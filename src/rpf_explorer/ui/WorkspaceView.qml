@@ -26,10 +26,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             orientation: Qt.Horizontal
-            handle: Rectangle {
-                implicitWidth: 1
-                color: Theme.Theme.border
-            }
+            handle: SplitViewHandle { }
 
             FolderPanel {
                 visible: view.bridge.foldersVisible

@@ -109,10 +109,7 @@ Window {
             Layout.fillHeight: true
             orientation: Qt.Horizontal
 
-            handle: Rectangle {
-                implicitWidth: 1
-                color: Theme.Theme.border
-            }
+            handle: SplitViewHandle { }
 
             TextureRail {
                 SplitView.preferredWidth: Theme.Theme.textureRailWidth
