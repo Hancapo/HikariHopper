@@ -28,6 +28,10 @@ Item {
         createDialogLoader.active = true
     }
 
+    function openDeleteDialog() {
+        deleteDialogLoader.active = true
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -91,6 +95,14 @@ Item {
         }
     }
 
+    Connections {
+        target: view.bridge
+
+        function onDeleteConfirmationRequested() {
+            view.openDeleteDialog()
+        }
+    }
+
     Loader {
         id: createDialogLoader
 
@@ -114,6 +126,25 @@ Item {
             )
             onClosed: Qt.callLater(function() {
                 createDialogLoader.active = false
+            })
+        }
+    }
+
+    Loader {
+        id: deleteDialogLoader
+
+        active: false
+        sourceComponent: deleteDialogComponent
+    }
+
+    Component {
+        id: deleteDialogComponent
+        DeleteEntriesDialog {
+            objectName: "deleteEntriesDialog"
+            bridge: view.bridge
+            Component.onCompleted: open()
+            onClosed: Qt.callLater(function() {
+                deleteDialogLoader.active = false
             })
         }
     }

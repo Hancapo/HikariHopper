@@ -30,7 +30,7 @@ Dialog {
 
     function submit() {
         const name = nameField.text.trim()
-        if (name === "" || bridge.creationBusy)
+        if (name === "" || bridge.entryOperationBusy)
             return
         let started = false
         switch (creationKind) {
@@ -199,7 +199,7 @@ Dialog {
                 Layout.preferredWidth: 88
                 Layout.preferredHeight: 28
                 primary: true
-                enabled: nameField.text.trim() !== "" && !dialog.bridge.creationBusy
+                enabled: nameField.text.trim() !== "" && !dialog.bridge.entryOperationBusy
                 text: qsTr("Create")
                 onClicked: dialog.submit()
             }

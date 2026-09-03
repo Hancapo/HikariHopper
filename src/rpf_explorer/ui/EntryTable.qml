@@ -249,7 +249,10 @@ Rectangle {
                 Keys.onReturnPressed: if (currentIndex >= 0) tablePanel.bridge.activateEntry(currentIndex)
                 Keys.onEnterPressed: if (currentIndex >= 0) tablePanel.bridge.activateEntry(currentIndex)
                 Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_Menu
+                    if (event.key === Qt.Key_Delete) {
+                        tablePanel.bridge.requestDeleteSelection()
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Menu
                             || (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier)) {
                         const source = entryTable.currentItem ?? entryTable
                         tablePanel.contextMenuRequested(

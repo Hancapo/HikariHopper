@@ -75,6 +75,11 @@ Rectangle {
                 Keys.onReturnPressed: if (currentIndex >= 0) gridPanel.bridge.activateEntry(currentIndex)
                 Keys.onEnterPressed: if (currentIndex >= 0) gridPanel.bridge.activateEntry(currentIndex)
                 Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Delete) {
+                        gridPanel.bridge.requestDeleteSelection()
+                        event.accepted = true
+                        return
+                    }
                     if (event.key === Qt.Key_Menu
                             || (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier)) {
                         const source = entryGrid.currentItem ?? entryGrid

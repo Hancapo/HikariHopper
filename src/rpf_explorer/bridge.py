@@ -12,6 +12,7 @@ from PySide6.QtCore import (
     Property,
     QAbstractListModel,
     QByteArray,
+    QFile,
     QMimeData,
     QModelIndex,
     QObject,
@@ -27,11 +28,13 @@ from PySide6.QtWidgets import QFileDialog
 
 from .backend import (
     EntryCreationTarget,
+    EntryDeletionTarget,
     RpfProvider,
     create_empty_rpf_at,
     create_folder_at,
     create_rpf_from_folder_at,
     create_rpf_from_zip_at,
+    delete_archive_files_at,
     normalize_entry_name,
     normalize_rpf_name,
 )
@@ -236,20 +239,20 @@ class TreeListModel(QAbstractListModel):
         )
 
 
-class _EntryCreationSignals(QObject):
+class _EntryOperationSignals(QObject):
     completed = Signal(object)
     failed = Signal(object)
 
 
-class _EntryCreationTask(QRunnable):
+class _EntryOperationTask(QRunnable):
     def __init__(
         self,
-        target: EntryCreationTarget,
+        target: object,
         label: str,
-        operation: Callable[[], str],
+        operation: Callable[[], object],
     ) -> None:
         super().__init__()
-        self.signals = _EntryCreationSignals()
+        self.signals = _EntryOperationSignals()
         self._target = target
         self._label = label
         self._operation = operation
@@ -257,7 +260,7 @@ class _EntryCreationTask(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            name = self._operation()
+            result = self._operation()
         except (
             ImportError,
             MemoryError,
@@ -266,9 +269,19 @@ class _EntryCreationTask(QRunnable):
             TypeError,
             ValueError,
         ) as error:
-            self.signals.failed.emit((self._label, str(error)))
+            self.signals.failed.emit((self._target, self._label, str(error)))
             return
-        self.signals.completed.emit((self._target, name))
+        self.signals.completed.emit((self._target, result))
+
+
+def _move_files_to_trash(target: EntryDeletionTarget) -> int:
+    if target.in_archive or not target.loose_paths:
+        raise ValueError("No loose files were selected for deletion")
+    for path in target.loose_paths:
+        moved, _ = QFile.moveToTrash(str(path))
+        if not moved:
+            raise OSError(f"Could not move {path.name} to the Recycle Bin")
+    return len(target.loose_paths)
 
 
 class ExplorerBridge(QObject):
@@ -284,7 +297,8 @@ class ExplorerBridge(QObject):
     treeFocusChanged = Signal()
     gameOpened = Signal(str)
     uiStateChanged = Signal()
-    creationStateChanged = Signal()
+    entryOperationStateChanged = Signal()
+    deleteConfirmationRequested = Signal()
     searchFocusRequested = Signal()
 
     def __init__(
@@ -301,9 +315,9 @@ class ExplorerBridge(QObject):
             self,
         )
         self._texture_viewer.sourceSaved.connect(self._texture_source_saved)
-        self._creation_pool = QThreadPool(self)
-        self._creation_pool.setMaxThreadCount(1)
-        self._creation_busy = False
+        self._entry_operation_pool = QThreadPool(self)
+        self._entry_operation_pool.setMaxThreadCount(1)
+        self._entry_operation_busy = False
         self._current_path = "."
         self._history: list[str] = []
         self._history_index = -1
@@ -521,9 +535,14 @@ class ExplorerBridge(QObject):
     def foldersVisible(self) -> bool:
         return self._folders_visible
 
-    @Property(bool, notify=creationStateChanged)
-    def creationBusy(self) -> bool:
-        return self._creation_busy
+    @Property(bool, notify=entryOperationStateChanged)
+    def entryOperationBusy(self) -> bool:
+        return self._entry_operation_busy
+
+    @Property(bool, notify=selectionChanged)
+    def selectionDeletable(self) -> bool:
+        entries = self._selected_entries()
+        return bool(entries) and all(not entry.is_directory for entry in entries)
 
     @Property(str, notify=viewModeChanged)
     def viewMode(self) -> str:
@@ -985,7 +1004,7 @@ class ExplorerBridge(QObject):
         label: str,
         operation_factory: Callable[[EntryCreationTarget], Callable[[], str]],
     ) -> bool:
-        if self._creation_busy:
+        if self._entry_operation_busy:
             return False
         try:
             target = self.provider.creation_target(self._current_path)
@@ -993,43 +1012,75 @@ class ExplorerBridge(QObject):
             self._set_status(f"Could not create entry: {error}")
             return False
 
-        task = _EntryCreationTask(target, label.strip(), operation_factory(target))
-        task.signals.completed.connect(self._entry_creation_completed)
-        task.signals.failed.connect(self._entry_creation_failed)
-        self._creation_busy = True
-        self.creationStateChanged.emit()
-        self._set_status(f"Creating {label.strip() or 'entry'}…")
-        self._creation_pool.start(task)
+        return self._start_entry_operation(
+            target,
+            f"create {label}",
+            f"Creating {label}…",
+            operation_factory(target),
+            self._entry_creation_completed,
+        )
+
+    def _start_entry_operation(
+        self,
+        target: object,
+        failure_label: str,
+        progress_label: str,
+        operation: Callable[[], object],
+        completed: Callable[[object], None],
+    ) -> bool:
+        if self._entry_operation_busy:
+            return False
+        task = _EntryOperationTask(target, failure_label, operation)
+        task.signals.completed.connect(completed)
+        task.signals.failed.connect(self._entry_operation_failed)
+        self._entry_operation_busy = True
+        self.entryOperationStateChanged.emit()
+        self._set_status(progress_label)
+        self._entry_operation_pool.start(task)
         return True
 
     @Slot(object)
     def _entry_creation_completed(self, payload: object) -> None:
         target, name = payload
-        self._creation_busy = False
-        self.creationStateChanged.emit()
-
-        refreshed = False
-        try:
-            if target.archive_path is not None:
-                refreshed = self.provider.reload_archive(target.archive_path)
-            else:
-                current = self.provider.creation_target(self._current_path)
-                refreshed = current.directory == target.directory
-        except (OSError, ValueError, RuntimeError):
-            refreshed = False
-
-        if refreshed:
+        self._finish_entry_operation()
+        if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
             self._select_created_entry(name)
         self._set_status(f"Created {name}")
 
     @Slot(object)
-    def _entry_creation_failed(self, payload: object) -> None:
-        label, message = payload
-        self._creation_busy = False
-        self.creationStateChanged.emit()
-        self._set_status(f"Could not create {label or 'entry'}: {message}")
+    def _entry_operation_failed(self, payload: object) -> None:
+        target, label, message = payload
+        self._finish_entry_operation()
+        if (
+            isinstance(target, EntryDeletionTarget)
+            and self._refresh_operation_target(target)
+        ):
+            self._clear_selection()
+            self._refresh()
+        self._set_status(f"Could not {label}: {message}")
+
+    def _finish_entry_operation(self) -> None:
+        self._entry_operation_busy = False
+        self.entryOperationStateChanged.emit()
+
+    def _refresh_operation_target(
+        self,
+        target: EntryCreationTarget | EntryDeletionTarget,
+    ) -> bool:
+        location = (
+            target.location
+            if isinstance(target, EntryDeletionTarget)
+            else target
+        )
+        try:
+            if location.archive_path is not None:
+                return self.provider.reload_archive(location.archive_path)
+            current = self.provider.creation_target(self._current_path)
+            return current.directory == location.directory
+        except (OSError, ValueError, RuntimeError):
+            return False
 
     def _select_created_entry(self, name: str) -> None:
         for row in range(self.entriesModel.rowCount()):
@@ -1037,6 +1088,60 @@ class ExplorerBridge(QObject):
             if entry is not None and entry.name.casefold() == name.casefold():
                 self._set_selection({row}, row, row, force=True)
                 return
+
+    @Slot()
+    def requestDeleteSelection(self) -> None:
+        if self._entry_operation_busy or not self._selected_rows:
+            return
+        if not self.selectionDeletable:
+            self._set_status("Only files can be deleted")
+            return
+        self.deleteConfirmationRequested.emit()
+
+    @Slot(result=bool)
+    def deleteSelectedFiles(self) -> bool:
+        if self._entry_operation_busy or not self.selectionDeletable:
+            return False
+        entries = self._selected_entries()
+        try:
+            target = self.provider.deletion_target(entries, self._current_path)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._set_status(f"Could not delete selection: {error}")
+            return False
+
+        count = len(entries)
+        noun = "file" if count == 1 else "files"
+        operation = (
+            partial(delete_archive_files_at, target)
+            if target.in_archive
+            else partial(_move_files_to_trash, target)
+        )
+        progress = (
+            f"Deleting {count} {noun} from RPF…"
+            if target.in_archive
+            else f"Moving {count} {noun} to the Recycle Bin…"
+        )
+        return self._start_entry_operation(
+            target,
+            "delete selected files",
+            progress,
+            operation,
+            self._entry_deletion_completed,
+        )
+
+    @Slot(object)
+    def _entry_deletion_completed(self, payload: object) -> None:
+        target, count = payload
+        self._finish_entry_operation()
+        if self._refresh_operation_target(target):
+            self._clear_selection()
+            self._refresh()
+        noun = "file" if count == 1 else "files"
+        self._set_status(
+            f"Deleted {count} {noun} from RPF"
+            if target.in_archive
+            else f"Moved {count} {noun} to the Recycle Bin"
+        )
 
     @Slot(str)
     def openArchive(self, path: str) -> None:
@@ -1227,7 +1332,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def navigateTree(self, path: str) -> None:
-        if self._creation_busy:
+        if self._entry_operation_busy:
             return
         if path.startswith("game://"):
             target = path.removeprefix("game://")
@@ -1294,7 +1399,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def toggleTreeNode(self, path: str) -> None:
-        if self._creation_busy:
+        if self._entry_operation_busy:
             return
         if path in self._expanded_nodes:
             self._expanded_nodes.remove(path)
@@ -1500,7 +1605,7 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def startEntryDrag(self, row: int) -> None:
-        if self._creation_busy:
+        if self._entry_operation_busy:
             return
         if row not in self._selected_rows:
             self.selectEntry(row)
@@ -1536,7 +1641,7 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def activateEntry(self, row: int) -> None:
-        if self._creation_busy:
+        if self._entry_operation_busy:
             return
         entry = self.entriesModel.entry_at(row)
         if entry is None:
