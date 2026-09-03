@@ -469,6 +469,41 @@ def test_nested_archive_opens_from_folder_tree(tmp_path) -> None:
     assert bridge.treeFocusIndex == 1
 
 
+def test_folder_activation_inside_nested_archive_uses_local_path(tmp_path) -> None:
+    from fivefury import RpfArchive
+
+    nested = RpfArchive.empty("netflix-force-4k-main.rpf")
+    nested.directory("netflix-force-4k-main")
+    outer_path = tmp_path / "outer.rpf"
+    outer = RpfArchive.empty(outer_path.name)
+    outer.file("New folder/netflix-force-4k-main.rpf", nested.to_bytes())
+    outer.save(outer_path)
+
+    bridge = ExplorerBridge()
+    bridge.openArchive(str(outer_path))
+    bridge.activateEntry(0)
+    bridge.activateEntry(0)
+    bridge.activateEntry(0)
+
+    assert bridge.currentPath == "netflix-force-4k-main"
+    assert [
+        segment["label"] for segment in bridge.navigationPathSegments
+    ] == [
+        "New folder",
+        "netflix-force-4k-main.rpf",
+        "netflix-force-4k-main",
+    ]
+    assert [
+        bridge.treeModel.row_at(row).label
+        for row in range(bridge.treeModel.rowCount())
+    ] == [
+        "outer.rpf",
+        "New folder",
+        "netflix-force-4k-main.rpf",
+        "netflix-force-4k-main",
+    ]
+
+
 def test_game_folder_is_the_primary_workspace(tmp_path, monkeypatch) -> None:
     import fivefury
     from fivefury import RpfArchive
