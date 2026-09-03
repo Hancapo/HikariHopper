@@ -12,6 +12,8 @@ Rectangle {
     required property var bridge
     required property var sourceModel
 
+    signal contextMenuRequested(Item source, real x, real y)
+
     color: Theme.Theme.panelBg
     SplitView.fillWidth: true
 
@@ -63,6 +65,9 @@ Rectangle {
 
                 delegate: EntryGridCell {
                     bridge: gridPanel.bridge
+                    onContextMenuRequested: function(source, x, y) {
+                        gridPanel.contextMenuRequested(source, x, y)
+                    }
                 }
 
                 currentIndex: gridPanel.bridge.selectedIndex
@@ -70,6 +75,17 @@ Rectangle {
                 Keys.onReturnPressed: if (currentIndex >= 0) gridPanel.bridge.activateEntry(currentIndex)
                 Keys.onEnterPressed: if (currentIndex >= 0) gridPanel.bridge.activateEntry(currentIndex)
                 Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Menu
+                            || (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier)) {
+                        const source = entryGrid.currentItem ?? entryGrid
+                        gridPanel.contextMenuRequested(
+                            source,
+                            source === entryGrid ? 24 : source.width / 2,
+                            source === entryGrid ? 24 : source.height / 2
+                        )
+                        event.accepted = true
+                        return
+                    }
                     if (event.key === Qt.Key_A && event.modifiers & Qt.ControlModifier) {
                         gridPanel.bridge.selectAllEntries()
                         event.accepted = true
@@ -134,8 +150,8 @@ Rectangle {
                 anchors.fill: parent
                 anchors.rightMargin: Theme.Theme.scrollbarWidth
                 z: 3
-                visible: entryGrid.count > 0
-                acceptedButtons: Qt.LeftButton
+                visible: gridPanel.bridge.hasWorkspace
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.ignored: true
 
                 function indexAtPoint(x, y) {
@@ -167,6 +183,14 @@ Rectangle {
                 onPressed: function(event) {
                     if (indexAtPoint(event.x, event.y) >= 0) {
                         event.accepted = false
+                        return
+                    }
+                    if (event.button === Qt.RightButton) {
+                        tracking = false
+                        marqueeActive = false
+                        gridPanel.bridge.clearEntrySelection()
+                        entryGrid.forceActiveFocus()
+                        gridPanel.contextMenuRequested(marqueeArea, event.x, event.y)
                         return
                     }
                     originX = GridMath.clamp(event.x, 0, width)

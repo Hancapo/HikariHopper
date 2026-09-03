@@ -14,6 +14,8 @@ Item {
     required property bool selected
     required property int index
 
+    signal contextMenuRequested(Item source, real x, real y)
+
     width: Theme.Theme.gridCellWidth
     height: Theme.Theme.gridCellHeight
 
@@ -77,5 +79,8 @@ Item {
         entrySelected: cell.selected
         focusTarget: cell.GridView.view
         accessibleName: cell.name
+        onContextMenuRequested: function(source, x, y) {
+            cell.contextMenuRequested(source, x, y)
+        }
     }
 }

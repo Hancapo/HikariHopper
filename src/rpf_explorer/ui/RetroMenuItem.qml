@@ -6,13 +6,14 @@ import "theme" as Theme
 MenuItem {
     id: control
     property string shortcutText: ""
+    property string iconName: control.icon.name
     implicitWidth: Math.max(
         Theme.Theme.menuMinimumWidth,
         contentItem.implicitWidth + leftPadding + rightPadding
     )
     implicitHeight: Theme.Theme.menuItemHeight
     leftPadding: 24
-    rightPadding: 11
+    rightPadding: control.subMenu !== null ? 28 : 11
     topPadding: 0
     bottomPadding: 0
     hoverEnabled: true
@@ -20,7 +21,7 @@ MenuItem {
     indicator: Item {
         implicitWidth: 20
         implicitHeight: control.height
-        visible: control.checkable
+        visible: control.checkable || control.iconName !== ""
 
         ChromeIcon {
             anchors.centerIn: parent
@@ -31,6 +32,26 @@ MenuItem {
             stroke: control.highlighted ? Theme.Theme.text : Theme.Theme.textDim
             thickness: 1.8
         }
+
+        LucideIcon {
+            anchors.centerIn: parent
+            visible: !control.checkable && control.iconName !== ""
+            width: 14
+            height: 14
+            name: control.iconName
+            stroke: control.highlighted ? Theme.Theme.text : Theme.Theme.textDim
+        }
+    }
+
+    arrow: ChromeIcon {
+        x: control.width - width - 8
+        anchors.verticalCenter: control.verticalCenter
+        visible: control.subMenu !== null
+        width: 12
+        height: 12
+        kind: "chevron"
+        stroke: control.highlighted ? Theme.Theme.text : Theme.Theme.textDim
+        thickness: 1.8
     }
 
     contentItem: RowLayout {

@@ -96,3 +96,93 @@ assert left_pane.width() > initial_width
         text=True,
         env=environment,
     )
+
+
+def test_explorer_context_menu_opens_in_list_and_grid_views() -> None:
+    project_root = Path(__file__).parents[1]
+    ui_path = project_root / "src" / "rpf_explorer" / "ui"
+    environment = os.environ.copy()
+    environment["QT_QPA_PLATFORM"] = "offscreen"
+    environment["QT_QUICK_BACKEND"] = "software"
+    environment["PYTHONPATH"] = str(project_root / "src")
+
+    script = f"""
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from PySide6.QtCore import QObject, QMetaObject, QPoint, Qt, QUrl
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlComponent
+from PySide6.QtQuick import QQuickView
+from PySide6.QtTest import QTest
+
+from rpf_explorer.bridge import ExplorerBridge
+
+app = QGuiApplication([])
+with TemporaryDirectory() as directory:
+    (Path(directory) / "sample.txt").write_text("sample", encoding="utf-8")
+    bridge = ExplorerBridge()
+    bridge.provider._game_root = Path(directory)
+    bridge.provider._game_target = "gta5_enhanced"
+    bridge._reset_navigation()
+    bridge._refresh()
+
+    view = QQuickView()
+    view.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+    component = QQmlComponent(
+        view.engine(),
+        QUrl.fromLocalFile({str(ui_path / "WorkspaceView.qml")!r}),
+    )
+    root = component.createWithInitialProperties({{
+        "bridge": bridge,
+        "entryModel": bridge.entriesModel,
+        "treeModel": bridge.treeModel,
+    }})
+    assert root is not None, [error.toString() for error in component.errors()]
+    view.setContent(QUrl(), component, root)
+    view.resize(1000, 600)
+    view.show()
+    QTest.qWait(80)
+
+    menu = root.findChild(QObject, "explorerContextMenu")
+    submenu = root.findChild(QObject, "newEntryMenu")
+    assert menu is not None
+    assert submenu is not None
+    assert menu.property("count") == 5
+    assert submenu.property("count") == 4
+
+    for mode in ("list", "grid"):
+        bridge.setViewMode(mode)
+        QTest.qWait(30)
+        QTest.mouseClick(
+            view,
+            Qt.MouseButton.RightButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(300, 78 if mode == "list" else 100),
+        )
+        QTest.qWait(30)
+        assert menu.property("visible")
+        assert bridge.selectionCount == 1
+        QMetaObject.invokeMethod(menu, "close")
+        QTest.mouseClick(
+            view,
+            Qt.MouseButton.RightButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(700, 180),
+        )
+        QTest.qWait(30)
+        assert menu.property("visible")
+        assert bridge.selectionCount == 0
+        QMetaObject.invokeMethod(menu, "close")
+        QTest.keyClick(view, Qt.Key.Key_Menu)
+        QTest.qWait(30)
+        assert menu.property("visible")
+        QMetaObject.invokeMethod(menu, "close")
+"""
+    subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
