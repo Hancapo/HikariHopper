@@ -17,7 +17,7 @@ from PySide6.QtCore import (
 )
 
 from .bridge import ExplorerBridge
-from .settings import app_settings
+from .settings import GamePathSettings, app_settings
 
 _INVALID_INDEX = QModelIndex()
 _MAX_RECENT_GAMES = 6
@@ -42,6 +42,7 @@ class ExplorerTabs(QAbstractListModel):
         self._tabs: list[ExplorerBridge] = []
         self._active_index = -1
         self._image_provider = image_provider
+        self._game_path_settings = GamePathSettings(self)
         self.newTab()
 
     def roleNames(self) -> dict[int, QByteArray]:
@@ -71,6 +72,10 @@ class ExplorerTabs(QAbstractListModel):
     @Property(QObject, notify=activeTabChanged)
     def activeBridge(self) -> QObject:
         return self._tabs[self._active_index]
+
+    @Property(QObject, constant=True)
+    def gamePathSettings(self) -> QObject:
+        return self._game_path_settings
 
     @Property(QObject, notify=activeTabChanged)
     def activeEntryModel(self) -> QObject:
@@ -106,6 +111,7 @@ class ExplorerTabs(QAbstractListModel):
         bridge = ExplorerBridge(self, image_provider=self._image_provider)
         bridge.workspaceChanged.connect(lambda bridge=bridge: self._workspace_changed(bridge))
         bridge.gameOpened.connect(self._remember_game)
+        bridge.gameOpened.connect(lambda _path: self._game_path_settings.refresh())
         self._tabs.append(bridge)
         self.endInsertRows()
         self.activateTab(row)

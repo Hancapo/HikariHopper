@@ -17,6 +17,7 @@ Window {
     id: root
 
     property string heading: ""
+    property string footerText: ""
     property int bodyMargin: 18
     default property alias content: body.data
 
@@ -62,6 +63,16 @@ Window {
             color: Theme.Theme.chromeBg
 
             Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 1; color: Theme.Theme.border }
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.footerText
+                color: Theme.Theme.textFaint
+                font.family: Theme.Theme.monoFont
+                font.pixelSize: Theme.Theme.smallFontSize
+            }
 
             ChromeToolButton {
                 anchors.right: parent.right

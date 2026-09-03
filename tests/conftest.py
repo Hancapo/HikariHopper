@@ -14,4 +14,5 @@ def isolated_application_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         return settings
 
     monkeypatch.setattr("rpf_explorer.bridge.app_settings", isolated_settings)
+    monkeypatch.setattr("rpf_explorer.settings.app_settings", isolated_settings)
     monkeypatch.setattr("rpf_explorer.tabs.app_settings", isolated_settings)
