@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A GTA V RPF Explorer built with PySide6 and FiveFury"
 requires-python = ">=3.11"
 dependencies = [
-  "PySide6>=6.8",
+  "PySide6>=6.11.2",
   "fivefury>=0.4.20,<0.5",
   "texfury>=1.6.3,<2",
 ]
