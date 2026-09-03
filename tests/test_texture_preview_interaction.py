@@ -93,6 +93,40 @@ cell_11 = rendered.pixelColor(checker_origin + QPoint(24, 24))
 assert cell_00 != cell_10 and cell_00 != cell_01
 assert cell_00 == cell_11
 
+initial_origin = frame.mapToItem(viewport, QPointF(0, 0))
+drag_from = viewport.mapToScene(QPointF(450, 300)).toPoint()
+drag_to = viewport.mapToScene(QPointF(520, 350)).toPoint()
+QTest.mousePress(
+    view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, drag_from
+)
+for drag_point in (
+    viewport.mapToScene(QPointF(470, 315)).toPoint(),
+    viewport.mapToScene(QPointF(500, 335)).toPoint(),
+    drag_to,
+):
+    QTest.mouseMove(view, drag_point, 20)
+QTest.mouseRelease(
+    view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, drag_to
+)
+QTest.qWait(40)
+dragged_origin = frame.mapToItem(viewport, QPointF(0, 0))
+assert dragged_origin.x() - initial_origin.x() > 60, (
+    initial_origin, dragged_origin, viewport.property("panX"), viewport.property("panY")
+)
+assert dragged_origin.y() - initial_origin.y() > 40, (
+    initial_origin, dragged_origin, viewport.property("panX"), viewport.property("panY")
+)
+assert viewport.property("panX") > 60
+assert viewport.property("panY") > 40
+
+keyboard_pan_x = viewport.property("panX")
+QTest.keyClick(view, Qt.Key.Key_Right)
+assert viewport.property("panX") == keyboard_pan_x + 48
+QTest.keyClick(view, Qt.Key.Key_F)
+QTest.qWait(20)
+assert viewport.property("panX") == 0
+assert viewport.property("panY") == 0
+
 focus = QPointF(650, 190)
 scene_focus = viewport.mapToScene(focus)
 
@@ -110,7 +144,6 @@ def zoom_one_step():
     QCoreApplication.sendEvent(view, event)
     QTest.qWait(20)
 
-zoom_one_step()  # Leave Fit mode; the image still fits horizontally here.
 old_scale = root.property("displayScale")
 old_origin = frame.mapToItem(viewport, QPointF(0, 0))
 source_point = QPointF(
@@ -126,26 +159,11 @@ anchored_point = QPointF(
 )
 assert new_scale > old_scale
 assert abs(anchored_point.x() - focus.x()) < 2, (
-    anchored_point, focus, old_scale, new_scale, viewport.property("contentX")
+    anchored_point, focus, old_scale, new_scale, viewport.property("panX")
 )
 assert abs(anchored_point.y() - focus.y()) < 2, (
-    anchored_point, focus, old_scale, new_scale, viewport.property("contentY")
+    anchored_point, focus, old_scale, new_scale, viewport.property("panY")
 )
-
-for _ in range(5):
-    zoom_one_step()
-old_content_x = viewport.property("contentX")
-drag_from = viewport.mapToScene(QPointF(450, 300)).toPoint()
-drag_to = viewport.mapToScene(QPointF(520, 300)).toPoint()
-QTest.mousePress(
-    view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, drag_from
-)
-QTest.mouseMove(view, drag_to, 40)
-QTest.mouseRelease(
-    view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, drag_to
-)
-QTest.qWait(40)
-assert viewport.property("contentX") < old_content_x
 """
     result = subprocess.run(
         [sys.executable, "-c", script],

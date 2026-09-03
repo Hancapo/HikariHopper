@@ -10,114 +10,73 @@ Item {
 
     property bool fitMode: true
     property real manualScale: 1
-    property real pendingContentX: 0
-    property real pendingContentY: 0
+    property real panX: 0
+    property real panY: 0
     readonly property int keyboardPanStep: 48
     readonly property int selectedIndexMirror: bridge.selectedIndex
     readonly property real fittedScale: bridge.previewWidth > 0 && bridge.previewHeight > 0
         ? Math.min(
-            Math.max(1, viewport.width - 48) / bridge.previewWidth,
-            Math.max(1, viewport.height - 48) / bridge.previewHeight
+            Math.max(1, width - 48) / bridge.previewWidth,
+            Math.max(1, height - 48) / bridge.previewHeight
         )
         : 1
     readonly property real displayScale: fitMode ? fittedScale : manualScale
     readonly property string zoomPercent: qsTr("%1%").arg(Math.round(displayScale * 100))
 
+    objectName: "textureViewport"
+    clip: true
+    activeFocusOnTab: bridge.selectedIndex >= 0
+    Accessible.name: qsTr("Texture preview")
+
     function fitTexture() {
-        zoomPositionTimer.stop()
         fitMode = true
-        viewport.contentX = 0
-        viewport.contentY = 0
+        panX = 0
+        panY = 0
     }
 
     function showActualSize() {
-        viewport.cancelFlick()
         fitMode = false
         manualScale = 1
-        const contentSize = scaledContentSize(manualScale)
-        pendingContentX = Math.max(0, (contentSize.width - viewport.width) / 2)
-        pendingContentY = Math.max(0, (contentSize.height - viewport.height) / 2)
-        zoomPositionTimer.restart()
+        panX = 0
+        panY = 0
     }
 
     function zoomBy(factor) {
-        zoomAt(factor, viewport.width / 2, viewport.height / 2)
-    }
-
-    function scaledContentSize(scale) {
-        return Qt.size(
-            Math.max(viewport.width, bridge.previewWidth * scale + 48),
-            Math.max(viewport.height, bridge.previewHeight * scale + 48)
-        )
+        zoomAt(factor, width / 2, height / 2)
     }
 
     function zoomAt(factor, focusX, focusY) {
         if (bridge.selectedIndex < 0)
             return
 
-        viewport.cancelFlick()
-        const current = displayScale
-        const oldContentSize = scaledContentSize(current)
-        const oldImageWidth = bridge.previewWidth * current
-        const oldImageHeight = bridge.previewHeight * current
-        const oldImageX = (oldContentSize.width - oldImageWidth) / 2
-        const oldImageY = (oldContentSize.height - oldImageHeight) / 2
-        const clampedFocusX = Math.max(0, Math.min(viewport.width, focusX))
-        const clampedFocusY = Math.max(0, Math.min(viewport.height, focusY))
-        const currentContentX = zoomPositionTimer.running
-            ? pendingContentX
-            : viewport.contentX
-        const currentContentY = zoomPositionTimer.running
-            ? pendingContentY
-            : viewport.contentY
-        const imagePointX = (currentContentX + clampedFocusX - oldImageX) / current
-        const imagePointY = (currentContentY + clampedFocusY - oldImageY) / current
+        const currentScale = displayScale
+        const currentImageX = (width - bridge.previewWidth * currentScale) / 2 + panX
+        const currentImageY = (height - bridge.previewHeight * currentScale) / 2 + panY
+        const clampedFocusX = Math.max(0, Math.min(width, focusX))
+        const clampedFocusY = Math.max(0, Math.min(height, focusY))
+        const imagePointX = (clampedFocusX - currentImageX) / currentScale
+        const imagePointY = (clampedFocusY - currentImageY) / currentScale
 
         fitMode = false
-        manualScale = Math.max(0.05, Math.min(16, current * factor))
-        const newContentSize = scaledContentSize(manualScale)
-        const newImageX = (newContentSize.width - bridge.previewWidth * manualScale) / 2
-        const newImageY = (newContentSize.height - bridge.previewHeight * manualScale) / 2
-        pendingContentX = Math.max(
-            0,
-            Math.min(
-                newContentSize.width - viewport.width,
-                newImageX + imagePointX * manualScale - clampedFocusX
-            )
-        )
-        pendingContentY = Math.max(
-            0,
-            Math.min(
-                newContentSize.height - viewport.height,
-                newImageY + imagePointY * manualScale - clampedFocusY
-            )
-        )
-        zoomPositionTimer.restart()
+        manualScale = Math.max(0.05, Math.min(16, currentScale * factor))
+        panX = clampedFocusX
+            - (width - bridge.previewWidth * manualScale) / 2
+            - imagePointX * manualScale
+        panY = clampedFocusY
+            - (height - bridge.previewHeight * manualScale) / 2
+            - imagePointY * manualScale
     }
 
     function panBy(xDistance, yDistance) {
-        viewport.cancelFlick()
-        viewport.contentX = Math.max(
-            0,
-            Math.min(viewport.contentWidth - viewport.width, viewport.contentX + xDistance)
-        )
-        viewport.contentY = Math.max(
-            0,
-            Math.min(viewport.contentHeight - viewport.height, viewport.contentY + yDistance)
-        )
+        panX += xDistance
+        panY += yDistance
     }
 
     onSelectedIndexMirrorChanged: fitTexture()
-
-    Timer {
-        id: zoomPositionTimer
-
-        interval: 0
-        onTriggered: {
-            viewport.contentX = surface.pendingContentX
-            viewport.contentY = surface.pendingContentY
-        }
-    }
+    Keys.onLeftPressed: panBy(-keyboardPanStep, 0)
+    Keys.onRightPressed: panBy(keyboardPanStep, 0)
+    Keys.onUpPressed: panBy(0, -keyboardPanStep)
+    Keys.onDownPressed: panBy(0, keyboardPanStep)
 
     TextureCheckerboard {
         objectName: "textureCheckerboard"
@@ -132,65 +91,49 @@ Item {
         color: Theme.Theme.appBg
     }
 
-    Flickable {
-        id: viewport
+    Item {
+        id: imageFrame
 
-        objectName: "textureViewport"
-        anchors.fill: parent
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        flickableDirection: Flickable.AutoFlickDirection
-        interactive: contentWidth > width || contentHeight > height
-        activeFocusOnTab: interactive
-        Accessible.name: qsTr("Texture preview")
-        contentWidth: Math.max(
-            width,
-            surface.bridge.previewWidth * surface.displayScale + 48
-        )
-        contentHeight: Math.max(
-            height,
-            surface.bridge.previewHeight * surface.displayScale + 48
-        )
-        onDragStarted: forceActiveFocus()
-        Keys.onLeftPressed: surface.panBy(-surface.keyboardPanStep, 0)
-        Keys.onRightPressed: surface.panBy(surface.keyboardPanStep, 0)
-        Keys.onUpPressed: surface.panBy(0, -surface.keyboardPanStep)
-        Keys.onDownPressed: surface.panBy(0, surface.keyboardPanStep)
+        objectName: "textureImageFrame"
+        x: (surface.width - width) / 2 + surface.panX
+        y: (surface.height - height) / 2 + surface.panY
+        width: Math.max(1, surface.bridge.previewWidth * surface.displayScale)
+        height: Math.max(1, surface.bridge.previewHeight * surface.displayScale)
+        visible: surface.bridge.selectedIndex >= 0
 
-        Item {
-            width: viewport.contentWidth
-            height: viewport.contentHeight
-
-            Item {
-                id: imageFrame
-
-                objectName: "textureImageFrame"
-                anchors.centerIn: parent
-                width: Math.max(1, surface.bridge.previewWidth * surface.displayScale)
-                height: Math.max(1, surface.bridge.previewHeight * surface.displayScale)
-                visible: surface.bridge.selectedIndex >= 0
-
-                Image {
-                    anchors.fill: parent
-                    source: surface.bridge.previewUrl
-                    sourceSize.width: Math.max(1, surface.bridge.previewWidth)
-                    sourceSize.height: Math.max(1, surface.bridge.previewHeight)
-                    fillMode: Image.Stretch
-                    asynchronous: true
-                    cache: false
-                    smooth: surface.filteredPreview
-                    mipmap: surface.filteredPreview
-                    visible: surface.bridge.previewUrl !== ""
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Theme.Theme.border
-                }
-            }
+        Image {
+            anchors.fill: parent
+            source: surface.bridge.previewUrl
+            sourceSize.width: Math.max(1, surface.bridge.previewWidth)
+            sourceSize.height: Math.max(1, surface.bridge.previewHeight)
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: false
+            smooth: surface.filteredPreview
+            mipmap: surface.filteredPreview
+            visible: surface.bridge.previewUrl !== ""
         }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            border.width: 1
+            border.color: Theme.Theme.border
+        }
+    }
+
+    DragHandler {
+        id: panHandler
+
+        target: null
+        enabled: surface.bridge.selectedIndex >= 0
+        cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        onActiveChanged: {
+            if (active)
+                surface.forceActiveFocus()
+        }
+        xAxis.onActiveValueChanged: delta => surface.panX += delta
+        yAxis.onActiveValueChanged: delta => surface.panY += delta
     }
 
     WheelHandler {
@@ -200,15 +143,13 @@ Item {
             const delta = event.angleDelta.y !== 0
                 ? event.angleDelta.y
                 : event.pixelDelta.y
+            if (delta === 0) {
+                event.accepted = false
+                return
+            }
             surface.zoomAt(Math.pow(1.25, delta / 120), event.x, event.y)
             event.accepted = true
         }
-    }
-
-    HoverHandler {
-        cursorShape: viewport.interactive
-            ? viewport.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-            : Qt.ArrowCursor
     }
 
     Text {
