@@ -11,6 +11,8 @@ Rectangle {
     required property var bridge
     required property var sourceModel
 
+    signal contextMenuRequested(Item source, real x, real y)
+
     readonly property int nameWidth: Math.max(300, Math.min(500, Math.round(width * 0.46)))
     readonly property int typeWidth: 190
     readonly property int sizeWidth: 124
@@ -236,6 +238,9 @@ Rectangle {
                         entrySelected: entryDelegate.selected
                         focusTarget: entryTable
                         accessibleName: entryDelegate.name
+                        onContextMenuRequested: function(source, x, y) {
+                            tablePanel.contextMenuRequested(source, x, y)
+                        }
                     }
                 }
 
@@ -244,7 +249,16 @@ Rectangle {
                 Keys.onReturnPressed: if (currentIndex >= 0) tablePanel.bridge.activateEntry(currentIndex)
                 Keys.onEnterPressed: if (currentIndex >= 0) tablePanel.bridge.activateEntry(currentIndex)
                 Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_A && event.modifiers & Qt.ControlModifier) {
+                    if (event.key === Qt.Key_Menu
+                            || (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier)) {
+                        const source = entryTable.currentItem ?? entryTable
+                        tablePanel.contextMenuRequested(
+                            source,
+                            source === entryTable ? 24 : source.width / 2,
+                            source === entryTable ? 24 : source.height / 2
+                        )
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_A && event.modifiers & Qt.ControlModifier) {
                         tablePanel.bridge.selectAllEntries();
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
@@ -306,8 +320,8 @@ Rectangle {
                 anchors.fill: parent
                 anchors.rightMargin: Theme.Theme.scrollbarWidth
                 z: 3
-                visible: entryTable.count > 0
-                acceptedButtons: Qt.LeftButton
+                visible: tablePanel.bridge.hasWorkspace
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.ignored: true
 
                 function rowAt(x, y) {
@@ -352,6 +366,14 @@ Rectangle {
                     if (!isBackground(event.x, event.y)) {
                         event.accepted = false;
                         return;
+                    }
+                    if (event.button === Qt.RightButton) {
+                        tracking = false
+                        marqueeActive = false
+                        tablePanel.bridge.clearEntrySelection()
+                        entryTable.forceActiveFocus()
+                        tablePanel.contextMenuRequested(marqueeArea, event.x, event.y)
+                        return
                     }
                     originX = clampX(event.x);
                     originY = clampY(event.y);

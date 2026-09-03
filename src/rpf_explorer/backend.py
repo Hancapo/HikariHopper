@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
+from zipfile import BadZipFile
 
 from .models import EntryRecord
 
@@ -56,6 +58,15 @@ _GENERAL_FILE_KIND_LABELS = {
     ".dat": "Data File",
 }
 
+_WINDOWS_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceInfo:
@@ -94,6 +105,181 @@ class ArchiveEntryTarget:
                 )
             entry._archive.file(entry.path, data)
             root.save(self.root_path)
+
+
+@dataclass(frozen=True, slots=True)
+class EntryCreationTarget:
+    directory: Path | None = None
+    archive_path: Path | None = None
+    archive_prefix: str = ""
+    internal_directory: str = "."
+    crypto: Any = field(default=None, repr=False, compare=False)
+
+    @property
+    def in_archive(self) -> bool:
+        return self.archive_path is not None
+
+
+def create_folder_at(target: EntryCreationTarget, name: str) -> str:
+    normalized = normalize_entry_name(name)
+    if target.in_archive:
+        _mutate_target_archive(
+            target,
+            normalized,
+            lambda archive: archive.directory(
+                _archive_child_path(target.internal_directory, normalized)
+            ),
+        )
+    else:
+        destination = _loose_destination(target, normalized)
+        destination.mkdir()
+    return normalized
+
+
+def create_empty_rpf_at(target: EntryCreationTarget, name: str) -> str:
+    from fivefury import RpfArchive
+
+    normalized = normalize_rpf_name(name)
+    _store_rpf(target, normalized, RpfArchive.empty(normalized, crypto=target.crypto))
+    return normalized
+
+
+def create_rpf_from_folder_at(
+    target: EntryCreationTarget,
+    name: str,
+    source: str | Path,
+) -> str:
+    from fivefury import RpfArchive
+
+    source_path = Path(source).expanduser().resolve(strict=True)
+    if not source_path.is_dir():
+        raise ValueError(f"RPF source folder does not exist: {source_path}")
+    normalized = normalize_rpf_name(name)
+    archive = RpfArchive.from_folder(source_path, name=normalized)
+    _store_rpf(target, normalized, archive)
+    return normalized
+
+
+def create_rpf_from_zip_at(
+    target: EntryCreationTarget,
+    name: str,
+    source: str | Path,
+) -> str:
+    from fivefury import RpfArchive
+
+    source_path = Path(source).expanduser().resolve(strict=True)
+    if not source_path.is_file():
+        raise ValueError(f"RPF source ZIP does not exist: {source_path}")
+    normalized = normalize_rpf_name(name)
+    try:
+        archive = RpfArchive.from_zip(source_path, name=normalized)
+    except BadZipFile as error:
+        raise ValueError(f"Not a valid ZIP archive: {source_path.name}") from error
+    _store_rpf(target, normalized, archive)
+    return normalized
+
+
+def normalize_entry_name(name: str) -> str:
+    normalized = name.strip()
+    invalid = '<>:"/\\|?*'
+    if (
+        not normalized
+        or normalized in {".", ".."}
+        or normalized.endswith((" ", "."))
+        or normalized.partition(".")[0].casefold() in _WINDOWS_RESERVED_NAMES
+        or any(character in invalid or ord(character) < 32 for character in normalized)
+    ):
+        raise ValueError("Enter a valid Windows file name")
+    return normalized
+
+
+def normalize_rpf_name(name: str) -> str:
+    normalized = normalize_entry_name(name)
+    if normalized.casefold().endswith(".rpf"):
+        return normalized
+    return f"{normalized}.rpf"
+
+
+def _archive_child_path(directory: str, name: str) -> str:
+    return name if directory == "." else f"{directory}/{name}"
+
+
+def _loose_destination(target: EntryCreationTarget, name: str) -> Path:
+    if target.directory is None:
+        raise ValueError("No writable explorer location is open")
+    destination = target.directory / name
+    if destination.exists():
+        raise FileExistsError(f"An entry named {name} already exists")
+    return destination
+
+
+def _store_rpf(
+    target: EntryCreationTarget,
+    name: str,
+    archive: Any,
+) -> None:
+    if not target.in_archive:
+        archive.save(_loose_destination(target, name))
+        return
+    data = archive.to_bytes()
+    _mutate_target_archive(
+        target,
+        name,
+        lambda owner: owner.file(
+            _archive_child_path(target.internal_directory, name),
+            data,
+        ),
+    )
+
+
+def _mutate_target_archive(
+    target: EntryCreationTarget,
+    name: str,
+    mutation: Callable[[Any], None],
+) -> None:
+    from fivefury import RpfArchive
+    from fivefury.rpf.entries import RpfDirectoryEntry, RpfFileEntry
+
+    if target.archive_path is None:
+        raise ValueError("No writable RPF archive is open")
+    with RpfArchive.from_path(
+        target.archive_path,
+        crypto=target.crypto,
+        load_nested=False,
+    ) as root:
+        archive = root
+        if target.archive_prefix:
+            entry = root.find_entry(target.archive_prefix)
+            if not isinstance(entry, RpfFileEntry) or entry._archive is None:
+                raise ValueError(
+                    f"Could not find nested archive: {target.archive_prefix}"
+                )
+            archive = entry._archive.load_nested_archive(
+                entry,
+                recursive=False,
+                strict=True,
+            )
+            if archive is None:
+                raise ValueError(
+                    f"Could not open nested archive: {target.archive_prefix}"
+                )
+
+        directory = (
+            archive.root
+            if target.internal_directory == "."
+            else archive.find_entry(target.internal_directory)
+        )
+        if not isinstance(directory, RpfDirectoryEntry):
+            raise ValueError(
+                f"Could not find archive folder: {target.internal_directory}"
+            )
+        if any(
+            entry.name.casefold() == name.casefold()
+            for entry in (*directory.directories, *directory.files)
+        ):
+            raise FileExistsError(f"An entry named {name} already exists")
+        mutation(archive)
+        root.save(target.archive_path)
 
 
 class RpfProvider:
@@ -269,6 +455,35 @@ class RpfProvider:
         if self.in_archive:
             return self.archive_entries(directory_path)
         return self.game_entries(directory_path)
+
+    def creation_target(self, directory_path: str = ".") -> EntryCreationTarget:
+        normalized = self._normalized_directory(directory_path)
+        if self.in_archive:
+            directory = self._archive_directory(self._archive, normalized)
+            if directory is None:
+                raise ValueError(f"Archive folder does not exist: {normalized}")
+            root = self._root_archive()
+            root_path = Path(root.source_path).expanduser().resolve()
+            if not root_path.is_file():
+                raise ValueError("The root RPF archive is no longer available")
+            target = EntryCreationTarget(
+                archive_path=root_path,
+                archive_prefix=self.archive_prefix,
+                internal_directory=normalized,
+                crypto=root.crypto,
+            )
+            root.close()
+            return target
+
+        if self._game_root is None:
+            raise ValueError("No writable explorer location is open")
+        root = self._game_root.resolve()
+        directory = root if normalized == "." else (root / normalized).resolve()
+        if directory != root and root not in directory.parents:
+            raise ValueError(f"Folder is outside the game installation: {normalized}")
+        if not directory.is_dir():
+            raise ValueError(f"Game folder does not exist: {normalized}")
+        return EntryCreationTarget(directory=directory, crypto=self._crypto)
 
     def export_entries(
         self,

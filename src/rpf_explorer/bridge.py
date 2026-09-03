@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import (
     Property,
@@ -14,6 +15,8 @@ from PySide6.QtCore import (
     QMimeData,
     QModelIndex,
     QObject,
+    QRunnable,
+    QThreadPool,
     Qt,
     QUrl,
     Signal,
@@ -22,7 +25,16 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QDrag, QGuiApplication
 from PySide6.QtWidgets import QFileDialog
 
-from .backend import RpfProvider
+from .backend import (
+    EntryCreationTarget,
+    RpfProvider,
+    create_empty_rpf_at,
+    create_folder_at,
+    create_rpf_from_folder_at,
+    create_rpf_from_zip_at,
+    normalize_entry_name,
+    normalize_rpf_name,
+)
 from .formatting import format_size
 from .models import EntryRecord
 from .settings import (
@@ -224,6 +236,41 @@ class TreeListModel(QAbstractListModel):
         )
 
 
+class _EntryCreationSignals(QObject):
+    completed = Signal(object)
+    failed = Signal(object)
+
+
+class _EntryCreationTask(QRunnable):
+    def __init__(
+        self,
+        target: EntryCreationTarget,
+        label: str,
+        operation: Callable[[], str],
+    ) -> None:
+        super().__init__()
+        self.signals = _EntryCreationSignals()
+        self._target = target
+        self._label = label
+        self._operation = operation
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            name = self._operation()
+        except (
+            ImportError,
+            MemoryError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as error:
+            self.signals.failed.emit((self._label, str(error)))
+            return
+        self.signals.completed.emit((self._target, name))
+
+
 class ExplorerBridge(QObject):
     workspaceChanged = Signal()
     currentPathChanged = Signal()
@@ -237,6 +284,7 @@ class ExplorerBridge(QObject):
     treeFocusChanged = Signal()
     gameOpened = Signal(str)
     uiStateChanged = Signal()
+    creationStateChanged = Signal()
     searchFocusRequested = Signal()
 
     def __init__(
@@ -253,6 +301,9 @@ class ExplorerBridge(QObject):
             self,
         )
         self._texture_viewer.sourceSaved.connect(self._texture_source_saved)
+        self._creation_pool = QThreadPool(self)
+        self._creation_pool.setMaxThreadCount(1)
+        self._creation_busy = False
         self._current_path = "."
         self._history: list[str] = []
         self._history_index = -1
@@ -469,6 +520,10 @@ class ExplorerBridge(QObject):
     @Property(bool, notify=uiStateChanged)
     def foldersVisible(self) -> bool:
         return self._folders_visible
+
+    @Property(bool, notify=creationStateChanged)
+    def creationBusy(self) -> bool:
+        return self._creation_busy
 
     @Property(str, notify=viewModeChanged)
     def viewMode(self) -> str:
@@ -841,6 +896,148 @@ class ExplorerBridge(QObject):
         if path:
             self.openArchive(path)
 
+    @Slot(result="QVariantMap")
+    def chooseRpfFolderSource(self) -> dict[str, str]:
+        path = QFileDialog.getExistingDirectory(
+            None,
+            "Choose a folder to pack as RPF",
+            self.provider.game_path,
+        )
+        return self._rpf_source_result(path, folder=True)
+
+    @Slot(result="QVariantMap")
+    def chooseRpfZipSource(self) -> dict[str, str]:
+        path, _ = QFileDialog.getOpenFileName(
+            None,
+            "Choose a ZIP archive to pack as RPF",
+            self.provider.game_path,
+            "ZIP archives (*.zip)",
+        )
+        return self._rpf_source_result(path, folder=False)
+
+    @staticmethod
+    def _rpf_source_result(path: str, *, folder: bool) -> dict[str, str]:
+        if not path:
+            return {"path": "", "suggestedName": ""}
+        source = Path(path)
+        stem = source.name if folder else source.stem
+        return {"path": str(source), "suggestedName": f"{stem}.rpf"}
+
+    @Slot(str, result=bool)
+    def createFolder(self, name: str) -> bool:
+        normalized = self._creation_name(name, rpf=False)
+        if not normalized:
+            return False
+        return self._start_entry_creation(
+            normalized,
+            lambda target: partial(create_folder_at, target, normalized),
+        )
+
+    @Slot(str, result=bool)
+    def createEmptyRpf(self, name: str) -> bool:
+        normalized = self._creation_name(name, rpf=True)
+        if not normalized:
+            return False
+        return self._start_entry_creation(
+            normalized,
+            lambda target: partial(create_empty_rpf_at, target, normalized),
+        )
+
+    @Slot(str, str, result=bool)
+    def createRpfFromFolder(self, name: str, source: str) -> bool:
+        normalized = self._creation_name(name, rpf=True)
+        if not normalized:
+            return False
+        return self._start_entry_creation(
+            normalized,
+            lambda target: partial(
+                create_rpf_from_folder_at,
+                target,
+                normalized,
+                source,
+            ),
+        )
+
+    @Slot(str, str, result=bool)
+    def createRpfFromZip(self, name: str, source: str) -> bool:
+        normalized = self._creation_name(name, rpf=True)
+        if not normalized:
+            return False
+        return self._start_entry_creation(
+            normalized,
+            lambda target: partial(
+                create_rpf_from_zip_at,
+                target,
+                normalized,
+                source,
+            ),
+        )
+
+    def _creation_name(self, name: str, *, rpf: bool) -> str:
+        try:
+            return normalize_rpf_name(name) if rpf else normalize_entry_name(name)
+        except ValueError as error:
+            self._set_status(str(error))
+            return ""
+
+    def _start_entry_creation(
+        self,
+        label: str,
+        operation_factory: Callable[[EntryCreationTarget], Callable[[], str]],
+    ) -> bool:
+        if self._creation_busy:
+            return False
+        try:
+            target = self.provider.creation_target(self._current_path)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._set_status(f"Could not create entry: {error}")
+            return False
+
+        task = _EntryCreationTask(target, label.strip(), operation_factory(target))
+        task.signals.completed.connect(self._entry_creation_completed)
+        task.signals.failed.connect(self._entry_creation_failed)
+        self._creation_busy = True
+        self.creationStateChanged.emit()
+        self._set_status(f"Creating {label.strip() or 'entry'}…")
+        self._creation_pool.start(task)
+        return True
+
+    @Slot(object)
+    def _entry_creation_completed(self, payload: object) -> None:
+        target, name = payload
+        self._creation_busy = False
+        self.creationStateChanged.emit()
+
+        refreshed = False
+        try:
+            if target.archive_path is not None:
+                refreshed = self.provider.reload_archive(target.archive_path)
+            else:
+                current = self.provider.creation_target(self._current_path)
+                refreshed = current.directory == target.directory
+        except (OSError, ValueError, RuntimeError):
+            refreshed = False
+
+        if refreshed:
+            self._clear_selection()
+            self._refresh()
+            self._select_created_entry(name)
+        self._set_status(f"Created {name}")
+
+    @Slot(object)
+    def _entry_creation_failed(self, payload: object) -> None:
+        label, message = payload
+        self._creation_busy = False
+        self.creationStateChanged.emit()
+        self._set_status(f"Could not create {label or 'entry'}: {message}")
+
+    def _select_created_entry(self, name: str) -> None:
+        for row in range(self.entriesModel.rowCount()):
+            entry = self.entriesModel.entry_at(row)
+            if entry is not None and entry.name.casefold() == name.casefold():
+                self._set_selection({row}, row, row, force=True)
+                return
+
     @Slot(str)
     def openArchive(self, path: str) -> None:
         try:
@@ -1030,6 +1227,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def navigateTree(self, path: str) -> None:
+        if self._creation_busy:
+            return
         if path.startswith("game://"):
             target = path.removeprefix("game://")
             if self.provider.in_archive:
@@ -1095,6 +1294,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def toggleTreeNode(self, path: str) -> None:
+        if self._creation_busy:
+            return
         if path in self._expanded_nodes:
             self._expanded_nodes.remove(path)
             self.focusTreePath(path)
@@ -1299,6 +1500,8 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def startEntryDrag(self, row: int) -> None:
+        if self._creation_busy:
+            return
         if row not in self._selected_rows:
             self.selectEntry(row)
         entries = self._selected_entries()
@@ -1333,6 +1536,8 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def activateEntry(self, row: int) -> None:
+        if self._creation_busy:
+            return
         entry = self.entriesModel.entry_at(row)
         if entry is None:
             return

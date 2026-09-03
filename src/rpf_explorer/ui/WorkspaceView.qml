@@ -14,6 +14,20 @@ Item {
         navigation.focusSearch()
     }
 
+    function openContextMenu(source, localX, localY) {
+        const point = source.mapToItem(view, localX, localY)
+        explorerContextMenu.x = point.x
+        explorerContextMenu.y = point.y
+        explorerContextMenu.open()
+    }
+
+    function openCreateDialog(kind, suggestedName, sourcePath) {
+        createDialogLoader.creationKind = kind
+        createDialogLoader.suggestedName = suggestedName
+        createDialogLoader.sourcePath = sourcePath
+        createDialogLoader.active = true
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -51,6 +65,9 @@ Item {
         EntryTable {
             bridge: view.bridge
             sourceModel: view.entryModel
+            onContextMenuRequested: function(source, x, y) {
+                view.openContextMenu(source, x, y)
+            }
         }
     }
 
@@ -59,6 +76,45 @@ Item {
         EntryGrid {
             bridge: view.bridge
             sourceModel: view.entryModel
+            onContextMenuRequested: function(source, x, y) {
+                view.openContextMenu(source, x, y)
+            }
+        }
+    }
+
+    ExplorerContextMenu {
+        id: explorerContextMenu
+        objectName: "explorerContextMenu"
+        bridge: view.bridge
+        onCreateRequested: function(kind, suggestedName, sourcePath) {
+            view.openCreateDialog(kind, suggestedName, sourcePath)
+        }
+    }
+
+    Loader {
+        id: createDialogLoader
+
+        property string creationKind: ""
+        property string suggestedName: ""
+        property string sourcePath: ""
+
+        active: false
+        sourceComponent: createDialogComponent
+    }
+
+    Component {
+        id: createDialogComponent
+        ExplorerCreateDialog {
+            objectName: "explorerCreateDialog"
+            bridge: view.bridge
+            Component.onCompleted: begin(
+                createDialogLoader.creationKind,
+                createDialogLoader.suggestedName,
+                createDialogLoader.sourcePath
+            )
+            onClosed: Qt.callLater(function() {
+                createDialogLoader.active = false
+            })
         }
     }
 }

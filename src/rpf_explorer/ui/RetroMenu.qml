@@ -6,6 +6,8 @@ Menu {
     id: control
     property int connectionWidth: 0
 
+    delegate: RetroMenuItem { }
+
     implicitWidth: Math.max(
         Theme.Theme.menuMinimumWidth + leftPadding + rightPadding,
         implicitContentWidth + leftPadding + rightPadding
