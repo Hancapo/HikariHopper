@@ -45,15 +45,7 @@ Rectangle {
         anchors.rightMargin: 6
         spacing: 3
 
-        Text {
-            Layout.fillWidth: true
-            text: toolbar.bridge.selectedName
-            color: Theme.Theme.text
-            font.family: Theme.Theme.monoFont
-            font.pixelSize: Theme.Theme.fontSize
-            font.bold: true
-            elide: Text.ElideRight
-        }
+        Item { Layout.fillWidth: true }
 
         Text {
             Layout.preferredWidth: 58

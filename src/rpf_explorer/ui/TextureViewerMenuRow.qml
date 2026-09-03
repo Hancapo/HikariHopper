@@ -47,13 +47,6 @@ Rectangle {
             onClicked: menuRow.openPopup(editMenu, editButton)
         }
 
-        MenuBarButton {
-            id: helpButton
-            text: qsTr("Help")
-            menuOpen: helpMenu.visible
-            onClicked: menuRow.openPopup(helpMenu, helpButton)
-        }
-
         Item { Layout.fillWidth: true }
     }
 
@@ -98,17 +91,6 @@ Rectangle {
             onTriggered: menuRow.viewerWindow.close()
         }
     }
-
-    RetroMenu {
-        id: helpMenu
-        connectionWidth: helpButton.width
-        RetroMenuItem {
-            text: qsTr("About HikariHopper")
-            onTriggered: about.show()
-        }
-    }
-
-    AboutWindow { id: about }
 
     Shortcut { sequence: "Ctrl+S"; enabled: menuRow.bridge.canSaveSource; onActivated: menuRow.bridge.saveYtd() }
     Shortcut { sequence: "Ctrl+Shift+S"; enabled: menuRow.bridge.textureCount > 0; onActivated: menuRow.bridge.saveYtdAs() }

@@ -25,51 +25,13 @@ Rectangle {
         textureContextMenu.open()
     }
 
-    Rectangle {
-        id: header
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        height: Theme.Theme.headerHeight
-        color: Theme.Theme.chromeRaised
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: 1
-            color: Theme.Theme.bevel
-        }
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.Theme.borderHard
-        }
-        Text {
-            x: 12
-            anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("TEXTURES  ·  %1").arg(rail.bridge.textureCount)
-            color: Theme.Theme.textDim
-            font.family: Theme.Theme.monoFont
-            font.pixelSize: Theme.Theme.smallFontSize
-            font.bold: true
-            font.letterSpacing: 1
-        }
-    }
-
     ListView {
         id: textureList
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: header.bottom
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
         model: rail.bridge.texturesModel
         currentIndex: rail.bridge.selectedIndex
         reuseItems: true
-        // The delegates genuinely scroll beyond this viewport; without a clip
-        // they paint through the fixed header and the source bar above it.
+        // The delegates genuinely scroll beyond this viewport.
         clip: true
         activeFocusOnTab: true
         boundsBehavior: Flickable.StopAtBounds
