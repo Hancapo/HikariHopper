@@ -115,6 +115,7 @@ QtObject {
     readonly property int textureThumbnailSize: 50
     readonly property int textureToolbarHeight: 38
     readonly property int textureMipBarHeight: 32
+    readonly property int textureCheckerCellSize: 16
 
     // Fixed identity-window metrics. The splash is an expressive surface, but
     // its geometry remains part of the shared design contract.
