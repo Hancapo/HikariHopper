@@ -62,7 +62,10 @@ Rectangle {
         RetroMenuItem { text: qsTr("Settings…"); onTriggered: settingsWindow.show() }
     }
 
-    SettingsWindow { id: settingsWindow }
+    SettingsWindow {
+        id: settingsWindow
+        gamePaths: menuRow.tabs.gamePathSettings
+    }
 
     RetroMenu {
         id: viewMenu

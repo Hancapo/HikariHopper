@@ -25,7 +25,13 @@ from PySide6.QtWidgets import QFileDialog
 from .backend import RpfProvider
 from .formatting import format_size
 from .models import EntryRecord
-from .settings import app_settings
+from .settings import (
+    ENHANCED_EDITION,
+    LEGACY_EDITION,
+    app_settings,
+    configured_game_root,
+    remember_game_root,
+)
 from .texture_viewer import TextureImageProvider, TextureViewerBridge
 
 _INVALID_INDEX = QModelIndex()
@@ -785,15 +791,34 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def openEnhancedGameDialog(self) -> None:
-        self._open_game_dialog("Select GTA V Enhanced Installation", "GTA5_Enhanced.exe")
+        self._open_game_dialog(
+            "Select GTA V Enhanced Installation",
+            "GTA5_Enhanced.exe",
+            ENHANCED_EDITION,
+        )
 
     @Slot()
     def openLegacyGameDialog(self) -> None:
-        self._open_game_dialog("Select GTA V Legacy Installation", "GTA5.exe")
+        self._open_game_dialog(
+            "Select GTA V Legacy Installation",
+            "GTA5.exe",
+            LEGACY_EDITION,
+        )
 
-    def _open_game_dialog(self, title: str, expected_executable: str = "") -> None:
+    def _open_game_dialog(
+        self,
+        title: str,
+        expected_executable: str = "",
+        edition: str = "",
+    ) -> None:
         settings = app_settings()
-        start_path = str(settings.value("gameRoot", ""))
+        start_path = (
+            configured_game_root(settings, edition)
+            if edition
+            else str(settings.value("gameRoot", ""))
+        )
+        if not Path(start_path).is_dir():
+            start_path = str(settings.value("gameRoot", ""))
         path = QFileDialog.getExistingDirectory(None, title, start_path)
         if not path:
             return
@@ -811,7 +836,7 @@ class ExplorerBridge(QObject):
         except (OSError, ValueError, RuntimeError) as error:
             self._set_status(f"Could not load game: {error}")
             return
-        app_settings().setValue("gameRoot", self.provider.game_path)
+        remember_game_root(app_settings(), self.provider.game_path)
         self.gameOpened.emit(self.provider.game_path)
         self._expanded_nodes = {"game://."}
         self._reset_navigation()
