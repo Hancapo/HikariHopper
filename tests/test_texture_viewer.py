@@ -93,6 +93,14 @@ def test_mip_chain_does_not_cross_minimum_for_non_power_of_two_sizes() -> None:
     assert mip_dimensions_for_minimum(100, 200, 4)[-1] == (6, 12)
 
 
+def test_mip_chain_terminates_at_one_pixel() -> None:
+    expected = ((4, 4), (2, 2), (1, 1))
+
+    assert mip_dimensions_for_minimum(4, 4, 1) == expected
+    assert mip_dimensions_for_minimum(4, 4, 0) == expected
+    assert mip_dimensions_for_minimum(1, 1, 1) == ((1, 1),)
+
+
 def test_texfury_stop_size_produces_the_requested_short_edge() -> None:
     from PIL import Image
     from texfury import BCFormat, Texture

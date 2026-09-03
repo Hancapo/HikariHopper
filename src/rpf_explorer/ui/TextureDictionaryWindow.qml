@@ -26,7 +26,6 @@ Window {
 
     property bool closeApproved: false
     property bool closeAfterSave: false
-    property var pendingToolDialog: null
 
     function present() {
         window.show()
@@ -36,17 +35,7 @@ Window {
 
     function openToolDialog(component) {
         toolDialogLoader.active = false
-        pendingToolDialog = component
-        // A context menu still owns its popup grab while onTriggered runs.
-        // Let it close before introducing the next modal popup.
-        Qt.callLater(window.presentPendingToolDialog)
-    }
-
-    function presentPendingToolDialog() {
-        if (pendingToolDialog === null)
-            return
-        toolDialogLoader.sourceComponent = pendingToolDialog
-        pendingToolDialog = null
+        toolDialogLoader.sourceComponent = component
         toolDialogLoader.active = true
     }
 
@@ -160,7 +149,7 @@ Window {
         id: toolDialogLoader
         active: false
         asynchronous: false
-        onLoaded: item.open()
+        onLoaded: item.visible = true
     }
 
     Loader {
