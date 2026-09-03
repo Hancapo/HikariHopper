@@ -87,7 +87,7 @@ def test_deletion_target_rejects_folders(tmp_path: Path) -> None:
         provider.deletion_target(provider.archive_entries("."))
 
 
-def test_cannot_trash_an_rpf_that_is_still_open(tmp_path: Path) -> None:
+def test_trashing_an_open_rpf_releases_its_archive_handle(tmp_path: Path) -> None:
     from fivefury import RpfArchive
 
     archive_path = tmp_path / "archive.rpf"
@@ -103,8 +103,10 @@ def test_cannot_trash_an_rpf_that_is_still_open(tmp_path: Path) -> None:
         if entry.name == archive_path.name
     )
 
-    with pytest.raises(ValueError, match="Close the RPF archive"):
-        provider.deletion_target([archive_entry])
+    target = provider.deletion_target([archive_entry])
+
+    assert target.loose_paths == (archive_path.resolve(),)
+    assert not provider.has_archive
 
 
 def test_bridge_moves_loose_files_to_recycle_bin_in_background(

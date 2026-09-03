@@ -68,6 +68,7 @@ RetroMenu {
         enabled: false
     }
     RetroMenuItem {
+        objectName: "deleteMenuItem"
         text: qsTr("Delete")
         shortcutText: "Del"
         iconName: "trash-2"

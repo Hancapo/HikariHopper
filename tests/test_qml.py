@@ -110,11 +110,12 @@ def test_explorer_context_menu_opens_in_list_and_grid_views() -> None:
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from PySide6.QtCore import QObject, QMetaObject, QPoint, Qt, QUrl
+from PySide6.QtCore import QObject, QMetaObject, QPoint, QPointF, Qt, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent
-from PySide6.QtQuick import QQuickView
+from PySide6.QtQuick import QQuickItem, QQuickView
 from PySide6.QtTest import QTest
+from shiboken6 import getCppPointer, wrapInstance
 
 from rpf_explorer.bridge import ExplorerBridge
 
@@ -163,7 +164,25 @@ with TemporaryDirectory() as directory:
         QTest.qWait(30)
         assert menu.property("visible")
         assert bridge.selectionCount == 1
-        QMetaObject.invokeMethod(menu, "close")
+        delete_item_object = root.findChild(QObject, "deleteMenuItem")
+        assert delete_item_object is not None
+        delete_item = wrapInstance(getCppPointer(delete_item_object)[0], QQuickItem)
+        delete_center = delete_item.mapToScene(QPointF(
+            delete_item.width() / 2,
+            delete_item.height() / 2,
+        ))
+        QTest.mouseClick(
+            view,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(round(delete_center.x()), round(delete_center.y())),
+        )
+        QTest.qWait(30)
+        delete_dialog = root.findChild(QObject, "deleteEntriesDialog")
+        assert delete_dialog is not None
+        assert delete_dialog.property("visible")
+        QMetaObject.invokeMethod(delete_dialog, "close")
+        QTest.qWait(30)
         QTest.keyClick(view, Qt.Key.Key_Delete)
         QTest.qWait(30)
         delete_dialog = root.findChild(QObject, "deleteEntriesDialog")
@@ -185,6 +204,110 @@ with TemporaryDirectory() as directory:
         QTest.qWait(30)
         assert menu.property("visible")
         QMetaObject.invokeMethod(menu, "close")
+"""
+    subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+
+def test_delete_menu_trashes_a_previously_opened_rpf() -> None:
+    project_root = Path(__file__).parents[1]
+    ui_path = project_root / "src" / "rpf_explorer" / "ui"
+    environment = os.environ.copy()
+    environment["QT_QPA_PLATFORM"] = "offscreen"
+    environment["QT_QUICK_BACKEND"] = "software"
+    environment["PYTHONPATH"] = str(project_root / "src")
+
+    script = f"""
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from PySide6.QtCore import QObject, QPoint, QPointF, Qt, QUrl
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlComponent
+from PySide6.QtQuick import QQuickItem, QQuickView
+from PySide6.QtTest import QTest
+from shiboken6 import getCppPointer, wrapInstance
+
+import rpf_explorer.bridge as bridge_module
+from fivefury import RpfArchive
+from rpf_explorer.bridge import ExplorerBridge
+
+
+class FakeFile:
+    @staticmethod
+    def moveToTrash(path):
+        Path(path).unlink()
+        return True, "Recycle Bin/sample.rpf"
+
+
+def click_item(view, item_object):
+    item = wrapInstance(getCppPointer(item_object)[0], QQuickItem)
+    center = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
+    QTest.mouseClick(
+        view,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(round(center.x()), round(center.y())),
+    )
+
+
+bridge_module.QFile = FakeFile
+app = QGuiApplication([])
+with TemporaryDirectory() as directory:
+    source = Path(directory) / "sample.rpf"
+    RpfArchive.empty(source.name).save(source)
+    bridge = ExplorerBridge()
+    bridge.provider._game_root = Path(directory)
+    bridge.provider._game_target = "gta5_enhanced"
+    bridge.provider.open_archive(source)
+    bridge.provider.show_game()
+    bridge._reset_navigation()
+    bridge._refresh()
+
+    view = QQuickView()
+    view.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+    component = QQmlComponent(
+        view.engine(),
+        QUrl.fromLocalFile({str(ui_path / "WorkspaceView.qml")!r}),
+    )
+    root = component.createWithInitialProperties({{
+        "bridge": bridge,
+        "entryModel": bridge.entriesModel,
+        "treeModel": bridge.treeModel,
+    }})
+    assert root is not None, [error.toString() for error in component.errors()]
+    view.setContent(QUrl(), component, root)
+    view.resize(1000, 600)
+    view.show()
+    QTest.qWait(80)
+
+    QTest.mouseClick(
+        view,
+        Qt.MouseButton.RightButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(300, 78),
+    )
+    QTest.qWait(30)
+    delete_menu_item = root.findChild(QObject, "deleteMenuItem")
+    assert delete_menu_item is not None
+    click_item(view, delete_menu_item)
+    QTest.qWait(30)
+
+    confirm_button = root.findChild(QObject, "confirmDeleteButton")
+    assert confirm_button is not None
+    click_item(view, confirm_button)
+
+    for _ in range(50):
+        QTest.qWait(20)
+        if not source.exists():
+            break
+
+    assert not source.exists()
 """
     subprocess.run(
         [sys.executable, "-c", script],

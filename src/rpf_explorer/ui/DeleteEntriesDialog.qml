@@ -14,8 +14,8 @@ Dialog {
         : qsTr("Are you sure you want to delete %1 items?").arg(fileCount)
 
     function submit() {
-        close()
-        Qt.callLater(dialog.bridge.deleteSelectedFiles)
+        if (dialog.bridge.deleteSelectedFiles())
+            accept()
     }
 
     modal: true
@@ -103,6 +103,7 @@ Dialog {
                 onClicked: dialog.reject()
             }
             ChromeToolButton {
+                objectName: "confirmDeleteButton"
                 Layout.preferredWidth: 88
                 Layout.preferredHeight: 28
                 destructive: true

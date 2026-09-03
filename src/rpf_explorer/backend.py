@@ -575,7 +575,7 @@ class RpfProvider:
         if open_archive is not None:
             source_path = Path(open_archive.source_path).expanduser().resolve()
             if source_path in loose_paths:
-                raise ValueError("Close the RPF archive before deleting its file")
+                self._close_archive()
         return EntryDeletionTarget(location=location, loose_paths=loose_paths)
 
     def export_entries(
