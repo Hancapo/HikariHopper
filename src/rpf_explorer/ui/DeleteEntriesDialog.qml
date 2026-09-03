@@ -9,21 +9,21 @@ Dialog {
     required property var bridge
 
     readonly property int fileCount: bridge.selectionCount
-    readonly property string selectionLabel: fileCount === 1
-        ? qsTr("“%1”").arg(bridge.selectedName)
-        : qsTr("%1 selected files").arg(fileCount)
+    readonly property string question: fileCount === 1
+        ? qsTr("Are you sure you want to delete “%1”?").arg(bridge.selectedName)
+        : qsTr("Are you sure you want to delete %1 items?").arg(fileCount)
 
     function submit() {
-        close()
-        Qt.callLater(dialog.bridge.deleteSelectedFiles)
+        if (dialog.bridge.deleteSelectedFiles())
+            accept()
     }
 
     modal: true
     parent: Overlay.overlay
     x: Math.round((parent.width - width) / 2)
     y: Math.round((parent.height - height) / 2)
-    width: 470
-    height: Theme.Theme.headerHeight + 126 + 58
+    width: 410
+    height: Theme.Theme.headerHeight + 64 + 58
     padding: 0
     closePolicy: Popup.CloseOnEscape
 
@@ -56,9 +56,7 @@ Dialog {
             x: 10
             width: parent.width - 20
             height: parent.height
-            text: dialog.fileCount === 1
-                ? qsTr("DELETE FILE")
-                : qsTr("DELETE FILES")
+            text: qsTr("DELETION")
             color: Theme.Theme.textDim
             font.family: Theme.Theme.monoFont
             font.pixelSize: Theme.Theme.smallFontSize
@@ -68,44 +66,16 @@ Dialog {
         }
     }
 
-    contentItem: RowLayout {
-        spacing: 12
-
-        LucideIcon {
-            Layout.leftMargin: 16
-            Layout.preferredWidth: 24
-            Layout.preferredHeight: 24
-            name: "trash-2"
-            stroke: Theme.Theme.error
-            Accessible.ignored: true
-        }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.rightMargin: 16
-            spacing: 6
-
-            Text {
-                Layout.fillWidth: true
-                text: dialog.bridge.inArchive
-                    ? qsTr("Delete %1 from this RPF?").arg(dialog.selectionLabel)
-                    : qsTr("Move %1 to the Recycle Bin?").arg(dialog.selectionLabel)
-                color: Theme.Theme.text
-                font.family: Theme.Theme.uiFont
-                font.pixelSize: Theme.Theme.fontSize
-                font.bold: true
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                Layout.fillWidth: true
-                visible: dialog.bridge.inArchive
-                text: qsTr("Files removed from an RPF cannot be restored from the Recycle Bin.")
-                color: Theme.Theme.textDim
-                font.family: Theme.Theme.uiFont
-                font.pixelSize: Theme.Theme.fontSize
-                wrapMode: Text.WordWrap
-            }
-        }
+    contentItem: Text {
+        leftPadding: 16
+        rightPadding: 16
+        text: dialog.question
+        color: Theme.Theme.text
+        font.family: Theme.Theme.uiFont
+        font.pixelSize: Theme.Theme.fontSize
+        font.bold: true
+        verticalAlignment: Text.AlignVCenter
+        wrapMode: Text.WordWrap
     }
 
     footer: Rectangle {
@@ -133,11 +103,11 @@ Dialog {
                 onClicked: dialog.reject()
             }
             ChromeToolButton {
+                objectName: "confirmDeleteButton"
                 Layout.preferredWidth: 88
                 Layout.preferredHeight: 28
-                raised: true
+                destructive: true
                 enabled: !dialog.bridge.entryOperationBusy
-                foreground: Theme.Theme.error
                 text: qsTr("Delete")
                 onClicked: dialog.submit()
             }
