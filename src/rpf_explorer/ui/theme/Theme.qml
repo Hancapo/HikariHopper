@@ -95,6 +95,11 @@ QtObject {
     readonly property int statusHeight: 24
     readonly property int statusHintInset: 10
     readonly property int splitHandleHitWidth: 8
+    readonly property int gridCellWidth: 148
+    readonly property int gridCellHeight: 112
+    readonly property int gridCellInset: 3
+    readonly property int gridContentInset: 10
+    readonly property int gridGlyphSize: 34
     readonly property int rowHeight: 26
     readonly property int scrollbarWidth: 12
     readonly property int scrollbarIdleThumbWidth: 4

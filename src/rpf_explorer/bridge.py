@@ -226,6 +226,7 @@ class ExplorerBridge(QObject):
     selectionChanged = Signal()
     searchChanged = Signal()
     sortChanged = Signal()
+    viewModeChanged = Signal()
     treeFocusChanged = Signal()
     gameOpened = Signal(str)
     uiStateChanged = Signal()
@@ -267,6 +268,7 @@ class ExplorerBridge(QObject):
         self._tree_focus_path = ""
         self._tree_focus_index = -1
         self._folders_visible = True
+        self._view_mode = "list"
 
     @Property(QObject, constant=True)
     def textureViewer(self) -> QObject:
@@ -460,6 +462,10 @@ class ExplorerBridge(QObject):
     @Property(bool, notify=uiStateChanged)
     def foldersVisible(self) -> bool:
         return self._folders_visible
+
+    @Property(str, notify=viewModeChanged)
+    def viewMode(self) -> str:
+        return self._view_mode
 
     @Property(int, notify=treeFocusChanged)
     def treeFocusIndex(self) -> int:
@@ -987,6 +993,14 @@ class ExplorerBridge(QObject):
         self._folders_visible = visible
         self.uiStateChanged.emit()
 
+    @Slot(str)
+    def setViewMode(self, mode: str) -> None:
+        normalized = mode.casefold()
+        if normalized not in {"list", "grid"} or normalized == self._view_mode:
+            return
+        self._view_mode = normalized
+        self.viewModeChanged.emit()
+
     @Slot()
     def requestSearchFocus(self) -> None:
         self.searchFocusRequested.emit()
@@ -1142,6 +1156,28 @@ class ExplorerBridge(QObject):
             if first >= 0 and last >= 0
             else set()
         )
+        self._apply_marquee_selection(interval, last, first)
+
+    @Slot("QVariantList")
+    def updateMarqueeRows(self, rows: list[Any]) -> None:
+        selected = {
+            int(row)
+            for row in rows
+            if isinstance(row, (int, float))
+            and 0 <= int(row) < self.entriesModel.rowCount()
+        }
+        self._apply_marquee_selection(
+            selected,
+            max(selected) if selected else -1,
+            min(selected) if selected else -1,
+        )
+
+    def _apply_marquee_selection(
+        self,
+        interval: set[int],
+        current_hint: int,
+        anchor_hint: int,
+    ) -> None:
         control = bool(
             self._marquee_modifiers & Qt.KeyboardModifier.ControlModifier.value
         )
@@ -1152,8 +1188,16 @@ class ExplorerBridge(QObject):
             selected = self._marquee_base_selection | interval
         else:
             selected = interval
-        current = last if last in selected else (max(selected) if selected else -1)
-        anchor = first if interval else -1
+        current = (
+            current_hint
+            if current_hint in selected
+            else (max(selected) if selected else -1)
+        )
+        anchor = (
+            anchor_hint
+            if anchor_hint in interval
+            else (min(interval) if interval else -1)
+        )
         self._set_selection(selected, current, anchor)
 
     @Slot()

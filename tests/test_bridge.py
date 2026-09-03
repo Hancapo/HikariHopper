@@ -17,6 +17,24 @@ def test_bridge_starts_without_demo_content() -> None:
     assert bridge.treeModel.rowCount() == 0
     assert bridge.selectedIndex == -1
     assert bridge.selectionCount == 0
+    assert bridge.viewMode == "list"
+
+
+def test_view_mode_accepts_only_list_and_grid() -> None:
+    bridge = ExplorerBridge()
+    changes = QSignalSpy(bridge.viewModeChanged)
+
+    bridge.setViewMode("grid")
+    bridge.setViewMode("unsupported")
+    bridge.setViewMode("GRID")
+
+    assert bridge.viewMode == "grid"
+    assert changes.count() == 1
+
+    bridge.setViewMode("list")
+
+    assert bridge.viewMode == "list"
+    assert changes.count() == 2
 
 
 def test_entry_selection_supports_control_shift_and_select_all(tmp_path, monkeypatch) -> None:
@@ -158,6 +176,30 @@ def test_marquee_selection_replaces_adds_and_toggles(tmp_path, monkeypatch) -> N
     assert bridge.entriesModel.data(
         bridge.entriesModel.index(3, 0), bridge.entriesModel.SELECTED
     )
+
+
+def test_grid_marquee_selects_non_contiguous_rows(tmp_path, monkeypatch) -> None:
+    import fivefury
+
+    monkeypatch.setattr(fivefury, "load_game_keys", lambda *args, **kwargs: None)
+    (tmp_path / "GTA5.exe").write_bytes(b"test executable")
+    for name in ("a.txt", "b.txt", "c.txt", "d.txt", "e.txt"):
+        (tmp_path / name).write_text(name, encoding="utf-8")
+
+    bridge = ExplorerBridge()
+    bridge.openGame(str(tmp_path))
+    bridge.beginMarqueeSelection(Qt.KeyboardModifier.NoModifier.value)
+    bridge.updateMarqueeRows([0, 2, 4])
+    bridge.endMarqueeSelection()
+
+    assert bridge.selectionCount == 3
+    assert [
+        row
+        for row in range(bridge.entriesModel.rowCount())
+        if bridge.entriesModel.data(
+            bridge.entriesModel.index(row, 0), bridge.entriesModel.SELECTED
+        )
+    ] == [0, 2, 4]
 
 
 def test_archive_selection_exports_standalone_files_and_folders(tmp_path) -> None:
@@ -751,6 +793,7 @@ def test_tabs_keep_independent_explorer_state(tmp_path, monkeypatch) -> None:
     first = tabs.activeBridge
     first.openGame(str(enhanced))
     first.navigate("mods")
+    first.setViewMode("grid")
 
     tabs.newTab()
     second = tabs.activeBridge
@@ -761,12 +804,14 @@ def test_tabs_keep_independent_explorer_state(tmp_path, monkeypatch) -> None:
     assert tabs.activeIndex == 1
     assert second.gamePath == str(legacy)
     assert second.currentPath == "update"
+    assert second.viewMode == "list"
 
     tabs.activateTab(0)
 
     assert tabs.activeBridge is first
     assert first.gamePath == str(enhanced)
     assert first.currentPath == "mods"
+    assert first.viewMode == "grid"
 
     tabs.closeActiveTab()
 

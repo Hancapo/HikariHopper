@@ -67,7 +67,8 @@ Rectangle {
     RetroMenu {
         id: viewMenu
         connectionWidth: viewButton.width
-        RetroMenuItem { text: qsTr("List view"); checkable: true; checked: true }
+        RetroMenuItem { text: qsTr("List view"); checkable: true; autoExclusive: true; checked: menuRow.bridge.viewMode === "list"; onTriggered: menuRow.bridge.setViewMode("list") }
+        RetroMenuItem { text: qsTr("Grid view"); checkable: true; autoExclusive: true; checked: menuRow.bridge.viewMode === "grid"; onTriggered: menuRow.bridge.setViewMode("grid") }
         RetroMenuSeparator { }
         RetroMenuItem { text: qsTr("Folders pane"); checkable: true; checked: menuRow.bridge.foldersVisible; onToggled: menuRow.bridge.setFoldersVisible(checked) }
     }

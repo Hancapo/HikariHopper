@@ -3,6 +3,8 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import "theme" as Theme
 
+pragma ComponentBehavior: Bound
+
 Item {
     id: view
     required property var bridge
@@ -34,12 +36,30 @@ Item {
                 sourceModel: view.treeModel
             }
 
-            EntryTable {
-                bridge: view.bridge
-                sourceModel: view.entryModel
+            Loader {
+                SplitView.fillWidth: true
+                sourceComponent: view.bridge.viewMode === "grid"
+                    ? gridComponent
+                    : listComponent
             }
         }
 
         StatusBar { bridge: view.bridge }
+    }
+
+    Component {
+        id: listComponent
+        EntryTable {
+            bridge: view.bridge
+            sourceModel: view.entryModel
+        }
+    }
+
+    Component {
+        id: gridComponent
+        EntryGrid {
+            bridge: view.bridge
+            sourceModel: view.entryModel
+        }
     }
 }

@@ -245,6 +245,9 @@ touch-target sizing the tool stops being able to show a directory.
 | `headerHeight` | 24 |
 | `statusHeight` | 24 |
 | `rowHeight` | 26 |
+| `gridCellWidth` / `gridCellHeight` | 148 / 112 |
+| `gridGlyphSize` | 34 |
+| `gridCellInset` / `gridContentInset` | 3 / 10 |
 
 Use the tokens; do not hardcode heights. If a new bar needs a height, add a
 token for it.
@@ -420,6 +423,7 @@ being read), and motion on an expressive surface (section 17).
 | `NavigationBar` | Back/forward/up, address bar, search, view modes |
 | `FolderPanel` | The headerless folder tree |
 | `EntryTable` | The detail list |
+| `EntryGrid` / `EntryGridCell` | The compact icon field and its fixed-size entry cells |
 | `StatusBar` | The bottom bar |
 
 Screens, one level up:
@@ -472,6 +476,11 @@ Rules for any new window or dialog:
   headerless: its hierarchy identifies the pane without spending a row on a
   redundant `FOLDERS` label.
 - Panels are separated by a 1px `border` `SplitView` handle.
+- List and grid are two presentations of the same entry model and selection.
+  Grid cells are unboxed at rest, use the existing type-aware `FileGlyph`, and
+  carry the same solid green selection as table rows. Arrow keys navigate by
+  grid geometry; Ctrl/Shift selection, drag export, sorting, search marking,
+  double-click activation and rectangular marquee remain available.
 - The top-level menu begins 1px from the frame and each title takes its content
   width plus 12px horizontal padding. While a popup is visible, its title keeps
   the `chromeRaised` active surface and opens the bottom seam so title and popup

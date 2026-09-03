@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import "entry_text.js" as EntryText
 import "theme" as Theme
 
 pragma ComponentBehavior: Bound
@@ -14,20 +15,6 @@ Rectangle {
     readonly property int typeWidth: 190
     readonly property int sizeWidth: 124
     readonly property int dataBlockWidth: nameWidth + typeWidth + sizeWidth
-
-    function markMatch(name, selected) {
-        const escape = (value) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const query = tablePanel.bridge.searchQuery;
-        if (!query)
-            return escape(name);
-        const at = name.toLowerCase().indexOf(query.toLowerCase());
-        if (at < 0)
-            return escape(name);
-        const ink = selected ? Theme.Theme.selectionText : Theme.Theme.brass;
-        return escape(name.slice(0, at))
-            + "<u><font color=\"" + ink + "\"><b>" + escape(name.slice(at, at + query.length)) + "</b></font></u>"
-            + escape(name.slice(at + query.length));
-    }
 
     color: Theme.Theme.panelBg
     SplitView.fillWidth: true
@@ -174,7 +161,13 @@ Rectangle {
                                     implicitWidth,
                                     parent.width - (childCountLabel.visible ? childCountLabel.width + 14 : 8)
                                 )
-                                text: tablePanel.markMatch(entryDelegate.name, entryDelegate.selected)
+                                text: EntryText.markMatch(
+                                    entryDelegate.name,
+                                    tablePanel.bridge.searchQuery,
+                                    entryDelegate.selected
+                                        ? Theme.Theme.selectionText
+                                        : Theme.Theme.brass
+                                )
                                 textFormat: Text.StyledText
                                 color: entryDelegate.selected
                                     ? Theme.Theme.selectionText
@@ -236,45 +229,13 @@ Rectangle {
                         }
                     }
 
-                    MouseArea {
+                    EntryPointerArea {
                         id: mouse
-                        property real pressX: 0
-                        property real pressY: 0
-                        property bool dragStarted: false
-                        property bool selectionChangedOnPress: false
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        preventStealing: true
-
-                        onPressed: function(event) {
-                            pressX = event.x;
-                            pressY = event.y;
-                            dragStarted = false;
-                            selectionChangedOnPress = !entryDelegate.selected;
-                            if (selectionChangedOnPress)
-                                tablePanel.bridge.selectEntry(entryDelegate.index, event.modifiers);
-                            entryTable.forceActiveFocus();
-                        }
-                        onPositionChanged: function(event) {
-                            const distanceX = event.x - pressX;
-                            const distanceY = event.y - pressY;
-                            const threshold = Application.styleHints.startDragDistance;
-                            if (!dragStarted && pressed
-                                    && distanceX * distanceX + distanceY * distanceY >= threshold * threshold) {
-                                dragStarted = true;
-                                tablePanel.bridge.startEntryDrag(entryDelegate.index);
-                            }
-                        }
-                        onDoubleClicked: function(event) {
-                            if (!dragStarted)
-                                tablePanel.bridge.activateEntry(entryDelegate.index);
-                        }
-                        onClicked: function(event) {
-                            if (!dragStarted && !selectionChangedOnPress)
-                                tablePanel.bridge.selectEntry(entryDelegate.index, event.modifiers);
-                        }
-                        onCanceled: dragStarted = false
+                        bridge: tablePanel.bridge
+                        entryIndex: entryDelegate.index
+                        entrySelected: entryDelegate.selected
+                        focusTarget: entryTable
+                        accessibleName: entryDelegate.name
                     }
                 }
 

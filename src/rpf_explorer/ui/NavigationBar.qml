@@ -207,15 +207,22 @@ Rectangle {
                 spacing: 0
                 ChromeToolButton {
                     Layout.preferredWidth: 30; Layout.preferredHeight: 26
-                    bordered: false; sunken: true
-                    iconKind: "list"; foreground: Theme.Theme.text
+                    bordered: false
+                    sunken: navigation.bridge.viewMode === "list"
+                    iconKind: "list"
+                    foreground: sunken ? Theme.Theme.text : Theme.Theme.textDim
                     Accessible.name: qsTr("List view")
+                    onClicked: navigation.bridge.setViewMode("list")
                 }
                 Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 26; color: Theme.Theme.borderHard }
                 ChromeToolButton {
                     Layout.preferredWidth: 30; Layout.preferredHeight: 26
-                    bordered: false; iconKind: "grid"; enabled: false
+                    bordered: false
+                    sunken: navigation.bridge.viewMode === "grid"
+                    iconKind: "grid"
+                    foreground: sunken ? Theme.Theme.text : Theme.Theme.textDim
                     Accessible.name: qsTr("Grid view")
+                    onClicked: navigation.bridge.setViewMode("grid")
                 }
             }
         }
