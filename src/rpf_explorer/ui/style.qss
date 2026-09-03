@@ -1,0 +1,5 @@
+/* Shared Qt stylesheet for the widget-based dialogs, kept out of Python and QML. */
+* { font-family: "Archivo"; font-size: 10pt; }
+QMessageBox { background: #2C2D43; color: #FFFBFF; }
+QFileDialog { background: #2C2D43; color: #FFFBFF; }
+QToolTip { background: #33354C; color: #FFFBFF; border: 1px solid #43455F; }

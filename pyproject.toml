@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hikari-hopper"
+version = "0.1.0"
+description = "A GTA V RPF Explorer built with PySide6 and FiveFury"
+requires-python = ">=3.11"
+dependencies = [
+  "PySide6>=6.8",
+  "fivefury>=0.4.20,<0.5",
+  "texfury>=1.6.3,<2",
+]
+
+[project.scripts]
+hikari-hopper = "rpf_explorer.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rpf_explorer = ["ui/*.qml", "ui/*.qss", "ui/*.js", "ui/*.txt", "ui/fonts/*", "ui/theme/*.qml", "ui/theme/qmldir"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
