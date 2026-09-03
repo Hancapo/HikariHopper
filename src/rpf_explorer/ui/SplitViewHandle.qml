@@ -14,6 +14,12 @@ Item {
         height: handle.height
     }
 
+    HoverHandler {
+        margin: (Theme.Theme.splitHandleHitWidth - handle.width) / 2
+        cursorShape: Qt.SplitHCursor
+        blocking: false
+    }
+
     Rectangle {
         anchors.fill: parent
         color: SplitHandle.pressed
