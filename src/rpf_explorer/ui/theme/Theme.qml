@@ -93,6 +93,7 @@ QtObject {
     readonly property int navigationHeight: 40
     readonly property int headerHeight: 24
     readonly property int statusHeight: 24
+    readonly property int statusHintInset: 10
     readonly property int rowHeight: 26
     readonly property int scrollbarWidth: 12
     readonly property int scrollbarIdleThumbWidth: 4

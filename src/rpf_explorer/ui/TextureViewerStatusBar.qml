@@ -86,6 +86,7 @@ Rectangle {
 
         RowLayout {
             Layout.fillHeight: true
+            Layout.leftMargin: Theme.Theme.statusHintInset
             spacing: 14
             Repeater {
                 model: [
@@ -111,7 +112,7 @@ Rectangle {
                     }
                 }
             }
-            Item { Layout.preferredWidth: 10 }
+            Item { Layout.preferredWidth: Theme.Theme.statusHintInset }
         }
     }
 }
