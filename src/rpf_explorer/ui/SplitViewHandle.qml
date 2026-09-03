@@ -5,14 +5,23 @@ import "theme" as Theme
 Item {
     id: handle
 
-    implicitWidth: Theme.Theme.splitHandleHitWidth
+    implicitWidth: 1
     Accessible.name: qsTr("Resize panels")
 
+    containmentMask: Item {
+        x: (handle.width - width) / 2
+        width: Theme.Theme.splitHandleHitWidth
+        height: handle.height
+    }
+
+    HoverHandler {
+        margin: (Theme.Theme.splitHandleHitWidth - handle.width) / 2
+        cursorShape: Qt.SplitHCursor
+        blocking: false
+    }
+
     Rectangle {
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: 1
+        anchors.fill: parent
         color: SplitHandle.pressed
             ? Theme.Theme.textRow
             : SplitHandle.hovered
