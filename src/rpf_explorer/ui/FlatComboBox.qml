@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Controls.Basic
 import "theme" as Theme
 
+pragma ComponentBehavior: Bound
+
 /*
  * A square, sunken combo box in the house style: an inset well, a drawn caret,
  * and a popup built like RetroMenu. Entries may be disabled — the model can set
