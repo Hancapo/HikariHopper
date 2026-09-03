@@ -432,7 +432,10 @@ def mip_dimensions_for_minimum(
     while True:
         next_width = max(1, mip_width // 2)
         next_height = max(1, mip_height // 2)
-        if min(next_width, next_height) < minimum:
+        if (
+            min(next_width, next_height) < minimum
+            or (next_width, next_height) == (mip_width, mip_height)
+        ):
             break
         mip_width = next_width
         mip_height = next_height
