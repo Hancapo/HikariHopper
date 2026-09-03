@@ -49,6 +49,7 @@ Rectangle {
             required property string name
             required property string dimensions
             required property string formatName
+            required property string dataSizeLabel
             required property string thumbnailUrl
             required property int mipCount
 
@@ -135,7 +136,16 @@ Rectangle {
                     ? Theme.Theme.scrollbarWidth + 6
                     : 12
                 y: 33
-                spacing: 12
+                spacing: 10
+
+                Text {
+                    text: textureDelegate.dataSizeLabel
+                    color: textureDelegate.selected
+                        ? Theme.Theme.selectionInk
+                        : Theme.Theme.textFaint
+                    font.family: Theme.Theme.monoFont
+                    font.pixelSize: Theme.Theme.smallFontSize
+                }
 
                 Text {
                     text: textureDelegate.formatName

@@ -135,11 +135,6 @@ Rectangle {
             Layout.fillWidth: true
             bridge: preview.bridge
         }
-
-        TextureFactsBar {
-            Layout.fillWidth: true
-            bridge: preview.bridge
-        }
     }
 
     Shortcut { sequence: "F"; onActivated: preview.fitTexture() }
