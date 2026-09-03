@@ -83,7 +83,7 @@ Rectangle {
             spacing: 14
             Repeater {
                 model: [
-                    { key: "Ctrl+O", label: qsTr("Game folder") },
+                    { key: "Ctrl+O", label: qsTr("Configured game") },
                     { key: "Enter", label: qsTr("Open") },
                     { key: "Backspace", label: qsTr("Up") },
                     { key: "F3", label: qsTr("Search") }

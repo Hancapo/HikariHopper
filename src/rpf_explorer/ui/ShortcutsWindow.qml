@@ -24,7 +24,7 @@ ToolWindow {
             keys: [
                 { key: "Ctrl+T", action: qsTr("New explorer tab") },
                 { key: "Ctrl+W", action: qsTr("Close current tab") },
-                { key: "Ctrl+O", action: qsTr("Open the GTA V folder") },
+                { key: "Ctrl+O", action: qsTr("Open the configured game") },
                 { key: "Ctrl+Shift+O", action: qsTr("Open a standalone RPF") },
                 { key: "Alt+F4", action: qsTr("Exit") }
             ]

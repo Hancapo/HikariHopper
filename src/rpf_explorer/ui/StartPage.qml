@@ -18,24 +18,22 @@ Rectangle {
     required property var bridge
     color: Theme.Theme.appBg
 
-    // Only the two GTA V editions can actually be opened: FiveFury's GameTarget
-    // has exactly GTA5 and GTA5_ENHANCED, and open_game() looks for GTA5.exe or
-    // GTA5_Enhanced.exe. The rest are listed so the scope is visible, and
-    // disabled so the UI never promises something it cannot do.
+    // Settings owns installation discovery. This picker only chooses which of
+    // the two configured editions to open.
     readonly property var titles: [
-        { label: "Grand Theft Auto V — Enhanced", edition: "enhanced" },
-        { label: "Grand Theft Auto V — Legacy", edition: "legacy" },
-        { label: "Grand Theft Auto IV", edition: "", supported: false, note: qsTr("no keys") },
-        { label: "Red Dead Redemption", edition: "", supported: false, note: qsTr("no keys") },
-        { label: "Red Dead Redemption 2", edition: "", supported: false, note: qsTr("no keys") }
+        { label: qsTr("Grand Theft Auto V — Enhanced"), edition: "enhanced" },
+        { label: qsTr("Grand Theft Auto V — Legacy"), edition: "legacy" }
     ]
 
+    readonly property string selectedEdition: titleBox.currentIndex < 0
+        ? ""
+        : page.titles[titleBox.currentIndex].edition
+    readonly property bool selectedPathValid: selectedEdition === "enhanced"
+        ? page.tabs.gamePathSettings.enhancedPathValid
+        : selectedEdition === "legacy" && page.tabs.gamePathSettings.legacyPathValid
+
     function openSelected() {
-        const entry = page.titles[titleBox.currentIndex]
-        if (entry.edition === "enhanced")
-            page.bridge.openEnhancedGameDialog()
-        else if (entry.edition === "legacy")
-            page.bridge.openLegacyGameDialog()
+        page.bridge.openConfiguredGame(page.selectedEdition)
     }
 
     ColumnLayout {
@@ -205,11 +203,11 @@ Rectangle {
                     ChromeToolButton {
                         Layout.preferredWidth: 92
                         Layout.preferredHeight: 28
-                        enabled: titleBox.currentSupported
+                        enabled: page.selectedPathValid
                         objectName: "openButton"
                         primary: true
-                        text: qsTr("Open…")
-                        Accessible.name: qsTr("Choose the installation folder")
+                        text: qsTr("Open", "action: open configured game")
+                        Accessible.name: qsTr("Open the configured game")
                         onClicked: page.openSelected()
                     }
                 }
@@ -217,8 +215,8 @@ Rectangle {
                 Text {
                     Layout.fillWidth: true
                     Layout.leftMargin: 48
-                    visible: !titleBox.currentSupported
-                    text: qsTr("HikariHopper reads GTA V archives. FiveFury has no game keys for this title.")
+                    visible: !page.selectedPathValid
+                    text: qsTr("Set this edition's installation path in Edit > Settings.")
                     color: Theme.Theme.textFaint
                     font.family: Theme.Theme.uiFont
                     font.pixelSize: Theme.Theme.smallFontSize

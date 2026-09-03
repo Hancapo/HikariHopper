@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QFileDialog
 APPLICATION_NAME = "HikariHopper"
 ORGANIZATION_NAME = "HikariHopper"
 _LEGACY_NAME = "Hikari Hopper"
-_SETTINGS_SCHEMA_VERSION = 2
+_SETTINGS_SCHEMA_VERSION = 3
 
 LAST_GAME_ROOT_KEY = "gameRoot"
 LEGACY_GAME_ROOT_KEY = "gameRoots/legacy"
@@ -59,6 +59,15 @@ def migrate_legacy_settings() -> None:
         edition = game_edition_for_path(last_root)
         if edition:
             current.setValue(game_root_key(edition), last_root)
+
+    if schema_version < 3:
+        last_root = str(current.value(LAST_GAME_ROOT_KEY, ""))
+        if not game_edition_for_path(last_root):
+            for edition in (ENHANCED_EDITION, LEGACY_EDITION):
+                configured_root = configured_game_root(current, edition)
+                if is_game_root(configured_root, edition):
+                    current.setValue(LAST_GAME_ROOT_KEY, configured_root)
+                    break
 
     current.setValue("settingsSchemaVersion", _SETTINGS_SCHEMA_VERSION)
     current.sync()
@@ -163,12 +172,21 @@ class GamePathSettings(QObject):
         normalized = value.strip().strip('"')
         if normalized == self._paths[edition]:
             return
+        previous = self._paths[edition]
         self._paths[edition] = normalized
         settings = app_settings()
         if normalized:
             settings.setValue(game_root_key(edition), normalized)
         else:
             settings.remove(game_root_key(edition))
+        last_root = str(settings.value(LAST_GAME_ROOT_KEY, ""))
+        last_edition = game_edition_for_path(last_root)
+        if is_game_root(normalized, edition) and (
+            not last_edition or last_edition == edition
+        ):
+            settings.setValue(LAST_GAME_ROOT_KEY, normalized)
+        elif last_root == previous:
+            settings.remove(LAST_GAME_ROOT_KEY)
         settings.sync()
         self.pathsChanged.emit()
 

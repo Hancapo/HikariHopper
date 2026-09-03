@@ -8,6 +8,7 @@ from PySide6.QtTest import QSignalSpy
 from rpf_explorer.settings import (
     ENHANCED_EDITION,
     ENHANCED_GAME_ROOT_KEY,
+    LEGACY_EDITION,
     LEGACY_GAME_ROOT_KEY,
     GamePathSettings,
     game_edition_for_path,
@@ -44,7 +45,7 @@ def test_remember_game_root_tracks_each_edition(tmp_path: Path) -> None:
     assert settings.value("gameRoot") == str(enhanced)
 
 
-def test_schema_two_migrates_the_last_game_to_its_edition(
+def test_schema_three_migrates_the_last_game_to_its_edition(
     tmp_path: Path,
 ) -> None:
     from rpf_explorer import settings as settings_module
@@ -56,8 +57,24 @@ def test_schema_two_migrates_the_last_game_to_its_edition(
 
     migrate_legacy_settings()
 
-    assert settings.value("settingsSchemaVersion") == 2
+    assert settings.value("settingsSchemaVersion") == 3
     assert settings.value(LEGACY_GAME_ROOT_KEY) == str(legacy)
+
+
+def test_schema_three_uses_a_configured_path_when_no_last_game_exists(
+    tmp_path: Path,
+) -> None:
+    from rpf_explorer import settings as settings_module
+
+    settings = settings_module.app_settings()
+    enhanced = _installation(tmp_path, "Enhanced", "GTA5_Enhanced.exe")
+    settings.setValue("settingsSchemaVersion", 2)
+    settings.setValue(ENHANCED_GAME_ROOT_KEY, str(enhanced))
+
+    migrate_legacy_settings()
+
+    assert settings.value("settingsSchemaVersion") == 3
+    assert settings.value("gameRoot") == str(enhanced)
 
 
 def test_game_path_settings_persists_and_validates_paths(tmp_path: Path) -> None:
@@ -76,6 +93,7 @@ def test_game_path_settings_persists_and_validates_paths(tmp_path: Path) -> None
     assert controller.legacyPath == str(legacy)
     assert controller.legacyPathValid
     assert settings.value(LEGACY_GAME_ROOT_KEY) == str(legacy)
+    assert settings.value("gameRoot") == str(legacy)
     assert controller.enhancedPath == str(invalid)
     assert not controller.enhancedPathValid
     assert settings.value(ENHANCED_GAME_ROOT_KEY) == str(invalid)
@@ -85,6 +103,41 @@ def test_game_path_settings_persists_and_validates_paths(tmp_path: Path) -> None
 
     assert settings.value(ENHANCED_GAME_ROOT_KEY) is None
     assert changes.count() == 3
+
+    controller.setLegacyPath("")
+
+    assert settings.value(LEGACY_GAME_ROOT_KEY) is None
+    assert settings.value("gameRoot") is None
+    assert changes.count() == 4
+
+
+def test_configured_game_opens_without_a_folder_dialog(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import fivefury
+
+    from rpf_explorer import settings as settings_module
+    from rpf_explorer.bridge import ExplorerBridge
+
+    monkeypatch.setattr(fivefury, "load_game_keys", lambda *args, **kwargs: None)
+    legacy = _installation(tmp_path, "Legacy", "GTA5.exe")
+    settings_module.app_settings().setValue(LEGACY_GAME_ROOT_KEY, str(legacy))
+    bridge = ExplorerBridge()
+
+    bridge.openConfiguredGame(LEGACY_EDITION)
+
+    assert bridge.hasGame
+    assert bridge.gamePath == str(legacy)
+
+
+def test_missing_configured_game_points_to_settings() -> None:
+    from rpf_explorer.bridge import ExplorerBridge
+
+    bridge = ExplorerBridge()
+
+    bridge.openConfiguredGame(ENHANCED_EDITION)
+
+    assert bridge.status == "Configure the GTA V Enhanced path in Settings"
 
 
 def test_tabs_refresh_game_path_settings_after_opening_game(

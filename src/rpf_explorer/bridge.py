@@ -30,6 +30,7 @@ from .settings import (
     LEGACY_EDITION,
     app_settings,
     configured_game_root,
+    is_game_root,
     remember_game_root,
 )
 from .texture_viewer import TextureImageProvider, TextureViewerBridge
@@ -258,7 +259,7 @@ class ExplorerBridge(QObject):
         self._search = ""
         self._sort_column = "name"
         self._sort_ascending = True
-        self._status = "No game loaded  ·  Use Ctrl+O to select the GTA V folder"
+        self._status = "No game loaded  ·  Configure game paths in Settings"
         self._total_count = 0
         self._visible_count = 0
         self._selected_name = ""
@@ -781,52 +782,37 @@ class ExplorerBridge(QObject):
         self._publish_navigation()
 
     def restore_last_game(self) -> None:
-        path = str(app_settings().value("gameRoot", ""))
-        if path and Path(path).is_dir():
+        path = self._configured_game_path()
+        if path:
             self.openGame(path)
 
-    @Slot()
-    def openGameDialog(self) -> None:
-        self._open_game_dialog("Select GTA V Installation")
-
-    @Slot()
-    def openEnhancedGameDialog(self) -> None:
-        self._open_game_dialog(
-            "Select GTA V Enhanced Installation",
-            "GTA5_Enhanced.exe",
-            ENHANCED_EDITION,
-        )
-
-    @Slot()
-    def openLegacyGameDialog(self) -> None:
-        self._open_game_dialog(
-            "Select GTA V Legacy Installation",
-            "GTA5.exe",
-            LEGACY_EDITION,
-        )
-
-    def _open_game_dialog(
-        self,
-        title: str,
-        expected_executable: str = "",
-        edition: str = "",
-    ) -> None:
-        settings = app_settings()
-        start_path = (
-            configured_game_root(settings, edition)
-            if edition
-            else str(settings.value("gameRoot", ""))
-        )
-        if not Path(start_path).is_dir():
-            start_path = str(settings.value("gameRoot", ""))
-        path = QFileDialog.getExistingDirectory(None, title, start_path)
+    @Slot(str)
+    def openConfiguredGame(self, edition: str = "") -> None:
+        path = self._configured_game_path(edition)
         if not path:
-            return
-        if expected_executable and not (Path(path) / expected_executable).is_file():
-            edition = "Enhanced" if expected_executable == "GTA5_Enhanced.exe" else "Legacy"
-            self._set_status(f"That folder is not a GTA V {edition} installation")
+            edition_name = {
+                ENHANCED_EDITION: "GTA V Enhanced",
+                LEGACY_EDITION: "GTA V Legacy",
+            }.get(edition, "game")
+            self._set_status(f"Configure the {edition_name} path in Settings")
             return
         self.openGame(path)
+
+    @staticmethod
+    def _configured_game_path(edition: str = "") -> str:
+        settings = app_settings()
+        if edition:
+            path = configured_game_root(settings, edition)
+            return path if is_game_root(path, edition) else ""
+
+        last_root = str(settings.value("gameRoot", ""))
+        if is_game_root(last_root):
+            return last_root
+        for candidate_edition in (ENHANCED_EDITION, LEGACY_EDITION):
+            path = configured_game_root(settings, candidate_edition)
+            if is_game_root(path, candidate_edition):
+                return path
+        return ""
 
     @Slot(str)
     def openGame(self, path: str) -> None:
@@ -921,7 +907,7 @@ class ExplorerBridge(QObject):
         self._total_count = 0
         self._visible_count = 0
         self.countsChanged.emit()
-        self._set_status("No game loaded  ·  Use Ctrl+O to select the GTA V folder")
+        self._set_status("No game loaded  ·  Configure game paths in Settings")
 
     @Slot(str)
     def navigate(self, path: str) -> None:
