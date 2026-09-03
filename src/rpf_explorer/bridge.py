@@ -35,6 +35,7 @@ from .backend import (
     create_rpf_from_folder_at,
     create_rpf_from_zip_at,
     delete_archive_files_at,
+    import_files_at,
     normalize_entry_name,
     normalize_rpf_name,
 )
@@ -51,6 +52,7 @@ from .settings import (
 from .texture_viewer import TextureImageProvider, TextureViewerBridge
 
 _INVALID_INDEX = QModelIndex()
+_ENTRY_DRAG_MIME = "application/x-hikarihopper-entry-drag"
 
 
 class EntryListModel(QAbstractListModel):
@@ -539,6 +541,10 @@ class ExplorerBridge(QObject):
     def entryOperationBusy(self) -> bool:
         return self._entry_operation_busy
 
+    @Property(str, constant=True)
+    def entryDragMimeType(self) -> str:
+        return _ENTRY_DRAG_MIME
+
     @Property(bool, notify=selectionChanged)
     def selectionDeletable(self) -> bool:
         entries = self._selected_entries()
@@ -992,6 +998,41 @@ class ExplorerBridge(QObject):
             ),
         )
 
+    @Slot("QVariantList", result=bool)
+    def importDroppedFiles(self, urls: list[Any]) -> bool:
+        if self._entry_operation_busy:
+            return False
+        try:
+            sources = self._local_drop_paths(urls)
+            target = self.provider.creation_target(self._current_path)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._set_status(f"Could not import files: {error}")
+            return False
+        count = len(sources)
+        noun = "file" if count == 1 else "files"
+        return self._start_entry_operation(
+            target,
+            f"import {noun}",
+            f"Importing {count} {noun}…",
+            partial(import_files_at, target, sources),
+            self._entry_import_completed,
+        )
+
+    @staticmethod
+    def _local_drop_paths(urls: list[Any]) -> tuple[Path, ...]:
+        paths: list[Path] = []
+        for value in urls:
+            url = value if isinstance(value, QUrl) else QUrl(str(value))
+            if not url.isLocalFile():
+                raise ValueError("Only local files can be imported")
+            path = Path(url.toLocalFile()).expanduser().resolve(strict=True)
+            if not path.is_file():
+                raise ValueError(f"Only files can be imported: {path.name}")
+            paths.append(path)
+        if not paths:
+            raise ValueError("Drop one or more files to import")
+        return tuple(paths)
+
     def _creation_name(self, name: str, *, rpf: bool) -> str:
         try:
             return normalize_rpf_name(name) if rpf else normalize_entry_name(name)
@@ -1046,8 +1087,20 @@ class ExplorerBridge(QObject):
         if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
-            self._select_created_entry(name)
+            self._select_entries_by_name((name,))
         self._set_status(f"Created {name}")
+
+    @Slot(object)
+    def _entry_import_completed(self, payload: object) -> None:
+        target, names = payload
+        self._finish_entry_operation()
+        if self._refresh_operation_target(target):
+            self._clear_selection()
+            self._refresh()
+            self._select_entries_by_name(names)
+        count = len(names)
+        noun = "file" if count == 1 else "files"
+        self._set_status(f"Imported {count} {noun}")
 
     @Slot(object)
     def _entry_operation_failed(self, payload: object) -> None:
@@ -1082,12 +1135,17 @@ class ExplorerBridge(QObject):
         except (OSError, ValueError, RuntimeError):
             return False
 
-    def _select_created_entry(self, name: str) -> None:
-        for row in range(self.entriesModel.rowCount()):
-            entry = self.entriesModel.entry_at(row)
-            if entry is not None and entry.name.casefold() == name.casefold():
-                self._set_selection({row}, row, row, force=True)
-                return
+    def _select_entries_by_name(self, names: tuple[str, ...]) -> None:
+        keys = {name.casefold() for name in names}
+        rows = {
+            row
+            for row in range(self.entriesModel.rowCount())
+            if (entry := self.entriesModel.entry_at(row)) is not None
+            and entry.name.casefold() in keys
+        }
+        if rows:
+            current = min(rows)
+            self._set_selection(rows, current, current, force=True)
 
     @Slot()
     def requestDeleteSelection(self) -> None:
@@ -1630,6 +1688,7 @@ class ExplorerBridge(QObject):
 
         mime_data = QMimeData()
         mime_data.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+        mime_data.setData(_ENTRY_DRAG_MIME, QByteArray(b"1"))
         drag = QDrag(self)
         drag.setMimeData(mime_data)
         self._set_status(
