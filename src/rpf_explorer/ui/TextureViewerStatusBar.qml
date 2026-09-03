@@ -48,38 +48,20 @@ Rectangle {
 
         Seam { }
 
-        RowLayout {
+        Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
-            Text {
-                leftPadding: 10
-                text: statusBar.bridge.operationBusy
-                    ? statusBar.bridge.status
-                    : statusBar.bridge.selectedIndex >= 0
-                    ? qsTr("Selected")
-                    : statusBar.bridge.status
-                color: Theme.Theme.textFaint
-                font.family: Theme.Theme.monoFont
-                font.pixelSize: Theme.Theme.smallFontSize
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-            Text {
-                text: statusBar.bridge.selectedName
-                color: Theme.Theme.text
-                font.family: Theme.Theme.monoFont
-                font.pixelSize: Theme.Theme.smallFontSize
-                verticalAlignment: Text.AlignVCenter
-            }
-            Text {
-                Layout.fillWidth: true
-                text: statusBar.bridge.selectedDataSize
-                color: Theme.Theme.textFaint
-                font.family: Theme.Theme.monoFont
-                font.pixelSize: Theme.Theme.smallFontSize
-                verticalAlignment: Text.AlignVCenter
-            }
+            leftPadding: 10
+            text: statusBar.bridge.operationBusy || statusBar.bridge.error !== ""
+                ? statusBar.bridge.status
+                : ""
+            color: statusBar.bridge.error === ""
+                ? Theme.Theme.textFaint
+                : Theme.Theme.error
+            font.family: Theme.Theme.monoFont
+            font.pixelSize: Theme.Theme.smallFontSize
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
         }
 
         Seam { }

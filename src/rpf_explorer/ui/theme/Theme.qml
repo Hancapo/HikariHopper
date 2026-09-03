@@ -110,7 +110,6 @@ QtObject {
 
     // Texture dictionary viewer metrics. Its rows are taller only because the
     // thumbnail is the primary recognition aid rather than an entry glyph.
-    readonly property int textureContextHeight: 42
     readonly property int textureRailWidth: 340
     readonly property int textureRowHeight: 62
     readonly property int textureThumbnailSize: 50

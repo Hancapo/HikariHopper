@@ -99,11 +99,6 @@ Window {
             viewerWindow: window
         }
 
-        TextureContextBar {
-            Layout.fillWidth: true
-            bridge: window.bridge
-        }
-
         SplitView {
             Layout.fillWidth: true
             Layout.fillHeight: true
