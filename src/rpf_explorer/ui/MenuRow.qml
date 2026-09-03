@@ -39,7 +39,13 @@ Rectangle {
         connectionWidth: fileButton.width
         RetroMenuItem { text: qsTr("New tab"); shortcutText: "Ctrl+T"; onTriggered: menuRow.tabs.newTab() }
         RetroMenuSeparator { }
-        RetroMenuItem { text: qsTr("Open GTA V folder…"); shortcutText: "Ctrl+O"; onTriggered: menuRow.bridge.openGameDialog() }
+        RetroMenuItem {
+            text: qsTr("Open configured game")
+            shortcutText: "Ctrl+O"
+            enabled: menuRow.tabs.gamePathSettings.enhancedPathValid
+                || menuRow.tabs.gamePathSettings.legacyPathValid
+            onTriggered: menuRow.bridge.openConfiguredGame("")
+        }
         RetroMenuItem { text: qsTr("Open RPF archive…"); shortcutText: "Ctrl+Shift+O"; onTriggered: menuRow.bridge.openArchiveDialog() }
         RetroMenuSeparator { }
         RetroMenuItem { text: qsTr("Close RPF archive"); enabled: menuRow.bridge.hasArchive; onTriggered: menuRow.bridge.closeArchive() }
@@ -94,7 +100,12 @@ Rectangle {
     }
 
     Shortcut { sequence: "Ctrl+T"; onActivated: menuRow.tabs.newTab() }
-    Shortcut { sequence: "Ctrl+O"; onActivated: menuRow.bridge.openGameDialog() }
+    Shortcut {
+        sequence: "Ctrl+O"
+        enabled: menuRow.tabs.gamePathSettings.enhancedPathValid
+            || menuRow.tabs.gamePathSettings.legacyPathValid
+        onActivated: menuRow.bridge.openConfiguredGame("")
+    }
     Shortcut { sequence: "Ctrl+Shift+O"; onActivated: menuRow.bridge.openArchiveDialog() }
     Shortcut { sequence: "Ctrl+W"; onActivated: menuRow.tabs.closeActiveTab() }
     Shortcut { sequence: "Ctrl+C"; enabled: menuRow.bridge.hasSelection; onActivated: menuRow.bridge.copySelectedName() }

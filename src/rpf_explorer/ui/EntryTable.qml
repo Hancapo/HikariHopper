@@ -267,7 +267,7 @@ Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: tablePanel.bridge.hasWorkspace
                         ? qsTr("This folder is empty")
-                        : qsTr("Select your GTA V installation to begin")
+                        : qsTr("Configure a GTA V installation to begin")
                     color: Theme.Theme.textDim
                     font.family: Theme.Theme.monoFont
                     font.pixelSize: Theme.Theme.fontSize
@@ -279,8 +279,8 @@ Rectangle {
                     height: 32
                     visible: !tablePanel.bridge.hasWorkspace
                     primary: true
-                    text: qsTr("OPEN GTA V FOLDER…")
-                    onClicked: tablePanel.bridge.openGameDialog()
+                    text: qsTr("OPEN CONFIGURED GAME")
+                    onClicked: tablePanel.bridge.openConfiguredGame("")
                 }
             }
 
