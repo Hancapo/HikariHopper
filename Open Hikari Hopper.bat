@@ -29,6 +29,7 @@ if not errorlevel 1 goto launch
 
 :install
 echo Installing HikariHopper and its dependencies...
+if exist "src\hikari_hopper.egg-info" rmdir /s /q "src\hikari_hopper.egg-info"
 "%VENV_PYTHON%" -m pip install --editable .
 if errorlevel 1 goto setup_failed
 copy /y "pyproject.toml" "%INSTALL_MARKER%" >nul
