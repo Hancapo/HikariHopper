@@ -1543,7 +1543,12 @@ class ExplorerBridge(QObject):
             return
         self.selectEntry(row)
         if entry.is_directory:
-            self.navigate(entry.path)
+            path = (
+                self.provider.entry_local_path(entry)
+                if self.provider.in_archive
+                else entry.path
+            )
+            self.navigate(path)
             return
         if entry.name.casefold().endswith(".ytd"):
             self._open_texture_dictionary(entry)
