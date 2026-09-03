@@ -39,8 +39,7 @@ ScrollBar {
         implicitWidth: Theme.Theme.scrollbarWidth
 
         Rectangle {
-            anchors.right: parent.right
-            anchors.rightMargin: 2
+            anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: control.hovered || control.pressed
