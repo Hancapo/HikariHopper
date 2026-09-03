@@ -1,33 +1,37 @@
 import QtQuick
 import "theme" as Theme
 
-pragma ComponentBehavior: Bound
-
 Item {
     id: checkerboard
 
     property int cellSize: 24
-    readonly property int columnCount: Math.max(1, Math.ceil(width / cellSize))
-    readonly property int rowCount: Math.max(1, Math.ceil(height / cellSize))
 
-    clip: true
+    onCellSizeChanged: board.requestPaint()
 
-    Rectangle {
+    Canvas {
+        id: board
+
         anchors.fill: parent
-        color: Theme.Theme.appBg
-    }
-
-    Repeater {
-        model: checkerboard.columnCount * checkerboard.rowCount
-        delegate: Rectangle {
-            required property int index
-            x: (index % checkerboard.columnCount) * checkerboard.cellSize
-            y: Math.floor(index / checkerboard.columnCount) * checkerboard.cellSize
-            width: checkerboard.cellSize
-            height: checkerboard.cellSize
-            color: (index + Math.floor(index / checkerboard.columnCount)) % 2
-                ? Theme.Theme.appBg
-                : Theme.Theme.chromeBg
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onPaint: {
+            const context = getContext("2d")
+            context.fillStyle = Theme.Theme.chromeBg
+            context.fillRect(0, 0, width, height)
+            context.fillStyle = Theme.Theme.appBg
+            for (let y = 0; y < height; y += checkerboard.cellSize) {
+                const row = Math.floor(y / checkerboard.cellSize)
+                for (let x = 0; x < width; x += checkerboard.cellSize) {
+                    const column = Math.floor(x / checkerboard.cellSize)
+                    if ((row + column) % 2 !== 0)
+                        context.fillRect(
+                            x,
+                            y,
+                            checkerboard.cellSize,
+                            checkerboard.cellSize
+                        )
+                }
+            }
         }
     }
 }

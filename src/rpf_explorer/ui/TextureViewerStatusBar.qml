@@ -73,6 +73,8 @@ Rectangle {
             Repeater {
                 model: [
                     { key: "Ctrl+E", label: qsTr("Extract DDS") },
+                    { key: qsTr("Wheel"), label: qsTr("Zoom") },
+                    { key: qsTr("Drag"), label: qsTr("Pan") },
                     { key: "F", label: qsTr("Fit") },
                     { key: "1", label: qsTr("Actual size") }
                 ]
