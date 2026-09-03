@@ -16,6 +16,9 @@ ToolButton {
     property bool bordered: true
     // The green action. Dark ink, brighter on hover, pressed a shade down.
     property bool primary: false
+    // A destructive action uses the error colour as its fill while preserving
+    // the same bevel, hover, pressed, and disabled behavior as other variants.
+    property bool destructive: false
     // Sits on raised chrome with a bevel instead of being transparent at rest.
     property bool raised: false
     // A close mark tucked into a panel header takes no fill: a slab behind a tiny
@@ -27,21 +30,27 @@ ToolButton {
     // font has no arrow or view-mode glyphs, so those must always be drawn.
     property string iconKind: ""
 
-    readonly property bool framed: bordered || raised || primary
+    readonly property bool framed: bordered || raised || primary || destructive
 
-    readonly property color fillBase: primary
-        ? Theme.Theme.selection
-        : raised ? Theme.Theme.chromeRaised : "transparent"
-    readonly property color fillHover: primary
-        ? Qt.lighter(Theme.Theme.selection, 1.11)
-        : Theme.Theme.hoverChrome
-    readonly property color fillDown: primary
-        ? Qt.darker(Theme.Theme.selection, 1.12)
-        : Theme.Theme.borderSoft
+    readonly property color fillBase: destructive
+        ? Theme.Theme.error
+        : primary
+            ? Theme.Theme.selection
+            : raised ? Theme.Theme.chromeRaised : "transparent"
+    readonly property color fillHover: destructive
+        ? Qt.lighter(Theme.Theme.error, 1.11)
+        : primary
+            ? Qt.lighter(Theme.Theme.selection, 1.11)
+            : Theme.Theme.hoverChrome
+    readonly property color fillDown: destructive
+        ? Qt.darker(Theme.Theme.error, 1.12)
+        : primary
+            ? Qt.darker(Theme.Theme.selection, 1.12)
+            : Theme.Theme.borderSoft
 
     property color foreground: !enabled
         ? Theme.Theme.textFaint
-        : primary
+        : primary || destructive
             ? Theme.Theme.selectionText
             : down
                 ? Theme.Theme.textRow
@@ -74,7 +83,7 @@ ToolButton {
             anchors.margins: 1
             height: 1
             visible: control.framed && !control.sunken && !control.down
-            color: control.primary && control.enabled
+            color: (control.primary || control.destructive) && control.enabled
                 ? Qt.rgba(1, 1, 1, 0.4)
                 : Theme.Theme.bevel
         }
