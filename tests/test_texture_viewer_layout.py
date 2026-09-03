@@ -15,3 +15,5 @@ def test_texture_size_moves_to_rail_and_facts_bar_is_removed() -> None:
     assert "TextureFactsBar" not in preview
     assert not (ui_path / "TextureFactsBar.qml").exists()
     assert "textureFactsHeight" not in theme
+    assert "textureScrollBar.enabled ? Theme.Theme.scrollbarWidth : 0" in rail
+    assert "anchors.rightMargin: textureScrollBar.enabled ? 6 : 12" in rail

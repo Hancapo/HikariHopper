@@ -56,6 +56,7 @@ Rectangle {
             readonly property bool selected: textureDelegate.index === rail.bridge.selectedIndex
 
             width: ListView.view.width
+                - (textureScrollBar.enabled ? Theme.Theme.scrollbarWidth : 0)
             height: Theme.Theme.textureRowHeight
             color: selected
                 ? Theme.Theme.selection
@@ -132,9 +133,7 @@ Rectangle {
 
             Row {
                 anchors.right: parent.right
-                anchors.rightMargin: textureScrollBar.enabled
-                    ? Theme.Theme.scrollbarWidth + 6
-                    : 12
+                anchors.rightMargin: textureScrollBar.enabled ? 6 : 12
                 y: 33
                 spacing: 10
 
