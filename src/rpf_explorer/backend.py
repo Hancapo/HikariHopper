@@ -120,6 +120,17 @@ class EntryCreationTarget:
         return self.archive_path is not None
 
 
+@dataclass(frozen=True, slots=True)
+class EntryDeletionTarget:
+    location: EntryCreationTarget
+    loose_paths: tuple[Path, ...] = ()
+    archive_paths: tuple[str, ...] = ()
+
+    @property
+    def in_archive(self) -> bool:
+        return self.location.in_archive
+
+
 def create_folder_at(target: EntryCreationTarget, name: str) -> str:
     normalized = normalize_entry_name(name)
     if target.in_archive:
@@ -179,6 +190,26 @@ def create_rpf_from_zip_at(
     return normalized
 
 
+def delete_archive_files_at(target: EntryDeletionTarget) -> int:
+    from fivefury.rpf.entries import RpfFileEntry
+
+    if not target.in_archive or not target.archive_paths:
+        raise ValueError("No RPF files were selected for deletion")
+
+    def remove_files(archive: Any) -> None:
+        entries: list[RpfFileEntry] = []
+        for path in target.archive_paths:
+            entry = _archive_file_at(archive, path)
+            if not isinstance(entry, RpfFileEntry) or entry.parent is None:
+                raise ValueError(f"Could not find archive file: {path}")
+            entries.append(entry)
+        for entry in entries:
+            entry.parent.remove_file(entry)
+
+    _save_target_archive(target.location, remove_files)
+    return len(target.archive_paths)
+
+
 def normalize_entry_name(name: str) -> str:
     normalized = name.strip()
     invalid = '<>:"/\\|?*'
@@ -202,6 +233,10 @@ def normalize_rpf_name(name: str) -> str:
 
 def _archive_child_path(directory: str, name: str) -> str:
     return name if directory == "." else f"{directory}/{name}"
+
+
+def _normalized_directory(path: str) -> str:
+    return "." if not path or path == "/" else path.strip("/")
 
 
 def _loose_destination(target: EntryCreationTarget, name: str) -> Path:
@@ -237,8 +272,30 @@ def _mutate_target_archive(
     name: str,
     mutation: Callable[[Any], None],
 ) -> None:
+    from fivefury.rpf.entries import RpfDirectoryEntry
+
+    def create_entry(archive: Any) -> None:
+        directory = _archive_directory_at(archive, target.internal_directory)
+        if not isinstance(directory, RpfDirectoryEntry):
+            raise ValueError(
+                f"Could not find archive folder: {target.internal_directory}"
+            )
+        if any(
+            entry.name.casefold() == name.casefold()
+            for entry in (*directory.directories, *directory.files)
+        ):
+            raise FileExistsError(f"An entry named {name} already exists")
+        mutation(archive)
+
+    _save_target_archive(target, create_entry)
+
+
+def _save_target_archive(
+    target: EntryCreationTarget,
+    mutation: Callable[[Any], None],
+) -> None:
     from fivefury import RpfArchive
-    from fivefury.rpf.entries import RpfDirectoryEntry, RpfFileEntry
+    from fivefury.rpf.entries import RpfFileEntry
 
     if target.archive_path is None:
         raise ValueError("No writable RPF archive is open")
@@ -263,23 +320,30 @@ def _mutate_target_archive(
                 raise ValueError(
                     f"Could not open nested archive: {target.archive_prefix}"
                 )
-
-        directory = (
-            archive.root
-            if target.internal_directory == "."
-            else archive.find_entry(target.internal_directory)
-        )
-        if not isinstance(directory, RpfDirectoryEntry):
-            raise ValueError(
-                f"Could not find archive folder: {target.internal_directory}"
-            )
-        if any(
-            entry.name.casefold() == name.casefold()
-            for entry in (*directory.directories, *directory.files)
-        ):
-            raise FileExistsError(f"An entry named {name} already exists")
         mutation(archive)
         root.save(target.archive_path)
+
+
+def _archive_directory_at(archive: Any, path: str) -> Any:
+    normalized = _normalized_directory(path)
+    directory = archive.root
+    if normalized == ".":
+        return directory
+    for segment in normalized.split("/"):
+        directory = directory.find_directory(segment)
+        if directory is None:
+            return None
+    return directory
+
+
+def _archive_file_at(archive: Any, path: str) -> Any:
+    normalized = _normalized_directory(path)
+    parent_path, separator, name = normalized.rpartition("/")
+    directory = _archive_directory_at(
+        archive,
+        parent_path if separator else ".",
+    )
+    return directory.find_file(name if separator else normalized) if directory else None
 
 
 class RpfProvider:
@@ -457,7 +521,7 @@ class RpfProvider:
         return self.game_entries(directory_path)
 
     def creation_target(self, directory_path: str = ".") -> EntryCreationTarget:
-        normalized = self._normalized_directory(directory_path)
+        normalized = _normalized_directory(directory_path)
         if self.in_archive:
             directory = self._archive_directory(self._archive, normalized)
             if directory is None:
@@ -484,6 +548,35 @@ class RpfProvider:
         if not directory.is_dir():
             raise ValueError(f"Game folder does not exist: {normalized}")
         return EntryCreationTarget(directory=directory, crypto=self._crypto)
+
+    def deletion_target(
+        self,
+        entries: list[EntryRecord],
+        directory_path: str = ".",
+    ) -> EntryDeletionTarget:
+        if not entries:
+            raise ValueError("No files are selected")
+        if any(entry.is_directory for entry in entries):
+            raise ValueError("Folder deletion is not supported")
+
+        location = self.creation_target(directory_path)
+        if location.in_archive:
+            if any(
+                getattr(entry.native_entry, "_archive", None) is not self._archive
+                for entry in entries
+            ):
+                raise ValueError("A selected file is outside the active RPF")
+            return EntryDeletionTarget(
+                location=location,
+                archive_paths=tuple(self.entry_local_path(entry) for entry in entries),
+            )
+        loose_paths = tuple(self._game_entry_path(entry) for entry in entries)
+        open_archive = self._root_archive()
+        if open_archive is not None:
+            source_path = Path(open_archive.source_path).expanduser().resolve()
+            if source_path in loose_paths:
+                raise ValueError("Close the RPF archive before deleting its file")
+        return EntryDeletionTarget(location=location, loose_paths=loose_paths)
 
     def export_entries(
         self,
@@ -613,7 +706,7 @@ class RpfProvider:
         return self.info
 
     def archive_entry(self, path: str) -> EntryRecord | None:
-        normalized = self._normalized_directory(path)
+        normalized = _normalized_directory(path)
         parent = PurePosixPath(normalized).parent.as_posix()
         for entry in self.archive_entries(parent):
             if entry.path.replace("\\", "/") == normalized:
@@ -675,7 +768,7 @@ class RpfProvider:
     def game_entries(self, directory_path: str) -> list[EntryRecord]:
         if self._game_root is None:
             return []
-        relative = self._normalized_directory(directory_path)
+        relative = _normalized_directory(directory_path)
         directory = self._game_root if relative == "." else self._game_root / relative
         if not directory.is_dir():
             return []
@@ -791,7 +884,7 @@ class RpfProvider:
     def _archive_directory(self, archive: Any, path: str) -> Any:
         if archive is None:
             return None
-        normalized = self._normalized_directory(path)
+        normalized = _normalized_directory(path)
         if normalized == ".":
             return archive.root
         try:
@@ -835,10 +928,6 @@ class RpfProvider:
             return path.relative_to(self._game_root).as_posix()
         except ValueError:
             return ""
-
-    @staticmethod
-    def _normalized_directory(path: str) -> str:
-        return "." if not path or path == "/" else path.strip("/")
 
     @staticmethod
     def _child_counts(directory: Path) -> tuple[int, int]:

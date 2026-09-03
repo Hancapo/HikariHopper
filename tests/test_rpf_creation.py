@@ -124,17 +124,17 @@ def test_bridge_creates_entries_without_blocking_the_ui_thread(tmp_path: Path) -
     bridge.provider._game_target = "gta5_enhanced"
 
     assert bridge.createEmptyRpf("background")
-    assert bridge.creationBusy
+    assert bridge.entryOperationBusy
 
     loop = QEventLoop()
-    bridge.creationStateChanged.connect(
-        lambda: loop.quit() if not bridge.creationBusy else None
+    bridge.entryOperationStateChanged.connect(
+        lambda: loop.quit() if not bridge.entryOperationBusy else None
     )
     QTimer.singleShot(5000, loop.quit)
     loop.exec()
     app.processEvents()
 
-    assert not bridge.creationBusy
+    assert not bridge.entryOperationBusy
     assert (tmp_path / "background.rpf").is_file()
     assert bridge.entriesModel.rowCount() == 1
     assert bridge.entriesModel.entry_at(0).name == "background.rpf"

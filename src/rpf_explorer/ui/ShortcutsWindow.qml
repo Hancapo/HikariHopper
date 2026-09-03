@@ -44,6 +44,7 @@ ToolWindow {
                 { key: "Ctrl+A", action: qsTr("Select all visible entries") },
                 { key: "Ctrl+C", action: qsTr("Copy name") },
                 { key: "Ctrl+Shift+C", action: qsTr("Copy path") },
+                { key: "Delete", action: qsTr("Delete selected files") },
                 { key: "F3 · Ctrl+F", action: qsTr("Search this folder") },
                 { key: "Esc", action: qsTr("Clear the search") }
             ]

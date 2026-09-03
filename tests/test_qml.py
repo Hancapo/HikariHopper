@@ -148,7 +148,7 @@ with TemporaryDirectory() as directory:
     submenu = root.findChild(QObject, "newEntryMenu")
     assert menu is not None
     assert submenu is not None
-    assert menu.property("count") == 5
+    assert menu.property("count") == 7
     assert submenu.property("count") == 4
 
     for mode in ("list", "grid"):
@@ -164,6 +164,13 @@ with TemporaryDirectory() as directory:
         assert menu.property("visible")
         assert bridge.selectionCount == 1
         QMetaObject.invokeMethod(menu, "close")
+        QTest.keyClick(view, Qt.Key.Key_Delete)
+        QTest.qWait(30)
+        delete_dialog = root.findChild(QObject, "deleteEntriesDialog")
+        assert delete_dialog is not None
+        assert delete_dialog.property("visible")
+        QMetaObject.invokeMethod(delete_dialog, "close")
+        QTest.qWait(30)
         QTest.mouseClick(
             view,
             Qt.MouseButton.RightButton,

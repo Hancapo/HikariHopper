@@ -60,6 +60,14 @@ Rectangle {
         connectionWidth: editButton.width
         RetroMenuItem { text: qsTr("Copy name"); shortcutText: "Ctrl+C"; enabled: menuRow.bridge.hasSelection; onTriggered: menuRow.bridge.copySelectedName() }
         RetroMenuItem { text: qsTr("Copy path"); shortcutText: "Ctrl+Shift+C"; enabled: menuRow.bridge.hasSelection; onTriggered: menuRow.bridge.copySelectedPath() }
+        RetroMenuItem {
+            text: qsTr("Delete")
+            shortcutText: "Del"
+            iconName: "trash-2"
+            enabled: menuRow.bridge.selectionDeletable
+                && !menuRow.bridge.entryOperationBusy
+            onTriggered: Qt.callLater(menuRow.bridge.requestDeleteSelection)
+        }
         RetroMenuSeparator { }
         RetroMenuItem { text: qsTr("Select all"); shortcutText: "Ctrl+A"; enabled: menuRow.bridge.visibleCount > 0; onTriggered: menuRow.bridge.selectAllEntries() }
         RetroMenuSeparator { }

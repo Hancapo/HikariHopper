@@ -28,7 +28,7 @@ RetroMenu {
     RetroMenuItem {
         text: qsTr("Open")
         enabled: contextMenu.bridge.selectionCount === 1
-            && !contextMenu.bridge.creationBusy
+            && !contextMenu.bridge.entryOperationBusy
         onTriggered: contextMenu.bridge.activateEntry(contextMenu.bridge.selectedIndex)
     }
 
@@ -36,7 +36,7 @@ RetroMenu {
         objectName: "newEntryMenu"
         title: qsTr("New")
         icon.name: "plus"
-        enabled: !contextMenu.bridge.creationBusy
+        enabled: !contextMenu.bridge.entryOperationBusy
 
         RetroMenuItem {
             text: qsTr("Folder")
@@ -68,10 +68,21 @@ RetroMenu {
         enabled: false
     }
     RetroMenuItem {
+        text: qsTr("Delete")
+        shortcutText: "Del"
+        iconName: "trash-2"
+        enabled: contextMenu.bridge.selectionDeletable
+            && !contextMenu.bridge.entryOperationBusy
+        onTriggered: Qt.callLater(contextMenu.bridge.requestDeleteSelection)
+    }
+
+    RetroMenuSeparator { }
+
+    RetroMenuItem {
         text: qsTr("Refresh")
         shortcutText: "F5"
         iconName: "rotate-cw"
-        enabled: !contextMenu.bridge.creationBusy
+        enabled: !contextMenu.bridge.entryOperationBusy
         onTriggered: contextMenu.bridge.refresh()
     }
 }
