@@ -151,7 +151,11 @@ with TemporaryDirectory() as directory:
     assert menu is not None
     assert submenu is not None
     assert menu.property("count") == 7
-    assert submenu.property("count") == 6
+    assert submenu.property("count") == 7
+    assert (
+        root.findChild(QObject, "createYtdMenuItem").property("text")
+        == "Texture dictionary"
+    )
     assert (
         root.findChild(QObject, "rpfArchiveSection").property("text")
         == "RPF ARCHIVE"
