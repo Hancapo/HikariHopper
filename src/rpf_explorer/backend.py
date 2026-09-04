@@ -80,6 +80,13 @@ class WorkspaceInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class LoadedGame:
+    root: Path
+    target: str
+    crypto: Any = field(repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
 class ArchiveEntryTarget:
     root_path: Path
     entry_path: str
@@ -470,6 +477,32 @@ def _archive_file_at(archive: Any, path: str) -> Any:
     return directory.find_file(name if separator else normalized) if directory else None
 
 
+def load_game(path: str | Path) -> LoadedGame:
+    from fivefury import GameTarget, load_game_keys
+
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"Game folder does not exist: {root}")
+    enhanced_exe = root / "GTA5_Enhanced.exe"
+    legacy_exe = root / "GTA5.exe"
+    if enhanced_exe.is_file():
+        target = GameTarget.GTA5_ENHANCED
+        executable = enhanced_exe
+    elif legacy_exe.is_file():
+        target = GameTarget.GTA5
+        executable = legacy_exe
+    else:
+        raise ValueError(
+            "Select the GTA V folder containing GTA5.exe or GTA5_Enhanced.exe"
+        )
+
+    crypto = load_game_keys(
+        executable,
+        gen9=target is GameTarget.GTA5_ENHANCED,
+    )
+    return LoadedGame(root=root, target=target.value, crypto=crypto)
+
+
 class RpfProvider:
     """Owns the selected game root and lazily opened FiveFury archives."""
 
@@ -561,27 +594,13 @@ class RpfProvider:
         return tuple(reversed(chain))
 
     def open_game(self, path: str | Path) -> WorkspaceInfo:
-        from fivefury import GameTarget, load_game_keys
+        return self.apply_loaded_game(load_game(path))
 
-        root = Path(path).expanduser().resolve()
-        if not root.is_dir():
-            raise ValueError(f"Game folder does not exist: {root}")
-        enhanced_exe = root / "GTA5_Enhanced.exe"
-        legacy_exe = root / "GTA5.exe"
-        if enhanced_exe.is_file():
-            target = GameTarget.GTA5_ENHANCED
-            executable = enhanced_exe
-        elif legacy_exe.is_file():
-            target = GameTarget.GTA5
-            executable = legacy_exe
-        else:
-            raise ValueError("Select the GTA V folder containing GTA5.exe or GTA5_Enhanced.exe")
-
-        crypto = load_game_keys(executable, gen9=target is GameTarget.GTA5_ENHANCED)
+    def apply_loaded_game(self, loaded: LoadedGame) -> WorkspaceInfo:
         self.close()
-        self._game_root = root
-        self._game_target = target.value
-        self._crypto = crypto
+        self._game_root = loaded.root
+        self._game_target = loaded.target
+        self._crypto = loaded.crypto
         self._in_archive = False
         return self.info
 

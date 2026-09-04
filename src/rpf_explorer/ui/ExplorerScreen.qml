@@ -18,11 +18,22 @@ Rectangle {
             onSearchRequested: screen.bridge.requestSearchFocus()
         }
         TabStrip { tabs: screen.tabs }
-        Loader {
-            id: workspaceLoader
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            sourceComponent: screen.bridge.hasWorkspace ? workspaceComponent : startComponent
+
+            Loader {
+                id: workspaceLoader
+                anchors.fill: parent
+                sourceComponent: screen.bridge.hasWorkspace
+                    ? workspaceComponent
+                    : startComponent
+            }
+
+            GameLoadingView {
+                anchors.fill: parent
+                bridge: screen.bridge
+            }
         }
     }
 

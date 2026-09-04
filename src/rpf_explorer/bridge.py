@@ -29,6 +29,7 @@ from PySide6.QtWidgets import QFileDialog
 from .backend import (
     EntryCreationTarget,
     EntryDeletionTarget,
+    LoadedGame,
     RpfProvider,
     create_empty_rpf_at,
     create_folder_at,
@@ -37,6 +38,7 @@ from .backend import (
     delete_archive_files_at,
     ensure_entry_name_available,
     import_files_at,
+    load_game,
     normalize_entry_name,
     normalize_rpf_name,
 )
@@ -47,6 +49,7 @@ from .settings import (
     LEGACY_EDITION,
     app_settings,
     configured_game_root,
+    game_edition_for_path,
     is_game_root,
     remember_game_root,
 )
@@ -311,6 +314,7 @@ class ExplorerBridge(QObject):
     viewModeChanged = Signal()
     treeFocusChanged = Signal()
     gameOpened = Signal(str)
+    gameLoadingChanged = Signal()
     uiStateChanged = Signal()
     entryOperationStateChanged = Signal()
     contentChanged = Signal(object)
@@ -336,6 +340,8 @@ class ExplorerBridge(QObject):
         self._entry_operation_pool.setMaxThreadCount(1)
         self._entry_operation_busy = False
         self._peer_entry_operation_busy = False
+        self._game_loading = False
+        self._game_loading_name = ""
         self._current_path = "."
         self._history: list[str] = []
         self._history_index = -1
@@ -556,7 +562,19 @@ class ExplorerBridge(QObject):
 
     @Property(bool, notify=entryOperationStateChanged)
     def entryOperationBusy(self) -> bool:
-        return self._entry_operation_busy or self._peer_entry_operation_busy
+        return (
+            self._entry_operation_busy
+            or self._peer_entry_operation_busy
+            or self._game_loading
+        )
+
+    @Property(bool, notify=gameLoadingChanged)
+    def gameLoading(self) -> bool:
+        return self._game_loading
+
+    @Property(str, notify=gameLoadingChanged)
+    def gameLoadingName(self) -> str:
+        return self._game_loading_name
 
     @property
     def local_entry_operation_busy(self) -> bool:
@@ -905,7 +923,7 @@ class ExplorerBridge(QObject):
             }.get(edition, "game")
             self._set_status(f"Configure the {edition_name} path in Settings")
             return
-        self.openGame(path)
+        self.openGameAsync(path)
 
     @staticmethod
     def _configured_game_path(edition: str = "") -> str:
@@ -931,6 +949,58 @@ class ExplorerBridge(QObject):
         except (OSError, ValueError, RuntimeError) as error:
             self._set_status(f"Could not load game: {error}")
             return
+        self._publish_opened_game()
+
+    @Slot(str, result=bool)
+    def openGameAsync(self, path: str) -> bool:
+        if self.entryOperationBusy:
+            return False
+        edition = game_edition_for_path(path)
+        self._game_loading_name = {
+            ENHANCED_EDITION: "Grand Theft Auto V Enhanced",
+            LEGACY_EDITION: "Grand Theft Auto V Legacy",
+        }.get(edition, Path(path).name or "Game")
+        self._set_game_loading(True)
+        self._set_status(f"Loading {self._game_loading_name}…")
+        task = _EntryOperationTask(
+            path,
+            "load game",
+            partial(load_game, path),
+        )
+        task.signals.completed.connect(self._game_load_completed)
+        task.signals.failed.connect(self._game_load_failed)
+        self._entry_operation_pool.start(task)
+        return True
+
+    @Slot(object)
+    def _game_load_completed(self, payload: object) -> None:
+        _path, loaded = payload
+        if not isinstance(loaded, LoadedGame):
+            self._game_load_failed(("", "load game", "Invalid game load result"))
+            return
+        try:
+            self.provider.apply_loaded_game(loaded)
+            self._publish_opened_game()
+        except (OSError, ValueError, RuntimeError) as error:
+            self._set_status(f"Could not load game: {error}")
+        self._set_game_loading(False)
+
+    @Slot(object)
+    def _game_load_failed(self, payload: object) -> None:
+        _path, _label, message = payload
+        self._set_status(f"Could not load game: {message}")
+        self._set_game_loading(False)
+
+    def _set_game_loading(self, loading: bool) -> None:
+        if loading == self._game_loading:
+            return
+        self._game_loading = loading
+        if not loading:
+            self._game_loading_name = ""
+        self.gameLoadingChanged.emit()
+        self.entryOperationStateChanged.emit()
+
+    def _publish_opened_game(self) -> None:
         remember_game_root(app_settings(), self.provider.game_path)
         self.gameOpened.emit(self.provider.game_path)
         self._expanded_nodes = {"game://."}
