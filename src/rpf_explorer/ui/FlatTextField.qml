@@ -10,6 +10,7 @@ TextField {
     property string keyCap: ""
     property string leadingIcon: ""
     property color leadingColor: Theme.Theme.textFaint
+    property bool invalid: false
 
     hoverEnabled: true
     color: Theme.Theme.text
@@ -28,7 +29,9 @@ TextField {
             ? Qt.lighter(Theme.Theme.insetBg, 1.35)
             : Theme.Theme.insetBg
         border.width: 1
-        border.color: control.activeFocus
+        border.color: control.invalid
+            ? Theme.Theme.error
+            : control.activeFocus
             ? Theme.Theme.accent
             : control.hovered ? Theme.Theme.border : Theme.Theme.borderHard
 
