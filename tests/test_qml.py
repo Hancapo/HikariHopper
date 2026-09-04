@@ -150,7 +150,23 @@ with TemporaryDirectory() as directory:
     assert menu is not None
     assert submenu is not None
     assert menu.property("count") == 7
-    assert submenu.property("count") == 4
+    assert submenu.property("count") == 6
+    assert (
+        root.findChild(QObject, "rpfArchiveSection").property("text")
+        == "RPF ARCHIVE"
+    )
+    assert (
+        root.findChild(QObject, "createEmptyRpfMenuItem").property("text")
+        == "Empty"
+    )
+    assert (
+        root.findChild(QObject, "createRpfFromFolderMenuItem").property("text")
+        == "From folder…"
+    )
+    assert (
+        root.findChild(QObject, "createRpfFromZipMenuItem").property("text")
+        == "From ZIP…"
+    )
 
     for mode in ("list", "grid"):
         bridge.setViewMode(mode)

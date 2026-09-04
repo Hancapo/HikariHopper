@@ -43,18 +43,26 @@ RetroMenu {
             iconName: "folder"
             onTriggered: contextMenu.requestCreation("folder", qsTr("New folder"), "")
         }
+        RetroMenuSeparator { }
+        RetroMenuSection {
+            objectName: "rpfArchiveSection"
+            text: qsTr("RPF ARCHIVE")
+        }
         RetroMenuItem {
-            text: qsTr("Empty RPF archive…")
+            objectName: "createEmptyRpfMenuItem"
+            text: qsTr("Empty")
             iconName: "package-plus"
             onTriggered: contextMenu.requestCreation("empty-rpf", qsTr("new_archive.rpf"), "")
         }
         RetroMenuItem {
-            text: qsTr("RPF from folder…")
+            objectName: "createRpfFromFolderMenuItem"
+            text: qsTr("From folder…")
             iconName: "folder-input"
             onTriggered: Qt.callLater(contextMenu.chooseFolderSource)
         }
         RetroMenuItem {
-            text: qsTr("RPF from ZIP…")
+            objectName: "createRpfFromZipMenuItem"
+            text: qsTr("From ZIP…")
             iconName: "file-archive"
             onTriggered: Qt.callLater(contextMenu.chooseZipSource)
         }
