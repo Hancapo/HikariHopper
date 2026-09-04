@@ -35,6 +35,7 @@ from .backend import (
     create_rpf_from_folder_at,
     create_rpf_from_zip_at,
     delete_archive_files_at,
+    ensure_entry_name_available,
     import_files_at,
     normalize_entry_name,
     normalize_rpf_name,
@@ -327,6 +328,7 @@ class ExplorerBridge(QObject):
         self._sort_column = "name"
         self._sort_ascending = True
         self._status = "No game loaded  ·  Configure game paths in Settings"
+        self._current_entry_names: tuple[str, ...] = ()
         self._total_count = 0
         self._visible_count = 0
         self._selected_name = ""
@@ -575,6 +577,7 @@ class ExplorerBridge(QObject):
 
     def _refresh(self) -> None:
         entries = self.provider.entries(self._current_path)
+        self._current_entry_names = tuple(entry.name for entry in entries)
         self._total_count = len(entries)
         search = self._search.casefold().strip()
         visible = [entry for entry in entries if not search or search in entry.name.casefold()]
@@ -1034,11 +1037,36 @@ class ExplorerBridge(QObject):
         return tuple(paths)
 
     def _creation_name(self, name: str, *, rpf: bool) -> str:
-        try:
-            return normalize_rpf_name(name) if rpf else normalize_entry_name(name)
-        except ValueError as error:
-            self._set_status(str(error))
+        normalized, error = self._validated_creation_name(name, rpf=rpf)
+        if error:
+            self._set_status(error)
             return ""
+        return normalized
+
+    @Slot(str, bool, result=str)
+    def creationNameError(self, name: str, rpf: bool) -> str:
+        _, error = self._validated_creation_name(name, rpf=rpf)
+        return error
+
+    def _validated_creation_name(
+        self,
+        name: str,
+        *,
+        rpf: bool,
+    ) -> tuple[str, str]:
+        try:
+            normalized = (
+                normalize_rpf_name(name)
+                if rpf
+                else normalize_entry_name(name)
+            )
+            ensure_entry_name_available(
+                normalized,
+                self._current_entry_names,
+            )
+        except (OSError, ValueError, RuntimeError) as error:
+            return "", str(error)
+        return normalized, ""
 
     def _start_entry_creation(
         self,

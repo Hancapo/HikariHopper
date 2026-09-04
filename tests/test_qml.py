@@ -110,7 +110,7 @@ def test_explorer_context_menu_opens_in_list_and_grid_views() -> None:
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from PySide6.QtCore import QObject, QMetaObject, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QObject, QMetaObject, QPoint, QPointF, Qt, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent
 from PySide6.QtQuick import QQuickItem, QQuickView
@@ -122,6 +122,7 @@ from rpf_explorer.bridge import ExplorerBridge
 app = QGuiApplication([])
 with TemporaryDirectory() as directory:
     (Path(directory) / "sample.txt").write_text("sample", encoding="utf-8")
+    (Path(directory) / "existing.rpf").write_bytes(b"existing")
     bridge = ExplorerBridge()
     bridge.provider._game_root = Path(directory)
     bridge.provider._game_target = "gta5_enhanced"
@@ -167,6 +168,29 @@ with TemporaryDirectory() as directory:
         root.findChild(QObject, "createRpfFromZipMenuItem").property("text")
         == "From ZIP…"
     )
+
+    assert QMetaObject.invokeMethod(
+        root,
+        "openCreateDialog",
+        Q_ARG("QVariant", "empty-rpf"),
+        Q_ARG("QVariant", "existing"),
+        Q_ARG("QVariant", ""),
+    )
+    QTest.qWait(30)
+    create_dialog = root.findChild(QObject, "explorerCreateDialog")
+    assert create_dialog is not None
+    assert create_dialog.property("nameError") == "An entry with this name already exists"
+    create_button = root.findChild(QObject, "confirmCreateButton")
+    assert create_button is not None
+    assert not create_button.property("enabled")
+    name_field = root.findChild(QObject, "creationNameField")
+    assert name_field is not None
+    name_field.setProperty("text", "fresh")
+    QTest.qWait(20)
+    assert create_dialog.property("nameError") == ""
+    assert create_button.property("enabled")
+    QMetaObject.invokeMethod(create_dialog, "close")
+    QTest.qWait(30)
 
     for mode in ("list", "grid"):
         bridge.setViewMode(mode)

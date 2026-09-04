@@ -9,6 +9,7 @@ Dialog {
     required property var bridge
     property string creationKind: ""
     property string sourcePath: ""
+    property string nameError: ""
 
     readonly property bool hasSource: sourcePath !== ""
     readonly property string heading: {
@@ -25,13 +26,22 @@ Dialog {
         creationKind = kind
         sourcePath = source
         nameField.text = suggestedName
+        updateNameValidation()
         open()
     }
 
+    function updateNameValidation() {
+        nameError = bridge.creationNameError(
+            nameField.text,
+            creationKind !== "folder"
+        )
+    }
+
     function submit() {
-        const name = nameField.text.trim()
-        if (name === "" || bridge.entryOperationBusy)
+        updateNameValidation()
+        if (nameError !== "" || bridge.entryOperationBusy)
             return
+        const name = nameField.text.trim()
         let started = false
         switch (creationKind) {
         case "folder":
@@ -56,7 +66,10 @@ Dialog {
     x: Math.round((parent.width - width) / 2)
     y: Math.round((parent.height - height) / 2)
     width: 480
-    height: Theme.Theme.headerHeight + (hasSource ? 164 : 112) + 58
+    height: Theme.Theme.headerHeight
+        + (hasSource ? 164 : 112)
+        + (nameError === "" ? 0 : 22)
+        + 58
     padding: 0
     closePolicy: Popup.CloseOnEscape
 
@@ -122,13 +135,29 @@ Dialog {
 
         FlatTextField {
             id: nameField
+            objectName: "creationNameField"
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
             Layout.preferredHeight: 32
             Accessible.name: qsTr("Entry name")
+            invalid: dialog.nameError !== ""
+            onTextChanged: dialog.updateNameValidation()
             Keys.onReturnPressed: dialog.submit()
             Keys.onEnterPressed: dialog.submit()
+        }
+
+        Text {
+            objectName: "creationNameError"
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            visible: dialog.nameError !== ""
+            text: dialog.nameError
+            color: Theme.Theme.error
+            font.family: Theme.Theme.uiFont
+            font.pixelSize: Theme.Theme.fontSize
+            wrapMode: Text.Wrap
         }
 
         Text {
@@ -196,10 +225,12 @@ Dialog {
                 onClicked: dialog.reject()
             }
             ChromeToolButton {
+                objectName: "confirmCreateButton"
                 Layout.preferredWidth: 88
                 Layout.preferredHeight: 28
                 primary: true
-                enabled: nameField.text.trim() !== "" && !dialog.bridge.entryOperationBusy
+                enabled: dialog.nameError === ""
+                    && !dialog.bridge.entryOperationBusy
                 text: qsTr("Create")
                 onClicked: dialog.submit()
             }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from shutil import copyfileobj, copystat
@@ -67,6 +67,8 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
 }
+_WINDOWS_INVALID_NAME_CHARACTERS = '<>:"/\\|?*'
+_MAX_ENTRY_NAME_LENGTH = 255
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,16 +251,12 @@ def import_files_at(
             raise ValueError(
                 f"Could not find archive folder: {target.internal_directory}"
             )
-        existing = {
-            entry.name.casefold()
+        existing = [
+            entry.name
             for entry in (*directory.directories, *directory.files)
-        }
-        conflict = next(
-            (name for _, name in resolved if name.casefold() in existing),
-            "",
-        )
-        if conflict:
-            raise FileExistsError(f"An entry named {conflict} already exists")
+        ]
+        for _, name in resolved:
+            ensure_entry_name_available(name, existing)
         for source, name in resolved:
             archive.file_path(
                 _archive_child_path(target.internal_directory, name),
@@ -291,23 +289,45 @@ def delete_archive_files_at(target: EntryDeletionTarget) -> int:
 
 def normalize_entry_name(name: str) -> str:
     normalized = name.strip()
-    invalid = '<>:"/\\|?*'
-    if (
-        not normalized
-        or normalized in {".", ".."}
-        or normalized.endswith((" ", "."))
-        or normalized.partition(".")[0].casefold() in _WINDOWS_RESERVED_NAMES
-        or any(character in invalid or ord(character) < 32 for character in normalized)
+    if not normalized:
+        raise ValueError("Enter a name")
+    if normalized in {".", ".."}:
+        raise ValueError("That name is reserved")
+    if len(normalized) > _MAX_ENTRY_NAME_LENGTH:
+        raise ValueError("Names cannot exceed 255 characters")
+    if normalized.endswith((" ", ".")):
+        raise ValueError("Names cannot end with a space or period")
+    if normalized.partition(".")[0].casefold() in _WINDOWS_RESERVED_NAMES:
+        raise ValueError("That name is reserved by Windows")
+    if any(
+        character in _WINDOWS_INVALID_NAME_CHARACTERS or ord(character) < 32
+        for character in normalized
     ):
-        raise ValueError("Enter a valid Windows file name")
+        raise ValueError('Names cannot contain < > : " / \\ | ? *')
     return normalized
 
 
 def normalize_rpf_name(name: str) -> str:
     normalized = normalize_entry_name(name)
-    if normalized.casefold().endswith(".rpf"):
-        return normalized
-    return f"{normalized}.rpf"
+    if normalized.casefold() == ".rpf":
+        raise ValueError("Enter a name before .rpf")
+    candidate = (
+        normalized
+        if normalized.casefold().endswith(".rpf")
+        else f"{normalized}.rpf"
+    )
+    if len(candidate) > _MAX_ENTRY_NAME_LENGTH:
+        raise ValueError("RPF names cannot exceed 255 characters including .rpf")
+    return candidate
+
+
+def ensure_entry_name_available(
+    name: str,
+    existing_names: Iterable[str],
+) -> None:
+    key = name.casefold()
+    if any(existing.casefold() == key for existing in existing_names):
+        raise FileExistsError("An entry with this name already exists")
 
 
 def _archive_child_path(directory: str, name: str) -> str:
@@ -321,9 +341,11 @@ def _normalized_directory(path: str) -> str:
 def _loose_destination(target: EntryCreationTarget, name: str) -> Path:
     if target.directory is None:
         raise ValueError("No writable explorer location is open")
+    ensure_entry_name_available(
+        name,
+        (entry.name for entry in target.directory.iterdir()),
+    )
     destination = target.directory / name
-    if destination.exists():
-        raise FileExistsError(f"An entry named {name} already exists")
     return destination
 
 
@@ -380,11 +402,13 @@ def _mutate_target_archive(
             raise ValueError(
                 f"Could not find archive folder: {target.internal_directory}"
             )
-        if any(
-            entry.name.casefold() == name.casefold()
-            for entry in (*directory.directories, *directory.files)
-        ):
-            raise FileExistsError(f"An entry named {name} already exists")
+        ensure_entry_name_available(
+            name,
+            (
+                entry.name
+                for entry in (*directory.directories, *directory.files)
+            ),
+        )
         mutation(archive)
 
     _save_target_archive(target, create_entry)

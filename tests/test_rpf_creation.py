@@ -13,6 +13,8 @@ from rpf_explorer.backend import (
     create_folder_at,
     create_rpf_from_folder_at,
     create_rpf_from_zip_at,
+    normalize_entry_name,
+    normalize_rpf_name,
 )
 from rpf_explorer.bridge import ExplorerBridge
 
@@ -65,6 +67,8 @@ def test_creates_entries_inside_an_open_rpf(tmp_path: Path) -> None:
 
     assert create_folder_at(target, "stream") == "stream"
     assert create_empty_rpf_at(target, "inner.rpf") == "inner.rpf"
+    with pytest.raises(FileExistsError, match="this name already exists"):
+        create_empty_rpf_at(target, "INNER.RPF")
 
     with RpfArchive.from_path(archive_path) as saved:
         assert saved.find_entry("mods/stream") is not None
@@ -111,10 +115,64 @@ def test_creation_rejects_invalid_and_duplicate_names(tmp_path: Path) -> None:
 
     with pytest.raises(FileExistsError, match="already exists"):
         create_folder_at(target, "EXISTING")
-    with pytest.raises(ValueError, match="valid Windows file name"):
+    with pytest.raises(ValueError, match="cannot contain"):
         create_empty_rpf_at(target, "bad/name")
-    with pytest.raises(ValueError, match="valid Windows file name"):
+    with pytest.raises(ValueError, match="reserved by Windows"):
         create_folder_at(target, "CON")
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("", "Enter a name"),
+        ("..", "reserved"),
+        ("bad:name", "cannot contain"),
+        ("name.", "cannot end"),
+        ("NUL.txt", "reserved by Windows"),
+        ("a" * 256, "cannot exceed 255"),
+    ],
+)
+def test_entry_name_validation_reports_specific_errors(
+    name: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        normalize_entry_name(name)
+
+
+def test_rpf_name_validation_accounts_for_the_extension() -> None:
+    with pytest.raises(ValueError, match="before .rpf"):
+        normalize_rpf_name(".rpf")
+    with pytest.raises(ValueError, match="including .rpf"):
+        normalize_rpf_name("a" * 252)
+
+
+def test_rpf_creation_rejects_case_insensitive_loose_conflicts(
+    tmp_path: Path,
+) -> None:
+    target = EntryCreationTarget(directory=tmp_path)
+    (tmp_path / "existing.rpf").write_bytes(b"existing")
+
+    with pytest.raises(FileExistsError, match="this name already exists"):
+        create_empty_rpf_at(target, "EXISTING")
+
+
+def test_bridge_rejects_duplicate_rpf_before_starting_worker(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "existing.rpf").write_bytes(b"existing")
+    bridge = ExplorerBridge()
+    bridge.provider._game_root = tmp_path
+    bridge.provider._game_target = "gta5_enhanced"
+    bridge._refresh()
+
+    assert (
+        bridge.creationNameError("EXISTING", True)
+        == "An entry with this name already exists"
+    )
+    assert not bridge.createEmptyRpf("EXISTING")
+    assert not bridge.entryOperationBusy
+    assert bridge.status == "An entry with this name already exists"
 
 
 def test_bridge_creates_entries_without_blocking_the_ui_thread(tmp_path: Path) -> None:
