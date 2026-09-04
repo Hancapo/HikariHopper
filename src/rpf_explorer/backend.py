@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from shutil import copyfileobj, copystat
 from typing import Any
 from zipfile import BadZipFile
 
@@ -190,6 +191,84 @@ def create_rpf_from_zip_at(
     return normalized
 
 
+def import_files_at(
+    target: EntryCreationTarget,
+    sources: tuple[Path, ...],
+) -> tuple[str, ...]:
+    resolved: list[tuple[Path, str]] = []
+    names: set[str] = set()
+    for value in sources:
+        source = Path(value).expanduser().resolve(strict=True)
+        if not source.is_file():
+            raise ValueError(f"Only files can be imported: {source.name}")
+        name = normalize_entry_name(source.name)
+        key = name.casefold()
+        if key in names:
+            raise ValueError(f"More than one dropped file is named {name}")
+        names.add(key)
+        resolved.append((source, name))
+    if not resolved:
+        raise ValueError("Drop one or more files to import")
+
+    if not target.in_archive:
+        destinations = [
+            (source, _loose_destination(target, name))
+            for source, name in resolved
+        ]
+        created: list[Path] = []
+        try:
+            for source, destination in destinations:
+                with source.open("rb") as source_stream:
+                    with destination.open("xb") as destination_stream:
+                        created.append(destination)
+                        copyfileobj(
+                            source_stream,
+                            destination_stream,
+                            length=1024 * 1024,
+                        )
+                copystat(source, destination)
+        except OSError:
+            for destination in created:
+                try:
+                    destination.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
+        return tuple(name for _, name in resolved)
+
+    if target.archive_path is not None:
+        archive_path = target.archive_path.expanduser().resolve()
+        if any(source == archive_path for source, _ in resolved):
+            raise ValueError("An RPF cannot be imported into itself")
+
+    def insert_files(archive: Any) -> None:
+        from fivefury.rpf.entries import RpfDirectoryEntry
+
+        directory = _archive_directory_at(archive, target.internal_directory)
+        if not isinstance(directory, RpfDirectoryEntry):
+            raise ValueError(
+                f"Could not find archive folder: {target.internal_directory}"
+            )
+        existing = {
+            entry.name.casefold()
+            for entry in (*directory.directories, *directory.files)
+        }
+        conflict = next(
+            (name for _, name in resolved if name.casefold() in existing),
+            "",
+        )
+        if conflict:
+            raise FileExistsError(f"An entry named {conflict} already exists")
+        for source, name in resolved:
+            archive.file_path(
+                _archive_child_path(target.internal_directory, name),
+                _rpf_file_source(source),
+            )
+
+    _save_target_archive(target, insert_files)
+    return tuple(name for _, name in resolved)
+
+
 def delete_archive_files_at(target: EntryDeletionTarget) -> int:
     from fivefury.rpf.entries import RpfFileEntry
 
@@ -265,6 +344,27 @@ def _store_rpf(
             data,
         ),
     )
+
+
+def _rpf_file_source(source: Path) -> Any:
+    from fivefury.rpf import (
+        RPF_MAGIC,
+        RSC7_MAGIC,
+        RpfFileSource,
+        RpfSourceKind,
+    )
+
+    with source.open("rb") as stream:
+        encoded_magic = stream.read(4)
+    little_magic = int.from_bytes(encoded_magic, "little")
+    big_magic = int.from_bytes(encoded_magic, "big")
+    if RPF_MAGIC in (little_magic, big_magic):
+        kind = RpfSourceKind.RPF7
+    elif little_magic == RSC7_MAGIC:
+        kind = RpfSourceKind.RSC7
+    else:
+        kind = RpfSourceKind.RAW
+    return RpfFileSource(source, kind)
 
 
 def _mutate_target_archive(

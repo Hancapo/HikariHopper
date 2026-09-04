@@ -53,11 +53,20 @@ Item {
                 sourceModel: view.treeModel
             }
 
-            Loader {
+            Item {
                 SplitView.fillWidth: true
-                sourceComponent: view.bridge.viewMode === "grid"
-                    ? gridComponent
-                    : listComponent
+
+                Loader {
+                    anchors.fill: parent
+                    sourceComponent: view.bridge.viewMode === "grid"
+                        ? gridComponent
+                        : listComponent
+                }
+
+                ExternalFileDropArea {
+                    anchors.fill: parent
+                    bridge: view.bridge
+                }
             }
         }
 
