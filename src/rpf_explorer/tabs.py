@@ -112,8 +112,21 @@ class ExplorerTabs(QAbstractListModel):
         bridge.workspaceChanged.connect(lambda bridge=bridge: self._workspace_changed(bridge))
         bridge.gameOpened.connect(self._remember_game)
         bridge.gameOpened.connect(lambda _path: self._game_path_settings.refresh())
+        bridge.entryOperationStateChanged.connect(
+            lambda bridge=bridge: self._operation_state_changed(bridge)
+        )
+        bridge.looseFilesAboutToBeDeleted.connect(
+            lambda paths, bridge=bridge: self._prepare_loose_file_deletion(
+                bridge,
+                paths,
+            )
+        )
+        bridge.contentChanged.connect(
+            lambda target, bridge=bridge: self._content_changed(bridge, target)
+        )
         self._tabs.append(bridge)
         self.endInsertRows()
+        self._synchronize_operation_state()
         self.activateTab(row)
         return row
 
@@ -142,6 +155,7 @@ class ExplorerTabs(QAbstractListModel):
         bridge.textureViewer.shutdown()
         bridge.provider.close()
         bridge.deleteLater()
+        self._synchronize_operation_state()
         if self._active_index > row:
             self._active_index -= 1
         elif self._active_index == row:
@@ -167,6 +181,38 @@ class ExplorerTabs(QAbstractListModel):
         self.dataChanged.emit(model_index, model_index, [self.TITLE])
         if row == self._active_index:
             self.activeTabChanged.emit()
+
+    def _operation_state_changed(self, _source: ExplorerBridge) -> None:
+        self._synchronize_operation_state()
+
+    def _synchronize_operation_state(self) -> None:
+        busy_bridges = {
+            bridge
+            for bridge in self._tabs
+            if bridge.local_entry_operation_busy
+        }
+        for bridge in self._tabs:
+            bridge.set_peer_entry_operation_busy(
+                bool(busy_bridges) and bridge not in busy_bridges
+            )
+
+    def _prepare_loose_file_deletion(
+        self,
+        source: ExplorerBridge,
+        paths: tuple[Path, ...],
+    ) -> None:
+        for bridge in self._tabs:
+            if bridge is not source:
+                bridge.prepare_loose_file_deletion(paths)
+
+    def _content_changed(
+        self,
+        source: ExplorerBridge,
+        target: object,
+    ) -> None:
+        for bridge in self._tabs:
+            if bridge is not source:
+                bridge.refresh_external_content(target)
 
     @Slot(str)
     def _remember_game(self, path: str) -> None:

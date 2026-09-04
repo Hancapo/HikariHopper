@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from typing import Any, Callable
 
@@ -280,11 +280,23 @@ class _EntryOperationTask(QRunnable):
 def _move_files_to_trash(target: EntryDeletionTarget) -> int:
     if target.in_archive or not target.loose_paths:
         raise ValueError("No loose files were selected for deletion")
+    moved_count = 0
+    failed: list[str] = []
     for path in target.loose_paths:
+        if not path.exists():
+            continue
+        if not path.is_file():
+            failed.append(path.name)
+            continue
         moved, _ = QFile.moveToTrash(str(path))
         if not moved:
-            raise OSError(f"Could not move {path.name} to the Recycle Bin")
-    return len(target.loose_paths)
+            failed.append(path.name)
+            continue
+        moved_count += 1
+    if failed:
+        names = ", ".join(failed)
+        raise OSError(f"Could not move to the Recycle Bin: {names}")
+    return moved_count
 
 
 class ExplorerBridge(QObject):
@@ -301,6 +313,8 @@ class ExplorerBridge(QObject):
     gameOpened = Signal(str)
     uiStateChanged = Signal()
     entryOperationStateChanged = Signal()
+    contentChanged = Signal(object)
+    looseFilesAboutToBeDeleted = Signal(object)
     deleteConfirmationRequested = Signal()
     searchFocusRequested = Signal()
 
@@ -321,6 +335,7 @@ class ExplorerBridge(QObject):
         self._entry_operation_pool = QThreadPool(self)
         self._entry_operation_pool.setMaxThreadCount(1)
         self._entry_operation_busy = False
+        self._peer_entry_operation_busy = False
         self._current_path = "."
         self._history: list[str] = []
         self._history_index = -1
@@ -541,7 +556,17 @@ class ExplorerBridge(QObject):
 
     @Property(bool, notify=entryOperationStateChanged)
     def entryOperationBusy(self) -> bool:
+        return self._entry_operation_busy or self._peer_entry_operation_busy
+
+    @property
+    def local_entry_operation_busy(self) -> bool:
         return self._entry_operation_busy
+
+    def set_peer_entry_operation_busy(self, busy: bool) -> None:
+        if busy == self._peer_entry_operation_busy:
+            return
+        self._peer_entry_operation_busy = busy
+        self.entryOperationStateChanged.emit()
 
     @Property(str, constant=True)
     def entryDragMimeType(self) -> str:
@@ -568,11 +593,12 @@ class ExplorerBridge(QObject):
         self._status = value
         self.statusChanged.emit()
 
-    def _reset_navigation(self) -> None:
-        self._history = ["."]
+    def _reset_navigation(self, path: str = ".") -> None:
+        normalized = path or "."
+        self._history = [normalized]
         self._history_index = 0
         self._search = ""
-        self._current_path = "."
+        self._current_path = normalized
         self.searchChanged.emit()
 
     def _refresh(self) -> None:
@@ -1003,7 +1029,7 @@ class ExplorerBridge(QObject):
 
     @Slot("QVariantList", result=bool)
     def importDroppedFiles(self, urls: list[Any]) -> bool:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return False
         try:
             sources = self._local_drop_paths(urls)
@@ -1073,7 +1099,7 @@ class ExplorerBridge(QObject):
         label: str,
         operation_factory: Callable[[EntryCreationTarget], Callable[[], str]],
     ) -> bool:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return False
         try:
             target = self.provider.creation_target(self._current_path)
@@ -1097,7 +1123,7 @@ class ExplorerBridge(QObject):
         operation: Callable[[], object],
         completed: Callable[[object], None],
     ) -> bool:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return False
         task = _EntryOperationTask(target, failure_label, operation)
         task.signals.completed.connect(completed)
@@ -1117,6 +1143,7 @@ class ExplorerBridge(QObject):
             self._refresh()
             self._select_entries_by_name((name,))
         self._set_status(f"Created {name}")
+        self.contentChanged.emit(target)
 
     @Slot(object)
     def _entry_import_completed(self, payload: object) -> None:
@@ -1129,6 +1156,7 @@ class ExplorerBridge(QObject):
         count = len(names)
         noun = "file" if count == 1 else "files"
         self._set_status(f"Imported {count} {noun}")
+        self.contentChanged.emit(target)
 
     @Slot(object)
     def _entry_operation_failed(self, payload: object) -> None:
@@ -1141,6 +1169,8 @@ class ExplorerBridge(QObject):
             self._clear_selection()
             self._refresh()
         self._set_status(f"Could not {label}: {message}")
+        if isinstance(target, EntryDeletionTarget):
+            self.contentChanged.emit(target)
 
     def _finish_entry_operation(self) -> None:
         self._entry_operation_busy = False
@@ -1177,7 +1207,7 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def requestDeleteSelection(self) -> None:
-        if self._entry_operation_busy or not self._selected_rows:
+        if self.entryOperationBusy or not self._selected_rows:
             return
         if not self.selectionDeletable:
             self._set_status("Only files can be deleted")
@@ -1186,7 +1216,7 @@ class ExplorerBridge(QObject):
 
     @Slot(result=bool)
     def deleteSelectedFiles(self) -> bool:
-        if self._entry_operation_busy or not self.selectionDeletable:
+        if self.entryOperationBusy or not self.selectionDeletable:
             return False
         entries = self._selected_entries()
         try:
@@ -1194,6 +1224,9 @@ class ExplorerBridge(QObject):
         except (OSError, ValueError, RuntimeError) as error:
             self._set_status(f"Could not delete selection: {error}")
             return False
+
+        if not target.in_archive:
+            self.looseFilesAboutToBeDeleted.emit(target.loose_paths)
 
         count = len(entries)
         noun = "file" if count == 1 else "files"
@@ -1228,6 +1261,61 @@ class ExplorerBridge(QObject):
             if target.in_archive
             else f"Moved {count} {noun} to the Recycle Bin"
         )
+        self.contentChanged.emit(target)
+
+    def prepare_loose_file_deletion(self, paths: tuple[Path, ...]) -> None:
+        was_in_archive = self.provider.in_archive
+        archive_game_path = self.provider.archive_game_path
+        if not self.provider.release_open_archive_for(paths):
+            return
+        self._clear_archive_expansion()
+        if not was_in_archive:
+            return
+        if not self.provider.has_game:
+            self.closeWorkspace()
+            return
+        parent = PurePosixPath(archive_game_path).parent.as_posix()
+        self._reset_navigation(parent)
+        self._expand_current_branch()
+        self._publish_workspace()
+        self._set_status("The open RPF is being deleted in another tab")
+
+    def refresh_external_content(self, target: object) -> None:
+        location = (
+            target.location
+            if isinstance(target, EntryDeletionTarget)
+            else target
+        )
+        if not isinstance(location, EntryCreationTarget):
+            return
+        if location.in_archive:
+            try:
+                reloaded = self.provider.reload_archive(location.archive_path)
+            except (OSError, ValueError, RuntimeError):
+                return
+            if reloaded:
+                self._clear_selection()
+                self._refresh()
+            return
+        if location.directory is None or not self.provider.has_game:
+            return
+        game_root = Path(self.provider.game_path).resolve()
+        changed_directory = location.directory.resolve()
+        if (
+            changed_directory != game_root
+            and game_root not in changed_directory.parents
+        ):
+            return
+        if not self.provider.in_archive:
+            try:
+                current = self.provider.creation_target(self._current_path)
+            except (OSError, ValueError, RuntimeError):
+                current = None
+            if current is not None and current.directory == changed_directory:
+                self._clear_selection()
+                self._refresh()
+                return
+        self._refresh_tree()
 
     @Slot(str)
     def openArchive(self, path: str) -> None:
@@ -1418,7 +1506,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def navigateTree(self, path: str) -> None:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return
         if path.startswith("game://"):
             target = path.removeprefix("game://")
@@ -1485,7 +1573,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def toggleTreeNode(self, path: str) -> None:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return
         if path in self._expanded_nodes:
             self._expanded_nodes.remove(path)
@@ -1691,7 +1779,7 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def startEntryDrag(self, row: int) -> None:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return
         if row not in self._selected_rows:
             self.selectEntry(row)
@@ -1728,7 +1816,7 @@ class ExplorerBridge(QObject):
 
     @Slot(int)
     def activateEntry(self, row: int) -> None:
-        if self._entry_operation_busy:
+        if self.entryOperationBusy:
             return
         entry = self.entriesModel.entry_at(row)
         if entry is None:

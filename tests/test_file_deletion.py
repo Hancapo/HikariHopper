@@ -7,6 +7,7 @@ from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
 
 from rpf_explorer.backend import RpfProvider, delete_archive_files_at
 from rpf_explorer.bridge import ExplorerBridge
+from rpf_explorer.tabs import ExplorerTabs
 
 
 def test_deletes_multiple_files_from_rpf_without_touching_siblings(
@@ -152,3 +153,149 @@ def test_bridge_moves_loose_files_to_recycle_bin_in_background(
     assert not source.exists()
     assert bridge.entriesModel.rowCount() == 0
     assert bridge.status == "Moved 1 file to the Recycle Bin"
+
+
+def test_tabs_release_archive_handles_and_refresh_shared_folder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fivefury import RpfArchive
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    shared_folder = tmp_path / "hola"
+    shared_folder.mkdir()
+    first_path = shared_folder / "first.rpf"
+    second_path = shared_folder / "second.rpf"
+    RpfArchive.empty(first_path.name).save(first_path)
+    RpfArchive.empty(second_path.name).save(second_path)
+
+    tabs = ExplorerTabs()
+    first = tabs.activeBridge
+    first.provider._game_root = tmp_path
+    first.provider._game_target = "gta5_enhanced"
+    first._refresh()
+    first.navigate("hola")
+
+    tabs.newTab()
+    second = tabs.activeBridge
+    second.provider._game_root = tmp_path
+    second.provider._game_target = "gta5_enhanced"
+    second.provider.open_archive(first_path)
+    second.provider.show_game()
+    second._refresh()
+    second.navigate("hola")
+    assert second.provider.has_archive
+    assert not second.inArchive
+
+    moved: list[Path] = []
+
+    class FakeFile:
+        @staticmethod
+        def moveToTrash(path: str) -> tuple[bool, str]:
+            assert not second.provider.has_archive
+            candidate = Path(path)
+            candidate.unlink()
+            moved.append(candidate)
+            return True, f"Recycle Bin/{candidate.name}"
+
+    monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
+    tabs.activateTab(0)
+    first.selectAllEntries()
+    assert first.deleteSelectedFiles()
+    assert second.entryOperationBusy
+
+    loop = QEventLoop()
+    first.entryOperationStateChanged.connect(
+        lambda: loop.quit() if not first.entryOperationBusy else None
+    )
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    app.processEvents()
+
+    assert set(moved) == {first_path, second_path}
+    assert first.entriesModel.rowCount() == 0
+    assert second.entriesModel.rowCount() == 0
+    assert not second.entryOperationBusy
+
+
+def test_stale_missing_selection_does_not_block_remaining_deletions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = QCoreApplication.instance() or QCoreApplication([])
+    missing = tmp_path / "first.txt"
+    remaining = tmp_path / "second.txt"
+    missing.write_text("first", encoding="utf-8")
+    remaining.write_text("second", encoding="utf-8")
+
+    class FakeFile:
+        @staticmethod
+        def moveToTrash(path: str) -> tuple[bool, str]:
+            candidate = Path(path)
+            candidate.unlink()
+            return True, f"Recycle Bin/{candidate.name}"
+
+    monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
+    bridge = ExplorerBridge()
+    bridge.provider._game_root = tmp_path
+    bridge.provider._game_target = "gta5_enhanced"
+    bridge._refresh()
+    bridge.selectAllEntries()
+    missing.unlink()
+
+    assert bridge.deleteSelectedFiles()
+    loop = QEventLoop()
+    bridge.entryOperationStateChanged.connect(
+        lambda: loop.quit() if not bridge.entryOperationBusy else None
+    )
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    app.processEvents()
+
+    assert not remaining.exists()
+    assert bridge.entriesModel.rowCount() == 0
+    assert bridge.status == "Moved 1 file to the Recycle Bin"
+
+
+def test_multi_delete_attempts_every_selected_file_after_a_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = QCoreApplication.instance() or QCoreApplication([])
+    blocked = tmp_path / "blocked.txt"
+    movable = tmp_path / "movable.txt"
+    blocked.write_text("blocked", encoding="utf-8")
+    movable.write_text("movable", encoding="utf-8")
+    attempts: list[str] = []
+
+    class FakeFile:
+        @staticmethod
+        def moveToTrash(path: str) -> tuple[bool, str]:
+            candidate = Path(path)
+            attempts.append(candidate.name)
+            if candidate == blocked:
+                return False, ""
+            candidate.unlink()
+            return True, f"Recycle Bin/{candidate.name}"
+
+    monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
+    bridge = ExplorerBridge()
+    bridge.provider._game_root = tmp_path
+    bridge.provider._game_target = "gta5_enhanced"
+    bridge._refresh()
+    bridge.selectAllEntries()
+
+    assert bridge.deleteSelectedFiles()
+    loop = QEventLoop()
+    bridge.entryOperationStateChanged.connect(
+        lambda: loop.quit() if not bridge.entryOperationBusy else None
+    )
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    app.processEvents()
+
+    assert attempts == ["blocked.txt", "movable.txt"]
+    assert blocked.exists()
+    assert not movable.exists()
+    assert bridge.entriesModel.rowCount() == 1
+    assert "blocked.txt" in bridge.status
