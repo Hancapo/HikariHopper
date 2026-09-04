@@ -612,6 +612,21 @@ class RpfProvider:
         self._in_archive = False
         return self.info
 
+    def release_open_archive_for(self, paths: Iterable[Path]) -> bool:
+        root = self._root_archive()
+        if root is None or root.source_path is None:
+            return False
+        source_path = Path(root.source_path).expanduser().resolve()
+        candidates = {
+            Path(path).expanduser().resolve()
+            for path in paths
+        }
+        if source_path not in candidates:
+            return False
+        self._close_archive()
+        self._in_archive = False
+        return True
+
     def show_archive(self) -> WorkspaceInfo:
         if self._archive is None:
             raise ValueError("No RPF archive is open")
@@ -694,7 +709,7 @@ class RpfProvider:
                 location=location,
                 archive_paths=tuple(self.entry_local_path(entry) for entry in entries),
             )
-        loose_paths = tuple(self._game_entry_path(entry) for entry in entries)
+        loose_paths = tuple(self._game_entry_candidate(entry) for entry in entries)
         open_archive = self._root_archive()
         if open_archive is not None:
             source_path = Path(open_archive.source_path).expanduser().resolve()
@@ -986,14 +1001,18 @@ class RpfProvider:
         destination.write_bytes(entry.native_entry.read_standalone())
 
     def _game_entry_path(self, entry: EntryRecord) -> Path:
+        candidate = self._game_entry_candidate(entry)
+        if not candidate.exists():
+            raise ValueError(f"Entry no longer exists: {entry.path}")
+        return candidate
+
+    def _game_entry_candidate(self, entry: EntryRecord) -> Path:
         if self._game_root is None:
             raise ValueError("No GTA V installation is loaded")
         candidate = (self._game_root / entry.path).resolve()
         root = self._game_root.resolve()
         if candidate != root and root not in candidate.parents:
             raise ValueError(f"Entry is outside the game folder: {entry.path}")
-        if not candidate.exists():
-            raise ValueError(f"Entry no longer exists: {entry.path}")
         return candidate
 
     @staticmethod
