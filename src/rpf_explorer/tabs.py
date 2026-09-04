@@ -146,6 +146,8 @@ class ExplorerTabs(QAbstractListModel):
     def closeTab(self, row: int) -> None:
         if not 0 <= row < len(self._tabs):
             return
+        if self._tabs[row].entryOperationBusy:
+            return
         if len(self._tabs) == 1:
             self._tabs[0].closeWorkspace()
             return
@@ -170,7 +172,7 @@ class ExplorerTabs(QAbstractListModel):
 
     @Slot(str)
     def openRecentGame(self, path: str) -> None:
-        self.activeBridge.openGame(path)
+        self.activeBridge.openGameAsync(path)
 
     def _workspace_changed(self, bridge: ExplorerBridge) -> None:
         try:

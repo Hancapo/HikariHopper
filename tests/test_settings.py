@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QCoreApplication, QEventLoop, QSettings, QTimer
 from PySide6.QtTest import QSignalSpy
 
 from rpf_explorer.settings import (
@@ -122,12 +123,61 @@ def test_configured_game_opens_without_a_folder_dialog(
     monkeypatch.setattr(fivefury, "load_game_keys", lambda *args, **kwargs: None)
     legacy = _installation(tmp_path, "Legacy", "GTA5.exe")
     settings_module.app_settings().setValue(LEGACY_GAME_ROOT_KEY, str(legacy))
+    app = QCoreApplication.instance() or QCoreApplication([])
     bridge = ExplorerBridge()
+    loop = QEventLoop()
+    bridge.gameOpened.connect(loop.quit)
 
     bridge.openConfiguredGame(LEGACY_EDITION)
+    if not bridge.hasGame:
+        assert bridge.gameLoading
+        QTimer.singleShot(2000, loop.quit)
+        loop.exec()
+    app.processEvents()
+
+    assert bridge.hasGame
+    assert not bridge.gameLoading
+    assert bridge.gamePath == str(legacy)
+
+
+def test_manual_game_loading_keeps_the_calling_thread_responsive(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import fivefury
+
+    from rpf_explorer.bridge import ExplorerBridge
+
+    entered = Event()
+    release = Event()
+
+    def load_keys(*_args, **_kwargs):
+        entered.set()
+        release.wait(2)
+        return None
+
+    monkeypatch.setattr(fivefury, "load_game_keys", load_keys)
+    legacy = _installation(tmp_path, "Legacy", "GTA5.exe")
+    app = QCoreApplication.instance() or QCoreApplication([])
+    bridge = ExplorerBridge()
+
+    assert bridge.openGameAsync(str(legacy))
+    assert entered.wait(1)
+    assert bridge.gameLoading
+    assert not bridge.hasGame
+
+    loop = QEventLoop()
+    bridge.gameLoadingChanged.connect(
+        lambda: loop.quit() if not bridge.gameLoading else None
+    )
+    release.set()
+    QTimer.singleShot(2000, loop.quit)
+    loop.exec()
+    app.processEvents()
 
     assert bridge.hasGame
     assert bridge.gamePath == str(legacy)
+    assert not bridge.gameLoading
 
 
 def test_missing_configured_game_points_to_settings() -> None:
