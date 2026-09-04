@@ -167,7 +167,7 @@ def test_bridge_rejects_duplicate_rpf_before_starting_worker(
     bridge._refresh()
 
     assert (
-        bridge.creationNameError("EXISTING", True)
+        bridge.creationNameError("EXISTING", "rpf")
         == "An entry with this name already exists"
     )
     assert not bridge.createEmptyRpf("EXISTING")
