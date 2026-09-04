@@ -121,11 +121,11 @@ def test_bridge_moves_loose_files_to_recycle_bin_in_background(
 
     class FakeFile:
         @staticmethod
-        def moveToTrash(path: str) -> tuple[bool, str]:
+        def moveToTrash(path: str) -> bool:
             candidate = Path(path)
             candidate.unlink()
             moved.append(candidate)
-            return True, "Recycle Bin/delete.txt"
+            return True
 
     monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
     bridge = ExplorerBridge()
@@ -191,12 +191,12 @@ def test_tabs_release_archive_handles_and_refresh_shared_folder(
 
     class FakeFile:
         @staticmethod
-        def moveToTrash(path: str) -> tuple[bool, str]:
+        def moveToTrash(path: str) -> bool:
             assert not second.provider.has_archive
             candidate = Path(path)
             candidate.unlink()
             moved.append(candidate)
-            return True, f"Recycle Bin/{candidate.name}"
+            return True
 
     monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
     tabs.activateTab(0)
@@ -230,10 +230,10 @@ def test_stale_missing_selection_does_not_block_remaining_deletions(
 
     class FakeFile:
         @staticmethod
-        def moveToTrash(path: str) -> tuple[bool, str]:
+        def moveToTrash(path: str) -> bool:
             candidate = Path(path)
             candidate.unlink()
-            return True, f"Recycle Bin/{candidate.name}"
+            return True
 
     monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
     bridge = ExplorerBridge()
@@ -270,13 +270,13 @@ def test_multi_delete_attempts_every_selected_file_after_a_failure(
 
     class FakeFile:
         @staticmethod
-        def moveToTrash(path: str) -> tuple[bool, str]:
+        def moveToTrash(path: str) -> bool:
             candidate = Path(path)
             attempts.append(candidate.name)
             if candidate == blocked:
-                return False, ""
+                return False
             candidate.unlink()
-            return True, f"Recycle Bin/{candidate.name}"
+            return True
 
     monkeypatch.setattr("rpf_explorer.bridge.QFile", FakeFile)
     bridge = ExplorerBridge()

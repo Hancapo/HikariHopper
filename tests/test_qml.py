@@ -282,7 +282,7 @@ class FakeFile:
     @staticmethod
     def moveToTrash(path):
         Path(path).unlink()
-        return True, "Recycle Bin/sample.rpf"
+        return True
 
 
 def click_item(view, item_object):

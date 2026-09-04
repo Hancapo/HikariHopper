@@ -288,7 +288,7 @@ def _move_files_to_trash(target: EntryDeletionTarget) -> int:
         if not path.is_file():
             failed.append(path.name)
             continue
-        moved, _ = QFile.moveToTrash(str(path))
+        moved = QFile.moveToTrash(str(path))
         if not moved:
             failed.append(path.name)
             continue
