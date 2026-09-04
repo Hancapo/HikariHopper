@@ -153,19 +153,4 @@ Window {
         Accessible.ignored: true
     }
 
-    FocusScope {
-        anchors.fill: parent
-        focus: true
-        Accessible.role: Accessible.Button
-        Accessible.name: qsTr("Dismiss startup screen")
-
-        Keys.onPressed: event => {
-            splash.visible = false
-            event.accepted = true
-        }
-
-        TapHandler {
-            onTapped: splash.visible = false
-        }
-    }
 }

@@ -12,6 +12,7 @@ from rpf_explorer.settings import (
     LEGACY_EDITION,
     LEGACY_GAME_ROOT_KEY,
     GamePathSettings,
+    configured_game_root_to_open,
     game_edition_for_path,
     migrate_legacy_settings,
     remember_game_root,
@@ -31,6 +32,28 @@ def test_game_edition_detection_prefers_enhanced(tmp_path: Path) -> None:
 
     assert game_edition_for_path(str(installation)) == ENHANCED_EDITION
     assert game_edition_for_path(str(tmp_path / "missing")) == ""
+
+
+def test_startup_splash_requires_a_restorable_game(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from rpf_explorer import app as app_module
+    from rpf_explorer import settings as settings_module
+
+    settings = settings_module.app_settings()
+    monkeypatch.setattr(app_module, "app_settings", lambda: settings)
+    assert configured_game_root_to_open(settings) == ""
+    assert not app_module.startup_splash_required()
+
+    settings.setValue("gameRoot", str(tmp_path / "Missing"))
+    assert configured_game_root_to_open(settings) == ""
+    assert not app_module.startup_splash_required()
+
+    enhanced = _installation(tmp_path, "Enhanced", "GTA5_Enhanced.exe")
+    settings.setValue("gameRoot", str(enhanced))
+    assert configured_game_root_to_open(settings) == str(enhanced)
+    assert app_module.startup_splash_required()
 
 
 def test_remember_game_root_tracks_each_edition(tmp_path: Path) -> None:
