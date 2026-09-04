@@ -104,6 +104,24 @@ def configured_game_root(settings: QSettings, edition: str) -> str:
     return str(settings.value(game_root_key(edition), ""))
 
 
+def configured_game_root_to_open(
+    settings: QSettings,
+    edition: str = "",
+) -> str:
+    if edition:
+        path = configured_game_root(settings, edition)
+        return path if is_game_root(path, edition) else ""
+
+    last_root = str(settings.value(LAST_GAME_ROOT_KEY, ""))
+    if is_game_root(last_root):
+        return last_root
+    for candidate_edition in (ENHANCED_EDITION, LEGACY_EDITION):
+        path = configured_game_root(settings, candidate_edition)
+        if is_game_root(path, candidate_edition):
+            return path
+    return ""
+
+
 def remember_game_root(settings: QSettings, value: str) -> None:
     """Remember the last opened game and its edition-specific installation."""
     edition = game_edition_for_path(value)

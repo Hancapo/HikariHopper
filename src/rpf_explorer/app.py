@@ -16,6 +16,7 @@ from .settings import (
     APPLICATION_NAME,
     ORGANIZATION_NAME,
     app_settings,
+    configured_game_root_to_open,
     migrate_legacy_settings,
 )
 
@@ -27,7 +28,7 @@ class _StartupSequence(QObject):
         self,
         app: QApplication,
         engine: QQmlApplicationEngine,
-        splash: Any,
+        splash: Any | None,
         ui_dir: Path,
     ) -> None:
         super().__init__(app)
@@ -38,11 +39,16 @@ class _StartupSequence(QObject):
         self._tabs: Any = None
         self._started = False
 
-    def wait_for_first_frame(self) -> None:
+    def start(self) -> None:
+        if self._splash is None:
+            QTimer.singleShot(0, self._begin)
+            return
         self._splash.frameSwapped.connect(self._begin)
         QTimer.singleShot(150, self._begin)
 
     def _set_phase(self, message: str, phase: str) -> None:
+        if self._splash is None:
+            return
         self._splash.setProperty("startupMessage", message)
         self._splash.setProperty("startupPhase", phase)
 
@@ -50,10 +56,11 @@ class _StartupSequence(QObject):
         if self._started:
             return
         self._started = True
-        try:
-            self._splash.frameSwapped.disconnect(self._begin)
-        except (RuntimeError, TypeError):
-            pass
+        if self._splash is not None:
+            try:
+                self._splash.frameSwapped.disconnect(self._begin)
+            except (RuntimeError, TypeError):
+                pass
         self._set_phase("Loading explorer components…", "CORE")
         QTimer.singleShot(0, self._create_session)
 
@@ -68,7 +75,7 @@ class _StartupSequence(QObject):
         except (ImportError, RuntimeError) as error:
             self._fail(error)
             return
-        saved_game = str(app_settings().value("gameRoot", ""))
+        saved_game = configured_game_root_to_open(app_settings())
         message = (
             "Loading FiveFury runtime and GTA V keys…"
             if saved_game and Path(saved_game).is_dir()
@@ -94,7 +101,8 @@ class _StartupSequence(QObject):
         try:
             self._engine.setInitialProperties({"tabs": self._tabs})
             self._engine.load(QUrl.fromLocalFile(str(self._ui_dir / "main.qml")))
-            if len(self._engine.rootObjects()) < 2:
+            expected_roots = 2 if self._splash is not None else 1
+            if len(self._engine.rootObjects()) < expected_roots:
                 raise RuntimeError("QML engine could not load the interface")
         except RuntimeError as error:
             self._fail(error)
@@ -104,13 +112,19 @@ class _StartupSequence(QObject):
         QTimer.singleShot(0, lambda: self._finish(main_window))
 
     def _finish(self, main_window: Any) -> None:
-        self._splash.close()
+        if self._splash is not None:
+            self._splash.close()
         main_window.requestActivate()
 
     def _fail(self, error: Exception) -> None:
         print(f"HikariHopper startup failed: {error}", file=sys.stderr)
         self._set_phase(f"Startup failed · {error}", "ERROR")
-        QTimer.singleShot(1800, lambda: self._app.exit(1))
+        delay = 1800 if self._splash is not None else 0
+        QTimer.singleShot(delay, lambda: self._app.exit(1))
+
+
+def startup_splash_required() -> bool:
+    return bool(configured_game_root_to_open(app_settings()))
 
 
 def main() -> None:
@@ -132,10 +146,12 @@ def main() -> None:
     app.setStyleSheet(qss_path.read_text(encoding="utf-8"))
 
     engine = QQmlApplicationEngine()
-    engine.load(QUrl.fromLocalFile(str(ui_dir / "SplashScreen.qml")))
-    if not engine.rootObjects():
-        raise SystemExit("QML engine could not load the splash screen")
-    splash = engine.rootObjects()[0]
+    splash = None
+    if startup_splash_required():
+        engine.load(QUrl.fromLocalFile(str(ui_dir / "SplashScreen.qml")))
+        if not engine.rootObjects():
+            raise SystemExit("QML engine could not load the splash screen")
+        splash = engine.rootObjects()[0]
     startup = _StartupSequence(app, engine, splash, ui_dir)
-    startup.wait_for_first_frame()
+    startup.start()
     raise SystemExit(app.exec())

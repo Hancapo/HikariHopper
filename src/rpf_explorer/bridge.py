@@ -48,9 +48,8 @@ from .settings import (
     ENHANCED_EDITION,
     LEGACY_EDITION,
     app_settings,
-    configured_game_root,
+    configured_game_root_to_open,
     game_edition_for_path,
-    is_game_root,
     remember_game_root,
 )
 from .texture_viewer import TextureImageProvider, TextureViewerBridge
@@ -927,19 +926,7 @@ class ExplorerBridge(QObject):
 
     @staticmethod
     def _configured_game_path(edition: str = "") -> str:
-        settings = app_settings()
-        if edition:
-            path = configured_game_root(settings, edition)
-            return path if is_game_root(path, edition) else ""
-
-        last_root = str(settings.value("gameRoot", ""))
-        if is_game_root(last_root):
-            return last_root
-        for candidate_edition in (ENHANCED_EDITION, LEGACY_EDITION):
-            path = configured_game_root(settings, candidate_edition)
-            if is_game_root(path, candidate_edition):
-                return path
-        return ""
+        return configured_game_root_to_open(app_settings(), edition)
 
     @Slot(str)
     def openGame(self, path: str) -> None:
