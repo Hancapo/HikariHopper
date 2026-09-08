@@ -148,8 +148,18 @@ class ExplorerTabs(QAbstractListModel):
             return
         if self._tabs[row].entryOperationBusy:
             return
+        bridge = self._tabs[row]
+        bridge.textureViewer.request_document_change(
+            lambda: self._close_tab(bridge)
+        )
+
+    def _close_tab(self, bridge: ExplorerBridge) -> None:
+        if bridge not in self._tabs or bridge.entryOperationBusy:
+            return
+        row = self._tabs.index(bridge)
+        bridge.textureViewer.close_document()
         if len(self._tabs) == 1:
-            self._tabs[0].closeWorkspace()
+            bridge.closeWorkspace()
             return
         self.beginRemoveRows(_INVALID_INDEX, row, row)
         bridge = self._tabs.pop(row)
