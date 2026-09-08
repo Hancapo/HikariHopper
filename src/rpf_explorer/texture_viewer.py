@@ -493,7 +493,7 @@ class TextureViewerBridge(QObject):
     selectionChanged = Signal()
     statusChanged = Signal()
     openRequested = Signal()
-    sourceSaved = Signal(str)
+    sourceWriteFinished = Signal(str, bool)
     saveFinished = Signal(bool)
     unsavedChangesRequested = Signal()
     closeRequested = Signal()
@@ -525,6 +525,8 @@ class TextureViewerBridge(QObject):
         self._preview_loading = False
         self._operation_busy = False
         self._saving = False
+        self._saving_root_path = ""
+        self._external_write_busy = False
         self._undo_stack: list[TextureUndoAction] = []
         self._revision = 0
         self._saved_revision = 0
@@ -560,7 +562,12 @@ class TextureViewerBridge(QObject):
 
     @Property(bool, notify=stateChanged)
     def operationBusy(self) -> bool:
-        return self._operation_busy
+        return self._operation_busy or self._external_write_busy
+
+    def set_external_write_busy(self, busy: bool) -> None:
+        if busy != self._external_write_busy:
+            self._external_write_busy = busy
+            self.stateChanged.emit()
 
     @Property(bool, notify=stateChanged)
     def saving(self) -> bool:
@@ -1078,17 +1085,18 @@ class TextureViewerBridge(QObject):
 
     @Slot(result=bool)
     def saveYtd(self) -> bool:
-        if self._dictionary is None or self._operation_busy:
+        if self._dictionary is None or self.operationBusy:
             return False
         if self._source_saver is not None:
-            if self._source_prepare is not None:
-                self._source_prepare()
             action = partial(
                 _save_dictionary_to_archive,
                 self._dictionary,
                 self._source_saver,
             )
-            return self._start_save(self._source_name, action)
+            return self._start_save(
+                self._source_name, action, prepare=self._source_prepare,
+                root_path=self._source_root_path,
+            )
         if not self.canSaveSource:
             return False
         destination = Path(self._source_path)
@@ -1099,7 +1107,7 @@ class TextureViewerBridge(QObject):
 
     @Slot(result=bool)
     def saveYtdAs(self) -> bool:
-        if self._dictionary is None or self._operation_busy:
+        if self._dictionary is None or self.operationBusy:
             return False
         suggested = self._source_name or "textures.ytd"
         path, _ = QFileDialog.getSaveFileName(
@@ -1412,13 +1420,22 @@ class TextureViewerBridge(QObject):
         save_action: Callable[[], None],
         *,
         source_update: tuple[str, str] | None = None,
+        prepare: Callable[[], None] | None = None,
+        root_path: str = "",
     ) -> bool:
-        if self._dictionary is None or self._operation_busy:
+        if self._dictionary is None or self.operationBusy:
             return False
         self._operation_busy = True
         self._saving = True
+        self._saving_root_path = root_path
         self._set_status(f"Saving {label}…")
         self.stateChanged.emit()
+        try:
+            if prepare is not None:
+                prepare()
+        except (OSError, ValueError, RuntimeError) as error:
+            self._save_failed((self._generation, label, str(error)))
+            return False
         task = _SaveTask(
             self._generation,
             label,
@@ -1435,6 +1452,7 @@ class TextureViewerBridge(QObject):
         generation, label, source_update = payload
         if generation != self._generation:
             return
+        self._finish_source_write(True)
         self._operation_busy = False
         self._saving = False
         if source_update is not None:
@@ -1446,8 +1464,6 @@ class TextureViewerBridge(QObject):
         self._set_status(f"Saved {label}")
         self.stateChanged.emit()
         self.saveFinished.emit(True)
-        if source_update is None and self._source_root_path:
-            self.sourceSaved.emit(self._source_root_path)
         if self._change_after_save:
             self._complete_document_change()
 
@@ -1456,12 +1472,19 @@ class TextureViewerBridge(QObject):
         generation, label, message = payload
         if generation != self._generation:
             return
+        self._finish_source_write(False)
         self._operation_busy = False
         self._saving = False
         self._set_status(f"Could not save {label}: {message}")
         self.stateChanged.emit()
         self.saveFinished.emit(False)
         self.resolvePendingChanges("cancel")
+
+    def _finish_source_write(self, success: bool) -> None:
+        root_path = self._saving_root_path
+        self._saving_root_path = ""
+        if root_path:
+            self.sourceWriteFinished.emit(root_path, success)
 
     def _selected_record(self) -> TextureRecord | None:
         return self._textures_model.record_at(self._selected_index)

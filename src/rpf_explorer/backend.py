@@ -816,33 +816,34 @@ class RpfProvider:
         if current_prefix:
             nested_entry = reloaded_root.find_entry(current_prefix)
             if not isinstance(nested_entry, RpfFileEntry):
-                reloaded_root.close()
-                raise ValueError(
-                    f"Could not reopen nested archive: {current_prefix}"
-                )
-            owner = nested_entry._archive
-            if owner is None:
-                reloaded_root.close()
-                raise ValueError(
-                    f"Nested archive is detached: {current_prefix}"
-                )
-            nested = owner.load_nested_archive(
-                nested_entry,
-                recursive=False,
-                strict=True,
-            )
-            if nested is None:
-                reloaded_root.close()
-                raise ValueError(
-                    f"Could not reopen nested archive: {current_prefix}"
-                )
-            reloaded = nested
+                # A peer may have deleted the nested archive we were browsing.
+                reloaded = reloaded_root
+            else:
+                try:
+                    owner = nested_entry._archive
+                    if owner is None:
+                        raise ValueError(f"Nested archive is detached: {current_prefix}")
+                    nested = owner.load_nested_archive(
+                        nested_entry, recursive=False, strict=True,
+                    )
+                    if nested is None:
+                        raise ValueError(f"Could not reopen nested archive: {current_prefix}")
+                    reloaded = nested
+                except (OSError, ValueError, RuntimeError):
+                    reloaded_root.close()
+                    raise
 
         self._archive = reloaded
         self._archive_path = str(reloaded.source_path or reloaded.name)
         self._archive_is_nested = reloaded.parent is not None
         self._in_archive = was_in_archive
         return True
+
+    def prepare_archive_write(self, root_path: str | Path) -> None:
+        """Release the current handle while retaining navigation for reload."""
+        root = self._root_archive()
+        if root is not None and Path(root.source_path).resolve() == Path(root_path).resolve():
+            root.close()
 
     def open_nested(self, entry: EntryRecord) -> WorkspaceInfo:
         if self._archive is None or entry.native_entry is None:
