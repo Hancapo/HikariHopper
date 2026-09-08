@@ -27,6 +27,7 @@ from PySide6.QtGui import QDrag, QGuiApplication
 from PySide6.QtWidgets import QFileDialog
 
 from .backend import (
+    ArchiveEntryTarget,
     EntryCreationTarget,
     EntryDeletionTarget,
     LoadedGame,
@@ -318,6 +319,7 @@ class ExplorerBridge(QObject):
     entryOperationStateChanged = Signal()
     contentChanged = Signal(object)
     looseFilesAboutToBeDeleted = Signal(object)
+    archiveWriteRequested = Signal(str)
     deleteConfirmationRequested = Signal()
     searchFocusRequested = Signal()
 
@@ -334,7 +336,9 @@ class ExplorerBridge(QObject):
             image_provider or TextureImageProvider(),
             self,
         )
-        self._texture_viewer.sourceSaved.connect(self._texture_source_saved)
+        self._texture_viewer.sourceWriteFinished.connect(self._texture_source_write_finished)
+        self._texture_saving = False
+        self._texture_viewer.stateChanged.connect(self._texture_write_state_changed)
         self._entry_operation_pool = QThreadPool(self)
         self._entry_operation_pool.setMaxThreadCount(1)
         self._entry_operation_busy = False
@@ -565,6 +569,7 @@ class ExplorerBridge(QObject):
             self._entry_operation_busy
             or self._peer_entry_operation_busy
             or self._game_loading
+            or self._texture_viewer.saving
         )
 
     @Property(bool, notify=gameLoadingChanged)
@@ -577,9 +582,18 @@ class ExplorerBridge(QObject):
 
     @property
     def local_entry_operation_busy(self) -> bool:
-        return self._entry_operation_busy
+        return self._entry_operation_busy or self._texture_viewer.saving
+
+    def _texture_write_state_changed(self) -> None:
+        saving = self._texture_viewer.saving
+        if saving != self._texture_saving:
+            self._texture_saving = saving
+            self.entryOperationStateChanged.emit()
 
     def set_peer_entry_operation_busy(self, busy: bool) -> None:
+        self._texture_viewer.set_external_write_busy(
+            busy or self._entry_operation_busy or self._game_loading
+        )
         if busy == self._peer_entry_operation_busy:
             return
         self._peer_entry_operation_busy = busy
@@ -930,6 +944,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def openGame(self, path: str) -> None:
+        if self.entryOperationBusy:
+            return
         self._set_status("Loading GTA V keys…")
         try:
             self.provider.open_game(path)
@@ -1186,26 +1202,33 @@ class ExplorerBridge(QObject):
         task.signals.completed.connect(completed)
         task.signals.failed.connect(self._entry_operation_failed)
         self._entry_operation_busy = True
+        self._texture_viewer.set_external_write_busy(True)
         self.entryOperationStateChanged.emit()
         self._set_status(progress_label)
+        location = target.location if isinstance(target, EntryDeletionTarget) else target
+        try:
+            if isinstance(location, EntryCreationTarget) and location.archive_path is not None:
+                self._prepare_archive_write(str(location.archive_path))
+        except (OSError, ValueError, RuntimeError) as error:
+            self._entry_operation_failed((target, failure_label, str(error)))
+            return False
         self._entry_operation_pool.start(task)
         return True
 
     @Slot(object)
     def _entry_creation_completed(self, payload: object) -> None:
         target, name = payload
-        self._finish_entry_operation()
         if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
             self._select_entries_by_name((name,))
         self._set_status(f"Created {name}")
         self.contentChanged.emit(target)
+        self._finish_entry_operation()
 
     @Slot(object)
     def _entry_import_completed(self, payload: object) -> None:
         target, names = payload
-        self._finish_entry_operation()
         if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
@@ -1214,23 +1237,21 @@ class ExplorerBridge(QObject):
         noun = "file" if count == 1 else "files"
         self._set_status(f"Imported {count} {noun}")
         self.contentChanged.emit(target)
+        self._finish_entry_operation()
 
     @Slot(object)
     def _entry_operation_failed(self, payload: object) -> None:
         target, label, message = payload
-        self._finish_entry_operation()
-        if (
-            isinstance(target, EntryDeletionTarget)
-            and self._refresh_operation_target(target)
-        ):
+        if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
         self._set_status(f"Could not {label}: {message}")
-        if isinstance(target, EntryDeletionTarget):
-            self.contentChanged.emit(target)
+        self.contentChanged.emit(target)
+        self._finish_entry_operation()
 
     def _finish_entry_operation(self) -> None:
         self._entry_operation_busy = False
+        self._texture_viewer.set_external_write_busy(self._peer_entry_operation_busy)
         self.entryOperationStateChanged.emit()
 
     def _refresh_operation_target(
@@ -1308,7 +1329,6 @@ class ExplorerBridge(QObject):
     @Slot(object)
     def _entry_deletion_completed(self, payload: object) -> None:
         target, count = payload
-        self._finish_entry_operation()
         if self._refresh_operation_target(target):
             self._clear_selection()
             self._refresh()
@@ -1319,6 +1339,7 @@ class ExplorerBridge(QObject):
             else f"Moved {count} {noun} to the Recycle Bin"
         )
         self.contentChanged.emit(target)
+        self._finish_entry_operation()
 
     def prepare_loose_file_deletion(self, paths: tuple[Path, ...]) -> None:
         was_in_archive = self.provider.in_archive
@@ -1346,11 +1367,17 @@ class ExplorerBridge(QObject):
         if not isinstance(location, EntryCreationTarget):
             return
         if location.in_archive:
+            previous_prefix = self.provider.archive_prefix
             try:
                 reloaded = self.provider.reload_archive(location.archive_path)
             except (OSError, ValueError, RuntimeError):
                 return
             if reloaded:
+                if self.provider.archive_prefix != previous_prefix:
+                    self._clear_archive_expansion()
+                    self._reset_navigation()
+                    self._expand_current_branch()
+                    self._publish_workspace()
                 self._clear_selection()
                 self._refresh()
             return
@@ -1376,6 +1403,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def openArchive(self, path: str) -> None:
+        if self.entryOperationBusy:
+            return
         try:
             self.provider.open_archive(path)
         except (OSError, ValueError, RuntimeError) as error:
@@ -1389,6 +1418,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def showGame(self) -> None:
+        if self.entryOperationBusy:
+            return
         try:
             self.provider.show_game()
         except ValueError as error:
@@ -1401,6 +1432,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def showArchive(self) -> None:
+        if self.entryOperationBusy:
+            return
         try:
             self.provider.show_archive()
         except ValueError as error:
@@ -1413,6 +1446,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def closeArchive(self) -> None:
+        if self.entryOperationBusy:
+            return
         self.provider.close_archive()
         self._clear_archive_expansion()
         if self.provider.has_game:
@@ -1424,6 +1459,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def closeWorkspace(self) -> None:
+        if self.entryOperationBusy:
+            return
         self.provider.close()
         self.entriesModel.set_entries([])
         self.treeModel.set_rows([])
@@ -1444,6 +1481,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def navigate(self, path: str) -> None:
+        if self.entryOperationBusy:
+            return
         normalized = path or "."
         if normalized == self._current_path:
             return
@@ -1456,6 +1495,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def goBack(self) -> None:
+        if self.entryOperationBusy:
+            return
         if self._history_index > 0:
             self._history_index -= 1
             self._current_path = self._history[self._history_index]
@@ -1464,6 +1505,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def goForward(self) -> None:
+        if self.entryOperationBusy:
+            return
         if self._history_index + 1 < len(self._history):
             self._history_index += 1
             self._current_path = self._history[self._history_index]
@@ -1478,6 +1521,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def setSearch(self, value: str) -> None:
+        if self.entryOperationBusy:
+            return
         if value == self._search:
             return
         self._search = value
@@ -1487,6 +1532,8 @@ class ExplorerBridge(QObject):
 
     @Slot(str)
     def sortEntries(self, column: str) -> None:
+        if self.entryOperationBusy:
+            return
         normalized = column.casefold()
         if normalized not in {"name", "type", "size"}:
             return
@@ -1525,6 +1572,8 @@ class ExplorerBridge(QObject):
 
     @Slot()
     def refresh(self) -> None:
+        if self.entryOperationBusy:
+            return
         if self.provider.is_open:
             self._clear_selection()
             self._refresh()
@@ -1912,7 +1961,8 @@ class ExplorerBridge(QObject):
             data,
             source_saver=source_target.save if source_target is not None else None,
             source_prepare=(
-                source_target.prepare if source_target is not None else None
+                partial(self._prepare_texture_write, source_target)
+                if source_target is not None else None
             ),
             source_root_path=(
                 str(source_target.root_path) if source_target is not None else ""
@@ -1920,18 +1970,21 @@ class ExplorerBridge(QObject):
         )
         self._set_status(f"Opening {entry.name}  ·  FiveFury")
 
-    @Slot(str)
-    def _texture_source_saved(self, root_path: str) -> None:
-        try:
-            reloaded = self.provider.reload_archive(root_path)
-        except (OSError, ValueError, RuntimeError) as error:
-            self._set_status(f"Saved YTD, but could not refresh the RPF: {error}")
-            return
-        if not reloaded:
-            return
-        self._clear_selection()
-        self._refresh()
-        self._set_status("Saved YTD inside RPF  ·  FiveFury")
+    def _prepare_archive_write(self, root_path: str) -> None:
+        self.provider.prepare_archive_write(root_path)
+        self.archiveWriteRequested.emit(root_path)
+
+    def _prepare_texture_write(self, target: ArchiveEntryTarget) -> None:
+        target.prepare()
+        self._prepare_archive_write(str(target.root_path))
+
+    @Slot(str, bool)
+    def _texture_source_write_finished(self, root_path: str, success: bool) -> None:
+        target = EntryCreationTarget(archive_path=Path(root_path))
+        self.refresh_external_content(target)
+        self.contentChanged.emit(target)
+        if success:
+            self._set_status("Saved YTD inside RPF  ·  FiveFury")
 
     def _open_archive_entry(self, entry: EntryRecord) -> None:
         is_nested = getattr(entry.native_entry, "_archive", None) is not None

@@ -124,6 +124,7 @@ class ExplorerTabs(QAbstractListModel):
         bridge.contentChanged.connect(
             lambda target, bridge=bridge: self._content_changed(bridge, target)
         )
+        bridge.archiveWriteRequested.connect(self._prepare_archive_write)
         self._tabs.append(bridge)
         self.endInsertRows()
         self._synchronize_operation_state()
@@ -146,7 +147,7 @@ class ExplorerTabs(QAbstractListModel):
     def closeTab(self, row: int) -> None:
         if not 0 <= row < len(self._tabs):
             return
-        if self._tabs[row].entryOperationBusy:
+        if self._tabs[row].entryOperationBusy and not self._tabs[row].textureViewer.saving:
             return
         bridge = self._tabs[row]
         bridge.textureViewer.request_document_change(
@@ -216,6 +217,10 @@ class ExplorerTabs(QAbstractListModel):
         for bridge in self._tabs:
             if bridge is not source:
                 bridge.prepare_loose_file_deletion(paths)
+
+    def _prepare_archive_write(self, root_path: str) -> None:
+        for bridge in self._tabs:
+            bridge.provider.prepare_archive_write(root_path)
 
     def _content_changed(
         self,
