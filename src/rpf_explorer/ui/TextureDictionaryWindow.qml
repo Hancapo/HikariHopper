@@ -25,7 +25,6 @@ Window {
     modality: Qt.NonModal
 
     property bool closeApproved: false
-    property bool closeAfterSave: false
 
     function present() {
         window.show()
@@ -47,39 +46,26 @@ Window {
         unsavedDialogLoader.active = true
     }
 
-    function saveAndClose() {
-        closeAfterSave = bridge.canSaveSource
-            ? bridge.saveYtd()
-            : bridge.saveYtdAs()
-    }
-
     Connections {
         target: window.bridge
         function onOpenRequested() {
             window.closeApproved = false
-            window.closeAfterSave = false
             window.present()
         }
-        function onSaveFinished(success) {
-            if (!window.closeAfterSave)
-                return
-            window.closeAfterSave = false
-            if (success) {
-                window.closeApproved = true
-                window.close()
-            }
+        function onUnsavedChangesRequested() {
+            window.present()
+            window.openUnsavedDialog()
+        }
+        function onCloseRequested() {
+            window.closeApproved = true
+            window.close()
         }
     }
 
     onClosing: close => {
-        if (window.bridge.saving) {
+        if (!window.closeApproved) {
             close.accepted = false
-            window.closeAfterSave = true
-            return
-        }
-        if (!window.closeApproved && window.bridge.modified) {
-            close.accepted = false
-            window.openUnsavedDialog()
+            Qt.callLater(() => window.bridge.requestClose())
         }
     }
 
@@ -164,11 +150,9 @@ Window {
         id: unsavedDialogComponent
         TextureUnsavedChangesDialog {
             bridge: window.bridge
-            onSaveRequested: window.saveAndClose()
-            onDiscardRequested: {
-                window.closeApproved = true
-                window.close()
-            }
+            onSaveRequested: window.bridge.resolvePendingChanges("save")
+            onDiscardRequested: window.bridge.resolvePendingChanges("discard")
+            onRejected: window.bridge.resolvePendingChanges("cancel")
             onClosed: Qt.callLater(() => unsavedDialogLoader.active = false)
         }
     }

@@ -21,6 +21,7 @@ from PySide6.QtCore import (
     QSize,
     Qt,
     QThreadPool,
+    QTimer,
     Signal,
     Slot,
 )
@@ -494,6 +495,8 @@ class TextureViewerBridge(QObject):
     openRequested = Signal()
     sourceSaved = Signal(str)
     saveFinished = Signal(bool)
+    unsavedChangesRequested = Signal()
+    closeRequested = Signal()
 
     def __init__(
         self,
@@ -528,6 +531,8 @@ class TextureViewerBridge(QObject):
         self._next_revision = 0
         self._error = ""
         self._status = "No texture dictionary loaded"
+        self._pending_change: Callable[[], None] | None = None
+        self._change_after_save = False
 
     @Property(QObject, constant=True)
     def texturesModel(self) -> QObject:
@@ -684,24 +689,106 @@ class TextureViewerBridge(QObject):
         source_prepare: Callable[[], None] | None = None,
         source_root_path: str = "",
     ) -> None:
-        self._generation += 1
-        generation = self._generation
-        self._thread_pool.clear()
-        if self._session:
-            self._image_provider.clear_prefix(f"{self._session}/")
-        self._session = uuid4().hex
-        self._dictionary = None
+        self.request_document_change(partial(
+            self._open_dictionary, name, source_path, bytes(data),
+            source_saver=source_saver, source_prepare=source_prepare,
+            source_root_path=source_root_path,
+        ))
+
+    def request_document_change(self, action: Callable[[], None]) -> None:
+        if self._pending_change is not None:
+            return
+        if self._operation_busy and not self._saving:
+            self._set_status("Wait for the texture operation to finish")
+            return
+        if self._saving:
+            self._pending_change = action
+            self._change_after_save = True
+        elif self.modified:
+            self._pending_change = action
+            self.unsavedChangesRequested.emit()
+        else:
+            action()
+
+    @Slot(str)
+    def resolvePendingChanges(self, decision: str) -> None:
+        if decision == "cancel":
+            self._pending_change = None
+            self._change_after_save = False
+            return
+        if self._pending_change is None or self._operation_busy:
+            return
+        if decision == "discard":
+            self._complete_document_change()
+        elif decision == "save":
+            self._change_after_save = True
+            started = self.saveYtd() if self.canSaveSource else self.saveYtdAs()
+            if not started:
+                self.resolvePendingChanges("cancel")
+
+    def _complete_document_change(self) -> None:
+        action = self._pending_change
+        self._pending_change = None
+        self._change_after_save = False
+        if action is not None:
+            # A continuation can remove the tab and destroy the emitting QML dialog.
+            QTimer.singleShot(0, self, action)
+
+    @Slot()
+    def requestClose(self) -> None:
+        self.request_document_change(self.close_document)
+
+    def close_document(self) -> None:
+        self._reset_document()
+        self.stateChanged.emit()
+        self.selectionChanged.emit()
+        self.closeRequested.emit()
+
+    def _open_dictionary(
+        self,
+        name: str,
+        source_path: str,
+        data: bytes,
+        *,
+        source_saver: Callable[[bytes], None] | None,
+        source_prepare: Callable[[], None] | None,
+        source_root_path: str,
+    ) -> None:
+        self._reset_document()
         self._source_name = name
         self._source_path = source_path
         self._source_saver = source_saver
         self._source_prepare = source_prepare
         self._source_root_path = source_root_path
+        self._loading = True
+        self._set_status("Reading texture dictionary…")
+        self.stateChanged.emit()
+        self.selectionChanged.emit()
+        self.openRequested.emit()
+
+        task = _DictionaryTask(self._generation, data)
+        task.signals.completed.connect(self._dictionary_loaded)
+        task.signals.failed.connect(self._dictionary_failed)
+        self._thread_pool.start(task, 2)
+
+    def _reset_document(self) -> None:
+        self._generation += 1
+        self._thread_pool.clear()
+        if self._session:
+            self._image_provider.clear_prefix(f"{self._session}/")
+        self._session = uuid4().hex
+        self._dictionary = None
+        self._source_name = ""
+        self._source_path = ""
+        self._source_saver = None
+        self._source_prepare = None
+        self._source_root_path = ""
         self._selected_index = -1
         self._channel = "rgba"
         self._mip_level = 0
         self._preview_url = ""
         self._preview_revision = 0
-        self._loading = True
+        self._loading = False
         self._preview_loading = False
         self._operation_busy = False
         self._saving = False
@@ -711,15 +798,7 @@ class TextureViewerBridge(QObject):
         self._next_revision = 0
         self._error = ""
         self._textures_model.clear()
-        self._set_status("Reading texture dictionary…")
-        self.stateChanged.emit()
-        self.selectionChanged.emit()
-        self.openRequested.emit()
-
-        task = _DictionaryTask(generation, bytes(data))
-        task.signals.completed.connect(self._dictionary_loaded)
-        task.signals.failed.connect(self._dictionary_failed)
-        self._thread_pool.start(task, 2)
+        self._set_status("No texture dictionary loaded")
 
     @Slot(int)
     def selectTexture(self, row: int) -> None:
@@ -1369,6 +1448,8 @@ class TextureViewerBridge(QObject):
         self.saveFinished.emit(True)
         if source_update is None and self._source_root_path:
             self.sourceSaved.emit(self._source_root_path)
+        if self._change_after_save:
+            self._complete_document_change()
 
     @Slot(object)
     def _save_failed(self, payload: object) -> None:
@@ -1380,6 +1461,7 @@ class TextureViewerBridge(QObject):
         self._set_status(f"Could not save {label}: {message}")
         self.stateChanged.emit()
         self.saveFinished.emit(False)
+        self.resolvePendingChanges("cancel")
 
     def _selected_record(self) -> TextureRecord | None:
         return self._textures_model.record_at(self._selected_index)
