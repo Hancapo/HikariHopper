@@ -12,9 +12,13 @@ Dialog {
     property string nameError: ""
 
     readonly property bool hasSource: sourcePath !== ""
+    readonly property string nameKind: creationKind === "ytd"
+        ? "ytd"
+        : creationKind === "folder" ? "entry" : "rpf"
     readonly property string heading: {
         switch (creationKind) {
         case "folder": return qsTr("NEW FOLDER")
+        case "ytd": return qsTr("NEW TEXTURE DICTIONARY")
         case "empty-rpf": return qsTr("NEW EMPTY RPF")
         case "folder-rpf": return qsTr("RPF FROM FOLDER")
         case "zip-rpf": return qsTr("RPF FROM ZIP")
@@ -33,7 +37,7 @@ Dialog {
     function updateNameValidation() {
         nameError = bridge.creationNameError(
             nameField.text,
-            creationKind !== "folder"
+            nameKind
         )
     }
 
@@ -46,6 +50,9 @@ Dialog {
         switch (creationKind) {
         case "folder":
             started = bridge.createFolder(name)
+            break
+        case "ytd":
+            started = bridge.createYtd(name)
             break
         case "empty-rpf":
             started = bridge.createEmptyRpf(name)

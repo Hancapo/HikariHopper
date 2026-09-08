@@ -36,12 +36,14 @@ from .backend import (
     create_folder_at,
     create_rpf_from_folder_at,
     create_rpf_from_zip_at,
+    create_ytd_at,
     delete_archive_files_at,
     ensure_entry_name_available,
     import_files_at,
     load_game,
     normalize_entry_name,
     normalize_rpf_name,
+    normalize_ytd_name,
 )
 from .formatting import format_size
 from .models import EntryRecord
@@ -1052,7 +1054,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str, result=bool)
     def createFolder(self, name: str) -> bool:
-        normalized = self._creation_name(name, rpf=False)
+        normalized = self._creation_name(name)
         if not normalized:
             return False
         return self._start_entry_creation(
@@ -1062,7 +1064,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str, result=bool)
     def createEmptyRpf(self, name: str) -> bool:
-        normalized = self._creation_name(name, rpf=True)
+        normalized = self._creation_name(name, kind="rpf")
         if not normalized:
             return False
         return self._start_entry_creation(
@@ -1072,7 +1074,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str, str, result=bool)
     def createRpfFromFolder(self, name: str, source: str) -> bool:
-        normalized = self._creation_name(name, rpf=True)
+        normalized = self._creation_name(name, kind="rpf")
         if not normalized:
             return False
         return self._start_entry_creation(
@@ -1087,7 +1089,7 @@ class ExplorerBridge(QObject):
 
     @Slot(str, str, result=bool)
     def createRpfFromZip(self, name: str, source: str) -> bool:
-        normalized = self._creation_name(name, rpf=True)
+        normalized = self._creation_name(name, kind="rpf")
         if not normalized:
             return False
         return self._start_entry_creation(
@@ -1098,6 +1100,16 @@ class ExplorerBridge(QObject):
                 normalized,
                 source,
             ),
+        )
+
+    @Slot(str, result=bool)
+    def createYtd(self, name: str) -> bool:
+        normalized = self._creation_name(name, kind="ytd")
+        if not normalized:
+            return False
+        return self._start_entry_creation(
+            normalized,
+            lambda target: partial(create_ytd_at, target, normalized),
         )
 
     @Slot("QVariantList", result=bool)
@@ -1135,30 +1147,30 @@ class ExplorerBridge(QObject):
             raise ValueError("Drop one or more files to import")
         return tuple(paths)
 
-    def _creation_name(self, name: str, *, rpf: bool) -> str:
-        normalized, error = self._validated_creation_name(name, rpf=rpf)
+    def _creation_name(self, name: str, *, kind: str = "entry") -> str:
+        normalized, error = self._validated_creation_name(name, kind=kind)
         if error:
             self._set_status(error)
             return ""
         return normalized
 
-    @Slot(str, bool, result=str)
-    def creationNameError(self, name: str, rpf: bool) -> str:
-        _, error = self._validated_creation_name(name, rpf=rpf)
+    @Slot(str, str, result=str)
+    def creationNameError(self, name: str, kind: str) -> str:
+        _, error = self._validated_creation_name(name, kind=kind)
         return error
 
     def _validated_creation_name(
         self,
         name: str,
         *,
-        rpf: bool,
+        kind: str,
     ) -> tuple[str, str]:
         try:
-            normalized = (
-                normalize_rpf_name(name)
-                if rpf
-                else normalize_entry_name(name)
-            )
+            normalizer = {
+                "rpf": normalize_rpf_name,
+                "ytd": normalize_ytd_name,
+            }.get(kind, normalize_entry_name)
+            normalized = normalizer(name)
             ensure_entry_name_available(
                 normalized,
                 self._current_entry_names,

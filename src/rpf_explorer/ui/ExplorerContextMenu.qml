@@ -43,6 +43,16 @@ RetroMenu {
             iconName: "folder"
             onTriggered: contextMenu.requestCreation("folder", qsTr("New folder"), "")
         }
+        RetroMenuItem {
+            objectName: "createYtdMenuItem"
+            text: qsTr("Texture dictionary")
+            iconName: "image"
+            onTriggered: contextMenu.requestCreation(
+                "ytd",
+                qsTr("new_texture_dictionary.ytd"),
+                ""
+            )
+        }
         RetroMenuSeparator { }
         RetroMenuSection {
             objectName: "rpfArchiveSection"

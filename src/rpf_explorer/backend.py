@@ -123,6 +123,7 @@ class EntryCreationTarget:
     archive_path: Path | None = None
     archive_prefix: str = ""
     internal_directory: str = "."
+    game: str = "gta5"
     crypto: Any = field(default=None, repr=False, compare=False)
 
     @property
@@ -162,6 +163,23 @@ def create_empty_rpf_at(target: EntryCreationTarget, name: str) -> str:
 
     normalized = normalize_rpf_name(name)
     _store_rpf(target, normalized, RpfArchive.empty(normalized, crypto=target.crypto))
+    return normalized
+
+
+def create_ytd_at(target: EntryCreationTarget, name: str) -> str:
+    from fivefury.ytd import Texture, TextureFormat, Ytd
+
+    normalized = normalize_ytd_name(name)
+    texture = Texture.from_raw(
+        bytes(4 * 4 * 4),
+        4,
+        4,
+        TextureFormat.A8R8G8B8,
+        1,
+        name="texture",
+    )
+    data = Ytd([texture], game=target.game).to_bytes()
+    _store_file_bytes(target, normalized, data)
     return normalized
 
 
@@ -315,16 +333,30 @@ def normalize_entry_name(name: str) -> str:
 
 
 def normalize_rpf_name(name: str) -> str:
+    return normalize_suffixed_name(name, ".rpf", "RPF")
+
+
+def normalize_ytd_name(name: str) -> str:
+    return normalize_suffixed_name(name, ".ytd", "YTD")
+
+
+def normalize_suffixed_name(
+    name: str,
+    suffix: str,
+    label: str,
+) -> str:
     normalized = normalize_entry_name(name)
-    if normalized.casefold() == ".rpf":
-        raise ValueError("Enter a name before .rpf")
+    if normalized.casefold() == suffix:
+        raise ValueError(f"Enter a name before {suffix}")
     candidate = (
         normalized
-        if normalized.casefold().endswith(".rpf")
-        else f"{normalized}.rpf"
+        if normalized.casefold().endswith(suffix)
+        else f"{normalized}{suffix}"
     )
     if len(candidate) > _MAX_ENTRY_NAME_LENGTH:
-        raise ValueError("RPF names cannot exceed 255 characters including .rpf")
+        raise ValueError(
+            f"{label} names cannot exceed 255 characters including {suffix}"
+        )
     return candidate
 
 
@@ -369,6 +401,26 @@ def _store_rpf(
         target,
         name,
         lambda owner: owner.file(
+            _archive_child_path(target.internal_directory, name),
+            data,
+        ),
+    )
+
+
+def _store_file_bytes(
+    target: EntryCreationTarget,
+    name: str,
+    data: bytes,
+) -> None:
+    if not target.in_archive:
+        destination = _loose_destination(target, name)
+        with destination.open("xb") as stream:
+            stream.write(data)
+        return
+    _mutate_target_archive(
+        target,
+        name,
+        lambda archive: archive.file(
             _archive_child_path(target.internal_directory, name),
             data,
         ),
@@ -692,6 +744,7 @@ class RpfProvider:
                 archive_path=root_path,
                 archive_prefix=self.archive_prefix,
                 internal_directory=normalized,
+                game=self._game_target or "gta5",
                 crypto=root.crypto,
             )
             root.close()
@@ -705,7 +758,11 @@ class RpfProvider:
             raise ValueError(f"Folder is outside the game installation: {normalized}")
         if not directory.is_dir():
             raise ValueError(f"Game folder does not exist: {normalized}")
-        return EntryCreationTarget(directory=directory, crypto=self._crypto)
+        return EntryCreationTarget(
+            directory=directory,
+            game=self._game_target or "gta5",
+            crypto=self._crypto,
+        )
 
     def deletion_target(
         self,
