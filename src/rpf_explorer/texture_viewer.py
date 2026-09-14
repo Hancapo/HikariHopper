@@ -30,6 +30,7 @@ from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtWidgets import QFileDialog
 
 from .formatting import format_size, format_texture_format
+from .texture_dimensions import power_of_two_dimensions
 
 _INVALID_INDEX = QModelIndex()
 _CHANNELS = frozenset({"rgba", "r", "g", "b", "a"})
@@ -641,6 +642,24 @@ class TextureViewerBridge(QObject):
     def selectedHeight(self) -> int:
         record = self._selected_record()
         return int(record.texture.height) if record is not None else 0
+
+    @Property(bool, notify=selectionChanged)
+    def selectedNeedsPowerOfTwo(self) -> bool:
+        if self._selected_record() is None:
+            return False
+        from texfury import is_power_of_two
+
+        return not is_power_of_two(self.selectedWidth, self.selectedHeight)
+
+    @Slot(str, result="QVariantMap")
+    def powerOfTwoSize(self, mode: str) -> dict[str, int]:
+        if self._selected_record() is None:
+            return {}
+        try:
+            width, height = power_of_two_dimensions(self.selectedWidth, self.selectedHeight, mode)
+        except ValueError:
+            return {}
+        return {"width": width, "height": height}
 
     @Property(int, notify=selectionChanged)
     def previewWidth(self) -> int:

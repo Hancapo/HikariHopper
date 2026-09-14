@@ -5,13 +5,27 @@ import "theme" as Theme
 TextureToolDialog {
     id: dialog
 
-    heading: qsTr("RESIZE TEXTURE")
+    property bool powerOfTwo: false
+    readonly property var roundedSize: {
+        // Read selection properties here so the preview follows the selected texture.
+        const width = bridge.selectedWidth
+        const height = bridge.selectedHeight
+        return powerOfTwo && width > 0 && height > 0
+            ? bridge.powerOfTwoSize(roundingCombo.currentValue || "nearest") : ({})
+    }
+    readonly property int targetWidth: powerOfTwo ? (roundedSize.width || 0) : Number(widthField.text)
+    readonly property int targetHeight: powerOfTwo ? (roundedSize.height || 0) : Number(heightField.text)
+    readonly property bool validSize: targetWidth > 0 && targetHeight > 0
+        && targetWidth <= bridge.maximumDimension && targetHeight <= bridge.maximumDimension
+        && (powerOfTwo || (widthField.acceptableInput && heightField.acceptableInput))
+
+    heading: powerOfTwo ? qsTr("RESIZE TO POWER OF 2") : qsTr("RESIZE TEXTURE")
     bodyHeight: 330
-    applyEnabled: widthField.acceptableInput && heightField.acceptableInput
+    applyEnabled: validSize && (!powerOfTwo || bridge.selectedNeedsPowerOfTwo)
     applyAction: function() {
         return bridge.resizeSelected(
-            Number(widthField.text),
-            Number(heightField.text),
+            targetWidth,
+            targetHeight,
             filterCombo.currentValue,
             mipSizeCombo.currentValue,
             mipCheck.checked
@@ -21,8 +35,12 @@ TextureToolDialog {
     onOpened: {
         widthField.text = bridge.selectedWidth.toString()
         heightField.text = bridge.selectedHeight.toString()
-        widthField.forceActiveFocus()
-        widthField.selectAll()
+        if (powerOfTwo) {
+            roundingCombo.forceActiveFocus()
+        } else {
+            widthField.forceActiveFocus()
+            widthField.selectAll()
+        }
     }
 
     ColumnLayout {
@@ -40,8 +58,9 @@ TextureToolDialog {
             columnSpacing: 12
             rowSpacing: 8
 
-            Text { text: qsTr("Resolution"); color: Theme.Theme.textFaint; font.family: Theme.Theme.uiFont; font.pixelSize: Theme.Theme.fontSize }
+            Text { visible: !dialog.powerOfTwo; text: qsTr("Resolution"); color: Theme.Theme.textFaint; font.family: Theme.Theme.uiFont; font.pixelSize: Theme.Theme.fontSize }
             RowLayout {
+                visible: !dialog.powerOfTwo
                 Layout.fillWidth: true
                 spacing: 8
                 FlatTextField {
@@ -65,8 +84,33 @@ TextureToolDialog {
                 }
             }
 
-            Item { Layout.preferredWidth: 112; Layout.preferredHeight: 1 }
-            SquareCheckBox { id: lockAspect; Layout.fillWidth: true; text: qsTr("Lock aspect ratio"); checked: true }
+            Item { visible: !dialog.powerOfTwo; Layout.preferredWidth: 112; Layout.preferredHeight: 1 }
+            SquareCheckBox { id: lockAspect; visible: !dialog.powerOfTwo; Layout.fillWidth: true; text: qsTr("Lock aspect ratio"); checked: true }
+
+            Text { visible: dialog.powerOfTwo; text: qsTr("Rounding"); color: Theme.Theme.textFaint; font.family: Theme.Theme.uiFont; font.pixelSize: Theme.Theme.fontSize }
+            FlatComboBox {
+                id: roundingCombo
+                objectName: "powerOfTwoRounding"
+                visible: dialog.powerOfTwo
+                Layout.fillWidth: true
+                valueRole: "value"
+                model: [
+                    { label: qsTr("Nearest"), value: "nearest" },
+                    { label: qsTr("Round down"), value: "down" },
+                    { label: qsTr("Round up"), value: "up" }
+                ]
+            }
+
+            Text {
+                visible: dialog.powerOfTwo
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                text: qsTr("Each dimension is rounded separately; proportions may change.")
+                color: Theme.Theme.textDim
+                font.family: Theme.Theme.uiFont
+                font.pixelSize: Theme.Theme.smallFontSize
+                wrapMode: Text.WordWrap
+            }
 
             Text { text: qsTr("Resampling"); color: Theme.Theme.textFaint; font.family: Theme.Theme.uiFont; font.pixelSize: Theme.Theme.fontSize }
             TextureFilterCombo { id: filterCombo; Layout.fillWidth: true }
@@ -88,16 +132,18 @@ TextureToolDialog {
             Text { x: 9; y: 4; text: qsTr("RESULT"); color: Theme.Theme.textFaint; font.family: Theme.Theme.monoFont; font.pixelSize: Theme.Theme.smallFontSize; font.bold: true; font.letterSpacing: 1 }
             Text {
                 x: 9; y: 25; width: parent.width - 18
-                text: qsTr("%1 × %2  →  %3 × %4  ·  %5 mips  ·  last %6")
+                text: !dialog.validSize && dialog.powerOfTwo
+                    ? qsTr("Result exceeds the maximum dimension (%1). Choose Round down.").arg(dialog.bridge.maximumDimension)
+                    : qsTr("%1 × %2  →  %3 × %4  ·  %5 mips  ·  last %6")
                     .arg(dialog.bridge.selectedWidth)
                     .arg(dialog.bridge.selectedHeight)
-                    .arg(widthField.text || "—")
-                    .arg(heightField.text || "—")
-                    .arg(mipCheck.checked && widthField.acceptableInput && heightField.acceptableInput
-                        ? dialog.bridge.estimatedMipCount(Number(widthField.text), Number(heightField.text), mipSizeCombo.currentValue)
+                    .arg(dialog.targetWidth || "—")
+                    .arg(dialog.targetHeight || "—")
+                    .arg(mipCheck.checked && dialog.validSize
+                        ? dialog.bridge.estimatedMipCount(dialog.targetWidth, dialog.targetHeight, mipSizeCombo.currentValue)
                         : 1)
-                    .arg(mipCheck.checked && widthField.acceptableInput && heightField.acceptableInput
-                        ? dialog.bridge.estimatedSmallestMipDimensions(Number(widthField.text), Number(heightField.text), mipSizeCombo.currentValue)
+                    .arg(mipCheck.checked && dialog.validSize
+                        ? dialog.bridge.estimatedSmallestMipDimensions(dialog.targetWidth, dialog.targetHeight, mipSizeCombo.currentValue)
                         : qsTr("none"))
                 color: Theme.Theme.textRow
                 font.family: Theme.Theme.monoFont

@@ -98,6 +98,7 @@ Window {
                 SplitView.maximumWidth: 440
                 bridge: window.bridge
                 onResizeRequested: window.openToolDialog(resizeDialogComponent)
+                onPowerOfTwoRequested: window.openToolDialog(powerOfTwoDialogComponent)
                 onMipmapsRequested: window.openToolDialog(mipmapsDialogComponent)
                 onFormatRequested: window.openToolDialog(formatDialogComponent)
                 onAlphaRepairRequested: window.openToolDialog(alphaDialogComponent)
@@ -161,6 +162,15 @@ Window {
         id: resizeDialogComponent
         TextureResizeDialog {
             bridge: window.bridge
+            onClosed: Qt.callLater(() => toolDialogLoader.active = false)
+        }
+    }
+
+    Component {
+        id: powerOfTwoDialogComponent
+        TextureResizeDialog {
+            bridge: window.bridge
+            powerOfTwo: true
             onClosed: Qt.callLater(() => toolDialogLoader.active = false)
         }
     }

@@ -10,6 +10,7 @@ Rectangle {
     required property var bridge
 
     signal resizeRequested()
+    signal powerOfTwoRequested()
     signal mipmapsRequested()
     signal formatRequested()
     signal alphaRepairRequested()
@@ -223,6 +224,7 @@ Rectangle {
         parent: rail
         bridge: rail.bridge
         onResizeRequested: rail.resizeRequested()
+        onPowerOfTwoRequested: rail.powerOfTwoRequested()
         onMipmapsRequested: rail.mipmapsRequested()
         onFormatRequested: rail.formatRequested()
         onAlphaRepairRequested: rail.alphaRepairRequested()

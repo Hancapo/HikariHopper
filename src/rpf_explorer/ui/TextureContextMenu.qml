@@ -6,6 +6,7 @@ RetroMenu {
     required property var bridge
 
     signal resizeRequested()
+    signal powerOfTwoRequested()
     signal mipmapsRequested()
     signal formatRequested()
     signal alphaRepairRequested()
@@ -22,6 +23,11 @@ RetroMenu {
         text: qsTr("Resize texture…")
         enabled: menu.bridge.selectedIndex >= 0 && !menu.bridge.operationBusy
         onTriggered: menu.resizeRequested()
+    }
+    RetroMenuItem {
+        text: qsTr("Resize to power of 2…")
+        enabled: menu.bridge.selectedNeedsPowerOfTwo && !menu.bridge.operationBusy
+        onTriggered: menu.powerOfTwoRequested()
     }
     RetroMenuItem {
         text: qsTr("Recalculate mipmaps…")
