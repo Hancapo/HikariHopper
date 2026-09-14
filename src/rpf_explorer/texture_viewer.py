@@ -639,6 +639,13 @@ class TextureViewerBridge(QObject):
     def selectedCount(self) -> int:
         return len(self._selected_rows)
 
+    @Property(int, notify=stateChanged)
+    def duplicateTextureCount(self) -> int:
+        if self._dictionary is None:
+            return 0
+        textures = self._dictionary.textures
+        return len(textures) - len({texture.name.lower() for texture in textures})
+
     @Property(bool, notify=selectionChanged)
     def canRemoveSelection(self) -> bool:
         return 0 < self.selectedCount < self.textureCount
@@ -1101,6 +1108,27 @@ class TextureViewerBridge(QObject):
         return True
 
     @Slot(result=bool)
+    def removeDuplicatesByName(self) -> bool:
+        from fivefury.ytd import Ytd
+
+        if self._dictionary is None or self.operationBusy or not self.duplicateTextureCount:
+            return False
+        original = tuple(self._dictionary.textures)
+        cleaned = Ytd(list(original), game=self._dictionary.game).build()
+        positions = {texture.name.lower(): index for index, texture in enumerate(cleaned.textures)}
+        selection = {positions[original[row].name.lower()] for row in self._selected_rows}
+        current = positions[original[self._selected_index].name.lower()] if self._selected_index >= 0 else -1
+        if not self._replace_dictionary(cleaned.textures):
+            return False
+        self._push_undo("Remove duplicates by name", TextureUndoKind.SNAPSHOT,
+                        self._selected_index, original)
+        self._rebuild_texture_view(selection, current)
+        removed = len(original) - len(cleaned.textures)
+        noun = "texture" if removed == 1 else "textures"
+        self._set_status(f"Removed {removed} duplicate {noun}")
+        return True
+
+    @Slot(result=bool)
     def removeSelected(self) -> bool:
         record = self._selected_record()
         if record is None or self.operationBusy:
@@ -1151,9 +1179,11 @@ class TextureViewerBridge(QObject):
         action = self._undo_stack.pop()
         textures = list(self._dictionary.textures)
         if action.kind is TextureUndoKind.SNAPSHOT:
-            if not self._replace_dictionary(list(action.texture)):
-                self._undo_stack.append(action)
-                return False
+            from fivefury.ytd import Ytd
+
+            # Undo restores an imported state verbatim, including duplicate names.
+            # Serialization still validates the document before writing it.
+            self._dictionary = Ytd(list(action.texture), game=self._dictionary.game)
             self._revision = action.previous_revision
             self._rebuild_texture_view(set(action.selection), action.row)
             self._set_status(f"Undid {action.label.casefold()}")
