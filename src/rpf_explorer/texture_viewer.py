@@ -121,6 +121,7 @@ class TextureRecord:
 class TextureUndoKind(Enum):
     REPLACE = "replace"
     INSERT = "insert"
+    SNAPSHOT = "snapshot"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,9 +131,12 @@ class TextureUndoAction:
     row: int
     texture: Any
     previous_revision: int
+    selection: tuple[int, ...] = ()
 
     @property
     def data_size(self) -> int:
+        if self.kind is TextureUndoKind.SNAPSHOT:
+            return sum(len(texture.data) for texture in self.texture)
         return len(self.texture.data)
 
 
@@ -145,11 +149,13 @@ class TextureListModel(QAbstractListModel):
     DATA_SIZE_LABEL = Qt.ItemDataRole.UserRole + 6
     THUMBNAIL_URL = Qt.ItemDataRole.UserRole + 7
     MIP_COUNT = Qt.ItemDataRole.UserRole + 8
+    SELECTED = Qt.ItemDataRole.UserRole + 9
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._records: list[TextureRecord] = []
         self._thumbnail_keys: dict[int, str] = {}
+        self._selected_rows: set[int] = set()
 
     def roleNames(self) -> dict[int, QByteArray]:
         return {
@@ -161,6 +167,7 @@ class TextureListModel(QAbstractListModel):
             self.DATA_SIZE_LABEL: QByteArray(b"dataSizeLabel"),
             self.THUMBNAIL_URL: QByteArray(b"thumbnailUrl"),
             self.MIP_COUNT: QByteArray(b"mipCount"),
+            self.SELECTED: QByteArray(b"textureSelected"),
         }
 
     def rowCount(self, parent: QModelIndex = _INVALID_INDEX) -> int:
@@ -179,6 +186,7 @@ class TextureListModel(QAbstractListModel):
             self.DATA_SIZE_LABEL: format_size(record.data_size),
             self.THUMBNAIL_URL: self._thumbnail_keys.get(index.row(), ""),
             self.MIP_COUNT: record.mip_count,
+            self.SELECTED: index.row() in self._selected_rows,
         }.get(role)
 
     def set_textures(self, textures: list[Any]) -> None:
@@ -189,6 +197,12 @@ class TextureListModel(QAbstractListModel):
 
     def clear(self) -> None:
         self.set_textures([])
+
+    def set_selection(self, rows: set[int]) -> None:
+        changed = self._selected_rows ^ rows
+        self._selected_rows = set(rows)
+        if changed and self._records:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._records) - 1, 0), [self.SELECTED])
 
     def record_at(self, row: int) -> TextureRecord | None:
         return self._records[row] if 0 <= row < len(self._records) else None
@@ -323,37 +337,33 @@ class _TextureTransformTask(QRunnable):
     def __init__(
         self,
         generation: int,
-        row: int,
-        source: Any,
+        sources: tuple[tuple[int, Any], ...],
         operation: str,
         transform: Callable[[Any], Any],
     ) -> None:
         super().__init__()
         self.signals = _TaskSignals()
         self._generation = generation
-        self._row = row
-        self._source = source
+        self._sources = sources
         self._operation = operation
         self._transform = transform
 
     @Slot()
     def run(self) -> None:
         try:
-            editable = _to_texfury_texture(self._source)
-            transformed = self._transform(editable)
-            changed = transformed is not editable
-            result = (
-                _to_fivefury_texture(transformed, self._source)
-                if changed
-                else self._source
-            )
+            results = []
+            for row, source in self._sources:
+                editable = _to_texfury_texture(source)
+                transformed = self._transform(editable)
+                if transformed is not editable:
+                    results.append((row, _to_fivefury_texture(transformed, source)))
         except (ImportError, MemoryError, OSError, RuntimeError, TypeError, ValueError) as error:
             self.signals.failed.emit(
-                (self._generation, self._row, self._operation, str(error))
+                (self._generation, row, self._operation, f"{source.name}: {error}")
             )
             return
         self.signals.completed.emit(
-            (self._generation, self._row, self._operation, result, changed)
+            (self._generation, self._operation, results)
         )
 
 
@@ -518,6 +528,8 @@ class TextureViewerBridge(QObject):
         self._source_prepare: Callable[[], None] | None = None
         self._source_root_path = ""
         self._selected_index = -1
+        self._selected_rows: set[int] = set()
+        self._selection_anchor = -1
         self._channel = "rgba"
         self._mip_level = 0
         self._preview_url = ""
@@ -623,6 +635,14 @@ class TextureViewerBridge(QObject):
     def selectedIndex(self) -> int:
         return self._selected_index
 
+    @Property(int, notify=selectionChanged)
+    def selectedCount(self) -> int:
+        return len(self._selected_rows)
+
+    @Property(bool, notify=selectionChanged)
+    def canRemoveSelection(self) -> bool:
+        return 0 < self.selectedCount < self.textureCount
+
     @Property(str, notify=selectionChanged)
     def selectedName(self) -> str:
         record = self._selected_record()
@@ -645,11 +665,23 @@ class TextureViewerBridge(QObject):
 
     @Property(bool, notify=selectionChanged)
     def selectedNeedsPowerOfTwo(self) -> bool:
-        if self._selected_record() is None:
-            return False
         from texfury import is_power_of_two
 
-        return not is_power_of_two(self.selectedWidth, self.selectedHeight)
+        return any(not is_power_of_two(record.texture.width, record.texture.height)
+                   for _, record in self._selection_records())
+
+    def _selection_records(self) -> list[tuple[int, TextureRecord]]:
+        return [(row, self._textures_model.record_at(row)) for row in sorted(self._selected_rows)]
+
+    @Slot(str, result=bool)
+    def validPowerOfTwoSelection(self, mode: str) -> bool:
+        try:
+            return bool(self._selected_rows) and all(
+                max(power_of_two_dimensions(record.texture.width, record.texture.height, mode))
+                <= self.maximumDimension for _, record in self._selection_records()
+            )
+        except ValueError:
+            return False
 
     @Slot(str, result="QVariantMap")
     def powerOfTwoSize(self, mode: str) -> dict[str, int]:
@@ -810,6 +842,9 @@ class TextureViewerBridge(QObject):
         self._source_prepare = None
         self._source_root_path = ""
         self._selected_index = -1
+        self._selected_rows.clear()
+        self._selection_anchor = -1
+        self._textures_model.set_selection(set())
         self._channel = "rgba"
         self._mip_level = 0
         self._preview_url = ""
@@ -827,13 +862,49 @@ class TextureViewerBridge(QObject):
         self._set_status("No texture dictionary loaded")
 
     @Slot(int)
-    def selectTexture(self, row: int) -> None:
-        if self._textures_model.record_at(row) is None or row == self._selected_index:
+    @Slot(int, int)
+    def selectTexture(self, row: int, modifiers: int = 0) -> None:
+        if self.operationBusy or self._textures_model.record_at(row) is None:
             return
-        self._selected_index = row
+        control = bool(modifiers & Qt.KeyboardModifier.ControlModifier.value)
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier.value)
+        if shift:
+            anchor = self._selection_anchor if self._selection_anchor >= 0 else row
+            rows = set(range(min(anchor, row), max(anchor, row) + 1))
+            if control:
+                rows |= self._selected_rows
+            self._selection_anchor = anchor
+        elif control:
+            rows = self._selected_rows ^ {row}
+            self._selection_anchor = row
+        else:
+            rows = {row}
+            self._selection_anchor = row
+        current = row if row in rows else (min(rows) if rows else -1)
+        self._set_texture_selection(rows, current)
+
+    @Slot(int)
+    def selectContextTexture(self, row: int) -> None:
+        if row not in self._selected_rows:
+            self.selectTexture(row)
+        elif not self.operationBusy:
+            self._set_texture_selection(self._selected_rows, row)
+
+    @Slot()
+    def selectAllTextures(self) -> None:
+        if self.operationBusy:
+            return
+        rows = set(range(self.textureCount))
+        self._selection_anchor = 0 if rows else -1
+        self._set_texture_selection(rows, max(0, self._selected_index) if rows else -1)
+
+    def _set_texture_selection(self, rows: set[int], current: int) -> None:
+        self._selected_rows = set(rows)
+        self._textures_model.set_selection(rows)
+        self._selected_index = current
         self._mip_level = 0
         self._preview_url = ""
-        self._preview_loading = True
+        self._preview_loading = current >= 0
         self.selectionChanged.emit()
         self.stateChanged.emit()
         self._request_preview()
@@ -907,6 +978,18 @@ class TextureViewerBridge(QObject):
         )
         return self._start_transform("Resizing", transform)
 
+    @Slot(str, str, int, bool, result=bool)
+    def resizeSelectionToPowerOfTwo(
+        self, mode: str, filter_name: str, min_mip_size: int, generate_mipmaps: bool,
+    ) -> bool:
+        if not self.validPowerOfTwoSelection(mode):
+            self._set_status("A rounded dimension exceeds the limit; choose Round down")
+            return False
+        return self._start_transform("Resizing", partial(
+            _resize_to_power_of_two, mode=mode, mip_filter=_mip_filter(filter_name),
+            min_mip_size=min_mip_size, generate_mipmaps=generate_mipmaps,
+        ))
+
     @Slot(str, int, result=bool)
     def recalculateSelectedMipmaps(
         self,
@@ -919,11 +1002,7 @@ class TextureViewerBridge(QObject):
         transform = partial(
             _recalculate_mipmaps,
             mip_filter=_mip_filter(filter_name),
-            min_mip_size=texfury_mip_stop_size(
-                record.texture.width,
-                record.texture.height,
-                min_mip_size,
-            ),
+            min_mip_size=min_mip_size,
         )
         return self._start_transform("Recalculating mipmaps for", transform)
 
@@ -949,11 +1028,7 @@ class TextureViewerBridge(QObject):
             format=BCFormat[normalized],
             quality=max(0.0, min(1.0, float(quality))),
             mip_filter=_mip_filter(filter_name),
-            min_mip_size=texfury_mip_stop_size(
-                record.texture.width,
-                record.texture.height,
-                min_mip_size,
-            ),
+            min_mip_size=min_mip_size,
         )
         return self._start_transform("Changing format for", transform)
 
@@ -968,7 +1043,7 @@ class TextureViewerBridge(QObject):
     @Slot(result=bool)
     def replaceSelectedFromImage(self) -> bool:
         record = self._selected_record()
-        if record is None or self._operation_busy:
+        if record is None or self.operationBusy or self.selectedCount != 1:
             return False
         path, _ = QFileDialog.getOpenFileName(
             None,
@@ -996,7 +1071,7 @@ class TextureViewerBridge(QObject):
     def renameSelected(self, name: str) -> bool:
         record = self._selected_record()
         normalized = name.strip()
-        if record is None or self._operation_busy:
+        if record is None or self.operationBusy or self.selectedCount != 1:
             return False
         if not normalized:
             self._set_status("Texture name cannot be empty")
@@ -1028,12 +1103,20 @@ class TextureViewerBridge(QObject):
     @Slot(result=bool)
     def removeSelected(self) -> bool:
         record = self._selected_record()
-        if record is None or self._operation_busy:
+        if record is None or self.operationBusy:
             return False
-        if self._textures_model.rowCount() <= 1:
+        if not self.canRemoveSelection:
             self._set_status("A YTD must contain at least one texture")
             return False
         row = self._selected_index
+        if self.selectedCount > 1:
+            original = tuple(self._dictionary.textures)
+            textures = [texture for index, texture in enumerate(original) if index not in self._selected_rows]
+            if not self._replace_dictionary(textures):
+                return False
+            self._push_undo("Remove textures", TextureUndoKind.SNAPSHOT, row, original)
+            self._rebuild_texture_view({min(row, len(textures) - 1)}, min(row, len(textures) - 1))
+            return True
         textures = list(self._dictionary.textures)
         textures.pop(row)
         if not self._replace_dictionary(textures):
@@ -1048,6 +1131,9 @@ class TextureViewerBridge(QObject):
         self._thread_pool.clear()
         self._textures_model.remove_texture(row)
         self._selected_index = min(row, len(textures) - 1)
+        self._selected_rows = {self._selected_index}
+        self._selection_anchor = self._selected_index
+        self._textures_model.set_selection(self._selected_rows)
         self._mip_level = 0
         self._preview_url = ""
         self._preview_loading = True
@@ -1060,10 +1146,18 @@ class TextureViewerBridge(QObject):
 
     @Slot(result=bool)
     def undo(self) -> bool:
-        if not self._undo_stack or self._operation_busy or self._dictionary is None:
+        if not self._undo_stack or self.operationBusy or self._dictionary is None:
             return False
         action = self._undo_stack.pop()
         textures = list(self._dictionary.textures)
+        if action.kind is TextureUndoKind.SNAPSHOT:
+            if not self._replace_dictionary(list(action.texture)):
+                self._undo_stack.append(action)
+                return False
+            self._revision = action.previous_revision
+            self._rebuild_texture_view(set(action.selection), action.row)
+            self._set_status(f"Undid {action.label.casefold()}")
+            return True
         if action.kind is TextureUndoKind.REPLACE:
             if not 0 <= action.row < len(textures):
                 return False
@@ -1084,6 +1178,9 @@ class TextureViewerBridge(QObject):
             self._textures_model.insert_texture(action.row, action.texture)
         self._revision = action.previous_revision
         self._selected_index = action.row
+        self._selected_rows = {action.row}
+        self._selection_anchor = action.row
+        self._textures_model.set_selection(self._selected_rows)
         self._mip_level = 0
         self._preview_url = ""
         self._preview_loading = True
@@ -1149,7 +1246,21 @@ class TextureViewerBridge(QObject):
     @Slot()
     def extractSelected(self) -> None:
         record = self._selected_record()
-        if record is None:
+        if record is None or self.operationBusy:
+            return
+        if self.selectedCount > 1:
+            from fivefury.ytd import Ytd
+
+            dictionary = Ytd([record.texture for _, record in self._selection_records()], game=self._dictionary.game)
+            path = QFileDialog.getExistingDirectory(None, "Extract selected textures")
+            if not path:
+                return
+            try:
+                extracted = dictionary.extract(path)
+            except (OSError, ValueError, RuntimeError) as error:
+                self._set_status(f"Could not extract textures: {error}")
+                return
+            self._set_status(f"Extracted {len(extracted)} textures")
             return
         suggested = f"{record.name}.dds"
         path, _ = QFileDialog.getSaveFileName(
@@ -1204,6 +1315,9 @@ class TextureViewerBridge(QObject):
             self.stateChanged.emit()
             return
         self._selected_index = 0
+        self._selected_rows = {0}
+        self._selection_anchor = 0
+        self._textures_model.set_selection(self._selected_rows)
         self._preview_loading = True
         self._set_status(f"Loaded {self._textures_model.rowCount()} textures")
         self.stateChanged.emit()
@@ -1302,15 +1416,15 @@ class TextureViewerBridge(QObject):
         transform: Callable[[Any], Any],
     ) -> bool:
         record = self._selected_record()
-        if record is None or self._operation_busy:
+        if record is None or self.operationBusy or not self._selected_rows:
             return False
         self._operation_busy = True
-        self._set_status(f"{operation} {record.name}…")
+        label = record.name if self.selectedCount == 1 else f"{self.selectedCount} textures"
+        self._set_status(f"{operation} {label}…")
         self.stateChanged.emit()
         task = _TextureTransformTask(
             self._generation,
-            self._selected_index,
-            record.texture,
+            tuple((row, record.texture) for row, record in self._selection_records()),
             operation,
             transform,
         )
@@ -1321,19 +1435,19 @@ class TextureViewerBridge(QObject):
 
     @Slot(object)
     def _transform_completed(self, payload: object) -> None:
-        generation, row, operation, texture, changed = payload
+        generation, operation, results = payload
         if generation != self._generation:
             return
         self._operation_busy = False
-        record = self._textures_model.record_at(row)
-        if record is None:
+        if not results:
+            self._set_status("No changes were needed")
             self.stateChanged.emit()
             return
-        if not changed:
-            self._set_status(f"No change was needed for {record.name}")
-            self.stateChanged.emit()
-            return
-        if not self._replace_dictionary_texture(row, texture):
+        original = tuple(self._dictionary.textures)
+        textures = list(original)
+        for row, texture in results:
+            textures[row] = texture
+        if not self._replace_dictionary(textures):
             self.stateChanged.emit()
             return
         undo_labels = {
@@ -1345,22 +1459,21 @@ class TextureViewerBridge(QObject):
         }
         self._push_undo(
             undo_labels.get(operation, "Texture change"),
-            TextureUndoKind.REPLACE,
-            row,
-            record.texture,
+            TextureUndoKind.SNAPSHOT,
+            self._selected_index,
+            original,
         )
+        self._rebuild_texture_view(self._selected_rows, self._selected_index)
+        noun = "texture" if len(results) == 1 else "textures"
+        self._set_status(f"Finished {operation.casefold()} {len(results)} {noun}")
+
+    def _rebuild_texture_view(self, rows: set[int], current: int) -> None:
         self._generation += 1
         self._thread_pool.clear()
-        self._textures_model.replace_texture(row, texture)
-        if row == self._selected_index:
-            self._mip_level = 0
-            self._preview_url = ""
-            self._preview_loading = True
-            self.selectionChanged.emit()
-            self._request_preview()
-        self._start_image_task(row, texture, "rgba", thumbnail=True)
-        self._set_status(f"Finished {operation.casefold()} {record.name}")
-        self.stateChanged.emit()
+        self._textures_model.set_textures(list(self._dictionary.textures))
+        self._selection_anchor = current
+        self._set_texture_selection(rows, current)
+        self._request_all_thumbnails()
 
     @Slot(object)
     def _transform_failed(self, payload: object) -> None:
@@ -1406,6 +1519,7 @@ class TextureViewerBridge(QObject):
                 row=row,
                 texture=texture,
                 previous_revision=self._revision,
+                selection=tuple(sorted(self._selected_rows)),
             )
         )
         self._next_revision += 1
@@ -1553,7 +1667,7 @@ def _recalculate_mipmaps(
     return texture.to_format(
         texture.format,
         generate_mipmaps=True,
-        min_mip_size=min_mip_size,
+        min_mip_size=texfury_mip_stop_size(texture.width, texture.height, min_mip_size),
         mip_filter=mip_filter,
     )
 
@@ -1570,13 +1684,26 @@ def _change_texture_format(
         format,
         quality=quality,
         generate_mipmaps=True,
-        min_mip_size=min_mip_size,
+        min_mip_size=texfury_mip_stop_size(texture.width, texture.height, min_mip_size),
         mip_filter=mip_filter,
     )
 
 
 def _repair_alpha_edges(texture: Any, *, radius: int) -> Any:
     return texture.repair_alpha_edges(radius=radius)
+
+
+def _resize_to_power_of_two(
+    texture: Any, *, mode: str, mip_filter: Any, min_mip_size: int, generate_mipmaps: bool,
+) -> Any:
+    width, height = power_of_two_dimensions(texture.width, texture.height, mode)
+    if (width, height) == (texture.width, texture.height):
+        return texture
+    return _resize_texture(
+        texture, width=width, height=height, mip_filter=mip_filter,
+        min_mip_size=texfury_mip_stop_size(width, height, min_mip_size),
+        generate_mipmaps=generate_mipmaps,
+    )
 
 
 def _replace_texture_from_image(
