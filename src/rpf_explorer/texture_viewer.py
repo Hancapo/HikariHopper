@@ -1776,11 +1776,16 @@ def _replace_texture_from_image(
 
 
 def _save_dictionary_to_path(dictionary: Any, destination: Path) -> None:
-    dictionary.save(destination)
+    from fivefury.common import atomic_write_bytes
+    from .ytd_saving import serialize_ytd
+
+    atomic_write_bytes(destination, serialize_ytd(dictionary))
 
 
 def _save_dictionary_to_archive(
     dictionary: Any,
     source_saver: Callable[[bytes], None],
 ) -> None:
-    source_saver(dictionary.to_bytes())
+    from .ytd_saving import serialize_ytd
+
+    source_saver(serialize_ytd(dictionary))
