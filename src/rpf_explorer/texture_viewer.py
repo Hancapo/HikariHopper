@@ -31,7 +31,10 @@ from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtWidgets import QFileDialog
 
 from .formatting import format_size, format_texture_format
-from .texture_dimensions import power_of_two_dimensions
+from .texture_dimensions import (
+    mip_count_for_dimensions, mip_dimensions_for_minimum,
+    power_of_two_dimensions, texfury_mip_stop_size,
+)
 from .texture_import import IMAGE_FILTER, IMAGE_SUFFIXES, read_texture_image
 
 _INVALID_INDEX = QModelIndex()
@@ -448,45 +451,6 @@ def _to_fivefury_texture(texture: Any, source: Any = None) -> Any:
         name=source.name if source is not None else texture.name,
         **({"usage": source.usage, "usage_flags": source.usage_flags} if source is not None else {}),
     )
-
-
-def mip_count_for_dimensions(width: int, height: int, min_mip_size: int) -> int:
-    """Return the TexFury chain length for the requested dimensions."""
-    return len(mip_dimensions_for_minimum(width, height, min_mip_size))
-
-
-def mip_dimensions_for_minimum(
-    width: int,
-    height: int,
-    min_mip_size: int,
-) -> tuple[tuple[int, int], ...]:
-    """Build a mip chain without letting either dimension fall below the minimum."""
-    mip_width = int(width)
-    mip_height = int(height)
-    minimum = max(1, int(min_mip_size))
-    if mip_width <= 0 or mip_height <= 0:
-        return ()
-    dimensions = [(mip_width, mip_height)]
-    while True:
-        next_width = max(1, mip_width // 2)
-        next_height = max(1, mip_height // 2)
-        if (
-            min(next_width, next_height) < minimum
-            or (next_width, next_height) == (mip_width, mip_height)
-        ):
-            break
-        mip_width = next_width
-        mip_height = next_height
-        dimensions.append((mip_width, mip_height))
-    return tuple(dimensions)
-
-
-def texfury_mip_stop_size(width: int, height: int, min_mip_size: int) -> int:
-    """Translate a minimum short edge into TexFury's native mip stop value."""
-    dimensions = mip_dimensions_for_minimum(width, height, min_mip_size)
-    if not dimensions:
-        return max(1, int(min_mip_size))
-    return max(dimensions[-1])
 
 
 def _mip_filter(name: str) -> Any:

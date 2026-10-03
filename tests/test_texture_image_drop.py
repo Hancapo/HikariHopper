@@ -30,7 +30,7 @@ def test_drop_into_empty_ytd_imports_saves_and_undoes_one_batch(
     assert viewer.textureCount == viewer.selectedCount == 2, viewer.status
     assert viewer._dictionary.game == game
     assert viewer._dictionary.names() == ['paint', 'detail']
-    assert (viewer._dictionary.textures[0].width, viewer._dictionary.textures[0].height) == (7, 5)
+    assert (viewer._dictionary.textures[0].width, viewer._dictionary.textures[0].height) == (8, 4)
     assert len(viewer._undo_stack) == 1
     assert read_ytd(path.read_bytes()).textures == []  # Not autosaved.
     assert viewer.saveYtd()
@@ -165,15 +165,83 @@ def test_supported_formats_import_real_encoded_files(
     assert result.name == 'input'
     assert (result.width, result.height) == (4, 4)
     if extension == 'dds':
-        assert result.data == source.data
-        assert result.format.value == source.format.value
-        assert result.mip_count == source.mip_count
+        assert result.format.name == 'BC3'
+        assert result.mip_count == 1
     else:
         from rpf_explorer.texture_viewer import decode_texture_image
 
         image = decode_texture_image(result)
         alpha = image.pixelColor(0, 0).alpha()
         assert alpha == 255 if extension in ('jpg', 'jpeg', 'bmp') else 80 <= alpha <= 120
+
+
+@pytest.mark.parametrize('alpha,expected', [(255, 'BC1'), (254, 'BC3'), (100, 'BC3'), (0, 'BC3')])
+@pytest.mark.parametrize('extension', ['png', 'dds'])
+def test_import_selects_compression_from_pixels_not_file_channels(tmp_path, alpha, expected, extension):
+    from texfury import Texture, BCFormat
+    from rpf_explorer.texture_import import read_texture_image
+
+    path = tmp_path / f'alpha.{extension}'
+    if extension == 'dds':
+        source = Texture.from_raw(bytes([30, 60, 90, 255]) * 15 + bytes([30, 60, 90, alpha]),
+                                  4, 4, BCFormat.A8R8G8B8, 1, [0], [64])
+        path.write_bytes(source.to_dds_bytes())
+    else:
+        image = QImage(4, 4, QImage.Format_RGBA8888)
+        image.fill(QColor(90, 60, 30, 255))
+        image.setPixelColor(3, 3, QColor(90, 60, 30, alpha))
+        assert image.save(str(path))
+    result = read_texture_image(path)
+    assert result.format.name == expected
+
+
+@pytest.mark.parametrize('size,expected', [
+    ((100, 30), [(128, 32), (64, 16), (32, 8), (16, 4)]),
+    ((30, 100), [(32, 128), (16, 64), (8, 32), (4, 16)]),
+    ((32, 32), [(32, 32), (16, 16), (8, 8), (4, 4)]),
+    ((7, 5), [(8, 4)]),
+    ((1, 2), [(4, 4)]),
+])
+@pytest.mark.parametrize('extension', ['png', 'dds'])
+def test_import_rounds_to_pot_and_stops_mips_at_short_edge_four(tmp_path, size, expected, extension):
+    from texfury import Texture, BCFormat
+    from rpf_explorer.texture_import import read_texture_image
+
+    path = tmp_path / f'sized.{extension}'
+    if extension == 'dds':
+        pixels = size[0] * size[1]
+        source = Texture.from_raw(bytes([30, 60, 90, 255]) * pixels, *size,
+                                  BCFormat.A8R8G8B8, 1, [0], [pixels * 4])
+        path.write_bytes(source.to_dds_bytes())
+    else:
+        image_file(path, *size)
+    texture = read_texture_image(path)
+    assert [texture.to_rgba(mip)[1:] for mip in range(texture.mip_count)] == expected
+
+
+@pytest.mark.parametrize('extension', ['png', 'dds'])
+def test_import_passes_maximum_quality_to_real_encoder(tmp_path, monkeypatch, extension):
+    from texfury import _native, Texture, BCFormat
+    from rpf_explorer.texture_import import read_texture_image
+
+    original = _native.compress
+    qualities = []
+
+    def compress(image, format, mips, minimum, quality, filter):
+        qualities.append(quality)
+        return original(image, format, mips, minimum, quality, filter)
+
+    monkeypatch.setattr(_native, 'compress', compress)
+    path = tmp_path / f'quality.{extension}'
+    if extension == 'dds':
+        source = Texture.from_raw(bytes([30, 60, 90, 255]) * 91, 13, 7,
+                                  BCFormat.A8R8G8B8, 1, [0], [364])
+        path.write_bytes(source.to_dds_bytes())
+    else:
+        image_file(path, 13, 7)
+    result = read_texture_image(path)
+    assert result.data
+    assert qualities and all(quality == 1.0 for quality in qualities)
 
 
 def test_dropped_images_save_inside_rpf(texture_sessions, texture_dictionary, settle_texture_sessions, tmp_path):
