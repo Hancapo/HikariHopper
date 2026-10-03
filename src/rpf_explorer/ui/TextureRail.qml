@@ -10,6 +10,7 @@ Rectangle {
     required property var bridge
 
     signal resizeRequested()
+    signal powerOfTwoRequested()
     signal mipmapsRequested()
     signal formatRequested()
     signal alphaRepairRequested()
@@ -27,6 +28,7 @@ Rectangle {
 
     ListView {
         id: textureList
+        objectName: "textureSelectionList"
         anchors.fill: parent
         model: rail.bridge.texturesModel
         currentIndex: rail.bridge.selectedIndex
@@ -52,8 +54,9 @@ Rectangle {
             required property string dataSizeLabel
             required property string thumbnailUrl
             required property int mipCount
+            required property bool textureSelected
 
-            readonly property bool selected: textureDelegate.index === rail.bridge.selectedIndex
+            readonly property bool selected: textureDelegate.textureSelected
 
             width: ListView.view.width
                 - (textureScrollBar.enabled ? Theme.Theme.scrollbarWidth : 0)
@@ -171,11 +174,11 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onPressed: mouse => {
                     if (mouse.button === Qt.RightButton)
-                        rail.bridge.selectTexture(textureDelegate.index)
+                        rail.bridge.selectContextTexture(textureDelegate.index)
                 }
                 onClicked: mouse => {
                     if (mouse.button === Qt.LeftButton) {
-                        rail.bridge.selectTexture(textureDelegate.index)
+                        rail.bridge.selectTexture(textureDelegate.index, mouse.modifiers)
                         textureList.forceActiveFocus()
                     } else if (mouse.button === Qt.RightButton) {
                         textureList.forceActiveFocus()
@@ -190,20 +193,23 @@ Rectangle {
             accessibleName: qsTr("Texture list scroll bar")
         }
 
-        Keys.onUpPressed: {
+        Keys.onUpPressed: event => {
             if (rail.bridge.selectedIndex > 0)
-                rail.bridge.selectTexture(rail.bridge.selectedIndex - 1)
+                rail.bridge.selectTexture(rail.bridge.selectedIndex - 1, event.modifiers)
         }
-        Keys.onDownPressed: {
+        Keys.onDownPressed: event => {
             if (rail.bridge.selectedIndex + 1 < rail.bridge.textureCount)
-                rail.bridge.selectTexture(rail.bridge.selectedIndex + 1)
+                rail.bridge.selectTexture(rail.bridge.selectedIndex + 1, event.modifiers)
         }
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_Home && rail.bridge.textureCount > 0) {
-                rail.bridge.selectTexture(0)
+            if (event.key === Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {
+                rail.bridge.selectAllTextures()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Home && rail.bridge.textureCount > 0) {
+                rail.bridge.selectTexture(0, event.modifiers)
                 event.accepted = true
             } else if (event.key === Qt.Key_End && rail.bridge.textureCount > 0) {
-                rail.bridge.selectTexture(rail.bridge.textureCount - 1)
+                rail.bridge.selectTexture(rail.bridge.textureCount - 1, event.modifiers)
                 event.accepted = true
             } else if (
                 event.key === Qt.Key_Menu
@@ -223,6 +229,7 @@ Rectangle {
         parent: rail
         bridge: rail.bridge
         onResizeRequested: rail.resizeRequested()
+        onPowerOfTwoRequested: rail.powerOfTwoRequested()
         onMipmapsRequested: rail.mipmapsRequested()
         onFormatRequested: rail.formatRequested()
         onAlphaRepairRequested: rail.alphaRepairRequested()

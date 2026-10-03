@@ -74,7 +74,7 @@ Dialog {
             }
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Closing now will discard the pending texture operations.")
+                text: qsTr("Your changes have not been saved.")
                 color: Theme.Theme.textDim
                 font.family: Theme.Theme.uiFont
                 font.pixelSize: Theme.Theme.fontSize

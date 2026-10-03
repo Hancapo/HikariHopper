@@ -25,7 +25,6 @@ Window {
     modality: Qt.NonModal
 
     property bool closeApproved: false
-    property bool closeAfterSave: false
 
     function present() {
         window.show()
@@ -47,39 +46,26 @@ Window {
         unsavedDialogLoader.active = true
     }
 
-    function saveAndClose() {
-        closeAfterSave = bridge.canSaveSource
-            ? bridge.saveYtd()
-            : bridge.saveYtdAs()
-    }
-
     Connections {
         target: window.bridge
         function onOpenRequested() {
             window.closeApproved = false
-            window.closeAfterSave = false
             window.present()
         }
-        function onSaveFinished(success) {
-            if (!window.closeAfterSave)
-                return
-            window.closeAfterSave = false
-            if (success) {
-                window.closeApproved = true
-                window.close()
-            }
+        function onUnsavedChangesRequested() {
+            window.present()
+            window.openUnsavedDialog()
+        }
+        function onCloseRequested() {
+            window.closeApproved = true
+            window.close()
         }
     }
 
     onClosing: close => {
-        if (window.bridge.saving) {
+        if (!window.closeApproved) {
             close.accepted = false
-            window.closeAfterSave = true
-            return
-        }
-        if (!window.closeApproved && window.bridge.modified) {
-            close.accepted = false
-            window.openUnsavedDialog()
+            Qt.callLater(() => window.bridge.requestClose())
         }
     }
 
@@ -112,6 +98,7 @@ Window {
                 SplitView.maximumWidth: 440
                 bridge: window.bridge
                 onResizeRequested: window.openToolDialog(resizeDialogComponent)
+                onPowerOfTwoRequested: window.openToolDialog(powerOfTwoDialogComponent)
                 onMipmapsRequested: window.openToolDialog(mipmapsDialogComponent)
                 onFormatRequested: window.openToolDialog(formatDialogComponent)
                 onAlphaRepairRequested: window.openToolDialog(alphaDialogComponent)
@@ -164,11 +151,9 @@ Window {
         id: unsavedDialogComponent
         TextureUnsavedChangesDialog {
             bridge: window.bridge
-            onSaveRequested: window.saveAndClose()
-            onDiscardRequested: {
-                window.closeApproved = true
-                window.close()
-            }
+            onSaveRequested: window.bridge.resolvePendingChanges("save")
+            onDiscardRequested: window.bridge.resolvePendingChanges("discard")
+            onRejected: window.bridge.resolvePendingChanges("cancel")
             onClosed: Qt.callLater(() => unsavedDialogLoader.active = false)
         }
     }
@@ -177,6 +162,15 @@ Window {
         id: resizeDialogComponent
         TextureResizeDialog {
             bridge: window.bridge
+            onClosed: Qt.callLater(() => toolDialogLoader.active = false)
+        }
+    }
+
+    Component {
+        id: powerOfTwoDialogComponent
+        TextureResizeDialog {
+            bridge: window.bridge
+            powerOfTwo: true
             onClosed: Qt.callLater(() => toolDialogLoader.active = false)
         }
     }
@@ -223,12 +217,12 @@ Window {
 
     Shortcut {
         sequence: "F2"
-        enabled: window.bridge.selectedIndex >= 0 && !window.bridge.operationBusy
+        enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy
         onActivated: window.openToolDialog(renameDialogComponent)
     }
     Shortcut {
         sequence: "Del"
-        enabled: window.bridge.textureCount > 1 && !window.bridge.operationBusy
+        enabled: window.bridge.canRemoveSelection && !window.bridge.operationBusy
         onActivated: window.openToolDialog(removeDialogComponent)
     }
     Shortcut {

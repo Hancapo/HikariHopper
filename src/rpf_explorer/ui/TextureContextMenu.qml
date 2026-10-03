@@ -6,6 +6,7 @@ RetroMenu {
     required property var bridge
 
     signal resizeRequested()
+    signal powerOfTwoRequested()
     signal mipmapsRequested()
     signal formatRequested()
     signal alphaRepairRequested()
@@ -14,7 +15,7 @@ RetroMenu {
 
     RetroMenuItem {
         text: qsTr("Replace from image…")
-        enabled: menu.bridge.selectedIndex >= 0 && !menu.bridge.operationBusy
+        enabled: menu.bridge.selectedCount === 1 && !menu.bridge.operationBusy
         onTriggered: menu.bridge.replaceSelectedFromImage()
     }
     RetroMenuSeparator { }
@@ -22,6 +23,11 @@ RetroMenu {
         text: qsTr("Resize texture…")
         enabled: menu.bridge.selectedIndex >= 0 && !menu.bridge.operationBusy
         onTriggered: menu.resizeRequested()
+    }
+    RetroMenuItem {
+        text: qsTr("Resize to power of 2…")
+        enabled: menu.bridge.selectedNeedsPowerOfTwo && !menu.bridge.operationBusy
+        onTriggered: menu.powerOfTwoRequested()
     }
     RetroMenuItem {
         text: qsTr("Recalculate mipmaps…")
@@ -42,19 +48,19 @@ RetroMenu {
     RetroMenuItem {
         text: qsTr("Extract DDS…")
         shortcutText: "Ctrl+E"
-        enabled: menu.bridge.selectedIndex >= 0
+        enabled: menu.bridge.selectedCount > 0 && !menu.bridge.operationBusy
         onTriggered: menu.bridge.extractSelected()
     }
     RetroMenuItem {
         text: qsTr("Rename…")
         shortcutText: "F2"
-        enabled: menu.bridge.selectedIndex >= 0 && !menu.bridge.operationBusy
+        enabled: menu.bridge.selectedCount === 1 && !menu.bridge.operationBusy
         onTriggered: menu.renameRequested()
     }
     RetroMenuItem {
         text: qsTr("Remove")
         shortcutText: "Del"
-        enabled: menu.bridge.textureCount > 1 && !menu.bridge.operationBusy
+        enabled: menu.bridge.canRemoveSelection && !menu.bridge.operationBusy
         onTriggered: menu.removeRequested()
     }
 }

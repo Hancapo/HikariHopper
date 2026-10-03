@@ -61,6 +61,12 @@ Rectangle {
             enabled: menuRow.bridge.canUndo
             onTriggered: menuRow.bridge.undo()
         }
+        RetroMenuSeparator { }
+        RetroMenuItem {
+            text: qsTr("Remove duplicates by name")
+            enabled: menuRow.bridge.duplicateTextureCount > 0 && !menuRow.bridge.operationBusy
+            onTriggered: menuRow.bridge.removeDuplicatesByName()
+        }
     }
 
     RetroMenu {

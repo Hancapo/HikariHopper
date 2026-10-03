@@ -56,7 +56,16 @@ TextureToolDialog {
             border.width: 1
             border.color: Theme.Theme.border
             Text { x: 9; y: 4; text: qsTr("RESULT"); color: Theme.Theme.textFaint; font.family: Theme.Theme.monoFont; font.pixelSize: Theme.Theme.smallFontSize; font.bold: true; font.letterSpacing: 1 }
-            Text { x: 9; y: 23; width: parent.width - 18; text: qsTr("%1  →  %2").arg(dialog.bridge.selectedFormat).arg(formatCombo.currentText); color: Theme.Theme.textRow; font.family: Theme.Theme.monoFont; font.pixelSize: Theme.Theme.fontSize; elide: Text.ElideRight }
+            Text {
+                x: 9; y: 23; width: parent.width - 18
+                text: dialog.bridge.selectedCount > 1
+                    ? qsTr("All selected textures → %1").arg(formatCombo.currentText)
+                    : qsTr("%1 → %2").arg(dialog.bridge.selectedFormat).arg(formatCombo.currentText)
+                color: Theme.Theme.textRow
+                font.family: Theme.Theme.monoFont
+                font.pixelSize: Theme.Theme.fontSize
+                elide: Text.ElideRight
+            }
         }
 
         Item { Layout.fillHeight: true }

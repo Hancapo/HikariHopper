@@ -5,9 +5,10 @@ import "theme" as Theme
 TextureToolDialog {
     id: dialog
 
-    heading: qsTr("REMOVE TEXTURE")
+    heading: bridge.selectedCount > 1 ? qsTr("REMOVE TEXTURES") : qsTr("REMOVE TEXTURE")
     bodyHeight: 160
     applyLabel: qsTr("Remove")
+    applyEnabled: bridge.canRemoveSelection
     applyAction: function() { return bridge.removeSelected() }
 
     ColumnLayout {
@@ -19,7 +20,9 @@ TextureToolDialog {
         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.Theme.border }
         Text {
             Layout.fillWidth: true
-            text: qsTr("Remove this texture from the working YTD? The source file is not changed until you save.")
+            text: dialog.bridge.selectedCount > 1
+                ? qsTr("Remove %1 selected textures?").arg(dialog.bridge.selectedCount)
+                : qsTr("Remove this texture?")
             color: Theme.Theme.textRow
             font.family: Theme.Theme.uiFont
             font.pixelSize: Theme.Theme.fontSize
