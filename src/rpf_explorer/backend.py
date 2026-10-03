@@ -123,7 +123,7 @@ class EntryCreationTarget:
     archive_path: Path | None = None
     archive_prefix: str = ""
     internal_directory: str = "."
-    game: str = "gta5"
+    game: str = ""
     crypto: Any = field(default=None, repr=False, compare=False)
 
     @property
@@ -167,19 +167,12 @@ def create_empty_rpf_at(target: EntryCreationTarget, name: str) -> str:
 
 
 def create_ytd_at(target: EntryCreationTarget, name: str) -> str:
-    from fivefury.ytd import Texture, TextureFormat, Ytd
+    from .ytd_empty_ad_hoc import empty_ytd_bytes
 
+    if not target.game:
+        raise ValueError("Open a configured game before creating a YTD; its Legacy/Enhanced edition is unknown")
     normalized = normalize_ytd_name(name)
-    texture = Texture.from_raw(
-        bytes(4 * 4 * 4),
-        4,
-        4,
-        TextureFormat.A8R8G8B8,
-        1,
-        name="texture",
-    )
-    data = Ytd([texture], game=target.game).to_bytes()
-    _store_file_bytes(target, normalized, data)
+    _store_file_bytes(target, normalized, empty_ytd_bytes(target.game))
     return normalized
 
 
@@ -744,7 +737,7 @@ class RpfProvider:
                 archive_path=root_path,
                 archive_prefix=self.archive_prefix,
                 internal_directory=normalized,
-                game=self._game_target or "gta5",
+                game=self._game_target,
                 crypto=root.crypto,
             )
             root.close()
@@ -760,7 +753,7 @@ class RpfProvider:
             raise ValueError(f"Game folder does not exist: {normalized}")
         return EntryCreationTarget(
             directory=directory,
-            game=self._game_target or "gta5",
+            game=self._game_target,
             crypto=self._crypto,
         )
 

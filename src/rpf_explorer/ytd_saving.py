@@ -56,6 +56,13 @@ def _texture_layout(system: bytes | bytearray, graphics: bytes, version: int, te
 
 def serialize_ytd(dictionary: Any) -> bytes:
     """Build and verify page-contained YTD bytes before any destination is touched."""
+    # AD HOC: Python 0.5.1 rejects empty models; use the .NET-validated templates.
+    # Nonempty documents retain the full validation and page-layout path below.
+    if not dictionary.textures:
+        from .ytd_empty_ad_hoc import empty_ytd_bytes
+
+        return empty_ytd_bytes(dictionary.game)
+
     from fivefury.hashing import jenk_hash
     from fivefury.resource import (
         ResourceBlockSpan, ResourceHeader, ResourceSections, find_resource_chunk,

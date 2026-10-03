@@ -75,13 +75,13 @@ Rectangle {
         RetroMenuItem {
             text: qsTr("Save YTD")
             shortcutText: "Ctrl+S"
-            enabled: menuRow.bridge.textureCount > 0 && menuRow.bridge.canSaveSource
+            enabled: menuRow.bridge.hasDocument && !menuRow.bridge.operationBusy && menuRow.bridge.canSaveSource
             onTriggered: menuRow.bridge.saveYtd()
         }
         RetroMenuItem {
             text: qsTr("Save YTD as…")
             shortcutText: "Ctrl+Shift+S"
-            enabled: menuRow.bridge.textureCount > 0
+            enabled: menuRow.bridge.hasDocument && !menuRow.bridge.operationBusy
             onTriggered: menuRow.bridge.saveYtdAs()
         }
         RetroMenuSeparator { }
@@ -98,8 +98,8 @@ Rectangle {
         }
     }
 
-    Shortcut { sequence: "Ctrl+S"; enabled: menuRow.bridge.canSaveSource; onActivated: menuRow.bridge.saveYtd() }
-    Shortcut { sequence: "Ctrl+Shift+S"; enabled: menuRow.bridge.textureCount > 0; onActivated: menuRow.bridge.saveYtdAs() }
+    Shortcut { sequence: "Ctrl+S"; enabled: menuRow.bridge.hasDocument && !menuRow.bridge.operationBusy && menuRow.bridge.canSaveSource; onActivated: menuRow.bridge.saveYtd() }
+    Shortcut { sequence: "Ctrl+Shift+S"; enabled: menuRow.bridge.hasDocument && !menuRow.bridge.operationBusy; onActivated: menuRow.bridge.saveYtdAs() }
     Shortcut { sequence: "Ctrl+E"; enabled: menuRow.bridge.selectedIndex >= 0; onActivated: menuRow.bridge.extractSelected() }
     Shortcut { sequence: "Ctrl+W"; onActivated: menuRow.viewerWindow.close() }
 }

@@ -48,8 +48,9 @@ def test_control_shift_and_context_selection(viewer):
     assert not viewer.removeSelected()
     viewer.selectAllTextures()
     assert selected(viewer) == set(range(5))
-    assert not viewer.canRemoveSelection
-    assert not viewer.removeSelected()
+    assert viewer.canRemoveSelection
+    assert viewer.removeSelected()
+    assert viewer.textureCount == 0
 
 
 @pytest.mark.parametrize('operation', ['resize', 'power', 'mips', 'format'])
@@ -250,12 +251,32 @@ QMetaObject.invokeMethod(menu, 'close')
 view.forceActiveFocus()
 QTest.keyClick(window, Qt.Key_A, Qt.ControlModifier)
 assert viewer.selectedCount == 5
-assert not actions['Remove'].property('enabled')
+assert actions['Remove'].property('enabled')
 click(1)
 QTest.keyClick(window, Qt.Key_Down, Qt.ShiftModifier)
 assert viewer._selected_rows == {1, 2}
 QTest.keyClick(window, Qt.Key_End, Qt.ShiftModifier)
 assert viewer._selected_rows == {1, 2, 3, 4}
+viewer.selectAllTextures()
+assert viewer.removeSelected()
+app.processEvents()
+assert viewer.hasDocument and viewer.textureCount == 0
+file_actions = {obj.property('text'): obj for obj in window.findChildren(QObject)
+                if obj.metaObject().className().startswith('RetroMenuItem_')}
+assert file_actions['Save YTD as…'].property('enabled')
+assert not file_actions['Save YTD'].property('enabled')  # No source path.
+assert not file_actions['Extract all textures…'].property('enabled')
+viewer._source_path = 'empty.ytd'
+viewer.stateChanged.emit()
+assert file_actions['Save YTD'].property('enabled')
+viewer._operation_busy = True
+viewer.stateChanged.emit()
+assert not file_actions['Save YTD'].property('enabled')
+assert not file_actions['Save YTD as…'].property('enabled')
+viewer._operation_busy = False
+viewer._reset_document()
+assert not viewer.hasDocument
+assert not file_actions['Save YTD as…'].property('enabled')
 viewer.shutdown()
 window.setVisible(False)
 engine.deleteLater()

@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
 
 from fivefury import GameTarget, RpfArchive
-from fivefury.ytd import read_ytd
+from rpf_explorer.ytd_empty_ad_hoc import read_ytd
 
 from rpf_explorer.backend import (
     EntryCreationTarget,
@@ -27,9 +27,8 @@ def test_creates_valid_ytd_for_each_gta_v_edition(
     assert create_ytd_at(target, "textures") == "textures.ytd"
 
     created = read_ytd((tmp_path / "textures.ytd").read_bytes())
-    assert created.names() == ["texture"]
-    texture = created.textures[0]
-    assert (texture.width, texture.height, texture.mip_count) == (4, 4, 1)
+    assert created.names() == []
+    assert created.game == game
 
 
 def test_creates_ytd_inside_an_rpf_with_the_active_game_target(
@@ -51,7 +50,9 @@ def test_creates_ytd_inside_an_rpf_with_the_active_game_target(
     with RpfArchive.from_path(archive_path) as saved:
         entry = saved.find_entry("textures/created.ytd")
         assert entry is not None
-        assert read_ytd(entry.read_standalone()).names() == ["texture"]
+        created = read_ytd(entry.read_standalone())
+        assert created.names() == []
+        assert created.game == GameTarget.GTA5_ENHANCED
 
 
 def test_ytd_creation_uses_name_validation_and_runs_in_background(
@@ -88,3 +89,18 @@ def test_ytd_creation_uses_name_validation_and_runs_in_background(
     assert bridge.creationNameError("textures", "ytd") == (
         "An entry with this name already exists"
     )
+
+
+def test_standalone_rpf_without_game_context_does_not_guess_ytd_edition(tmp_path):
+    archive_path = tmp_path / 'standalone.rpf'
+    RpfArchive.empty(archive_path.name).save(archive_path)
+    original = archive_path.read_bytes()
+    provider = RpfProvider()
+    provider.open_archive(archive_path)
+    try:
+        target = provider.creation_target()
+        with pytest.raises(ValueError, match='configured game'):
+            create_ytd_at(target, 'unknown')
+        assert archive_path.read_bytes() == original
+    finally:
+        provider.close()

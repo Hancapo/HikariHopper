@@ -276,7 +276,7 @@ class _DictionaryTask(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            from fivefury.ytd import read_ytd
+            from .ytd_empty_ad_hoc import read_ytd
 
             dictionary = read_ytd(self._data)
         except (ImportError, MemoryError, OSError, RuntimeError, ValueError) as error:
@@ -566,6 +566,10 @@ class TextureViewerBridge(QObject):
         return self._textures_model.rowCount()
 
     @Property(bool, notify=stateChanged)
+    def hasDocument(self) -> bool:
+        return self._dictionary is not None and not self._loading
+
+    @Property(bool, notify=stateChanged)
     def loading(self) -> bool:
         return self._loading
 
@@ -648,7 +652,7 @@ class TextureViewerBridge(QObject):
 
     @Property(bool, notify=selectionChanged)
     def canRemoveSelection(self) -> bool:
-        return 0 < self.selectedCount < self.textureCount
+        return self.selectedCount > 0
 
     @Property(str, notify=selectionChanged)
     def selectedName(self) -> str:
@@ -1133,17 +1137,18 @@ class TextureViewerBridge(QObject):
         record = self._selected_record()
         if record is None or self.operationBusy:
             return False
-        if not self.canRemoveSelection:
-            self._set_status("A YTD must contain at least one texture")
-            return False
         row = self._selected_index
-        if self.selectedCount > 1:
+        if self.selectedCount > 1 or self.selectedCount == self.textureCount:
             original = tuple(self._dictionary.textures)
             textures = [texture for index, texture in enumerate(original) if index not in self._selected_rows]
             if not self._replace_dictionary(textures):
                 return False
-            self._push_undo("Remove textures", TextureUndoKind.SNAPSHOT, row, original)
-            self._rebuild_texture_view({min(row, len(textures) - 1)}, min(row, len(textures) - 1))
+            label = "Remove texture" if self.selectedCount == 1 else "Remove textures"
+            self._push_undo(label, TextureUndoKind.SNAPSHOT, row, original)
+            current = min(row, len(textures) - 1)
+            self._rebuild_texture_view({current} if textures else set(), current)
+            if not textures:
+                self._set_status("Texture dictionary is empty")
             return True
         textures = list(self._dictionary.textures)
         textures.pop(row)
@@ -1159,12 +1164,12 @@ class TextureViewerBridge(QObject):
         self._thread_pool.clear()
         self._textures_model.remove_texture(row)
         self._selected_index = min(row, len(textures) - 1)
-        self._selected_rows = {self._selected_index}
+        self._selected_rows = {self._selected_index} if textures else set()
         self._selection_anchor = self._selected_index
         self._textures_model.set_selection(self._selected_rows)
         self._mip_level = 0
         self._preview_url = ""
-        self._preview_loading = True
+        self._preview_loading = bool(textures)
         self._set_status(f"Removed {record.name}")
         self.stateChanged.emit()
         self.selectionChanged.emit()
@@ -1528,7 +1533,14 @@ class TextureViewerBridge(QObject):
             return False
         candidate = Ytd(textures, game=self._dictionary.game)
         try:
-            candidate.validate().raise_for_errors()
+            if textures:
+                candidate.validate().raise_for_errors()
+            else:
+                # AD HOC: an empty model is supported only for our verified
+                # template editions; do not relax validation of any texture.
+                from .ytd_empty_ad_hoc import empty_ytd_bytes
+
+                empty_ytd_bytes(candidate.game)
         except ValueError as error:
             self._set_status(f"Texture change is invalid: {error}")
             return False
