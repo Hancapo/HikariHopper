@@ -217,12 +217,12 @@ Window {
 
     Shortcut {
         sequence: "F2"
-        enabled: window.bridge.selectedIndex >= 0 && !window.bridge.operationBusy
+        enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy
         onActivated: window.openToolDialog(renameDialogComponent)
     }
     Shortcut {
         sequence: "Del"
-        enabled: window.bridge.textureCount > 1 && !window.bridge.operationBusy
+        enabled: window.bridge.canRemoveSelection && !window.bridge.operationBusy
         onActivated: window.openToolDialog(removeDialogComponent)
     }
     Shortcut {

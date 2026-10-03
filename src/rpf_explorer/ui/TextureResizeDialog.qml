@@ -17,12 +17,17 @@ TextureToolDialog {
     readonly property int targetHeight: powerOfTwo ? (roundedSize.height || 0) : Number(heightField.text)
     readonly property bool validSize: targetWidth > 0 && targetHeight > 0
         && targetWidth <= bridge.maximumDimension && targetHeight <= bridge.maximumDimension
-        && (powerOfTwo || (widthField.acceptableInput && heightField.acceptableInput))
+        && (powerOfTwo
+            ? (bridge.selectedCount > 0 && bridge.validPowerOfTwoSelection(roundingCombo.currentValue || "nearest"))
+            : (widthField.acceptableInput && heightField.acceptableInput))
 
     heading: powerOfTwo ? qsTr("RESIZE TO POWER OF 2") : qsTr("RESIZE TEXTURE")
     bodyHeight: 330
     applyEnabled: validSize && (!powerOfTwo || bridge.selectedNeedsPowerOfTwo)
     applyAction: function() {
+        if (powerOfTwo)
+            return bridge.resizeSelectionToPowerOfTwo(roundingCombo.currentValue,
+                filterCombo.currentValue, mipSizeCombo.currentValue, mipCheck.checked)
         return bridge.resizeSelected(
             targetWidth,
             targetHeight,
@@ -134,6 +139,10 @@ TextureToolDialog {
                 x: 9; y: 25; width: parent.width - 18
                 text: !dialog.validSize && dialog.powerOfTwo
                     ? qsTr("Result exceeds the maximum dimension (%1). Choose Round down.").arg(dialog.bridge.maximumDimension)
+                    : dialog.bridge.selectedCount > 1
+                    ? (dialog.powerOfTwo
+                        ? qsTr("Round each texture independently · %1").arg(roundingCombo.currentText)
+                        : qsTr("All selected textures → %1 × %2").arg(dialog.targetWidth).arg(dialog.targetHeight))
                     : qsTr("%1 × %2  →  %3 × %4  ·  %5 mips  ·  last %6")
                     .arg(dialog.bridge.selectedWidth)
                     .arg(dialog.bridge.selectedHeight)

@@ -23,7 +23,9 @@ RowLayout {
 
         Text {
             Layout.fillWidth: true
-            text: summary.bridge.selectedName
+            text: summary.bridge.selectedCount > 1
+                ? qsTr("%1 textures selected").arg(summary.bridge.selectedCount)
+                : summary.bridge.selectedName
             color: Theme.Theme.text
             font.family: Theme.Theme.monoFont
             font.pixelSize: Theme.Theme.fontSize
@@ -33,7 +35,9 @@ RowLayout {
 
         Text {
             Layout.fillWidth: true
-            text: qsTr("Original  %1  ·  %2  ·  %3 mips")
+            text: summary.bridge.selectedCount > 1
+                ? qsTr("Applies to all selected textures.")
+                : qsTr("Original  %1  ·  %2  ·  %3 mips")
                 .arg(summary.bridge.selectedDimensions)
                 .arg(summary.bridge.selectedFormat)
                 .arg(summary.bridge.mipCount)
