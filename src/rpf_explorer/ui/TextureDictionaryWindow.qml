@@ -60,6 +60,9 @@ Window {
             window.closeApproved = true
             window.close()
         }
+        function onImageImportConfirmationRequested() {
+            imageImportDialogLoader.active = true
+        }
     }
 
     onClosing: close => {
@@ -85,30 +88,38 @@ Window {
             viewerWindow: window
         }
 
-        SplitView {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            orientation: Qt.Horizontal
+            SplitView {
+                anchors.fill: parent
+                orientation: Qt.Horizontal
 
-            handle: SplitViewHandle { }
+                handle: SplitViewHandle { }
 
-            TextureRail {
-                SplitView.preferredWidth: Theme.Theme.textureRailWidth
-                SplitView.minimumWidth: 280
-                SplitView.maximumWidth: 440
-                bridge: window.bridge
-                onResizeRequested: window.openToolDialog(resizeDialogComponent)
-                onPowerOfTwoRequested: window.openToolDialog(powerOfTwoDialogComponent)
-                onMipmapsRequested: window.openToolDialog(mipmapsDialogComponent)
-                onFormatRequested: window.openToolDialog(formatDialogComponent)
-                onAlphaRepairRequested: window.openToolDialog(alphaDialogComponent)
-                onRenameRequested: window.openToolDialog(renameDialogComponent)
-                onRemoveRequested: window.openToolDialog(removeDialogComponent)
+                TextureRail {
+                    SplitView.preferredWidth: Theme.Theme.textureRailWidth
+                    SplitView.minimumWidth: 280
+                    SplitView.maximumWidth: 440
+                    bridge: window.bridge
+                    onResizeRequested: window.openToolDialog(resizeDialogComponent)
+                    onPowerOfTwoRequested: window.openToolDialog(powerOfTwoDialogComponent)
+                    onMipmapsRequested: window.openToolDialog(mipmapsDialogComponent)
+                    onFormatRequested: window.openToolDialog(formatDialogComponent)
+                    onAlphaRepairRequested: window.openToolDialog(alphaDialogComponent)
+                    onRenameRequested: window.openToolDialog(renameDialogComponent)
+                    onRemoveRequested: window.openToolDialog(removeDialogComponent)
+                }
+
+                TexturePreview {
+                    SplitView.fillWidth: true
+                    bridge: window.bridge
+                }
             }
-
-            TexturePreview {
-                SplitView.fillWidth: true
+            TextureImageDropArea {
+                anchors.fill: parent
                 bridge: window.bridge
+                enabled: window.bridge.canImportImages && !toolDialogLoader.active && !unsavedDialogLoader.active
             }
         }
 
@@ -144,6 +155,18 @@ Window {
         active: false
         asynchronous: false
         sourceComponent: unsavedDialogComponent
+        onLoaded: item.visible = true
+    }
+
+    Loader {
+        id: imageImportDialogLoader
+        active: false
+        sourceComponent: Component {
+            TextureImportDialog {
+                bridge: window.bridge
+                onClosed: Qt.callLater(() => imageImportDialogLoader.active = false)
+            }
+        }
         onLoaded: item.visible = true
     }
 

@@ -22,6 +22,7 @@ from PySide6.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
     Signal,
     Slot,
 )
@@ -30,7 +31,11 @@ from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtWidgets import QFileDialog
 
 from .formatting import format_size, format_texture_format
-from .texture_dimensions import power_of_two_dimensions
+from .texture_dimensions import (
+    mip_count_for_dimensions, mip_dimensions_for_minimum,
+    power_of_two_dimensions, texfury_mip_stop_size,
+)
+from .texture_import import IMAGE_FILTER, IMAGE_SUFFIXES, read_texture_image
 
 _INVALID_INDEX = QModelIndex()
 _CHANNELS = frozenset({"rgba", "r", "g", "b", "a"})
@@ -367,6 +372,31 @@ class _TextureTransformTask(QRunnable):
         )
 
 
+class _TextureImportTask(QRunnable):
+    def __init__(self, generation: int, paths: tuple[Path, ...], original: tuple[Any, ...]) -> None:
+        super().__init__()
+        self.signals = _TaskSignals()
+        self._generation = generation
+        self._paths = paths
+        self._original = original
+
+    @Slot()
+    def run(self) -> None:
+        sources = {}
+        for texture in self._original:
+            sources.setdefault(texture.name.lower(), texture)
+        imported = {}
+        try:
+            for path in self._paths:
+                decoded = read_texture_image(path)
+                key = path.stem.lower()
+                imported[key] = _to_fivefury_texture(decoded, sources.get(key))
+        except (ImportError, MemoryError, OSError, RuntimeError, TypeError, ValueError) as error:
+            self.signals.failed.emit((self._generation, -1, "Import", f"{path.name}: {error}"))
+            return
+        self.signals.completed.emit((self._generation, imported))
+
+
 class _SaveTask(QRunnable):
     def __init__(
         self,
@@ -409,7 +439,7 @@ def _to_texfury_texture(texture: Any) -> Any:
     )
 
 
-def _to_fivefury_texture(texture: Any, source: Any) -> Any:
+def _to_fivefury_texture(texture: Any, source: Any = None) -> Any:
     from fivefury.ytd import Texture, TextureFormat
 
     return Texture.from_raw(
@@ -418,49 +448,9 @@ def _to_fivefury_texture(texture: Any, source: Any) -> Any:
         texture.height,
         TextureFormat(texture.format.value),
         texture.mip_count,
-        name=source.name,
-        usage=source.usage,
-        usage_flags=source.usage_flags,
+        name=source.name if source is not None else texture.name,
+        **({"usage": source.usage, "usage_flags": source.usage_flags} if source is not None else {}),
     )
-
-
-def mip_count_for_dimensions(width: int, height: int, min_mip_size: int) -> int:
-    """Return the TexFury chain length for the requested dimensions."""
-    return len(mip_dimensions_for_minimum(width, height, min_mip_size))
-
-
-def mip_dimensions_for_minimum(
-    width: int,
-    height: int,
-    min_mip_size: int,
-) -> tuple[tuple[int, int], ...]:
-    """Build a mip chain without letting either dimension fall below the minimum."""
-    mip_width = int(width)
-    mip_height = int(height)
-    minimum = max(1, int(min_mip_size))
-    if mip_width <= 0 or mip_height <= 0:
-        return ()
-    dimensions = [(mip_width, mip_height)]
-    while True:
-        next_width = max(1, mip_width // 2)
-        next_height = max(1, mip_height // 2)
-        if (
-            min(next_width, next_height) < minimum
-            or (next_width, next_height) == (mip_width, mip_height)
-        ):
-            break
-        mip_width = next_width
-        mip_height = next_height
-        dimensions.append((mip_width, mip_height))
-    return tuple(dimensions)
-
-
-def texfury_mip_stop_size(width: int, height: int, min_mip_size: int) -> int:
-    """Translate a minimum short edge into TexFury's native mip stop value."""
-    dimensions = mip_dimensions_for_minimum(width, height, min_mip_size)
-    if not dimensions:
-        return max(1, int(min_mip_size))
-    return max(dimensions[-1])
 
 
 def _mip_filter(name: str) -> Any:
@@ -508,6 +498,7 @@ class TextureViewerBridge(QObject):
     saveFinished = Signal(bool)
     unsavedChangesRequested = Signal()
     closeRequested = Signal()
+    imageImportConfirmationRequested = Signal()
 
     def __init__(
         self,
@@ -549,6 +540,8 @@ class TextureViewerBridge(QObject):
         self._pending_change: Callable[[], None] | None = None
         self._change_after_save = False
 
+        self._pending_image_import: tuple[int, int, tuple[Path, ...], int] | None = None
+
     @Property(QObject, constant=True)
     def texturesModel(self) -> QObject:
         return self._textures_model
@@ -568,6 +561,22 @@ class TextureViewerBridge(QObject):
     @Property(bool, notify=stateChanged)
     def hasDocument(self) -> bool:
         return self._dictionary is not None and not self._loading
+
+    @Property(bool, notify=stateChanged)
+    def canImportImages(self) -> bool:
+        return self.hasDocument and not self.operationBusy and self._pending_image_import is None
+
+    @Property(bool, notify=stateChanged)
+    def importConfirmationPending(self) -> bool:
+        return self._pending_image_import is not None
+
+    @Property(int, notify=stateChanged)
+    def importConflictCount(self) -> int:
+        return self._pending_image_import[3] if self._pending_image_import else 0
+
+    @Property(int, notify=stateChanged)
+    def importFileCount(self) -> int:
+        return len(self._pending_image_import[2]) if self._pending_image_import else 0
 
     @Property(bool, notify=stateChanged)
     def loading(self) -> bool:
@@ -841,6 +850,7 @@ class TextureViewerBridge(QObject):
         self._thread_pool.start(task, 2)
 
     def _reset_document(self) -> None:
+        self._pending_image_import = None
         self._generation += 1
         self._thread_pool.clear()
         if self._session:
@@ -1060,7 +1070,7 @@ class TextureViewerBridge(QObject):
             None,
             "Replace texture from image",
             "",
-            "Texture images (*.dds *.png *.jpg *.jpeg *.bmp *.tga *.webp)",
+            IMAGE_FILTER,
         )
         if not path:
             return False
@@ -1077,6 +1087,91 @@ class TextureViewerBridge(QObject):
             ),
         )
         return self._start_transform("Replacing", transform)
+
+    @Slot("QVariantList", result=bool)
+    def canAcceptImageDrop(self, urls: list[Any]) -> bool:
+        if not self.canImportImages or not urls:
+            return False
+        for value in urls:
+            url = value if isinstance(value, QUrl) else QUrl(str(value))
+            if not url.isLocalFile() or Path(url.toLocalFile()).suffix.lower() not in IMAGE_SUFFIXES:
+                return False
+        return True
+
+    @Slot("QVariantList", result=bool)
+    def importDroppedImages(self, urls: list[Any]) -> bool:
+        from .file_drops import local_drop_paths
+
+        if not self.canAcceptImageDrop(urls):
+            return False
+        try:
+            paths = local_drop_paths(urls)
+        except (OSError, ValueError, RuntimeError) as error:
+            self._set_status(f"Could not import images: {error}")
+            return False
+        seen = {texture.name.lower() for texture in self._dictionary.textures}
+        conflicts = set()
+        for path in paths:
+            name = path.stem.lower()
+            if name in seen:
+                conflicts.add(name)
+            seen.add(name)
+        if conflicts:
+            self._pending_image_import = (self._generation, self._revision, paths, len(conflicts))
+            self.stateChanged.emit()
+            self.imageImportConfirmationRequested.emit()
+            return True
+        return self._start_image_import(paths)
+
+    @Slot(bool, result=bool)
+    def confirmImageImport(self, accepted: bool) -> bool:
+        pending = self._pending_image_import
+        self._pending_image_import = None
+        self.stateChanged.emit()
+        if pending is None or not accepted:
+            return False
+        generation, revision, paths, _ = pending
+        if generation != self._generation or revision != self._revision or not self.canImportImages:
+            self._set_status("The document changed; drop the images again")
+            return False
+        return self._start_image_import(paths)
+
+    def _start_image_import(self, paths: tuple[Path, ...]) -> bool:
+        self._operation_busy = True
+        self._set_status(f"Importing {len(paths)} images…")
+        self.stateChanged.emit()
+        task = _TextureImportTask(self._generation, paths, tuple(self._dictionary.textures))
+        task.signals.completed.connect(self._image_import_completed)
+        task.signals.failed.connect(self._transform_failed)
+        self._thread_pool.start(task, 3)
+        return True
+
+    @Slot(object)
+    def _image_import_completed(self, payload: object) -> None:
+        generation, imported = payload
+        if generation != self._generation:
+            return
+        self._operation_busy = False
+        original = tuple(self._dictionary.textures)
+        textures = []
+        selected = set()
+        remaining = dict(imported)
+        for texture in original:
+            key = texture.name.lower()
+            if key not in imported:
+                textures.append(texture)
+            elif key in remaining:
+                selected.add(len(textures))
+                textures.append(remaining.pop(key))
+        for texture in remaining.values():
+            selected.add(len(textures))
+            textures.append(texture)
+        if not self._replace_dictionary(textures):
+            self.stateChanged.emit()
+            return
+        self._push_undo("Import textures", TextureUndoKind.SNAPSHOT, self._selected_index, original)
+        self._rebuild_texture_view(selected, min(selected))
+        self._set_status(f"Imported {len(imported)} textures")
 
     @Slot(str, result=bool)
     def renameSelected(self, name: str) -> bool:
