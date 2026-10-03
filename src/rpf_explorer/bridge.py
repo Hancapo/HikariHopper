@@ -1117,7 +1117,9 @@ class ExplorerBridge(QObject):
         if self.entryOperationBusy:
             return False
         try:
-            sources = self._local_drop_paths(urls)
+            from .file_drops import local_drop_paths
+
+            sources = local_drop_paths(urls)
             target = self.provider.creation_target(self._current_path)
         except (OSError, ValueError, RuntimeError) as error:
             self._set_status(f"Could not import files: {error}")
@@ -1131,21 +1133,6 @@ class ExplorerBridge(QObject):
             partial(import_files_at, target, sources),
             self._entry_import_completed,
         )
-
-    @staticmethod
-    def _local_drop_paths(urls: list[Any]) -> tuple[Path, ...]:
-        paths: list[Path] = []
-        for value in urls:
-            url = value if isinstance(value, QUrl) else QUrl(str(value))
-            if not url.isLocalFile():
-                raise ValueError("Only local files can be imported")
-            path = Path(url.toLocalFile()).expanduser().resolve(strict=True)
-            if not path.is_file():
-                raise ValueError(f"Only files can be imported: {path.name}")
-            paths.append(path)
-        if not paths:
-            raise ValueError("Drop one or more files to import")
-        return tuple(paths)
 
     def _creation_name(self, name: str, *, kind: str = "entry") -> str:
         normalized, error = self._validated_creation_name(name, kind=kind)
