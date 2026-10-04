@@ -26,7 +26,7 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QGuiApplication, QImage
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtWidgets import QFileDialog
 
@@ -1372,6 +1372,46 @@ class TextureViewerBridge(QObject):
             partial(_save_dictionary_to_path, self._dictionary, destination),
             source_update=(str(destination), destination.name),
         )
+
+    @Slot(result=bool)
+    def copySelectedImage(self) -> bool:
+        record = self._selected_record()
+        if record is None or self.selectedCount != 1 or self.operationBusy:
+            return False
+        self._operation_busy = True
+        self._set_status(f"Copying {record.name}…")
+        self.stateChanged.emit()
+        # Reuse background decoding, but deliver the full RGBA base mip to the
+        # clipboard callback rather than to the preview or thumbnail cache.
+        task = _ImageTask(self._generation, self._selected_index, record.texture, "rgba", 0, False)
+        task.signals.completed.connect(self._copy_image_completed)
+        task.signals.failed.connect(self._copy_image_failed)
+        self._thread_pool.start(task, 3)
+        return True
+
+    @Slot(object)
+    def _copy_image_completed(self, payload: object) -> None:
+        generation, _row, _kind, _mode, _mip, image = payload
+        if generation != self._generation:
+            return
+        # QClipboard must only be accessed on the GUI thread.
+        clipboard = QGuiApplication.clipboard()
+        self._operation_busy = False
+        if clipboard is None or image.isNull():
+            self._set_status("Could not copy image to clipboard")
+        else:
+            clipboard.setImage(image)
+            self._set_status(f"Copied {self.selectedName} to clipboard")
+        self.stateChanged.emit()
+
+    @Slot(object)
+    def _copy_image_failed(self, payload: object) -> None:
+        generation, _row, _kind, _mode, _mip, message = payload
+        if generation != self._generation:
+            return
+        self._operation_busy = False
+        self._set_status(f"Could not copy image: {message}")
+        self.stateChanged.emit()
 
     @Slot()
     def extractSelected(self) -> None:

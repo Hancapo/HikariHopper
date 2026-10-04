@@ -46,6 +46,11 @@ RetroMenu {
     }
     RetroMenuSeparator { }
     RetroMenuItem {
+        text: qsTr("Copy image")
+        enabled: menu.bridge.selectedCount === 1 && !menu.bridge.operationBusy
+        onTriggered: menu.bridge.copySelectedImage()
+    }
+    RetroMenuItem {
         text: qsTr("Extract DDS…")
         shortcutText: "Ctrl+E"
         enabled: menu.bridge.selectedCount > 0 && !menu.bridge.operationBusy
