@@ -63,6 +63,9 @@ Window {
         function onImageImportConfirmationRequested() {
             imageImportDialogLoader.active = true
         }
+        function onPasteImageRequested() {
+            pasteDialogLoader.active = true
+        }
     }
 
     onClosing: close => {
@@ -170,6 +173,18 @@ Window {
         onLoaded: item.visible = true
     }
 
+    Loader {
+        id: pasteDialogLoader
+        active: false
+        sourceComponent: Component {
+            TexturePasteDialog {
+                bridge: window.bridge
+                onClosed: Qt.callLater(() => pasteDialogLoader.active = false)
+            }
+        }
+        onLoaded: item.visible = true
+    }
+
     Component {
         id: unsavedDialogComponent
         TextureUnsavedChangesDialog {
@@ -240,23 +255,29 @@ Window {
 
     Shortcut {
         sequence: "F2"
-        enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy
+        enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy && !pasteDialogLoader.active
         onActivated: window.openToolDialog(renameDialogComponent)
     }
     Shortcut {
         sequence: "Del"
-        enabled: window.bridge.canRemoveSelection && !window.bridge.operationBusy
+        enabled: window.bridge.canRemoveSelection && !window.bridge.operationBusy && !pasteDialogLoader.active
         onActivated: window.openToolDialog(removeDialogComponent)
     }
     Shortcut {
         sequence: "Ctrl+C"
         enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy
-            && !toolDialogLoader.active && !unsavedDialogLoader.active && !imageImportDialogLoader.active
+            && !toolDialogLoader.active && !unsavedDialogLoader.active && !imageImportDialogLoader.active && !pasteDialogLoader.active
         onActivated: window.bridge.copySelectedImage()
     }
     Shortcut {
         sequence: "Ctrl+Z"
-        enabled: window.bridge.canUndo
+        enabled: window.bridge.canUndo && !pasteDialogLoader.active
         onActivated: window.bridge.undo()
+    }
+    Shortcut {
+        sequence: "Ctrl+V"
+        enabled: window.bridge.canPasteImage
+            && !toolDialogLoader.active && !unsavedDialogLoader.active && !imageImportDialogLoader.active && !pasteDialogLoader.active
+        onActivated: window.bridge.requestPasteImage()
     }
 }

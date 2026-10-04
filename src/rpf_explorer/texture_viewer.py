@@ -35,7 +35,7 @@ from .texture_dimensions import (
     mip_count_for_dimensions, mip_dimensions_for_minimum,
     power_of_two_dimensions, texfury_mip_stop_size,
 )
-from .texture_import import IMAGE_FILTER, IMAGE_SUFFIXES, read_texture_image
+from .texture_import import IMAGE_FILTER, IMAGE_SUFFIXES, read_texture_image, texture_from_clipboard_image
 
 _INVALID_INDEX = QModelIndex()
 _CHANNELS = frozenset({"rgba", "r", "g", "b", "a"})
@@ -397,6 +397,35 @@ class _TextureImportTask(QRunnable):
         self.signals.completed.emit((self._generation, imported))
 
 
+@dataclass(frozen=True, slots=True)
+class _TexturePasteRequest:
+    generation: int
+    revision: int
+    row: int
+    image: QImage
+    source: Any
+
+
+class _TexturePasteTask(QRunnable):
+    def __init__(self, request: _TexturePasteRequest, replace_selected: bool, name: str) -> None:
+        super().__init__()
+        self.signals = _TaskSignals()
+        self._request = request
+        self._replace_selected = replace_selected
+        self._name = name
+
+    @Slot()
+    def run(self) -> None:
+        request = self._request
+        try:
+            decoded = texture_from_clipboard_image(request.image, self._name)
+            texture = _to_fivefury_texture(decoded, request.source if self._replace_selected else None)
+        except (ImportError, MemoryError, OSError, RuntimeError, TypeError, ValueError) as error:
+            self.signals.failed.emit((request.generation, request.row, "Paste", str(error)))
+            return
+        self.signals.completed.emit((request.generation, request.row if self._replace_selected else -1, texture))
+
+
 class _SaveTask(QRunnable):
     def __init__(
         self,
@@ -499,6 +528,7 @@ class TextureViewerBridge(QObject):
     unsavedChangesRequested = Signal()
     closeRequested = Signal()
     imageImportConfirmationRequested = Signal()
+    pasteImageRequested = Signal()
 
     def __init__(
         self,
@@ -541,6 +571,10 @@ class TextureViewerBridge(QObject):
         self._change_after_save = False
 
         self._pending_image_import: tuple[int, int, tuple[Path, ...], int] | None = None
+        self._pending_paste: _TexturePasteRequest | None = None
+        self._clipboard = QGuiApplication.clipboard() if isinstance(QGuiApplication.instance(), QGuiApplication) else None
+        if self._clipboard is not None:
+            self._clipboard.dataChanged.connect(self._clipboard_changed)
 
     @Property(QObject, constant=True)
     def texturesModel(self) -> QObject:
@@ -564,7 +598,31 @@ class TextureViewerBridge(QObject):
 
     @Property(bool, notify=stateChanged)
     def canImportImages(self) -> bool:
-        return self.hasDocument and not self.operationBusy and self._pending_image_import is None
+        return (self.hasDocument and not self.operationBusy
+                and self._pending_image_import is None and self._pending_paste is None)
+
+    @Slot()
+    def _clipboard_changed(self) -> None:
+        self.stateChanged.emit()
+
+    @Property(bool, notify=stateChanged)
+    def canPasteImage(self) -> bool:
+        if not self.canImportImages or self._clipboard is None:
+            return False
+        mime = self._clipboard.mimeData()
+        return mime is not None and mime.hasImage()
+
+    @Property(bool, notify=stateChanged)
+    def pastePending(self) -> bool:
+        return self._pending_paste is not None
+
+    @Property(bool, notify=stateChanged)
+    def pasteCanReplace(self) -> bool:
+        return self._pending_paste is not None and self._pending_paste.source is not None
+
+    @Property(str, notify=stateChanged)
+    def pasteTargetName(self) -> str:
+        return self._pending_paste.source.name if self.pasteCanReplace else ""
 
     @Property(bool, notify=stateChanged)
     def importConfirmationPending(self) -> bool:
@@ -851,6 +909,7 @@ class TextureViewerBridge(QObject):
 
     def _reset_document(self) -> None:
         self._pending_image_import = None
+        self._pending_paste = None
         self._generation += 1
         self._thread_pool.clear()
         if self._session:
@@ -1372,6 +1431,90 @@ class TextureViewerBridge(QObject):
             partial(_save_dictionary_to_path, self._dictionary, destination),
             source_update=(str(destination), destination.name),
         )
+
+    @Slot(result=bool)
+    def requestPasteImage(self) -> bool:
+        if not self.canPasteImage:
+            return False
+        image = self._clipboard.image().copy()
+        if image.isNull():
+            self._set_status("Clipboard does not contain a readable image")
+            return False
+        record = self._selected_record() if self.selectedCount == 1 else None
+        self._pending_paste = _TexturePasteRequest(
+            self._generation, self._revision, self._selected_index if record else -1,
+            image, record.texture if record else None,
+        )
+        self.stateChanged.emit()
+        self.pasteImageRequested.emit()
+        return True
+
+    @Slot()
+    def cancelPasteImage(self) -> None:
+        self._pending_paste = None
+        self.stateChanged.emit()
+
+    @Slot(str, result=str)
+    def pasteNameError(self, name: str) -> str:
+        normalized = name.strip()
+        if not normalized:
+            return "Enter a texture name"
+        if len(normalized) > 255 or any(ord(char) < 32 or ord(char) == 127 for char in normalized):
+            return "Use up to 255 characters without control characters"
+        if self._dictionary is not None and any(
+            texture.name.lower() == normalized.lower() for texture in self._dictionary.textures
+        ):
+            return "A texture with this name already exists"
+        return ""
+
+    @Slot(bool, str, result=bool)
+    def pasteImage(self, replace_selected: bool, name: str) -> bool:
+        request = self._pending_paste
+        if request is None or self.operationBusy:
+            return False
+        if request.generation != self._generation or request.revision != self._revision or not self.hasDocument:
+            self.cancelPasteImage()
+            self._set_status("The document changed; paste the image again")
+            return False
+        if replace_selected:
+            if request.source is None:
+                return False
+            name = request.source.name
+        else:
+            error = self.pasteNameError(name)
+            if error:
+                self._set_status(error)
+                return False
+            name = name.strip()
+        self._pending_paste = None
+        self._operation_busy = True
+        self._set_status(f"Pasting {name}…")
+        self.stateChanged.emit()
+        task = _TexturePasteTask(request, replace_selected, name)
+        task.signals.completed.connect(self._paste_completed)
+        task.signals.failed.connect(self._transform_failed)
+        self._thread_pool.start(task, 3)
+        return True
+
+    @Slot(object)
+    def _paste_completed(self, payload: object) -> None:
+        generation, row, texture = payload
+        if generation != self._generation:
+            return
+        self._operation_busy = False
+        original = tuple(self._dictionary.textures)
+        textures = list(original)
+        if row < 0:
+            row = len(textures)
+            textures.append(texture)
+        else:
+            textures[row] = texture
+        if not self._replace_dictionary(textures):
+            self.stateChanged.emit()
+            return
+        self._push_undo("Paste image", TextureUndoKind.SNAPSHOT, self._selected_index, original)
+        self._rebuild_texture_view({row}, row)
+        self._set_status(f"Pasted {texture.name}")
 
     @Slot(result=bool)
     def copySelectedImage(self) -> bool:

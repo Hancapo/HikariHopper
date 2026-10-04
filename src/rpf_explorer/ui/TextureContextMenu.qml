@@ -52,6 +52,12 @@ RetroMenu {
         onTriggered: menu.bridge.copySelectedImage()
     }
     RetroMenuItem {
+        text: qsTr("Paste…")
+        shortcutText: "Ctrl+V"
+        enabled: menu.bridge.canPasteImage
+        onTriggered: menu.bridge.requestPasteImage()
+    }
+    RetroMenuItem {
         text: qsTr("Extract DDS…")
         shortcutText: "Ctrl+E"
         enabled: menu.bridge.selectedCount > 0 && !menu.bridge.operationBusy
