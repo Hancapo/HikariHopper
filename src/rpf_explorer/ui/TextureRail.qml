@@ -26,6 +26,13 @@ Rectangle {
         textureContextMenu.open()
     }
 
+    MouseArea {
+        id: emptyContextArea
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onClicked: mouse => rail.openContextMenu(emptyContextArea, mouse.x, mouse.y)
+    }
+
     ListView {
         id: textureList
         objectName: "textureSelectionList"

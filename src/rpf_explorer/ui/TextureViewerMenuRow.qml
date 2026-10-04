@@ -67,6 +67,13 @@ Rectangle {
             enabled: menuRow.bridge.duplicateTextureCount > 0 && !menuRow.bridge.operationBusy
             onTriggered: menuRow.bridge.removeDuplicatesByName()
         }
+        RetroMenuSeparator { }
+        RetroMenuItem {
+            text: qsTr("Paste…")
+            shortcutText: "Ctrl+V"
+            enabled: menuRow.bridge.canPasteImage
+            onTriggered: menuRow.bridge.requestPasteImage()
+        }
     }
 
     RetroMenu {

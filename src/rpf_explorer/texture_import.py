@@ -19,6 +19,27 @@ def read_texture_image(path: Path):
         # channel alone does not imply transparency. Keep this stage lossless.
         source = Texture.from_image(path, name=name, format=BCFormat.A8R8G8B8,
                                     quality=1.0, resize_to_pot=False, generate_mipmaps=False)
+    return normalize_texture_image(source)
+
+
+def texture_from_clipboard_image(image, name: str):
+    from PySide6.QtGui import QImage
+    from texfury import BCFormat, Texture
+
+    # TexFury's A8R8G8B8 storage is BGRA. RGBA8888 + channel swap gives
+    # explicit byte order, independent of native ARGB32 endianness.
+    pixels = image.convertToFormat(QImage.Format_RGBA8888).rgbSwapped()
+    width, height = pixels.width(), pixels.height()
+    if pixels.isNull():
+        raise ValueError("Clipboard image is empty")
+    source = Texture.from_raw(bytes(pixels.constBits()), width, height,
+                              BCFormat.A8R8G8B8, 1, [0], [width * height * 4], name=name)
+    return normalize_texture_image(source)
+
+
+def normalize_texture_image(source):
+    from texfury import BCFormat
+
     target_format = BCFormat.BC3 if source.has_transparency() else BCFormat.BC1
     width, height = power_of_two_dimensions(source.width, source.height, 'nearest')
     width, height = max(4, width), max(4, height)
