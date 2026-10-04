@@ -36,6 +36,7 @@ from .texture_dimensions import (
     power_of_two_dimensions, texfury_mip_stop_size,
 )
 from .texture_import import IMAGE_FILTER, IMAGE_SUFFIXES, read_texture_image, texture_from_clipboard_image
+from .texture_compression import DXT_FORMATS, optimize_texture_compression
 
 _INVALID_INDEX = QModelIndex()
 _CHANNELS = frozenset({"rgba", "r", "g", "b", "a"})
@@ -721,6 +722,10 @@ class TextureViewerBridge(QObject):
     def canRemoveSelection(self) -> bool:
         return self.selectedCount > 0
 
+    @Property(bool, notify=selectionChanged)
+    def canOptimizeCompression(self) -> bool:
+        return any(record.texture.format.name in DXT_FORMATS for _, record in self._selection_records())
+
     @Property(str, notify=selectionChanged)
     def selectedName(self) -> str:
         record = self._selected_record()
@@ -1085,6 +1090,12 @@ class TextureViewerBridge(QObject):
             min_mip_size=min_mip_size,
         )
         return self._start_transform("Recalculating mipmaps for", transform)
+
+    @Slot(result=bool)
+    def optimizeSelectedCompression(self) -> bool:
+        sources = tuple((row, record.texture) for row, record in self._selection_records()
+                        if record.texture.format.name in DXT_FORMATS)
+        return self._start_transform("Optimizing compression for", optimize_texture_compression, sources=sources)
 
     @Slot(str, float, str, int, result=bool)
     def changeSelectedFormat(
@@ -1727,9 +1738,15 @@ class TextureViewerBridge(QObject):
         self,
         operation: str,
         transform: Callable[[Any], Any],
+        *,
+        sources: tuple[tuple[int, Any], ...] | None = None,
     ) -> bool:
         record = self._selected_record()
         if record is None or self.operationBusy or not self._selected_rows:
+            return False
+        if sources is None:
+            sources = tuple((row, record.texture) for row, record in self._selection_records())
+        if not sources:
             return False
         self._operation_busy = True
         label = record.name if self.selectedCount == 1 else f"{self.selectedCount} textures"
@@ -1737,7 +1754,7 @@ class TextureViewerBridge(QObject):
         self.stateChanged.emit()
         task = _TextureTransformTask(
             self._generation,
-            tuple((row, record.texture) for row, record in self._selection_records()),
+            sources,
             operation,
             transform,
         )
@@ -1769,6 +1786,7 @@ class TextureViewerBridge(QObject):
             "Changing format for": "Change texture format",
             "Repairing alpha edges for": "Repair alpha edges",
             "Replacing": "Replace texture",
+            "Optimizing compression for": "Optimize compression",
         }
         self._push_undo(
             undo_labels.get(operation, "Texture change"),

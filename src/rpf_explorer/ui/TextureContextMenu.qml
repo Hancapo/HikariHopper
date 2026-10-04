@@ -40,6 +40,11 @@ RetroMenu {
         onTriggered: menu.formatRequested()
     }
     RetroMenuItem {
+        text: qsTr("Optimize compression")
+        enabled: menu.bridge.canOptimizeCompression && !menu.bridge.operationBusy
+        onTriggered: menu.bridge.optimizeSelectedCompression()
+    }
+    RetroMenuItem {
         text: qsTr("Repair alpha edges…")
         enabled: menu.bridge.selectedIndex >= 0 && !menu.bridge.operationBusy
         onTriggered: menu.alphaRepairRequested()
