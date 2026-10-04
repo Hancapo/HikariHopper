@@ -5,7 +5,7 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize('scenario', ['copy', 'guards', 'failure', 'stale'])
+@pytest.mark.parametrize('scenario', ['copy', 'shortcut', 'guards', 'failure', 'stale'])
 def test_copy_image_context_action(scenario):
     # The offscreen clipboard is process-local: never overwrite the user's clipboard.
     script = r'''
@@ -15,6 +15,9 @@ from threading import Event
 from PySide6.QtCore import QObject, QMetaObject, QThread, QTimer, QUrl, Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlEngine, QQmlComponent
+from PySide6.QtTest import QTest
+from PySide6.QtQuick import QQuickItem
+from shiboken6 import getCppPointer, wrapInstance
 from fivefury.ytd import Texture, TextureFormat, Ytd
 import rpf_explorer
 import rpf_explorer.texture_viewer as module
@@ -48,7 +51,7 @@ viewer.open_dictionary('textures.ytd', '', Ytd(textures).to_bytes())
 settle()
 assert copy_action.property('enabled')
 scenario = sys.argv[1]
-if scenario == 'copy':
+if scenario in ('copy', 'shortcut'):
     viewer.setChannel('r')
     viewer.setMipLevel(1)
     settle()
@@ -58,7 +61,15 @@ if scenario == 'copy':
         assert QThread.currentThread() != app.thread(), 'Decode blocked the GUI thread'
         return original(*args)
     module.decode_texture_image = decode
-    assert QMetaObject.invokeMethod(copy_action, 'triggered')
+    if scenario == 'shortcut':
+        assert copy_action.property('shortcutText') == 'Ctrl+C'
+        window.requestActivate()
+        QTest.qWait(50)
+        list_object = window.findChild(QObject, 'textureSelectionList')
+        wrapInstance(getCppPointer(list_object)[0], QQuickItem).forceActiveFocus()
+        QTest.keyClick(window, Qt.Key_C, Qt.ControlModifier)
+    else:
+        assert QMetaObject.invokeMethod(copy_action, 'triggered')
     assert viewer.operationBusy and not copy_action.property('enabled')
     settle()
     assert clipboard.mimeData().hasImage()
@@ -68,6 +79,28 @@ if scenario == 'copy':
     assert viewer.previewUrl == preview
     assert viewer.channel == 'r' and viewer.mipLevel == 1
     assert not viewer.modified and not viewer.canUndo and not viewer.operationBusy
+    if scenario == 'shortcut':
+        clipboard.setText('untouched')
+        viewer.selectAllTextures()
+        QTest.keyClick(window, Qt.Key_C, Qt.ControlModifier)
+        settle()
+        assert clipboard.text() == 'untouched'
+        viewer.selectTexture(0)
+        viewer.set_external_write_busy(True)
+        QTest.keyClick(window, Qt.Key_C, Qt.ControlModifier)
+        settle()
+        assert clipboard.text() == 'untouched'
+        viewer.set_external_write_busy(False)
+        QTest.keyClick(window, Qt.Key_F2)
+        app.processEvents()
+        rename_dialog = next(obj for obj in window.findChildren(QObject)
+                             if obj.metaObject().className().startswith('TextureRenameDialog_'))
+        assert rename_dialog.property('visible')
+        QTest.keyClick(window, Qt.Key_C, Qt.ControlModifier)
+        settle()
+        assert not clipboard.mimeData().hasImage()  # Leave text-copy to the dialog.
+        QTest.keyClick(window, Qt.Key_Escape)
+        app.processEvents()
 elif scenario == 'guards':
     viewer.selectAllTextures()
     assert not copy_action.property('enabled')

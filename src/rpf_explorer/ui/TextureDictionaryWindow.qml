@@ -249,6 +249,12 @@ Window {
         onActivated: window.openToolDialog(removeDialogComponent)
     }
     Shortcut {
+        sequence: "Ctrl+C"
+        enabled: window.bridge.selectedCount === 1 && !window.bridge.operationBusy
+            && !toolDialogLoader.active && !unsavedDialogLoader.active && !imageImportDialogLoader.active
+        onActivated: window.bridge.copySelectedImage()
+    }
+    Shortcut {
         sequence: "Ctrl+Z"
         enabled: window.bridge.canUndo
         onActivated: window.bridge.undo()

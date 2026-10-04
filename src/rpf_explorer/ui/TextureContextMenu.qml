@@ -47,6 +47,7 @@ RetroMenu {
     RetroMenuSeparator { }
     RetroMenuItem {
         text: qsTr("Copy image")
+        shortcutText: "Ctrl+C"
         enabled: menu.bridge.selectedCount === 1 && !menu.bridge.operationBusy
         onTriggered: menu.bridge.copySelectedImage()
     }
