@@ -14,8 +14,6 @@ dotnet build HikariHopper.slnx -c Release
 dotnet run --project src/HikariHopper -c Release
 ```
 
-`Open Hikari Hopper.bat` builds the app (incrementally) and starts it.
-
 ## Tests
 
 ```sh
