@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.GamePathRow"
+             x:DataType="v:GamePathRow">
+  <!-- Port of GamePathRow.qml: a title, its installation path field, Browse… and a detection
+       note. Unsupported titles are listed disabled at 48% opacity. -->
+  <Panel>
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderSoft}" />
+    <Canvas Name="Surface">
+      <TextBlock Name="NameText" Canvas.Left="12" Width="214"
+                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                 TextTrimming="CharacterEllipsis" />
+      <c:FlatTextField Name="PathField" Canvas.Left="238" Height="28" />
+      <c:ChromeToolButton Name="BrowseButton" Width="78" Height="28" Raised="True" Text="Browse…" />
+      <TextBlock Name="StatusText" Canvas.Left="238" Canvas.Top="40"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" />
+    </Canvas>
+  </Panel>
+</UserControl>

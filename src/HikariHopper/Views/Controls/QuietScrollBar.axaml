@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- Port of QuietScrollBar.qml. The bar paints itself (QuietScrollBar.Render); the template
+       only gives it a transparent surface so the whole 12px gutter is its hit area, as in Qt. -->
+  <ControlTheme x:Key="{x:Type c:QuietScrollBar}" TargetType="c:QuietScrollBar">
+    <Setter Property="Width" Value="{x:Static ui:Theme.ScrollbarWidth}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Background="Transparent" />
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- The QML lists anchor their ListView with rightMargin: scrollbarWidth and parent the bar in
+       the reserved 12px gutter on the right. Apply with Theme="{StaticResource QuietScrollViewer}". -->
+  <ControlTheme x:Key="QuietScrollViewer" TargetType="ScrollViewer">
+    <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="VerticalScrollBarVisibility" Value="Visible" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="*,Auto">
+          <ScrollContentPresenter Name="PART_ContentPresenter" Grid.Column="0"
+                                  Content="{TemplateBinding Content}"
+                                  Padding="{TemplateBinding Padding}" />
+          <c:QuietScrollBar Name="PART_VerticalScrollBar" Grid.Column="1" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- ScrollBar.vertical attached without re-parenting (e.g. the texture rail): the bar sits over
+       the right edge of the content instead of beside it. -->
+  <ControlTheme x:Key="QuietOverlayScrollViewer" TargetType="ScrollViewer">
+    <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="VerticalScrollBarVisibility" Value="Visible" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <ScrollContentPresenter Name="PART_ContentPresenter"
+                                  Content="{TemplateBinding Content}"
+                                  Padding="{TemplateBinding Padding}" />
+          <c:QuietScrollBar Name="PART_VerticalScrollBar" HorizontalAlignment="Right" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

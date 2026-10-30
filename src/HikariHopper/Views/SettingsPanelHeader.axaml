@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.SettingsPanelHeader"
+             x:DataType="v:SettingsPanelHeader"
+             Background="{x:Static ui:Theme.ChromeRaised}">
+  <!-- Port of SettingsPanelHeader.qml: a column-header strip with a bevel on top and a hard seam below. -->
+  <Panel>
+    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+    <TextBlock Name="LabelText" Margin="12,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+               Foreground="{x:Static ui:Theme.TextDim}"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+               FontWeight="Bold" LetterSpacing="1" />
+  </Panel>
+</UserControl>

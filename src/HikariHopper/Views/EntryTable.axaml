@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.EntryTable"
+             x:DataType="vm:ExplorerViewModel"
+             Background="{x:Static ui:Theme.PanelBg}">
+  <!-- Port of EntryTable.qml: the details list. Column widths follow the panel width
+       (NAME = clamp(round(width × 0.46), 300, 500), TYPE 190, SIZE 124); rows end at the data block. -->
+  <DockPanel>
+    <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.HeaderBg}">
+      <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+      <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+      <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+        <v:EntryTableHeaderCell Name="NameHeader" Text="NAME" LeftPadding="10" Clicked="OnSortName" />
+        <v:EntryTableHeaderCell Name="TypeHeader" Text="TYPE" LeftPadding="10" Width="190" Clicked="OnSortType" />
+        <v:EntryTableHeaderCell Name="SizeHeader" Text="SIZE" AlignRight="True" RightPadding="12" Width="124" Clicked="OnSortSize" />
+      </StackPanel>
+    </Panel>
+
+    <Panel Name="ListArea">
+      <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">
+        <v:EntryRowList Name="EntryList" ItemsSource="{Binding EntriesModel}" Background="Transparent"
+                        Focusable="True" IsTabStop="True" FocusAdorner="{x:Null}"
+                        AutomationProperties.Name="Archive entries">
+          <v:EntryRowList.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+          </v:EntryRowList.ItemsPanel>
+        </v:EntryRowList>
+      </ScrollViewer>
+
+      <v:QtCenteredPanel Margin="0,0,12,0">
+      <StackPanel Name="EmptyState" Spacing="12">
+        <TextBlock Name="EmptyText" HorizontalAlignment="Center" IsHitTestVisible="False" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+        <c:ChromeToolButton Name="OpenGameButton" HorizontalAlignment="Center" Width="190" Height="32" Primary="True"
+                            Text="OPEN CONFIGURED GAME" Click="OnOpenConfiguredGame" />
+      </StackPanel>
+      </v:QtCenteredPanel>
+
+      <Canvas Name="MarqueeLayer" Margin="0,0,12,0" IsHitTestVisible="False" ClipToBounds="False">
+        <v:SelectionMarquee Name="Marquee" IsVisible="False" />
+      </Canvas>
+    </Panel>
+  </DockPanel>
+</UserControl>

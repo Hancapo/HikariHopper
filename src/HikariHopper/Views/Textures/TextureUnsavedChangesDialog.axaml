@@ -1,0 +1,41 @@
+<v:TextureModalDialog xmlns="https://github.com/avaloniaui"
+                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                      xmlns:v="using:HikariHopper.Views"
+                      xmlns:c="using:HikariHopper.Views.Controls"
+                      xmlns:ui="using:HikariHopper.Ui"
+                      x:Class="HikariHopper.Views.TextureUnsavedChangesDialog"
+                      Width="470">
+  <!-- Port of TextureUnsavedChangesDialog.qml: header, a 126px body with the file glyph and the
+       question, and Cancel / Don't save / Save. -->
+  <Panel>
+    <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" />
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Margin="10,0" VerticalAlignment="Center" Text="UNSAVED CHANGES"
+                   Foreground="{x:Static ui:Theme.TextDim}" FontWeight="Bold" LetterSpacing="1"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+      </Panel>
+      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+        <StackPanel Margin="0,0,12,0" Orientation="Horizontal" Spacing="6"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Name="CancelButton" Width="82" Height="28" Raised="True" Text="Cancel" />
+          <c:ChromeToolButton Name="DiscardButton" Width="106" Height="28" Raised="True" Text="Don't save" />
+          <c:ChromeToolButton Name="SaveButton" Width="82" Height="28" Primary="True" Text="Save" />
+        </StackPanel>
+      </Panel>
+      <v:QtGrid ColumnDefinitions="16,24,12,*,16">
+        <c:LucideIcon Grid.Column="1" Width="24" Height="24" VerticalAlignment="Center" IconName="file"
+                      Stroke="{x:Static ui:Theme.InkAsset}" />
+        <StackPanel Grid.Column="3" Spacing="6" VerticalAlignment="Center">
+          <TextBlock Name="QuestionText" Foreground="{x:Static ui:Theme.Text}" FontWeight="Bold"
+                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+          <TextBlock Text="Your changes have not been saved." Foreground="{x:Static ui:Theme.TextDim}" TextWrapping="Wrap"
+                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+        </StackPanel>
+      </v:QtGrid>
+    </DockPanel>
+  </Panel>
+</v:TextureModalDialog>

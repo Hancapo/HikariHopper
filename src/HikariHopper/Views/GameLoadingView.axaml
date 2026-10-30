@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.GameLoadingView"
+             x:DataType="vm:ExplorerViewModel"
+             IsVisible="False" ZIndex="10"
+             Background="{x:Static ui:Theme.AppBg}">
+  <!-- Port of GameLoadingView.qml: shown 200ms into a game load, a shuttling 56px mark on a
+       220px rail. The column is centred 28px above the middle (see LoadingColumn). -->
+  <v:LoadingColumn>
+    <TextBlock Text="LOADING GAME" Foreground="{x:Static ui:Theme.TextDim}"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+               FontWeight="Bold" LetterSpacing="1.2" />
+    <TextBlock Text="{Binding GameLoadingName}" Foreground="{x:Static ui:Theme.Text}"
+               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+    <Canvas Width="220" Height="2" Background="{x:Static ui:Theme.BorderHard}">
+      <Border Name="ProgressMark" Width="56" Height="2" Background="{x:Static ui:Theme.Accent}" />
+    </Canvas>
+  </v:LoadingColumn>
+</UserControl>

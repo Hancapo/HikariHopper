@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:HikariHopper.Views"
+        xmlns:c="using:HikariHopper.Views.Controls"
+        xmlns:ui="using:HikariHopper.Ui"
+        x:Class="HikariHopper.Views.TextureDictionaryWindow"
+        x:DataType="v:TextureDictionaryWindow"
+        Width="1250" Height="738" MinWidth="1080" MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        Background="{x:Static ui:Theme.AppBg}"
+        FontFamily="{x:Static ui:Theme.UiFont}"
+        FontSize="{x:Static ui:Theme.FontSize}"
+        Foreground="{x:Static ui:Theme.Text}"
+        Title="Texture Dictionary — HikariHopper">
+  <!-- Port of TextureDictionaryWindow.qml: title bar, menu row, the rail / preview split under the
+       image drop area, and the status bar; blue piping and resize grips on top, and the dialog
+       overlay above everything, like Qt's Overlay.overlay. -->
+  <Panel>
+    <DockPanel>
+      <c:WindowTitleBar Name="TitleBar" DockPanel.Dock="Top"
+                        TitleText="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" />
+      <v:TextureViewerMenuRow Name="MenuRow" DockPanel.Dock="Top" />
+      <v:TextureViewerStatusBar Name="StatusBar" DockPanel.Dock="Bottom" />
+      <v:TextureImageDropArea Name="DropArea">
+        <v:TextureImageDropArea.Body>
+          <Grid Name="SplitGrid">
+            <Grid.ColumnDefinitions>
+              <!-- Width: Theme.TextureRailWidth, set in code. -->
+              <ColumnDefinition MinWidth="280" MaxWidth="440" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <v:TextureRail Name="Rail" Grid.Column="0" />
+            <v:TexturePreview Name="Preview" Grid.Column="2" />
+            <c:SplitViewHandle Grid.Column="1" />
+          </Grid>
+        </v:TextureImageDropArea.Body>
+      </v:TextureImageDropArea>
+    </DockPanel>
+
+    <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+
+    <c:WindowResizeFrame />
+
+    <v:TextureDialogLayer Name="DialogLayer" />
+  </Panel>
+</Window>

@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:HikariHopper.Views"
+        xmlns:ui="using:HikariHopper.Ui"
+        x:Class="HikariHopper.Views.SplashScreen"
+        x:DataType="v:SplashScreen"
+        Width="{x:Static ui:Theme.SplashWidth}" Height="{x:Static ui:Theme.SplashHeight}"
+        CanResize="False" Topmost="True" ShowInTaskbar="False" ShowActivated="True"
+        WindowStartupLocation="Manual"
+        Background="{x:Static ui:Theme.AppBg}"
+        Title="HikariHopper">
+  <!-- Port of SplashScreen.qml. This own-window identity surface is the one deliberate
+       exception where green is expressive rather than state. -->
+  <Panel>
+    <v:SplashLivery />
+
+    <Canvas>
+      <Border Canvas.Left="46" Canvas.Top="62" Width="18" Height="18" Background="{x:Static ui:Theme.Brass}">
+        <Border Width="8" Height="8" Background="{x:Static ui:Theme.WindowChrome}"
+                HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <TextBlock Canvas.Left="76" Canvas.Top="52" Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}"
+                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SplashTitleSize}" FontWeight="Bold" />
+      <TextBlock Canvas.Left="46" Canvas.Top="94" Text="RPF EXPLORER" Foreground="{x:Static ui:Theme.TextDim}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                 FontWeight="Bold" LetterSpacing="1" />
+    </Canvas>
+
+    <Border Height="{x:Static ui:Theme.StatusHeight}" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.ChromeBg}">
+      <Panel>
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <DockPanel Margin="10,0">
+          <TextBlock Name="PhaseText" DockPanel.Dock="Right" Margin="18,0,0,0" Text="{Binding StartupPhase}"
+                     Foreground="{x:Static ui:Theme.TextFaint}"
+                     FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                     VerticalAlignment="Center" />
+          <TextBlock Name="MessageText" Text="{Binding StartupMessage}" Foreground="{x:Static ui:Theme.TextRow}"
+                     FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+      </Panel>
+    </Border>
+
+    <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+  </Panel>
+</Window>

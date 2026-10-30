@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureDialogSummary">
+  <!-- Port of TextureDialogSummary.qml: the texture glyph beside the selection's name and its
+       original dimensions, format and mip count. -->
+  <v:QtGrid ColumnDefinitions="20,10,*">
+    <c:LucideIcon Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center" IconName="image"
+                  Stroke="{x:Static ui:Theme.InkAsset}" />
+    <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+      <TextBlock Name="NameText" Foreground="{x:Static ui:Theme.Text}" FontWeight="Bold"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                 TextTrimming="CharacterEllipsis" />
+      <TextBlock Name="DetailText" Foreground="{x:Static ui:Theme.TextDim}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                 TextTrimming="CharacterEllipsis" />
+    </StackPanel>
+  </v:QtGrid>
+</UserControl>

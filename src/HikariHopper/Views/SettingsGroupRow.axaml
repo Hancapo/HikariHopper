@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.SettingsGroupRow"
+             x:DataType="v:SettingsGroupRow">
+  <!-- Port of SettingsGroupRow.qml. -->
+  <Panel Name="Surface">
+    <Border Name="Marker" Width="2" HorizontalAlignment="Left" Background="{x:Static ui:Theme.SelectionText}" />
+    <TextBlock Name="LabelText" Margin="12,7,12,0" VerticalAlignment="Top"
+               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
+               TextTrimming="CharacterEllipsis" />
+    <TextBlock Name="NoteText" Margin="12,25,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" />
+  </Panel>
+</UserControl>

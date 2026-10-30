@@ -1,0 +1,26 @@
+<v:TextureToolDialog xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:v="using:HikariHopper.Views"
+                     xmlns:c="using:HikariHopper.Views.Controls"
+                     xmlns:ui="using:HikariHopper.Ui"
+                     x:Class="HikariHopper.Views.TexturePasteDialog"
+                     Heading="PASTE TEXTURE" BodyHeight="150" ApplyLabel="Paste">
+  <!-- Port of TexturePasteDialog.qml (objectName texturePasteDialog). -->
+  <v:TextureToolDialog.Styles>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+    </Style>
+  </v:TextureToolDialog.Styles>
+  <c:QtColumnLayout Margin="12" Spacing="10">
+    <v:QtGrid ColumnDefinitions="Auto,12,*" RowDefinitions="Auto,10,Auto">
+      <TextBlock Classes="label" Text="Action" />
+      <c:FlatComboBox Name="ModeCombo" Grid.Column="2" />
+      <TextBlock Classes="label" Grid.Row="2" Text="Name" />
+      <c:FlatTextField Name="NameField" Grid.Row="2" Grid.Column="2" Height="28" MaxLength="255"
+                       AutomationProperties.Name="New texture name" />
+    </v:QtGrid>
+    <TextBlock Name="ErrorText" IsVisible="False" Foreground="{x:Static ui:Theme.Error}" TextWrapping="Wrap"
+               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+    <Panel c:QtColumnLayout.FillHeight="True" />
+  </c:QtColumnLayout>
+</v:TextureToolDialog>

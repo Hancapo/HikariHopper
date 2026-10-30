@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.ExternalFileDropArea"
+             IsHitTestVisible="False">
+  <!-- Port of ExternalFileDropArea.qml: the import target over the entry list. It only paints;
+       the drag events bubble to the area it covers (see Attach). -->
+  <Border Name="Highlight" IsVisible="False" Background="{x:Static ui:Theme.SelectionWash}"
+          BorderBrush="{x:Static ui:Theme.SelectionRing}" BorderThickness="1">
+    <TextBlock Text="DROP FILES TO IMPORT" HorizontalAlignment="Center" VerticalAlignment="Center"
+               Foreground="{x:Static ui:Theme.Selection}" FontFamily="{x:Static ui:Theme.MonoFont}"
+               FontSize="{x:Static ui:Theme.FontSize}" FontWeight="Bold" LetterSpacing="1" />
+  </Border>
+</UserControl>

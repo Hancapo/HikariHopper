@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.FolderPanel"
+             x:DataType="vm:ExplorerViewModel"
+             Background="{x:Static ui:Theme.SidebarBg}">
+  <!-- Port of FolderPanel.qml: the flattened folder tree with dotted depth guides and drawn
+       [+]/[−] boxes. The list leaves the 12px scrollbar gutter on its right. -->
+  <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">
+    <v:FolderTreeList Name="FolderList" ItemsSource="{Binding TreeModel}" Focusable="True" IsTabStop="True"
+                      FocusAdorner="{x:Null}" AutomationProperties.Name="Archive folders">
+      <v:FolderTreeList.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </v:FolderTreeList.ItemsPanel>
+    </v:FolderTreeList>
+  </ScrollViewer>
+</UserControl>

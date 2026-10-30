@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TexturePreview"
+             Background="{x:Static ui:Theme.AppBg}">
+  <!-- Port of TexturePreview.qml: toolbar, viewport and mip bar stacked; owns the transparency
+       grid and filtering toggles. -->
+  <DockPanel>
+    <v:TexturePreviewToolbar Name="Toolbar" DockPanel.Dock="Top" />
+    <v:TextureMipBar Name="MipBar" DockPanel.Dock="Bottom" />
+    <v:TextureViewport Name="Viewport" />
+  </DockPanel>
+</UserControl>

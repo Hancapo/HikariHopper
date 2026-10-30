@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.EntryGridHeader"
+             x:DataType="vm:ExplorerViewModel"
+             Height="{x:Static ui:Theme.HeaderHeight}"
+             Background="{x:Static ui:Theme.HeaderBg}">
+  <!-- Port of EntryGridHeader.qml: the icon field's title with compact sort buttons. -->
+  <Panel>
+    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+    <Grid Margin="0,0,12,0" ColumnDefinitions="*,82,68,68">
+      <TextBlock Padding="12,0,0,0" Text="ICON FIELD" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Center"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                 FontWeight="Bold" LetterSpacing="1" />
+      <v:EntryTableHeaderCell Name="NameHeader" Grid.Column="1" Text="NAME" LeftPadding="10" Clicked="OnSortName" />
+      <v:EntryTableHeaderCell Name="TypeHeader" Grid.Column="2" Text="TYPE" LeftPadding="8" Clicked="OnSortType" />
+      <v:EntryTableHeaderCell Name="SizeHeader" Grid.Column="3" Text="SIZE" LeftPadding="8" Clicked="OnSortSize" />
+    </Grid>
+  </Panel>
+</UserControl>

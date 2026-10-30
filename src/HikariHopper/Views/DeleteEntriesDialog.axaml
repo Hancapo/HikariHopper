@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.DeleteEntriesDialog"
+             Width="410">
+  <!-- Port of DeleteEntriesDialog.qml: the modal confirmation before entries are deleted. -->
+  <Panel>
+    <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" />
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Margin="10,0" VerticalAlignment="Center" Text="DELETION" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+      </Panel>
+
+      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Width="88" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
+          <c:ChromeToolButton Name="ConfirmButton" Width="88" Height="28" Destructive="True" Text="Delete" Click="OnDelete" />
+        </StackPanel>
+      </Panel>
+
+      <TextBlock Name="QuestionText" Padding="16,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                 Foreground="{x:Static ui:Theme.Text}" FontFamily="{x:Static ui:Theme.UiFont}"
+                 FontSize="{x:Static ui:Theme.FontSize}" FontWeight="Bold" />
+    </DockPanel>
+  </Panel>
+</UserControl>

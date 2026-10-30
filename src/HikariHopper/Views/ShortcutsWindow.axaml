@@ -1,0 +1,41 @@
+<v:ToolWindow xmlns="https://github.com/avaloniaui"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:v="using:HikariHopper.Views"
+              xmlns:c="using:HikariHopper.Views.Controls"
+              xmlns:ui="using:HikariHopper.Ui"
+              x:Class="HikariHopper.Views.ShortcutsWindow"
+              x:DataType="v:ShortcutsWindow"
+              Width="470" Height="545"
+              Title="Keyboard shortcuts"
+              Heading="KEYBOARD SHORTCUTS">
+  <!-- Port of ShortcutsWindow.qml: the keyboard reference laid out as a table. Keys go in mono
+       at row weight, actions in the UI face — the status bar's key-then-action pairing. -->
+  <ScrollViewer Name="Flick" Theme="{StaticResource BareScrollViewer}"
+                VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+    <ItemsControl ItemsSource="{Binding Groups}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="v:ShortcutGroup">
+          <StackPanel>
+            <c:DottedRule Horizontal="True" Margin="0,16,0,8" IsVisible="{Binding !IsFirst}" />
+            <TextBlock Margin="0,0,0,6" Text="{Binding Name}" Foreground="{x:Static ui:Theme.TextFaint}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" FontWeight="Bold" LetterSpacing="1.2" />
+            <ItemsControl ItemsSource="{Binding Keys}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="v:ShortcutEntry">
+                  <Grid Height="24" ColumnDefinitions="116,*" ColumnSpacing="14">
+                    <TextBlock Text="{Binding Key}" Foreground="{x:Static ui:Theme.TextRow}"
+                               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Action}" Foreground="{x:Static ui:Theme.TextDim}"
+                               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </ScrollViewer>
+</v:ToolWindow>

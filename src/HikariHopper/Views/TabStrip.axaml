@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TabStrip"
+             x:DataType="vm:ExplorerTabsViewModel"
+             Height="{x:Static ui:Theme.TabHeight}"
+             Background="{x:Static ui:Theme.ChromeBg}">
+  <!-- Port of TabStrip.qml: the tab list (as wide as its tabs, at most the strip width - 45),
+       the new-tab button right after it, and the hard seam along the bottom. -->
+  <Panel>
+    <Grid Name="Row" Margin="7,3,0,0" ColumnDefinitions="Auto,Auto,*,7" ColumnSpacing="2">
+      <ScrollViewer Name="TabList" Grid.Column="0" ClipToBounds="True"
+                    HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+        <ItemsControl Name="TabItems" ItemsSource="{Binding Tabs}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="2" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ExplorerViewModel">
+              <v:TabStripTab Tab="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <c:ChromeToolButton Grid.Column="1" Width="29" Height="NaN" VerticalAlignment="Stretch" IconKind="plus"
+                          AutomationProperties.Name="New explorer tab" Click="OnNewTab" />
+    </Grid>
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+  </Panel>
+</UserControl>

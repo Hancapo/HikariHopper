@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.EntryGrid"
+             x:DataType="vm:ExplorerViewModel"
+             Background="{x:Static ui:Theme.PanelBg}">
+  <!-- Port of EntryGrid.qml: the icon field. Cells are 148×112 inside a 10px content inset; rows
+       of cells are virtualized. -->
+  <DockPanel>
+    <v:EntryGridHeader DockPanel.Dock="Top" />
+
+    <Panel Name="GridArea">
+      <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">
+        <v:EntryGridRowList Name="RowList" Background="Transparent" Padding="0,10,0,10"
+                            Focusable="True" IsTabStop="True" FocusAdorner="{x:Null}"
+                            AutomationProperties.Name="Archive entries grid">
+          <v:EntryGridRowList.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+          </v:EntryGridRowList.ItemsPanel>
+        </v:EntryGridRowList>
+      </ScrollViewer>
+
+      <v:QtCenteredPanel IsHitTestVisible="False">
+      <TextBlock Name="EmptyText"
+                 Text="This folder is empty" Foreground="{x:Static ui:Theme.TextDim}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+      </v:QtCenteredPanel>
+
+      <Canvas Name="MarqueeLayer" Margin="0,0,12,0" IsHitTestVisible="False">
+        <v:SelectionMarquee Name="Marquee" IsVisible="False" />
+      </Canvas>
+    </Panel>
+  </DockPanel>
+</UserControl>

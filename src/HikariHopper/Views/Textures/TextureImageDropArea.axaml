@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureImageDropArea"
+             DragDrop.AllowDrop="True">
+  <!-- Port of TextureImageDropArea.qml. The QML DropArea lies over the split view without taking
+       the mouse; here the split view is the content and drags are caught as they bubble up. -->
+  <Panel>
+    <ContentPresenter Name="Host" />
+    <Border Name="Overlay" IsVisible="False" IsHitTestVisible="False"
+            Background="{x:Static ui:Theme.SelectionWash}" BorderBrush="{x:Static ui:Theme.SelectionRing}"
+            BorderThickness="1">
+      <v:QtCenterPanel Margin="-1">
+      <TextBlock Text="DROP IMAGES TO IMPORT"
+                 Foreground="{x:Static ui:Theme.Selection}" FontWeight="Bold"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+      </v:QtCenterPanel>
+    </Border>
+  </Panel>
+</UserControl>

@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.EntryTableHeaderCell"
+             Focusable="True" IsTabStop="True" FocusAdorner="{x:Null}" Background="Transparent">
+  <!-- Port of EntryTableHeaderCell.qml: a sortable column title with a caret when active and a
+       dotted rule on its right edge. -->
+  <Panel>
+    <Border Name="Fill" />
+    <StackPanel Name="ContentRow" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+      <TextBlock Name="Label" FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                 FontWeight="Bold" LetterSpacing="0.9" VerticalAlignment="Center" />
+      <c:ChromeIcon Name="Caret" Stroke="{x:Static ui:Theme.TextRow}" Thickness="1.4" Width="10" Height="10"
+                    VerticalAlignment="Center" />
+    </StackPanel>
+    <c:DottedRule HorizontalAlignment="Right" />
+  </Panel>
+</UserControl>

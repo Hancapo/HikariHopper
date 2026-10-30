@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- Port of SplitViewHandle.qml. -->
+  <ControlTheme x:Key="{x:Type c:SplitViewHandle}" TargetType="c:SplitViewHandle">
+    <Setter Property="Width" Value="{x:Static ui:Theme.SplitHandleHitWidth}" />
+    <Setter Property="Margin" Value="-4,0,-3,0" />
+    <Setter Property="ResizeDirection" Value="Columns" />
+    <Setter Property="ShowsPreview" Value="False" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Cursor" Value="SizeWestEast" />
+    <Setter Property="ZIndex" Value="10" />
+    <Setter Property="AutomationProperties.Name" Value="Resize panels" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Background="Transparent">
+          <Border Name="PART_Line" Width="1" HorizontalAlignment="Left" Margin="4,0,0,0" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

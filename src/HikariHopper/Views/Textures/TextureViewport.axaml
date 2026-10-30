@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureViewport"
+             ClipToBounds="True"
+             Background="Transparent"
+             AutomationProperties.Name="Texture preview">
+  <!-- Port of TextureViewport.qml: the checkerboard (or plain appBg), the zoomed and panned image
+       inside a 1px border, and the decoding/status message centred on top. -->
+  <Panel>
+    <v:TextureCheckerboard Name="Checkerboard" CellSize="16" />
+    <Border Name="PlainBackground" IsVisible="False" Background="{x:Static ui:Theme.AppBg}" />
+    <v:TextureImageFrame Name="ImageFrame" IsHitTestVisible="False" />
+    <v:QtCenterPanel>
+      <TextBlock Name="MessageText"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+    </v:QtCenterPanel>
+  </Panel>
+</UserControl>

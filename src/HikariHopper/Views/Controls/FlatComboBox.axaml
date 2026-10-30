@@ -1,0 +1,69 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- Port of FlatComboBox.qml. The popup sits directly under the well, as wide as it, at most
+       280px tall with 4px padding, framed like RetroMenu (hard border plus an inner bevel ring). -->
+  <ControlTheme x:Key="{x:Type c:FlatComboBox}" TargetType="c:FlatComboBox">
+    <Setter Property="Height" Value="28" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+    <Setter Property="FontSize" Value="{x:Static ui:Theme.FontSize}" />
+    <Setter Property="MaxDropDownHeight" Value="280" />
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <StackPanel />
+      </ItemsPanelTemplate>
+    </Setter>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="PART_Background" BorderThickness="1" />
+          <TextBlock Name="PART_Display" Margin="10,0,8,0"
+                     FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <c:ChromeIcon Name="PART_Caret" Kind="caretDown" Thickness="1.6" Width="14" Height="14" Margin="0,0,8,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" />
+          <Popup Name="PART_Popup"
+                 IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}"
+                 Placement="BottomEdgeAlignedLeft"
+                 IsLightDismissEnabled="True"
+                 InheritsTransform="True">
+            <Border Name="PART_PopupFrame" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                    Background="{x:Static ui:Theme.ChromeRaised}"
+                    BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
+              <Border BorderBrush="{x:Static ui:Theme.Bevel}" BorderThickness="1" Padding="2">
+                <ScrollViewer Theme="{StaticResource BareScrollViewer}" VerticalScrollBarVisibility="Hidden"
+                              HorizontalScrollBarVisibility="Disabled">
+                  <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                </ScrollViewer>
+              </Border>
+            </Border>
+          </Popup>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type c:FlatComboBoxItem}" TargetType="c:FlatComboBoxItem">
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Background">
+          <DockPanel Margin="{TemplateBinding Padding}">
+            <TextBlock Name="PART_Note" DockPanel.Dock="Right" Margin="8,0,0,0" Text="{TemplateBinding Note}"
+                       Foreground="{x:Static ui:Theme.TextFaint}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                       VerticalAlignment="Center" />
+            <TextBlock Name="PART_Label" Text="{TemplateBinding Label}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

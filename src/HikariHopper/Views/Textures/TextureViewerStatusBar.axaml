@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureViewerStatusBar"
+             x:DataType="vm:TextureViewerViewModel"
+             Height="{x:Static ui:Theme.StatusHeight}"
+             Background="{x:Static ui:Theme.ChromeBg}">
+  <!-- Port of TextureViewerStatusBar.qml: texture count, the busy/error status and the key hints,
+       split by 2px seams (borderHard with a border line on the right). -->
+  <UserControl.Styles>
+    <Style Selector="TextBlock">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.key">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+    </Style>
+    <Style Selector="Border.seam">
+      <Setter Property="Width" Value="2" />
+      <Setter Property="Background" Value="{x:Static ui:Theme.BorderHard}" />
+      <Setter Property="BorderBrush" Value="{x:Static ui:Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,0,1,0" />
+    </Style>
+  </UserControl.Styles>
+  <Panel>
+    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+    <Grid Margin="0,1,0,0" ColumnDefinitions="150,Auto,*,Auto,Auto">
+      <TextBlock Grid.Column="0" Margin="10,0,0,0" Foreground="{x:Static ui:Theme.TextDim}"
+                 Text="{Binding TextureCount, StringFormat='{}{0} textures'}" />
+      <Border Grid.Column="1" Classes="seam" />
+      <TextBlock Name="StatusText" Grid.Column="2" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
+      <Border Grid.Column="3" Classes="seam" />
+      <StackPanel Name="Hints" Grid.Column="4" Orientation="Horizontal" Spacing="14">
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <TextBlock Classes="key" Text="Ctrl+E" />
+          <TextBlock Classes="label" Text="Extract DDS" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <TextBlock Classes="key" Text="Wheel" />
+          <TextBlock Classes="label" Text="Zoom" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <TextBlock Classes="key" Text="Drag" />
+          <TextBlock Classes="label" Text="Pan" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <TextBlock Classes="key" Text="F" />
+          <TextBlock Classes="label" Text="Fit" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <TextBlock Classes="key" Text="1" />
+          <TextBlock Classes="label" Text="Actual size" />
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+  </Panel>
+</UserControl>

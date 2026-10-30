@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.ExplorerScreen"
+             x:DataType="vm:ExplorerTabsViewModel"
+             Background="{x:Static ui:Theme.AppBg}">
+  <!-- Port of ExplorerScreen.qml: menu row, tab strip, then the active tab's workspace or start
+       page with the game-loading cover on top. Its DataContext is the tabs. -->
+  <DockPanel>
+    <v:MenuRow Name="Menu" DockPanel.Dock="Top" />
+    <v:TabStrip DockPanel.Dock="Top" />
+    <Panel>
+      <ContentControl Name="PageHost" />
+      <v:GameLoadingView Name="LoadingView" DataContext="{Binding ActiveBridge}" />
+    </Panel>
+  </DockPanel>
+</UserControl>

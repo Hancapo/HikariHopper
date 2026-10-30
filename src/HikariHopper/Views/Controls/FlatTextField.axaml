@@ -1,0 +1,73 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- A scroll viewer with no bars at all: the text field scrolls its line horizontally to keep
+       the caret visible, the way Qt's TextInput autoScroll does, without showing a scrollbar. -->
+  <ControlTheme x:Key="BareScrollViewer" TargetType="ScrollViewer">
+    <Setter Property="HorizontalScrollBarVisibility" Value="Hidden" />
+    <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ScrollContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                Padding="{TemplateBinding Padding}" />
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- Port of FlatTextField.qml: a sunken well in Space Mono 11 with an optional leading icon
+       and a key cap rendered inside the field. States are computed in FlatTextField.cs. -->
+  <ControlTheme x:Key="{x:Type c:FlatTextField}" TargetType="c:FlatTextField">
+    <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
+    <Setter Property="CaretBrush" Value="{x:Static ui:Theme.Text}" />
+    <Setter Property="SelectionBrush" Value="{x:Static ui:Theme.AccentMuted}" />
+    <Setter Property="SelectionForegroundBrush" Value="{x:Static ui:Theme.Text}" />
+    <Setter Property="PlaceholderForeground" Value="{x:Static ui:Theme.TextFaint}" />
+    <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Cursor" Value="Ibeam" />
+    <Setter Property="AcceptsReturn" Value="False" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Name="PART_Background" BorderThickness="1" />
+          <c:ChromeIcon Name="PART_LeadingIcon" Kind="{TemplateBinding LeadingIcon}" Stroke="{TemplateBinding LeadingColor}"
+                        Width="13" Height="13" Margin="8,0,0,0"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" />
+          <Border Name="PART_KeyCap" Height="16" Margin="0,0,4,0" Padding="4,0"
+                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                  Background="{x:Static ui:Theme.ChromeRaised}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1">
+            <TextBlock Text="{TemplateBinding KeyCap}" Foreground="{x:Static ui:Theme.TextDim}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="10"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ScrollViewer Name="PART_ScrollViewer" Theme="{StaticResource BareScrollViewer}" Margin="{TemplateBinding Padding}">
+            <Panel>
+              <TextBlock Name="PART_Placeholder" Text="{TemplateBinding PlaceholderText}"
+                         Foreground="{TemplateBinding PlaceholderForeground}"
+                         FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                         TextTrimming="CharacterEllipsis" VerticalAlignment="Center" IsHitTestVisible="False" />
+              <TextPresenter Name="PART_TextPresenter"
+                             Text="{TemplateBinding Text, Mode=TwoWay}"
+                             CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                             CaretIndex="{TemplateBinding CaretIndex}"
+                             SelectionStart="{TemplateBinding SelectionStart}"
+                             SelectionEnd="{TemplateBinding SelectionEnd}"
+                             TextAlignment="{TemplateBinding TextAlignment}"
+                             TextWrapping="NoWrap"
+                             PasswordChar="{TemplateBinding PasswordChar}"
+                             RevealPassword="{TemplateBinding RevealPassword}"
+                             SelectionBrush="{TemplateBinding SelectionBrush}"
+                             SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                             CaretBrush="{TemplateBinding CaretBrush}"
+                             HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+            </Panel>
+          </ScrollViewer>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

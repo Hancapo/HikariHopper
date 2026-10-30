@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.MenuRow"
+             x:DataType="vm:ExplorerTabsViewModel"
+             Height="{x:Static ui:Theme.MenuHeight}"
+             Background="{x:Static ui:Theme.ChromeBg}">
+  <!-- Port of MenuRow.qml. Its DataContext is the tabs; "bridge" is tabs.ActiveBridge. -->
+  <UserControl.Resources>
+    <c:RetroMenu x:Key="FileMenu" x:DataType="vm:ExplorerTabsViewModel">
+      <c:RetroMenuItem Text="New tab" ShortcutText="Ctrl+T" Triggered="OnNewTab" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Open configured game" ShortcutText="Ctrl+O" Triggered="OnOpenConfiguredGame">
+        <c:RetroMenuItem.IsEnabled>
+          <MultiBinding Converter="{x:Static BoolConverters.Or}">
+            <Binding Path="GamePathSettings.EnhancedPathValid" />
+            <Binding Path="GamePathSettings.LegacyPathValid" />
+          </MultiBinding>
+        </c:RetroMenuItem.IsEnabled>
+      </c:RetroMenuItem>
+      <c:RetroMenuItem Text="Open RPF archive…" ShortcutText="Ctrl+Shift+O" Triggered="OnOpenArchive" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Close RPF archive" IsEnabled="{Binding ActiveBridge.HasArchive}" Triggered="OnCloseArchive" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Close tab" ShortcutText="Ctrl+W" Triggered="OnCloseTab" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Exit" ShortcutText="Alt+F4" Triggered="OnExit" />
+    </c:RetroMenu>
+
+    <c:RetroMenu x:Key="EditMenu" x:DataType="vm:ExplorerTabsViewModel">
+      <c:RetroMenuItem Text="Copy name" ShortcutText="Ctrl+C" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopyName" />
+      <c:RetroMenuItem Text="Copy path" ShortcutText="Ctrl+Shift+C" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopyPath" />
+      <c:RetroMenuItem Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete">
+        <c:RetroMenuItem.IsEnabled>
+          <MultiBinding Converter="{x:Static BoolConverters.And}">
+            <Binding Path="ActiveBridge.SelectionDeletable" />
+            <Binding Path="!ActiveBridge.EntryOperationBusy" />
+          </MultiBinding>
+        </c:RetroMenuItem.IsEnabled>
+      </c:RetroMenuItem>
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Select all" ShortcutText="Ctrl+A" IsEnabled="{Binding ActiveBridge.VisibleCount, Converter={x:Static v:ViewConverters.IsPositive}}" Triggered="OnSelectAll" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Search current location…" ShortcutText="F3" IsEnabled="{Binding ActiveBridge.HasWorkspace}" Triggered="OnSearch" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Settings…" Triggered="OnSettings" />
+    </c:RetroMenu>
+
+    <c:RetroMenu x:Key="ViewMenu" x:DataType="vm:ExplorerTabsViewModel">
+      <c:RetroMenuItem Text="List view" Checkable="True" AutoExclusive="True" Triggered="OnListView"
+                       IsChecked="{Binding ActiveBridge.ViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=list}" />
+      <c:RetroMenuItem Text="Grid view" Checkable="True" AutoExclusive="True" Triggered="OnGridView"
+                       IsChecked="{Binding ActiveBridge.ViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=grid}" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Folders pane" Checkable="True" Toggled="OnFoldersToggled"
+                       IsChecked="{Binding ActiveBridge.FoldersVisible, Mode=OneWay}" />
+    </c:RetroMenu>
+
+    <c:RetroMenu x:Key="GoMenu" x:DataType="vm:ExplorerTabsViewModel">
+      <c:RetroMenuItem Text="Back" ShortcutText="Alt+Left" IsEnabled="{Binding ActiveBridge.CanGoBack}" Triggered="OnBack" />
+      <c:RetroMenuItem Text="Forward" ShortcutText="Alt+Right" IsEnabled="{Binding ActiveBridge.CanGoForward}" Triggered="OnForward" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Up one level" ShortcutText="Backspace" IsEnabled="{Binding ActiveBridge.CanGoUp}" Triggered="OnUp" />
+    </c:RetroMenu>
+
+    <c:RetroMenu x:Key="HelpMenu" x:DataType="vm:ExplorerTabsViewModel">
+      <c:RetroMenuItem Text="Keyboard shortcuts" Triggered="OnShortcuts" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="About HikariHopper" Triggered="OnAbout" />
+    </c:RetroMenu>
+  </UserControl.Resources>
+
+  <Panel>
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+    <StackPanel Orientation="Horizontal" Margin="1,0,0,0">
+      <c:MenuBarButton Name="FileButton" Text="File" Click="OnMenuButton" />
+      <c:MenuBarButton Name="EditButton" Text="Edit" Click="OnMenuButton" />
+      <c:MenuBarButton Name="ViewButton" Text="View" Click="OnMenuButton" />
+      <c:MenuBarButton Name="GoButton" Text="Go" Click="OnMenuButton" />
+      <c:MenuBarButton Name="HelpButton" Text="Help" Click="OnMenuButton" />
+    </StackPanel>
+  </Panel>
+</UserControl>

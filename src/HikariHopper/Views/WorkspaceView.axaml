@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             x:Class="HikariHopper.Views.WorkspaceView"
+             x:DataType="vm:ExplorerViewModel">
+  <!-- Port of WorkspaceView.qml: navigation bar, the folders | entries split, and the status bar,
+       plus the context menu and the create/delete dialogs. -->
+  <DockPanel>
+    <v:NavigationBar Name="Navigation" DockPanel.Dock="Top" />
+    <v:StatusBar DockPanel.Dock="Bottom" />
+    <Grid Name="Split" ColumnDefinitions="247,Auto,*">
+      <v:FolderPanel Name="Folders" Grid.Column="0" />
+      <c:SplitViewHandle Name="Handle" Grid.Column="1" />
+      <Panel Name="EntriesArea" Grid.Column="2">
+        <ContentControl Name="EntriesHost" />
+        <v:ExternalFileDropArea Name="DropArea" />
+      </Panel>
+    </Grid>
+  </DockPanel>
+</UserControl>

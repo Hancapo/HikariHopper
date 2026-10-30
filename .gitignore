@@ -1,0 +1,8 @@
+ui-render.png
+font-test.png
+design-proposals/
+bin/
+obj/
+*.user
+.vs/
+TestResults/

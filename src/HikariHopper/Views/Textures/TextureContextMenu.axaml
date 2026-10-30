@@ -1,0 +1,22 @@
+<c:RetroMenu xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             x:Class="HikariHopper.Views.TextureContextMenu"
+             x:DataType="vm:TextureViewerViewModel">
+  <!-- Port of TextureContextMenu.qml. -->
+  <c:RetroMenuItem Name="ReplaceItem" Text="Replace from image…" IsEnabled="{Binding CanEditSingle}" />
+  <c:RetroMenuSeparator />
+  <c:RetroMenuItem Name="ResizeItem" Text="Resize texture…" IsEnabled="{Binding CanEditSelection}" />
+  <c:RetroMenuItem Name="PowerOfTwoItem" Text="Resize to power of 2…" IsEnabled="{Binding CanResizeToPowerOfTwo}" />
+  <c:RetroMenuItem Name="MipmapsItem" Text="Recalculate mipmaps…" IsEnabled="{Binding CanEditSelection}" />
+  <c:RetroMenuItem Name="FormatItem" Text="Change format…" IsEnabled="{Binding CanEditSelection}" />
+  <c:RetroMenuItem Name="OptimizeItem" Text="Optimize compression" IsEnabled="{Binding CanOptimizeSelection}" />
+  <c:RetroMenuItem Name="AlphaItem" Text="Repair alpha edges…" IsEnabled="{Binding CanEditSelection}" />
+  <c:RetroMenuSeparator />
+  <c:RetroMenuItem Name="CopyItem" Text="Copy image" ShortcutText="Ctrl+C" IsEnabled="{Binding CanEditSingle}" />
+  <c:RetroMenuItem Name="PasteItem" Text="Paste…" ShortcutText="Ctrl+V" IsEnabled="{Binding CanPasteImage}" />
+  <c:RetroMenuItem Name="ExtractItem" Text="Extract DDS…" ShortcutText="Ctrl+E" IsEnabled="{Binding CanExtractSelection}" />
+  <c:RetroMenuItem Name="RenameItem" Text="Rename…" ShortcutText="F2" IsEnabled="{Binding CanEditSingle}" />
+  <c:RetroMenuItem Name="RemoveItem" Text="Remove" ShortcutText="Del" IsEnabled="{Binding CanRemove}" />
+</c:RetroMenu>

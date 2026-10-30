@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="HikariHopper.Views.SelectionMarquee"
+             IsHitTestVisible="False" ClipToBounds="False"
+             HorizontalAlignment="Left" VerticalAlignment="Top">
+  <!-- Port of SelectionMarquee.qml: a neutral rubber band (fill, 45° hatch clipped 1px inside,
+       1px border). Painted in SelectionMarquee.Render. -->
+</UserControl>

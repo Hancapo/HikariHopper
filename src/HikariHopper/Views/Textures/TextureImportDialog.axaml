@@ -1,0 +1,8 @@
+<v:TextureToolDialog xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:v="using:HikariHopper.Views"
+                     x:Class="HikariHopper.Views.TextureImportDialog"
+                     Heading="IMPORT TEXTURES" BodyHeight="110" ApplyLabel="Import">
+  <!-- Port of TextureImportDialog.qml (objectName textureImportConfirmation). -->
+  <TextBlock Name="MessageText" Classes="body" Margin="16" />
+</v:TextureToolDialog>

@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.ExplorerCreateDialog"
+             Width="480">
+  <!-- Port of ExplorerCreateDialog.qml: a modal Qt Quick Dialog (header, content, footer) that
+       names a new folder, texture dictionary or RPF. Hosted in a ModalOverlay. -->
+  <Panel>
+    <!-- background: chromeBg with a hard 1px border; the header and footer cover its ends. -->
+    <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" />
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Name="HeadingText" Margin="10,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+      </Panel>
+
+      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Width="88" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
+          <c:ChromeToolButton Name="ConfirmButton" Width="88" Height="28" Primary="True" Text="Create" Click="OnCreate" />
+        </StackPanel>
+      </Panel>
+
+      <c:QtColumnLayout Spacing="6">
+        <TextBlock Margin="16,14,16,0" Text="NAME" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+        <c:FlatTextField Name="NameField" Margin="16,0" Height="32" AutomationProperties.Name="Entry name" />
+        <TextBlock Name="NameErrorText" Margin="16,0" Foreground="{x:Static ui:Theme.Error}" TextWrapping="Wrap"
+                   FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+        <TextBlock Name="SourceLabel" Margin="16,7,16,0" Text="SOURCE" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+        <Border Name="SourceBox" Margin="16,0" Height="30" Background="{x:Static ui:Theme.InsetBg}"
+                BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
+          <TextBlock Name="SourceText" Margin="8,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
+                     FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+        </Border>
+        <Panel c:QtColumnLayout.FillHeight="True" />
+      </c:QtColumnLayout>
+    </DockPanel>
+  </Panel>
+</UserControl>

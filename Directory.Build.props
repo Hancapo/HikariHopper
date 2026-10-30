@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- FiveFury.NET checkout: a sibling folder by default, or FIVEFURY_ROOT / -p:FiveFuryRoot=... -->
+    <FiveFuryRoot Condition="'$(FiveFuryRoot)' == '' and '$(FIVEFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(FIVEFURY_ROOT)'))</FiveFuryRoot>
+    <FiveFuryRoot Condition="'$(FiveFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../FiveFury.NET/</FiveFuryRoot>
+  </PropertyGroup>
+</Project>

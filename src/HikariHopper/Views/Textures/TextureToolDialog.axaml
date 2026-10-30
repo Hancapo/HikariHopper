@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:v="using:HikariHopper.Views"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- Port of TextureToolDialog.qml. The background's hard border shows only beside the body:
+       the opaque header and footer are drawn over it, edge to edge, as Qt lays them out. -->
+  <ControlTheme x:Key="{x:Type v:TextureToolDialog}" TargetType="v:TextureToolDialog">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}"
+                  BorderThickness="1" />
+          <DockPanel>
+            <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+              <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+              <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+              <TextBlock Margin="10,0" VerticalAlignment="Center" Text="{TemplateBinding Heading}"
+                         Foreground="{x:Static ui:Theme.TextDim}" FontWeight="Bold" LetterSpacing="1"
+                         FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                         TextTrimming="CharacterEllipsis" />
+            </Panel>
+            <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+              <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+              <StackPanel Margin="0,0,12,0" Orientation="Horizontal" Spacing="6"
+                          HorizontalAlignment="Right" VerticalAlignment="Center">
+                <c:ChromeToolButton Name="PART_CancelButton" Width="88" Height="28" Raised="True" Text="Cancel" />
+                <c:ChromeToolButton Name="PART_ApplyButton" Width="88" Height="28" Primary="True"
+                                    Text="{TemplateBinding ApplyLabel}" />
+              </StackPanel>
+            </Panel>
+            <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                              AutomationProperties.Name="{TemplateBinding Heading}" />
+          </DockPanel>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

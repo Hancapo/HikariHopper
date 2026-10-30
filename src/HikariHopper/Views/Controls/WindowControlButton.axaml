@@ -1,0 +1,23 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- Port of WindowControlButton.qml: a 34px divided cell with an application-drawn 1px mark.
+       Hover brightens only the mark; keyboard focus adds a short rule. -->
+  <ControlTheme x:Key="{x:Type c:WindowControlButton}" TargetType="c:WindowControlButton">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel Background="Transparent">
+          <Border Name="PART_Separator" Width="1" HorizontalAlignment="Left"
+                  Background="{x:Static ui:Theme.BorderHard}" IsVisible="{TemplateBinding Separated}" />
+          <Border Name="PART_FocusRule" Width="12" Height="1" Margin="0,0,0,2"
+                  HorizontalAlignment="Center" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.TextRow}" />
+          <c:WindowControlGlyph Name="PART_Glyph" Kind="{TemplateBinding Kind}"
+                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

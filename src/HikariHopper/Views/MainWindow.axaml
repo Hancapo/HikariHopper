@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:HikariHopper.Views"
+        xmlns:c="using:HikariHopper.Views.Controls"
+        xmlns:ui="using:HikariHopper.Ui"
+        x:Class="HikariHopper.Views.MainWindow"
+        x:DataType="v:MainWindow"
+        Width="1360" Height="840" MinWidth="940" MinHeight="580"
+        WindowStartupLocation="CenterScreen"
+        Background="{x:Static ui:Theme.AppBg}"
+        FontFamily="{x:Static ui:Theme.UiFont}"
+        FontSize="{x:Static ui:Theme.FontSize}"
+        Foreground="{x:Static ui:Theme.Text}"
+        Title="HikariHopper — RPF Explorer">
+  <!-- Port of main.qml: the frameless window. It owns the title bar and the blue piping. -->
+  <Panel>
+    <DockPanel>
+      <c:WindowTitleBar Name="TitleBar" DockPanel.Dock="Top"
+                        TitleText="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" />
+      <!-- ExplorerScreen goes here (QML: ExplorerScreen { tabs: window.tabs }). -->
+      <ContentControl Name="ExplorerScreenHost" x:FieldModifier="public" />
+    </DockPanel>
+
+    <!-- Blue piping around the whole window, the way the reference uniform runs its trim along
+         every edge. Drawn on top so no panel seam covers it. -->
+    <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+
+    <c:WindowResizeFrame />
+  </Panel>
+</Window>

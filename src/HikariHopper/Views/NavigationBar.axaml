@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.NavigationBar"
+             x:DataType="vm:ExplorerViewModel"
+             Height="{x:Static ui:Theme.NavigationHeight}"
+             Background="{x:Static ui:Theme.NavigationBg}">
+  <!-- Port of NavigationBar.qml. -->
+  <UserControl.Styles>
+    <Style Selector="c|ChromeToolButton.nav">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Bordered" Value="False" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+    </Style>
+    <Style Selector="c|ChromeToolButton.nav:disabled">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+    </Style>
+    <Style Selector="TextBlock.segment">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.FontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <Panel>
+    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+
+    <Grid Margin="7,0,8,0" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="1" VerticalAlignment="Center">
+        <c:ChromeToolButton Classes="nav" IconKind="back" IsEnabled="{Binding CanGoBack}"
+                            AutomationProperties.Name="Back" Click="OnBack" />
+        <c:ChromeToolButton Classes="nav" IconKind="forward" IsEnabled="{Binding CanGoForward}"
+                            AutomationProperties.Name="Forward" Click="OnForward" />
+        <c:ChromeToolButton Classes="nav" IconKind="up" IsEnabled="{Binding CanGoUp}"
+                            AutomationProperties.Name="Up one folder" Click="OnUp" />
+      </StackPanel>
+
+      <!-- Address bar. The path reads as separate clickable segments, and the segment that is an
+           archive carries the blue package mark — the one place the UI says you have crossed into
+           a container. -->
+      <Border Name="AddressBar" Grid.Column="1" Height="28" VerticalAlignment="Center" ClipToBounds="True"
+              Background="{x:Static ui:Theme.InsetBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1"
+              AutomationProperties.Name="Current game or archive path">
+        <DockPanel Margin="4,-1,2,-1">
+          <c:ChromeToolButton DockPanel.Dock="Right" Width="24" Height="22" Bordered="False" IconKind="refresh"
+                              IsEnabled="{Binding HasWorkspace}" AutomationProperties.Name="Refresh" Click="OnRefresh" />
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <!-- Root segment: the game, or a standalone archive. -->
+            <v:NavigationSegment Name="RootSegment" />
+            <StackPanel Name="Segments" Orientation="Horizontal" Spacing="2" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <c:FlatTextField Name="SearchField" Grid.Column="2" Width="216" Height="28" VerticalAlignment="Center"
+                       IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"
+                       AutomationProperties.Name="Search current entries" />
+
+      <!-- One segmented control, not three loose buttons: the active mode is sunken rather than
+           tinted, the way a native toolbar shows it. -->
+      <Border Grid.Column="3" Height="28" VerticalAlignment="Center"
+              BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
+        <Panel>
+          <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <c:ChromeToolButton Name="ListModeButton" Width="30" Height="26" Bordered="False" IconKind="list"
+                                AutomationProperties.Name="List view" Click="OnListMode" />
+            <Border Width="1" Height="26" Background="{x:Static ui:Theme.BorderHard}" />
+            <c:ChromeToolButton Name="GridModeButton" Width="30" Height="26" Bordered="False" IconKind="grid"
+                                AutomationProperties.Name="Grid view" Click="OnGridMode" />
+          </StackPanel>
+        </Panel>
+      </Border>
+    </Grid>
+  </Panel>
+</UserControl>

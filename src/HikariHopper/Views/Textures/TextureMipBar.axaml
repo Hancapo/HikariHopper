@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureMipBar"
+             x:DataType="vm:TextureViewerViewModel"
+             Height="{x:Static ui:Theme.TextureMipBarHeight}"
+             Background="{x:Static ui:Theme.ChromeBg}">
+  <!-- Port of TextureMipBar.qml: "MIP n / last", the mip slider with a tick per level, and the
+       dimensions of the shown level, between a bevel on top and a hard seam below. -->
+  <Panel>
+    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+    <v:QtGrid Margin="12,0" ColumnDefinitions="72,10,*,10,92">
+      <TextBlock Name="MipText" Grid.Column="0" VerticalAlignment="Center"
+                 Foreground="{x:Static ui:Theme.TextDim}" FontWeight="Bold"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+      <v:TextureMipSlider Name="Slider" Grid.Column="2" Height="24" VerticalAlignment="Center" />
+      <TextBlock Name="SizeText" Grid.Column="4" VerticalAlignment="Center" TextAlignment="Right"
+                 Foreground="{x:Static ui:Theme.TextRow}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+    </v:QtGrid>
+  </Panel>
+</UserControl>

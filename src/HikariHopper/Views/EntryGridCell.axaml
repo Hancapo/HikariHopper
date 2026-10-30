@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.EntryGridCell"
+             Width="{x:Static ui:Theme.GridCellWidth}" Height="{x:Static ui:Theme.GridCellHeight}"
+             Background="Transparent">
+  <!-- Port of EntryGridCell.qml: one icon-field cell. The name wraps anywhere onto two lines
+       and elides the second. -->
+  <Canvas>
+    <Border Name="Fill" Canvas.Left="{x:Static ui:Theme.GridCellInset}" Canvas.Top="{x:Static ui:Theme.GridCellInset}" />
+    <c:FileGlyph Name="Glyph" Canvas.Top="16" Width="{x:Static ui:Theme.GridGlyphSize}" Height="{x:Static ui:Theme.GridGlyphSize}" />
+    <TextBlock Name="NameText" Canvas.Left="9" Canvas.Top="57" Height="32"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+               TextAlignment="Center" />
+    <TextBlock Name="SizeText" Canvas.Left="8" Canvas.Top="92"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9"
+               TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+  </Canvas>
+</UserControl>

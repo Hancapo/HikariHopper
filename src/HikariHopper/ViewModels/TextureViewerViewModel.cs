@@ -1,0 +1,660 @@
+using System.Collections.ObjectModel;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using FiveFury;
+using FiveFury.Textures;
+using HikariHopper.Core;
+using HikariHopper.Infrastructure;
+using HikariHopper.Textures;
+
+namespace HikariHopper.ViewModels;
+
+/// <summary>Port of <c>texture_viewer.py::TextureViewerBridge</c>: the YTD/YDR texture editor of one explorer tab.</summary>
+/// <remarks>Background work runs on a two-thread priority queue; results return to the UI thread and are discarded when
+/// the generation counter changed meanwhile. All state is touched on the UI thread only.</remarks>
+public sealed partial class TextureViewerViewModel : ObservableObject
+{
+    private const int UndoLimit = 24;
+    private const int PriorityThumbnail = 0, PriorityPreview = 2, PriorityTransform = 3, PrioritySave = 4;
+
+    // Python stateChanged / selectionChanged notify signals.
+    private static readonly string[] StateProperties =
+    [
+        nameof(SourceName), nameof(IsDrawable), nameof(SourcePath), nameof(TextureCount), nameof(HasDocument),
+        nameof(CanImportImages), nameof(CanPasteImage), nameof(PastePending), nameof(PasteCanReplace), nameof(PasteTargetName),
+        nameof(ImportConfirmationPending), nameof(ImportConflictCount), nameof(ImportFileCount), nameof(Loading),
+        nameof(PreviewLoading), nameof(OperationBusy), nameof(Saving), nameof(Modified), nameof(CanUndo), nameof(UndoLabel),
+        nameof(CanSaveSource), nameof(MaximumDimension), nameof(Error), nameof(DuplicateTextureCount),
+    ];
+    private static readonly string[] SelectionProperties =
+    [
+        nameof(SelectedIndex), nameof(SelectedCount), nameof(CanRemoveSelection), nameof(CanOptimizeCompression),
+        nameof(SelectedName), nameof(SelectedDimensions), nameof(SelectedWidth), nameof(SelectedHeight),
+        nameof(SelectedNeedsPowerOfTwo), nameof(PreviewWidth), nameof(PreviewHeight), nameof(SelectedFormat),
+        nameof(SelectedUsage), nameof(SelectedDataSize), nameof(MipCount), nameof(MipLevel), nameof(Channel),
+        nameof(PreviewUrl), nameof(PreviewImage),
+    ];
+    // Conveniences that combine both groups for compiled bindings.
+    private static readonly string[] DerivedProperties =
+    [
+        nameof(HasSelection), nameof(CanEditSingle), nameof(CanEditSelection), nameof(CanResizeToPowerOfTwo),
+        nameof(CanOptimizeSelection), nameof(CanExtractSelection), nameof(CanRemove), nameof(CanRemoveDuplicates),
+        nameof(CanSave), nameof(CanSaveAs), nameof(CanExtractAll), nameof(HasMipChain), nameof(HasPreview),
+        nameof(ShowPreviewPlaceholder),
+    ];
+
+    private readonly PriorityWorkQueue pool = new(2);
+    private readonly IClipboardService clipboard;
+    private IFileDialogs? dialogs;
+    private int generation;
+    private string session = "";
+    private TextureSet? dictionary;
+    private YdrTextureDocument? ydrDocument;
+    private Dictionary<string, string> textureRenames = new(StringComparer.Ordinal);
+    private HashSet<string> deletedTextureOrigins = new(StringComparer.Ordinal);
+    private string sourceName = "", sourcePath = "", sourceRootPath = "";
+    private Action<byte[]>? sourceSaver;
+    private Action? sourcePrepare;
+    private int selectedIndex = -1;
+    private SortedSet<int> selectedRows = [];
+    private int selectionAnchor = -1;
+    private string channel = "rgba";
+    private int mipLevel;
+    private string previewUrl = "";
+    private Bitmap? previewImage;
+    private int previewRevision;
+    private bool loading, previewLoading, operationBusy, saving, externalWriteBusy;
+    private string savingRootPath = "";
+    private readonly List<TextureUndoAction> undoStack = [];
+    private int revision, savedRevision, nextRevision;
+    private string error = "";
+    private string status = "No texture dictionary loaded";
+    private Action? pendingChange;
+    private bool changeAfterSave;
+    private PendingImageImport? pendingImageImport;
+    private PasteRequest? pendingPaste;
+
+    public TextureViewerViewModel() : this(AppServices.Clipboard)
+    {
+    }
+
+    /// <summary>Uses <paramref name="clipboard"/> instead of <see cref="AppServices.Clipboard"/>.</summary>
+    internal TextureViewerViewModel(IClipboardService clipboard)
+    {
+        this.clipboard = clipboard;
+        session = Guid.NewGuid().ToString("N");
+        clipboard.Changed += ClipboardChanged;
+        FormatOptions = [.. TextureFormatNames.Editable.Select(name =>
+            new TextureFormatOption(Formatting.FormatTextureFormat(name, includeExact: true), name))];
+    }
+
+    /// <summary>Raised when a document starts loading, so the window can be shown.</summary>
+    public event EventHandler? OpenRequested;
+
+    /// <summary>Raised after a save into the source finishes (Qt <c>sourceWriteFinished(str, bool)</c>), only for saves
+    /// that were given a source root path.</summary>
+    public event EventHandler<SourceWriteResult>? SourceWriteFinished;
+
+    /// <summary>Raised when any save finishes; the argument is its success.</summary>
+    public event EventHandler<bool>? SaveFinished;
+
+    /// <summary>Asks the UI to show the unsaved-changes dialog, answered with <see cref="ResolvePendingChanges"/>.</summary>
+    public event EventHandler? UnsavedChangesRequested;
+
+    /// <summary>Raised after <see cref="CloseDocument"/>, so the window can close.</summary>
+    public event EventHandler? CloseRequested;
+
+    /// <summary>Asks the UI to confirm replacing textures with dropped images, answered with <see cref="ConfirmImageImport"/>.</summary>
+    public event EventHandler? ImageImportConfirmationRequested;
+
+    /// <summary>Asks the UI to show the paste dialog, answered with <see cref="PasteImage"/> or <see cref="CancelPasteImage"/>.</summary>
+    public event EventHandler? PasteImageRequested;
+
+    /// <summary>The textures in document order.</summary>
+    public ObservableCollection<TextureItem> TexturesModel { get; } = [];
+
+    public string SourceName => sourceName;
+
+    /// <summary>True when the open document is a YDR rather than a YTD.</summary>
+    public bool IsDrawable => sourceName.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
+
+    public string SourcePath => sourcePath;
+
+    public int TextureCount => TexturesModel.Count;
+
+    public bool HasDocument => dictionary is not null && !loading;
+
+    public bool CanImportImages => HasDocument && !OperationBusy && pendingImageImport is null && pendingPaste is null;
+
+    public bool CanPasteImage => CanImportImages && clipboard.HasImage;
+
+    public bool PastePending => pendingPaste is not null;
+
+    public bool PasteCanReplace => pendingPaste?.Source is not null;
+
+    public string PasteTargetName => PasteCanReplace ? pendingPaste!.Source!.Name ?? "" : "";
+
+    public bool ImportConfirmationPending => pendingImageImport is not null;
+
+    public int ImportConflictCount => pendingImageImport?.ConflictCount ?? 0;
+
+    public int ImportFileCount => pendingImageImport?.Paths.Count ?? 0;
+
+    public bool Loading => loading;
+
+    public bool PreviewLoading => previewLoading;
+
+    public bool OperationBusy => operationBusy || externalWriteBusy;
+
+    /// <summary>True while a save is running; changes raise <c>PropertyChanged(nameof(Saving))</c>.</summary>
+    public bool Saving => saving;
+
+    public bool Modified => revision != savedRevision;
+
+    public bool CanUndo => undoStack.Count > 0 && !operationBusy;
+
+    public string UndoLabel => undoStack.Count > 0 ? undoStack[^1].Label : "";
+
+    public bool CanSaveSource => sourceSaver is not null || sourcePath.Length > 0 && !sourcePath.Contains("::", StringComparison.Ordinal);
+
+    /// <summary>The formats offered by the Change format dialog.</summary>
+    public IReadOnlyList<TextureFormatOption> FormatOptions { get; }
+
+    public int MaximumDimension => dictionary?.Target == GameTarget.Enhanced ? 0xFFFF : 0x7FFF;
+
+    public string Error => error;
+
+    public string Status => status;
+
+    public int SelectedIndex => selectedIndex;
+
+    public int SelectedCount => selectedRows.Count;
+
+    public int DuplicateTextureCount => dictionary?.DuplicateCount ?? 0;
+
+    public bool CanRemoveSelection => SelectedCount > 0;
+
+    public bool CanOptimizeCompression => SelectionRecords().Any(record => TextureFormatNames.IsDxt(record.Item.Texture.Format));
+
+    public string SelectedName => SelectedRecord()?.Name ?? "";
+
+    public string SelectedDimensions => SelectedRecord()?.Dimensions ?? "";
+
+    public int SelectedWidth => SelectedRecord()?.Texture.Width ?? 0;
+
+    public int SelectedHeight => SelectedRecord()?.Texture.Height ?? 0;
+
+    public bool SelectedNeedsPowerOfTwo => SelectionRecords()
+        .Any(record => !TextureDimensions.IsPowerOfTwo(record.Item.Texture.Width, record.Item.Texture.Height));
+
+    public int PreviewWidth => Math.Max(1, SelectedWidth >> mipLevel);
+
+    public int PreviewHeight => Math.Max(1, SelectedHeight >> mipLevel);
+
+    public string SelectedFormat => SelectedRecord() is { } record ? Formatting.FormatTextureFormat(record.ExactFormatName, includeExact: true) : "";
+
+    public string SelectedUsage => SelectedRecord()?.Usage ?? "";
+
+    public string SelectedDataSize => SelectedRecord() is { } record ? Formatting.FormatSize(record.DataSize) : "";
+
+    public int MipCount => SelectedRecord()?.MipCount ?? 0;
+
+    public int MipLevel => mipLevel;
+
+    /// <summary><c>rgba</c>, <c>r</c>, <c>g</c>, <c>b</c> or <c>a</c>.</summary>
+    public string Channel => channel;
+
+    /// <summary>Key of the decoded preview; empty while none is available (QML <c>previewUrl</c>).</summary>
+    public string PreviewUrl => previewUrl;
+
+    /// <summary>The decoded preview of the current texture, mip and channel (premultiplied BGRA), or null when
+    /// <see cref="PreviewUrl"/> is empty.</summary>
+    public Bitmap? PreviewImage => previewImage;
+
+    public bool HasSelection => selectedIndex >= 0;
+
+    /// <summary>Rename, replace from image and copy image: exactly one texture and no running operation.</summary>
+    public bool CanEditSingle => SelectedCount == 1 && !OperationBusy;
+
+    /// <summary>Resize, mipmaps, format and alpha repair: a current texture and no running operation.</summary>
+    public bool CanEditSelection => HasSelection && !OperationBusy;
+
+    public bool CanResizeToPowerOfTwo => SelectedNeedsPowerOfTwo && !OperationBusy;
+
+    public bool CanOptimizeSelection => CanOptimizeCompression && !OperationBusy;
+
+    public bool CanExtractSelection => SelectedCount > 0 && !OperationBusy;
+
+    public bool CanRemove => CanRemoveSelection && !OperationBusy;
+
+    public bool CanRemoveDuplicates => DuplicateTextureCount > 0 && !OperationBusy;
+
+    public bool CanSave => HasDocument && !OperationBusy && CanSaveSource;
+
+    public bool CanSaveAs => HasDocument && !OperationBusy;
+
+    public bool CanExtractAll => TextureCount > 0;
+
+    public bool HasMipChain => MipCount > 1;
+
+    public bool HasPreview => previewUrl.Length > 0;
+
+    public bool ShowPreviewPlaceholder => previewLoading || selectedIndex < 0;
+
+    /// <summary>Blocks edits while another explorer operation writes files (Python <c>set_external_write_busy</c>).</summary>
+    public void SetExternalWriteBusy(bool busy)
+    {
+        if (busy == externalWriteBusy)
+            return;
+        externalWriteBusy = busy;
+        EmitStateChanged();
+    }
+
+    /// <summary>Opens a YTD/YDR after resolving unsaved changes (Python <c>open_dictionary</c>).</summary>
+    public void OpenDictionary(string name, string sourcePath, byte[] data,
+        Action<byte[]>? sourceSaver = null, Action? sourcePrepare = null, string sourceRootPath = "")
+    {
+        byte[] copy = data.ToArray();
+        RequestDocumentChange(() => OpenDictionaryNow(name, sourcePath, copy, sourceSaver, sourcePrepare, sourceRootPath));
+    }
+
+    /// <summary>Runs <paramref name="action"/> once unsaved changes are resolved (Python <c>request_document_change</c>).
+    /// While saving, it runs after the save succeeds; with unsaved edits it waits for <see cref="ResolvePendingChanges"/>.</summary>
+    public void RequestDocumentChange(Action action)
+    {
+        if (pendingChange is not null)
+            return;
+        if (operationBusy && !saving)
+        {
+            SetStatus("Wait for the texture operation to finish");
+            return;
+        }
+        if (saving)
+        {
+            pendingChange = action;
+            changeAfterSave = true;
+        }
+        else if (Modified)
+        {
+            pendingChange = action;
+            UnsavedChangesRequested?.Invoke(this, EventArgs.Empty);
+        }
+        else
+            action();
+    }
+
+    /// <summary>Answers <see cref="UnsavedChangesRequested"/> with <c>cancel</c>, <c>discard</c> or <c>save</c>.
+    /// Saving may show the Save As dialog.</summary>
+    public async Task ResolvePendingChanges(string decision)
+    {
+        if (decision == "cancel")
+        {
+            pendingChange = null;
+            changeAfterSave = false;
+            return;
+        }
+        if (pendingChange is null || operationBusy)
+            return;
+        if (decision == "discard")
+            CompleteDocumentChange();
+        else if (decision == "save")
+        {
+            changeAfterSave = true;
+            bool started = CanSaveSource ? SaveYtd() : await SaveYtdAs();
+            if (!started)
+                await ResolvePendingChanges("cancel");
+        }
+    }
+
+    /// <summary>Closes the document after resolving unsaved changes.</summary>
+    public void RequestClose() => RequestDocumentChange(CloseDocument);
+
+    /// <summary>Closes the open document without prompting (Python <c>close_document</c>).</summary>
+    public void CloseDocument()
+    {
+        ResetDocument();
+        EmitStateChanged();
+        EmitSelectionChanged();
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Stops background work before the owning tab is destroyed (Python <c>shutdown</c>).</summary>
+    public void Shutdown()
+    {
+        generation++;
+        pool.Clear();
+        clipboard.Changed -= ClipboardChanged;
+    }
+
+    /// <summary>Generation-tagged results still pending are discarded; for tests.</summary>
+    internal int Generation => generation;
+
+    internal TextureSet? Dictionary => dictionary;
+
+    internal YdrTextureDocument? YdrDocument => ydrDocument;
+
+    internal IReadOnlyList<TextureUndoAction> UndoStack => undoStack;
+
+    internal IReadOnlySet<int> SelectedRows => selectedRows;
+
+    internal Action? PendingChange => pendingChange;
+
+    /// <summary>File pickers; <see cref="AppServices.Dialogs"/> unless a test replaces them.</summary>
+    internal IFileDialogs Dialogs
+    {
+        get => dialogs ?? AppServices.Dialogs;
+        set => dialogs = value;
+    }
+
+    /// <summary>Retained undo bytes before the oldest entries are dropped (Python <c>_UNDO_DATA_LIMIT</c>).</summary>
+    internal long UndoDataLimit { get; set; } = 512L * 1024 * 1024;
+
+    /// <summary>Waits for queued background work; for tests.</summary>
+    internal bool WaitForBackgroundWork(TimeSpan timeout) => pool.WaitForDone(timeout);
+
+    internal void SetSourceForTesting(string name, string path)
+    {
+        sourceName = name;
+        sourcePath = path;
+        EmitStateChanged();
+    }
+
+    private void CompleteDocumentChange()
+    {
+        Action? action = pendingChange;
+        pendingChange = null;
+        changeAfterSave = false;
+        if (action is not null)
+            // A continuation can remove the tab and the window that raised this decision.
+            Dispatcher.UIThread.Post(action);
+    }
+
+    private void OpenDictionaryNow(string name, string path, byte[] data, Action<byte[]>? saver, Action? prepare, string rootPath)
+    {
+        ResetDocument();
+        sourceName = name;
+        sourcePath = path;
+        sourceSaver = saver;
+        sourcePrepare = prepare;
+        sourceRootPath = rootPath;
+        loading = true;
+        SetStatus("Reading texture dictionary…");
+        EmitStateChanged();
+        EmitSelectionChanged();
+        OpenRequested?.Invoke(this, EventArgs.Empty);
+
+        int token = generation;
+        bool drawable = IsDrawable;
+        pool.Start(() =>
+        {
+            try
+            {
+                if (drawable)
+                {
+                    YdrTextureDocument document = YdrTextureDocument.Read(data);
+                    Post(() => DrawableLoaded(token, document));
+                }
+                else
+                {
+                    TextureSet loaded = YtdSaving.Read(data);
+                    Post(() => DictionaryLoaded(token, loaded));
+                }
+            }
+            catch (Exception exception)
+            {
+                Post(() => DictionaryFailed(token, exception.Message));
+            }
+        }, PriorityPreview);
+    }
+
+    private void ResetDocument()
+    {
+        pendingImageImport = null;
+        pendingPaste = null;
+        generation++;
+        pool.Clear();
+        session = Guid.NewGuid().ToString("N");
+        dictionary = null;
+        ydrDocument = null;
+        textureRenames = new(StringComparer.Ordinal);
+        deletedTextureOrigins = new(StringComparer.Ordinal);
+        sourceName = "";
+        sourcePath = "";
+        sourceSaver = null;
+        sourcePrepare = null;
+        sourceRootPath = "";
+        selectedIndex = -1;
+        selectedRows = [];
+        selectionAnchor = -1;
+        ApplyModelSelection();
+        channel = "rgba";
+        mipLevel = 0;
+        ClearPreview();
+        previewRevision = 0;
+        loading = false;
+        previewLoading = false;
+        operationBusy = false;
+        saving = false;
+        undoStack.Clear();
+        revision = 0;
+        savedRevision = 0;
+        nextRevision = 0;
+        error = "";
+        SetTextures([]);
+        SetStatus("No texture dictionary loaded");
+    }
+
+    private void DrawableLoaded(int token, YdrTextureDocument document)
+    {
+        if (token != generation)
+            return;
+        ydrDocument = document;
+        DictionaryLoaded(token, document.Dictionary);
+    }
+
+    /// <summary>Python <c>_dictionary_loaded</c>; tests call it with the current <see cref="Generation"/>.</summary>
+    internal void DictionaryLoaded(int token, TextureSet loaded)
+    {
+        if (token != generation)
+            return;
+        dictionary = loaded;
+        SetTextures(loaded.Textures);
+        loading = false;
+        error = "";
+        if (TexturesModel.Count == 0)
+        {
+            SetStatus("Texture dictionary is empty");
+            EmitStateChanged();
+            return;
+        }
+        selectedIndex = 0;
+        selectedRows = [0];
+        selectionAnchor = 0;
+        ApplyModelSelection();
+        previewLoading = true;
+        SetStatus($"Loaded {TexturesModel.Count} textures");
+        EmitStateChanged();
+        EmitSelectionChanged();
+        RequestPreview();
+        RequestAllThumbnails();
+    }
+
+    private void DictionaryFailed(int token, string message)
+    {
+        if (token != generation)
+            return;
+        loading = false;
+        previewLoading = false;
+        error = message;
+        SetStatus($"Could not read texture dictionary: {message}");
+        EmitStateChanged();
+    }
+
+    private void RequestPreview()
+    {
+        if (SelectedRecord() is not { } record)
+            return;
+        SetStatus($"Decoding {record.Name} · mip {mipLevel}…");
+        StartImageTask(selectedIndex, record.Texture, channel, mipLevel, thumbnail: false);
+    }
+
+    private void RequestAllThumbnails()
+    {
+        for (int row = 0; row < TexturesModel.Count; row++)
+            StartImageTask(row, TexturesModel[row].Texture, "rgba", 0, thumbnail: true);
+    }
+
+    private void StartImageTask(int row, Texture texture, string mode, int mip, bool thumbnail)
+    {
+        int token = generation;
+        Func<Texture, string, int, RgbaImage> decode = DecodeImage;
+        pool.Start(() =>
+        {
+            Bitmap bitmap;
+            try
+            {
+                RgbaImage image = decode(texture, mode, mip);
+                bitmap = TextureBitmaps.Create(thumbnail ? TextureBitmaps.Thumbnail(image) : image);
+            }
+            catch (Exception exception)
+            {
+                Post(() => ImageFailed(token, row, thumbnail, mode, mip, exception.Message));
+                return;
+            }
+            Post(() => ImageLoaded(token, row, thumbnail, mode, mip, bitmap));
+        }, thumbnail ? PriorityThumbnail : PriorityPreview);
+    }
+
+    private void ImageLoaded(int token, int row, bool thumbnail, string mode, int mip, Bitmap bitmap)
+    {
+        if (token != generation)
+        {
+            bitmap.Dispose();
+            return;
+        }
+        if (thumbnail)
+        {
+            if (row >= 0 && row < TexturesModel.Count)
+                TexturesModel[row].SetThumbnail($"image://textureviewer/{session}/thumbnail/{row}", bitmap);
+            else
+                bitmap.Dispose();
+            return;
+        }
+        if (row != selectedIndex || mode != channel || mip != mipLevel)
+        {
+            bitmap.Dispose();
+            return;
+        }
+        previewRevision++;
+        SetPreview($"image://textureviewer/{session}/preview/{row}/{mode}/{mip}/{previewRevision}", bitmap);
+        previewLoading = false;
+        SetStatus($"Previewing {SelectedName} · mip {mip}");
+        EmitStateChanged();
+        EmitSelectionChanged();
+    }
+
+    private void ImageFailed(int token, int row, bool thumbnail, string mode, int mip, string message)
+    {
+        if (token != generation || thumbnail)
+            return;
+        if (row != selectedIndex || mode != channel || mip != mipLevel)
+            return;
+        previewLoading = false;
+        SetStatus($"Could not decode {SelectedName}: {message}");
+        EmitStateChanged();
+    }
+
+    /// <summary>Decodes a texture for previews, thumbnails and copying (Python <c>decode_texture_image</c>); replaceable
+    /// by tests.</summary>
+    internal Func<Texture, string, int, RgbaImage> DecodeImage { get; set; } = TextureOperations.DecodeImage;
+
+    private void SetPreview(string url, Bitmap? bitmap)
+    {
+        Bitmap? previous = previewImage;
+        previewUrl = url;
+        previewImage = bitmap;
+        if (previous is not null && !ReferenceEquals(previous, bitmap))
+            TextureBitmaps.DisposeLater(previous);
+    }
+
+    private void ClearPreview() => SetPreview("", null);
+
+    private void SetTextures(IEnumerable<Texture> textures)
+    {
+        foreach (TextureItem item in TexturesModel)
+            TextureBitmaps.DisposeLater(item.Thumbnail);
+        TexturesModel.Clear();
+        foreach (Texture texture in textures)
+            TexturesModel.Add(new TextureItem(texture));
+        ApplyModelSelection();
+    }
+
+    private void ReplaceModelTexture(int row, Texture texture)
+    {
+        if (row < 0 || row >= TexturesModel.Count)
+            return;
+        TextureItem previous = TexturesModel[row];
+        TexturesModel[row] = new TextureItem(texture) { TextureSelected = previous.TextureSelected };
+        TextureBitmaps.DisposeLater(previous.Thumbnail);
+    }
+
+    private void InsertModelTexture(int row, Texture texture)
+    {
+        int resolved = Math.Clamp(row, 0, TexturesModel.Count);
+        TexturesModel.Insert(resolved, new TextureItem(texture));
+        // Rows moved, so every published thumbnail is stale until it is decoded again.
+        foreach (TextureItem item in TexturesModel)
+            item.SetThumbnail("", null);
+        ApplyModelSelection();
+    }
+
+    private void ApplyModelSelection()
+    {
+        for (int row = 0; row < TexturesModel.Count; row++)
+            TexturesModel[row].TextureSelected = selectedRows.Contains(row);
+    }
+
+    private TextureItem? SelectedRecord() => RecordAt(selectedIndex);
+
+    private TextureItem? RecordAt(int row) => row >= 0 && row < TexturesModel.Count ? TexturesModel[row] : null;
+
+    private IEnumerable<(int Row, TextureItem Item)> SelectionRecords() =>
+        selectedRows.Where(row => row < TexturesModel.Count).Select(row => (row, TexturesModel[row]));
+
+    private void SetStatus(string value)
+    {
+        if (value == status)
+            return;
+        status = value;
+        OnPropertyChanged(nameof(Status));
+    }
+
+    private void EmitStateChanged()
+    {
+        foreach (string name in StateProperties)
+            OnPropertyChanged(name);
+        EmitDerived();
+    }
+
+    private void EmitSelectionChanged()
+    {
+        foreach (string name in SelectionProperties)
+            OnPropertyChanged(name);
+        EmitDerived();
+    }
+
+    private void EmitDerived()
+    {
+        foreach (string name in DerivedProperties)
+            OnPropertyChanged(name);
+    }
+
+    private void ClipboardChanged(object? sender, EventArgs e) => EmitStateChanged();
+
+    private static void Post(Action action) => Dispatcher.UIThread.Post(action);
+
+    private sealed record PendingImageImport(int Generation, int Revision, IReadOnlyList<string> Paths, int ConflictCount);
+
+    private sealed record PasteRequest(int Generation, int Revision, int Row, RgbaImage Image, Texture? Source);
+}

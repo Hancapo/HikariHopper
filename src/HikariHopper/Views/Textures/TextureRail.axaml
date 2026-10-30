@@ -1,0 +1,107 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureRail"
+             x:DataType="vm:TextureViewerViewModel"
+             Background="{x:Static ui:Theme.PanelBg}">
+  <!-- Port of TextureRail.qml: a virtualized list of 62px texture rows with a checkerboarded
+       thumbnail, the name, the dimensions and size / format / mip count. The quiet scrollbar sits
+       over the right edge; rows give up its 12px while the list can scroll. -->
+  <UserControl.Styles>
+    <Style Selector="Panel.row">
+      <Setter Property="Height" Value="{x:Static ui:Theme.TextureRowHeight}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Panel.row:pointerover">
+      <Setter Property="Background" Value="{x:Static ui:Theme.HoverBg}" />
+    </Style>
+    <Style Selector="Panel.row.selected">
+      <Setter Property="Background" Value="{x:Static ui:Theme.Selection}" />
+    </Style>
+    <Style Selector="Panel.row TextBlock">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Panel.row TextBlock.name">
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.FontSize}" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Panel.row TextBlock.dimensions">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
+    </Style>
+    <Style Selector="Panel.row.selected TextBlock">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.SelectionInk}" />
+    </Style>
+    <Style Selector="Panel.row.selected TextBlock.name">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.SelectionText}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Panel.row Border.thumbnail">
+      <Setter Property="BorderBrush" Value="{x:Static ui:Theme.Border}" />
+    </Style>
+    <Style Selector="Panel.row.selected Border.thumbnail">
+      <Setter Property="BorderBrush" Value="{x:Static ui:Theme.SelectionInk}" />
+    </Style>
+    <Style Selector="Panel.row c|LucideIcon">
+      <Setter Property="Stroke" Value="{x:Static ui:Theme.InkAsset}" />
+    </Style>
+    <Style Selector="Panel.row.selected c|LucideIcon">
+      <Setter Property="Stroke" Value="{x:Static ui:Theme.SelectionInk}" />
+    </Style>
+    <Style Selector="Panel.row StackPanel.info">
+      <Setter Property="Margin" Value="0,33,12,0" />
+    </Style>
+    <Style Selector="ItemsControl.scrollable StackPanel.info">
+      <Setter Property="Margin" Value="0,33,6,0" />
+    </Style>
+  </UserControl.Styles>
+  <ScrollViewer Name="Scroller" Theme="{StaticResource QuietOverlayScrollViewer}">
+    <ItemsControl Name="List" ItemsSource="{Binding TexturesModel}" Focusable="True" FocusAdorner="{x:Null}"
+                  Background="Transparent" AutomationProperties.Name="Textures">
+      <ItemsControl.Template>
+        <ControlTemplate>
+          <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+        </ControlTemplate>
+      </ItemsControl.Template>
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:TextureItem">
+          <Panel Classes="row" Classes.selected="{Binding TextureSelected}">
+            <Border Classes="thumbnail" Margin="7,6,0,0" Width="{x:Static ui:Theme.TextureThumbnailSize}"
+                    Height="{x:Static ui:Theme.TextureThumbnailSize}" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Background="{x:Static ui:Theme.InsetBg}" BackgroundSizing="InnerBorderEdge" BorderThickness="1">
+              <Panel>
+                <v:TextureCheckerboard CellSize="8" />
+                <Image Source="{Binding Thumbnail}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="LowQuality"
+                       IsVisible="{Binding ThumbnailUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <c:LucideIcon IconName="image" Width="18" Height="18"
+                              IsVisible="{Binding ThumbnailUrl, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+              </Panel>
+            </Border>
+            <TextBlock Classes="name" Margin="68,10,12,0" Text="{Binding Name}" />
+            <TextBlock Classes="dimensions" Margin="68,33,0,0" Text="{Binding Dimensions}" />
+            <StackPanel Classes="info" Orientation="Horizontal" Spacing="10"
+                        HorizontalAlignment="Right" VerticalAlignment="Top">
+              <TextBlock Text="{Binding DataSizeLabel}" />
+              <TextBlock Text="{Binding FormatName}" />
+              <TextBlock Text="{Binding MipCount, StringFormat='{}{0} MIPS'}" />
+            </StackPanel>
+          </Panel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </ScrollViewer>
+</UserControl>
