@@ -147,6 +147,27 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void BackToBackDoubleClicksOpenNestedFolders()
+    {
+        // Avalonia keeps counting presses (3, 4, …) while they stay close in time and place; like
+        // Windows, every second press of the sequence is a double-click.
+        Explorer ui = OpenExplorer();
+        Directory.CreateDirectory(Path.Combine(Work, "folder00", "inner"));
+        ui.Bridge.Refresh();
+        Pump();
+        Point point = Row(0, TableLeft + 40);
+        ui.Window.MouseMove(point);
+        for (int press = 0; press < 4; press++)
+        {
+            ui.Window.MouseDown(point, MouseButton.Left);
+            Pump();
+            ui.Window.MouseUp(point, MouseButton.Left);
+            Pump();
+        }
+        Assert.Equal("folder00/inner", ui.Bridge.CurrentPath);
+    }
+
+    [AvaloniaFact]
     public void DoubleClickOpensAFolder()
     {
         Explorer ui = OpenExplorer();
