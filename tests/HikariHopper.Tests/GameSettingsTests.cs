@@ -147,7 +147,7 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.Equal(legacy, bridge.GamePath);
         Assert.False(bridge.GameLoading);
         Assert.False(bridge.EntryOperationBusy);
-        Assert.Equal("Loaded GTA V Legacy  ·  FiveFury", bridge.Status);
+        Assert.Equal("Loaded GTA V Legacy", bridge.Status);
     });
 
     [AvaloniaFact]

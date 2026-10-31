@@ -295,12 +295,12 @@ public sealed partial class ExplorerViewModel
             if (isNested)
             {
                 Provider.OpenNested(entry);
-                statusText = "Opened nested archive  ·  FiveFury";
+                statusText = "Opened nested archive";
             }
             else
             {
                 Provider.OpenArchive(entry.NativeEntry is FileSystemInfo info ? info.FullName : GameChildPath(entry.Path));
-                statusText = $"Opened {entry.Name}  ·  FiveFury";
+                statusText = $"Opened {entry.Name}";
             }
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))

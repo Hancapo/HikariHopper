@@ -1,16 +1,54 @@
-using Avalonia;
+using System.ComponentModel;
 using Avalonia.Controls;
+using HikariHopper.ViewModels;
 
 namespace HikariHopper.Views;
 
 /// <summary>The explorer status bar (port of <c>StatusBar.qml</c>); its DataContext is the active tab's view model.</summary>
 public partial class StatusBar : UserControl
 {
+    private ExplorerViewModel? bridge;
+
     public StatusBar()
     {
         InitializeComponent();
-        // Layout.leftMargin: statusHintInset, then the RowLayout spacing (14) and a trailing
-        // statusHintInset spacer item.
-        Hints.Margin = new Thickness(Ui.Theme.StatusHintInset, 0, Hints.Spacing + Ui.Theme.StatusHintInset, 0);
+        Refresh();
+    }
+
+    /// <summary>The status message shown after the lamp, or "" when there is none worth showing.</summary>
+    public string VisibleStatus => StatusText.IsVisible ? StatusText.Text ?? "" : "";
+
+    private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
+
+    /// <summary>
+    /// The load confirmation only repeats what the lamp already says, so it is not shown; every
+    /// other message is.
+    /// </summary>
+    public static bool StatusWorthShowing(string status, string edition) =>
+        status.Length > 0 && (edition.Length == 0 || status != $"Loaded {edition}");
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (bridge is not null)
+            bridge.PropertyChanged -= OnBridgePropertyChanged;
+        bridge = Bridge;
+        if (bridge is not null)
+            bridge.PropertyChanged += OnBridgePropertyChanged;
+        Refresh();
+    }
+
+    private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition))
+            Refresh();
+    }
+
+    private void Refresh()
+    {
+        string edition = Bridge?.GameEdition ?? "";
+        bool status = StatusWorthShowing(Bridge?.Status ?? "", edition);
+        EditionDivider.IsVisible = Edition.IsVisible = edition.Length > 0;
+        StatusDivider.IsVisible = StatusText.IsVisible = status;
     }
 }

@@ -74,11 +74,14 @@ public sealed class RpfProvider
             if (InArchive)
                 return new WorkspaceInfo(archive!.Name, archivePath, "RPF7", archive.Archive.Platform.ToString().ToUpperInvariant());
             if (gameRoot is not null)
-                return new WorkspaceInfo(Path.GetFileName(gameRoot), gameRoot,
-                    gameTarget == FiveFury.GameTarget.Enhanced ? "GTA V Enhanced" : "GTA V Legacy", "PC");
+                return new WorkspaceInfo(Path.GetFileName(gameRoot), gameRoot, GameEdition, "PC");
             return new WorkspaceInfo("No game", "", "—", "PC");
         }
     }
+
+    /// <summary>"GTA V Legacy" or "GTA V Enhanced" while a game is open, otherwise "".</summary>
+    public string GameEdition => gameRoot is null ? ""
+        : gameTarget == FiveFury.GameTarget.Enhanced ? "GTA V Enhanced" : "GTA V Legacy";
 
     public bool IsOpen => gameRoot is not null || archive is not null;
 

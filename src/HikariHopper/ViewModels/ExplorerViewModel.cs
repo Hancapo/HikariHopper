@@ -22,7 +22,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
         nameof(ArchiveRootName), nameof(TabTitle), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
-        nameof(InArchive),
+        nameof(InArchive), nameof(GameEdition),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =
@@ -108,6 +108,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     public string ArchivePath => Provider.Info.SourcePath;
 
     public string GameName => Provider.GameName;
+
+    /// <summary>The open game's edition ("GTA V Legacy" or "GTA V Enhanced"), "" without a game.</summary>
+    public string GameEdition => Provider.GameEdition;
 
     public string GamePath => Provider.GamePath;
 
@@ -431,7 +434,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();
         PublishWorkspace();
-        SetStatus($"Loaded {Provider.Info.Version}  ·  FiveFury");
+        SetStatus($"Loaded {Provider.Info.Version}");
     }
 
     /// <summary>Asks for an RPF with the native picker and opens it.</summary>
@@ -486,7 +489,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         ResetNavigation();
         ExpandCurrentBranch();
         PublishWorkspace();
-        SetStatus($"Opened {ArchiveName}  ·  FiveFury");
+        SetStatus($"Opened {ArchiveName}");
     }
 
     public void ShowGame()
