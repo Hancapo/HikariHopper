@@ -341,6 +341,11 @@ public sealed class FolderRow : Panel
             panel?.Bridge?.ActivateTreeRow(Index);
     }
 
+    /// <summary>
+    /// Handles a tracked left-button release, marking it handled and releasing pointer capture.
+    /// A toggle press released in its cell requests a toggle; a non-double row press released within the
+    /// row requests path focus and focuses the tree list when the row has an item and a panel.
+    /// </summary>
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
