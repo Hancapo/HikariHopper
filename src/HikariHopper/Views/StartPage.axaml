@@ -6,7 +6,7 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.StartPage"
              x:DataType="vm:ExplorerViewModel"
-             Background="{x:Static ui:Theme.AppBg}">
+             Background="{x:Static ui:Theme.WindowBg}">
   <!-- Port of StartPage.qml: the empty state for a tab with no workspace. The app wears its own
        chrome from the first frame — the navigation bar and the column header are present but
        inert — and the picker sits centred where the entries will appear. -->
@@ -16,8 +16,22 @@
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
       <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
       <Setter Property="FontWeight" Value="Bold" />
-      <Setter Property="LetterSpacing" Value="0.9" />
+      <Setter Property="LetterSpacing" Value="1.4" />
       <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.well">
+      <Setter Property="Height" Value="{x:Static ui:Theme.ToolbarControlHeight}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
+      <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
+    </Style>
+    <Style Selector="c|ChromeToolButton.segment">
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Bordered" Value="False" />
+      <Setter Property="IsEnabled" Value="False" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
+      <Setter Property="IconThickness" Value="1.5" />
     </Style>
   </UserControl.Styles>
   <Panel>
@@ -25,38 +39,39 @@
       <!-- An inert navigation bar, so the toolbar does not appear out of nowhere the moment a
            workspace loads. -->
       <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.NavigationHeight}" Background="{x:Static ui:Theme.NavigationBg}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
         <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-        <Grid Margin="7,0,8,0" ColumnDefinitions="Auto,*,216" ColumnSpacing="6">
-          <StackPanel Orientation="Horizontal" Spacing="1" VerticalAlignment="Center">
-            <c:ChromeToolButton Width="28" Height="28" Bordered="False" IsEnabled="False" IconKind="back" />
-            <c:ChromeToolButton Width="28" Height="28" Bordered="False" IsEnabled="False" IconKind="forward" />
-            <c:ChromeToolButton Width="28" Height="28" Bordered="False" IsEnabled="False" IconKind="up" />
-          </StackPanel>
-          <Border Grid.Column="1" Height="28" VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
-                  BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
-            <TextBlock Margin="11,0,0,0" VerticalAlignment="Center" Text="No installation open"
+        <Grid Margin="10,0" ColumnDefinitions="Auto,*,232" ColumnSpacing="8">
+          <Border Classes="well" Padding="2">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <c:ChromeToolButton Classes="segment" IconKind="back" />
+              <c:ChromeToolButton Classes="segment" IconKind="forward" />
+              <c:ChromeToolButton Classes="segment" IconKind="up" IconSize="15" />
+            </StackPanel>
+          </Border>
+          <Border Grid.Column="1" Classes="well">
+            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="No installation open"
                        Foreground="{x:Static ui:Theme.TextFaint}" FontFamily="{x:Static ui:Theme.MonoFont}"
                        FontSize="{x:Static ui:Theme.FontSize}" />
           </Border>
-          <Border Grid.Column="2" Height="28" VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
-                  BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
-            <c:ChromeIcon Margin="7,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Width="13" Height="13"
-                          Kind="search" Stroke="{x:Static ui:Theme.TextFaint}" />
+          <Border Grid.Column="2" Classes="well">
+            <c:ChromeIcon Margin="10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Width="14" Height="14"
+                          Kind="search" Thickness="1.5" Stroke="{x:Static ui:Theme.TextFaint}" />
           </Border>
         </Grid>
       </Panel>
 
-      <!-- The column header, spanning the full width. -->
-      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.HeaderBg}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
-        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-        <Grid ColumnDefinitions="*,190,124">
-          <TextBlock Classes="columnTitle" Margin="38,0,0,0" Text="NAME" />
+      <!-- The entries panel to be, with its column header. -->
+      <Border Margin="{x:Static v:WorkspaceView.PanelMargin}" ClipToBounds="True"
+              CornerRadius="{x:Static ui:Theme.PanelCorner}" Background="{x:Static ui:Theme.PanelBg}">
+      <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
+        <Grid ColumnDefinitions="*,200,120,14">
+          <TextBlock Classes="columnTitle" Margin="16,0,0,0" Text="NAME" />
           <c:DottedRule HorizontalAlignment="Right" />
-          <TextBlock Grid.Column="1" Classes="columnTitle" Padding="10,0,0,0" Text="TYPE" />
+          <TextBlock Grid.Column="1" Classes="columnTitle" Padding="12,0,0,0" Text="TYPE" />
           <c:DottedRule Grid.Column="1" HorizontalAlignment="Right" />
           <TextBlock Grid.Column="2" Classes="columnTitle" Padding="0,0,12,0" HorizontalAlignment="Right" Text="SIZE" />
+          <c:DottedRule Grid.Column="2" HorizontalAlignment="Right" />
         </Grid>
       </Panel>
 
@@ -90,9 +105,11 @@
                               Text="Open standalone RPF…" Click="OnOpenStandalone" />
         </c:QtColumnLayout>
       </v:StartPickerHost>
+      </DockPanel>
+      </Border>
     </DockPanel>
 
-    <TextBlock Margin="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Text="{Binding Status}"
+    <TextBlock Margin="22,18" HorizontalAlignment="Left" VerticalAlignment="Bottom" Text="{Binding Status}"
                Foreground="{x:Static ui:Theme.TextFaint}" FontFamily="{x:Static ui:Theme.MonoFont}"
                FontSize="{x:Static ui:Theme.SmallFontSize}" />
   </Panel>

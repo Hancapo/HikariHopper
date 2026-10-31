@@ -4,12 +4,12 @@
              xmlns:v="using:HikariHopper.Views"
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.FolderPanel"
-             x:DataType="vm:ExplorerViewModel"
-             Background="{x:Static ui:Theme.SidebarBg}">
-  <!-- Port of FolderPanel.qml: the flattened folder tree with dotted depth guides and drawn
-       [+]/[−] boxes. The list leaves the 12px scrollbar gutter on its right. -->
-  <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">
+             x:DataType="vm:ExplorerViewModel">
+  <!-- Port of FolderPanel.qml: the flattened folder tree with dotted depth guides and chevron
+       toggles. Rows sit 6px inside the panel; the scrollbar floats over its right edge. -->
+  <ScrollViewer Name="Scroller" Theme="{StaticResource QuietOverlayScrollViewer}" Margin="0,6">
     <v:FolderTreeList Name="FolderList" ItemsSource="{Binding TreeModel}" Focusable="True" IsTabStop="True"
+                      Margin="{x:Static v:FolderPanel.RowInset}"
                       FocusAdorner="{x:Null}" AutomationProperties.Name="Archive folders">
       <v:FolderTreeList.ItemsPanel>
         <ItemsPanelTemplate>

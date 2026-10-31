@@ -12,6 +12,9 @@ namespace HikariHopper.Views;
 /// </summary>
 public partial class WorkspaceView : UserControl
 {
+    /// <summary>The 8px gutters around and between the floating panels.</summary>
+    public static readonly Thickness PanelMargin = new(Ui.Theme.PanelGutter);
+
     private readonly ExplorerContextMenu contextMenu = new();
     private ExplorerViewModel? bridge;
     private ExplorerCreateDialog? createDialog;
@@ -74,8 +77,9 @@ public partial class WorkspaceView : UserControl
         ColumnDefinition column = Split.ColumnDefinitions[0];
         if (!visible && Folders.IsVisible)
             folderWidth = column.Width;
-        Folders.IsVisible = visible;
+        FoldersFrame.IsVisible = visible;
         Handle.IsVisible = visible;
+        Split.ColumnDefinitions[1].Width = new GridLength(visible ? Ui.Theme.PanelGutter : 0);
         column.MinWidth = visible ? FolderPanel.MinimumWidth : 0;
         column.Width = visible ? folderWidth : new GridLength(0);
     }

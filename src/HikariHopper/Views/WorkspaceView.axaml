@@ -3,20 +3,28 @@
              xmlns:vm="using:HikariHopper.ViewModels"
              xmlns:v="using:HikariHopper.Views"
              xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.WorkspaceView"
              x:DataType="vm:ExplorerViewModel">
   <!-- Port of WorkspaceView.qml: navigation bar, the folders | entries split, and the status bar,
-       plus the context menu and the create/delete dialogs. -->
+       plus the context menu and the create/delete dialogs. The two panes float on the window's
+       base as separate rounded panels; the gutter between them is the resize handle. -->
   <DockPanel>
     <v:NavigationBar Name="Navigation" DockPanel.Dock="Top" />
     <v:StatusBar DockPanel.Dock="Bottom" />
-    <Grid Name="Split" ColumnDefinitions="247,Auto,*">
-      <v:FolderPanel Name="Folders" Grid.Column="0" />
-      <c:SplitViewHandle Name="Handle" Grid.Column="1" />
-      <Panel Name="EntriesArea" Grid.Column="2">
-        <ContentControl Name="EntriesHost" />
-        <v:ExternalFileDropArea Name="DropArea" />
-      </Panel>
+    <Grid Name="Split" Margin="{x:Static v:WorkspaceView.PanelMargin}" ColumnDefinitions="238,8,*">
+      <Border Name="FoldersFrame" Grid.Column="0" ClipToBounds="True"
+              CornerRadius="{x:Static ui:Theme.PanelCorner}" Background="{x:Static ui:Theme.SidebarBg}">
+        <v:FolderPanel Name="Folders" />
+      </Border>
+      <c:SplitViewHandle Name="Handle" Grid.Column="1" Margin="0" ShowsLineAtRest="False" />
+      <Border Name="EntriesFrame" Grid.Column="2" ClipToBounds="True"
+              CornerRadius="{x:Static ui:Theme.PanelCorner}" Background="{x:Static ui:Theme.PanelBg}">
+        <Panel Name="EntriesArea">
+          <ContentControl Name="EntriesHost" />
+          <v:ExternalFileDropArea Name="DropArea" />
+        </Panel>
+      </Border>
     </Grid>
   </DockPanel>
 </UserControl>

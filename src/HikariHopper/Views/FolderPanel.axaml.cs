@@ -21,7 +21,10 @@ public partial class FolderPanel : UserControl
     public const double MinimumWidth = 210;
 
     /// <summary>SplitView.preferredWidth.</summary>
-    public const double PreferredWidth = 247;
+    public const double PreferredWidth = 238;
+
+    /// <summary>Rows sit this far inside the panel's left and right edges.</summary>
+    public static readonly Thickness RowInset = new(Ui.Theme.ListInset, 0);
 
     private readonly QtWheelScrolling wheel;
     private ExplorerViewModel? bridge;
@@ -134,9 +137,10 @@ public sealed class FolderTreeList : ItemsControl
 }
 
 /// <summary>
-/// One tree row (the QML delegate), drawn the way Qt draws it: the row fill and ring, one dotted
-/// guide per depth level at <c>14 + level × 15</c>, the 9px [+]/[−] box in a 16px toggle cell at
-/// <c>7 + depth × 15</c>, the 16px glyph and the mono label.
+/// One tree row (the QML delegate): the rounded row fill and ring, one dotted guide per depth
+/// level at <c>12 + level × 16</c> (under the parent's chevron), an 11px chevron (right when
+/// collapsed, down when expanded) in a 16px toggle cell at <c>4 + depth × 16</c>, the 16px glyph and
+/// the mono label.
 /// </summary>
 public sealed class FolderRow : Panel
 {
@@ -188,7 +192,10 @@ public sealed class FolderRow : Panel
 
     private bool HasChildren => Item?.HasChildren == true;
 
-    private double RowLeft => 7 + Depth * 15;
+    /// <summary>Each level of depth indents by this much.</summary>
+    public const double Indent = 16;
+
+    private double RowLeft => 4 + Depth * Indent;
 
     private Rect ToggleRect => new(RowLeft, 0, 16, Bounds.Height);
 
@@ -205,8 +212,9 @@ public sealed class FolderRow : Panel
         bool archive = item?.Kind == "archive";
         glyph.Kind = archive ? "archive" : "folder";
         label.Text = item?.Label ?? "";
-        label.Foreground = IsSelected ? Ui.Theme.Text : Ui.Theme.TextRow;
-        label.FontWeight = item?.Kind == "root" || archive ? FontWeight.Bold : FontWeight.Normal;
+        bool bold = item?.Kind == "root" || archive;
+        label.Foreground = IsSelected || bold ? Ui.Theme.Text : Ui.Theme.TextRow;
+        label.FontWeight = bold ? FontWeight.Bold : FontWeight.Normal;
         toggle.Focusable = HasChildren;
         toggle.IsTabStop = HasChildren;
         AutomationProperties.SetName(toggle, item is null ? "" : item.Expanded ? $"Collapse {item.Label}" : $"Expand {item.Label}");
@@ -245,7 +253,7 @@ public sealed class FolderRow : Panel
     protected override Size MeasureOverride(Size availableSize)
     {
         glyph.Measure(availableSize);
-        label.Measure(new Size(Math.Max(0, (double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width) - 50), Ui.Theme.RowHeight));
+        label.Measure(new Size(Math.Max(0, (double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width) - 51), Ui.Theme.RowHeight));
         toggle.Measure(availableSize);
         return new Size(0, Ui.Theme.RowHeight);
     }
@@ -254,9 +262,9 @@ public sealed class FolderRow : Panel
     {
         double left = RowLeft;
         glyph.Arrange(new Rect(left + 21, Math.Floor((finalSize.Height - 16) / 2), 16, 16));
-        // Text { x: 42 (in the Row); width: Math.max(0, folderDelegate.width - x - 8) }: the width
+        // Text { x: 43 (in the Row); width: Math.max(0, folderDelegate.width - x - 8) }: the width
         // ignores the depth indent, so deep labels run to the list's clip instead of eliding early.
-        label.Arrange(new Rect(left + 42, 0, Math.Max(0, finalSize.Width - 50), finalSize.Height));
+        label.Arrange(new Rect(left + 43, 0, Math.Max(0, finalSize.Width - 51), finalSize.Height));
         toggle.Arrange(ToggleRect);
         Children[0].Arrange(new Rect(finalSize));
         return finalSize;
@@ -271,40 +279,35 @@ public sealed class FolderRow : Panel
             : focused ? Ui.Theme.BorderSoft
             : IsPointerOver ? Ui.Theme.HoverChrome
             : null;
+        double radius = Ui.Theme.ItemRadius;
         if (selected || focused)
         {
-            // Qt draws the border outside the inner fill, so translucent rings do not stack.
+            // The ring sits inside the row, over its wash.
             IBrush ring = selected ? Ui.Theme.SelectionRing : Ui.Theme.Border;
-            context.FillRectangle(fill!, bounds.Deflate(1));
-            context.FillRectangle(ring, new Rect(0, 0, bounds.Width, 1));
-            context.FillRectangle(ring, new Rect(0, bounds.Height - 1, bounds.Width, 1));
-            context.FillRectangle(ring, new Rect(0, 1, 1, bounds.Height - 2));
-            context.FillRectangle(ring, new Rect(bounds.Width - 1, 1, 1, bounds.Height - 2));
+            context.DrawRectangle(fill, new Pen(ring, 1), bounds.Deflate(0.5), radius - 0.5, radius - 0.5);
         }
         else if (fill is not null)
         {
-            context.FillRectangle(fill, bounds);
+            context.DrawRectangle(fill, null, bounds, radius, radius);
         }
 
-        // Dotted guides, one per level of depth.
+        // Dotted guides, one per level of depth, each under its parent's chevron.
         for (int level = 0; level < Depth; level++)
         {
-            double x = 14 + level * 15;
+            double x = 12 + level * Indent;
             for (double y = 0; y < bounds.Height; y += 3)
                 context.FillRectangle(Ui.Theme.Guide, new Rect(x, y, 1, 1));
         }
 
         if (!HasChildren)
             return;
-        // Drawn [+] / [−] box, not a typed character. anchors.centerIn with alignWhenCentered.
+        // A small chevron centred in the toggle cell: right while collapsed, down while expanded.
         IBrush ink = toggleHovered ? Ui.Theme.Text : Ui.Theme.TextDim;
-        double boxX = RowLeft + 3;
-        double boxY = Math.Floor(bounds.Height / 2) - 5;
-        context.FillRectangle(ink, new Rect(boxX, boxY, 9, 9));
-        context.FillRectangle(Ui.Theme.SidebarBg, new Rect(boxX + 1, boxY + 1, 7, 7));
-        context.FillRectangle(ink, new Rect(boxX + 2, boxY + 4, 5, 1));
-        if (Item?.Expanded != true)
-            context.FillRectangle(ink, new Rect(boxX + 4, boxY + 2, 1, 5));
+        const double size = 11;
+        double left = RowLeft + (16 - size) / 2;
+        double top = Math.Floor((bounds.Height - size) / 2);
+        using (context.PushTransform(Matrix.CreateTranslation(left, top)))
+            LucideIcon.DrawIcon(context, Item?.Expanded == true ? "chevron-down" : "chevron-right", ink, 1.3, size);
     }
 
     private void SetToggleHovered(bool hovered)
@@ -373,13 +376,13 @@ public sealed class FolderRow : Panel
         rowPressed = false;
     }
 
-    /// <summary>Paints the row's fill, ring, guides and toggle box beneath the glyph and label.</summary>
+    /// <summary>Paints the row's fill, ring, guides and chevron beneath the glyph and label.</summary>
     private sealed class RowArt(FolderRow row) : Control
     {
         public override void Render(DrawingContext context) => row.Draw(context);
     }
 
-    /// <summary>The [+]/[−] cell's keyboard target (activeFocusOnTab when the node has children).</summary>
+    /// <summary>The chevron cell's keyboard target (activeFocusOnTab when the node has children).</summary>
     private sealed class ToggleTarget : Control
     {
         private readonly FolderRow row;

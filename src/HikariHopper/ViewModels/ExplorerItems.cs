@@ -38,6 +38,18 @@ public sealed class EntryItem : ObservableObject
 
     public bool IsDirectory => Record.IsDirectory;
 
+    /// <summary>The TYPE column: a folder is recognisable by its glyph, so it shows no type.</summary>
+    public string TypeText => IsDirectory ? "" : Kind;
+
+    /// <summary>The SIZE column: a file's size, or how many items a folder holds ("Empty" for none).</summary>
+    public string SizeText => !IsDirectory ? SizeLabel
+        : ChildCount switch
+        {
+            0 => "Empty",
+            1 => "1 item",
+            var count => $"{count} items",
+        };
+
     public bool Selected
     {
         get => selected;

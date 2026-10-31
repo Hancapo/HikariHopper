@@ -15,12 +15,22 @@ namespace HikariHopper.Views;
 /// <summary>
 /// The details list (port of <c>EntryTable.qml</c>); its DataContext is the active tab's view model.
 /// Rows are virtualized; pointer input is routed per row (<see cref="EntryPointerArea"/>) or, on the
-/// background, to the marquee.
+/// background (below the rows and the panel's side insets), to the marquee.
 /// </summary>
 public partial class EntryTable : UserControl
 {
-    public const double TypeWidth = 190;
-    public const double SizeWidth = 124;
+    public const double TypeWidth = 200;
+    public const double SizeWidth = 120;
+
+    /// <summary>The empty lane at the end of every row that the floating scrollbar runs over.</summary>
+    public const double TrailWidth = 14;
+
+    /// <summary>A row's own padding before the name cell and after the trailing lane.</summary>
+    public const double RowPaddingLeft = 10;
+    public const double RowPaddingRight = 6;
+
+    /// <summary>Rows sit <see cref="Ui.Theme.ListInset"/> inside the panel's left and right edges.</summary>
+    public static readonly Thickness RowMargin = new(Ui.Theme.ListInset, 0);
 
     private readonly QtWheelScrolling wheel;
     private readonly EntryPointerArea pointerArea;
@@ -59,15 +69,16 @@ public partial class EntryTable : UserControl
 
     internal ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
-    /// <summary><c>Math.max(300, Math.min(500, Math.round(width * 0.46)))</c>.</summary>
-    public double NameWidth => Math.Max(300, Math.Min(500, Math.Floor(Bounds.Width * 0.46 + 0.5)));
+    /// <summary>The NAME column: whatever the row leaves after its padding, TYPE, SIZE and the trailing lane.</summary>
+    public double NameWidth => Math.Max(160, RowWidth - RowPaddingLeft - TypeWidth - SizeWidth - TrailWidth - RowPaddingRight);
 
-    public double DataBlockWidth => NameWidth + TypeWidth + SizeWidth;
+    /// <summary>The width of the rows and their columns, which span the panel.</summary>
+    public double DataBlockWidth => RowWidth;
 
-    /// <summary>The ListView's width (the panel minus the scrollbar gutter).</summary>
-    internal double ListWidth => Math.Max(0, ListArea.Bounds.Width - Ui.Theme.ScrollbarWidth);
+    /// <summary>The ListView's width: the whole panel, with the scrollbar floating over the trailing lane.</summary>
+    internal double ListWidth => Math.Max(0, ListArea.Bounds.Width);
 
-    internal double RowWidth => Math.Min(DataBlockWidth, ListWidth);
+    internal double RowWidth => Math.Max(0, ListWidth - 2 * Ui.Theme.ListInset);
 
     internal Control FocusTarget => EntryList;
 
@@ -136,7 +147,8 @@ public partial class EntryTable : UserControl
 
     private void UpdateColumns()
     {
-        NameHeader.Width = NameWidth;
+        // The header has no inset, so its NAME cell also covers the row inset and padding.
+        NameHeader.Width = Ui.Theme.ListInset + RowPaddingLeft + NameWidth;
         foreach (Control container in EntryList.GetRealizedContainers())
         {
             if (container is EntryRow row)
@@ -180,10 +192,10 @@ public partial class EntryTable : UserControl
     private void RequestContextMenu(Control source, Point point) =>
         ContextMenuRequested?.Invoke(this, new ContextMenuRequest(source, point));
 
-    /// <summary><c>entryTable.indexAt(min(x, dataBlockWidth - 1) + contentX, y + contentY)</c>.</summary>
+    /// <summary><c>entryTable.indexAt(x - inset, y + contentY)</c> for a point in the list area.</summary>
     internal int RowAt(double x, double y)
     {
-        double contentX = Math.Min(x, DataBlockWidth - 1);
+        double contentX = x - Ui.Theme.ListInset;
         double contentY = y + Scroller.Offset.Y;
         int count = Bridge?.EntriesModel.Count ?? 0;
         if (contentX < 0 || contentX >= RowWidth || contentY < 0)
@@ -192,7 +204,7 @@ public partial class EntryTable : UserControl
         return row < count ? row : -1;
     }
 
-    private bool IsBackground(double x, double y) => x >= DataBlockWidth || RowAt(x, y) < 0;
+    private bool IsBackground(double x, double y) => RowAt(x, y) < 0;
 
     private double ClampX(double value) => Math.Max(0, Math.Min(ListWidth, value));
 
@@ -209,14 +221,15 @@ public partial class EntryTable : UserControl
         double height = ListArea.Bounds.Height;
         double contentHeight = model.EntriesModel.Count * Ui.Theme.RowHeight;
         double contentBottom = Math.Max(0, Math.Min(height, contentHeight - Scroller.Offset.Y));
-        if (left >= DataBlockWidth || right <= 0 || top >= contentBottom)
+        double rowsLeft = Ui.Theme.ListInset;
+        if (left >= rowsLeft + RowWidth || right <= rowsLeft || top >= contentBottom)
         {
             model.UpdateMarqueeSelection(-1, -1);
             return;
         }
         double sampleBottom = Math.Max(top, Math.Min(bottom, contentBottom) - 1);
-        int first = RowAt(1, top);
-        int last = RowAt(1, sampleBottom);
+        int first = RowAt(rowsLeft + 1, top);
+        int last = RowAt(rowsLeft + 1, sampleBottom);
         model.UpdateMarqueeSelection(first, last);
     }
 
@@ -422,16 +435,15 @@ public sealed class EntryRowList : ItemsControl
 }
 
 /// <summary>
-/// One table row (the QML delegate): selection/hover fill as wide as the data block, the 16px glyph
-/// centred in a 36px cell, the name with its matched characters marked and its "N items" note,
-/// the type in the UI face and the right-aligned size.
+/// One table row (the QML delegate): a rounded selection/hover fill as wide as the row, the 16px
+/// glyph, the name with its matched characters marked, the type in the UI face and the
+/// right-aligned size — for a folder, its item count in faint ink and no type.
 /// </summary>
 public sealed class EntryRow : Panel
 {
     private readonly RowFill fill;
     private readonly FileGlyph glyph = new();
     private readonly TextBlock name = Text(Ui.Theme.MonoFont, Ui.Theme.FontSize);
-    private readonly TextBlock childCount = Text(Ui.Theme.MonoFont, Ui.Theme.SmallFontSize);
     private readonly TextBlock type = Text(Ui.Theme.UiFont, Ui.Theme.FontSize);
     private readonly TextBlock size = Text(Ui.Theme.MonoFont, Ui.Theme.FontSize);
     private EntryTable? owner;
@@ -446,13 +458,12 @@ public sealed class EntryRow : Panel
         fill = new RowFill(this);
         name.TextTrimming = TextTrimming.CharacterEllipsis;
         type.TextTrimming = TextTrimming.CharacterEllipsis;
-        type.Padding = new Thickness(10, 0, 0, 0);
+        type.Padding = new Thickness(12, 0, 0, 0);
         size.Padding = new Thickness(0, 0, 12, 0);
         size.TextAlignment = TextAlignment.Right;
         Children.Add(fill);
         Children.Add(glyph);
         Children.Add(name);
-        Children.Add(childCount);
         Children.Add(type);
         Children.Add(size);
     }
@@ -496,14 +507,12 @@ public sealed class EntryRow : Panel
         glyph.FileKind = item.Kind;
         glyph.Selected = selected;
         name.Foreground = selected ? Ui.Theme.SelectionText : Ui.Theme.TextRow;
+        name.FontWeight = selected ? FontWeight.Bold : FontWeight.Normal;
         EntryText.MarkMatch(name.Inlines!, item.Name, owner?.Bridge?.SearchQuery, selected ? Ui.Theme.SelectionText : Ui.Theme.Brass);
-        childCount.IsVisible = item.ChildCount > 0;
-        childCount.Text = $"{item.ChildCount} items";
-        childCount.Foreground = selected ? Ui.Theme.SelectionFaint : Ui.Theme.TextFaint;
-        type.Text = item.Kind;
+        type.Text = item.TypeText;
         type.Foreground = selected ? Ui.Theme.SelectionInk : Ui.Theme.TextDim;
-        size.Text = item.IsDirectory ? "—" : item.SizeLabel;
-        size.Foreground = selected ? Ui.Theme.SelectionText : Ui.Theme.TextRow;
+        size.Text = item.SizeText;
+        size.Foreground = selected ? Ui.Theme.SelectionInk : item.IsDirectory ? Ui.Theme.TextFaint : Ui.Theme.TextRow;
         AutomationProperties.SetName(this, item.Name);
         InvalidateMeasure();
         fill.InvalidateVisual();
@@ -522,7 +531,6 @@ public sealed class EntryRow : Panel
     {
         var unbounded = new Size(double.PositiveInfinity, Ui.Theme.RowHeight);
         glyph.Measure(unbounded);
-        childCount.Measure(unbounded);
         name.Measure(new Size(NameCellAvailable(), Ui.Theme.RowHeight));
         type.Measure(new Size(EntryTable.TypeWidth, Ui.Theme.RowHeight));
         size.Measure(new Size(EntryTable.SizeWidth, Ui.Theme.RowHeight));
@@ -530,27 +538,27 @@ public sealed class EntryRow : Panel
         return new Size(owner?.RowWidth ?? 0, Ui.Theme.RowHeight);
     }
 
-    /// <summary><c>parent.width - (childCountLabel.visible ? childCountLabel.width + 14 : 8)</c>.</summary>
-    private double NameCellAvailable() =>
-        Math.Max(0, NameWidth - 36 - (childCount.IsVisible ? childCount.DesiredSize.Width + 14 : 8));
+    /// <summary>The name cell after the glyph, less an 8px margin before TYPE.</summary>
+    private double NameCellAvailable() => Math.Max(0, NameWidth - NameOffset + EntryTable.RowPaddingLeft - 8);
+
+    /// <summary>The name text starts after the 16px glyph and a 10px gap.</summary>
+    private const double NameOffset = EntryTable.RowPaddingLeft + 16 + 10;
 
     protected override Size ArrangeOverride(Size finalSize)
     {
         double height = finalSize.Height;
+        double typeLeft = EntryTable.RowPaddingLeft + NameWidth;
         fill.Arrange(new Rect(finalSize));
-        // FileGlyph { anchors.centerIn: parent } in the 36px cell.
-        glyph.Arrange(new Rect(10, QtCenter(height, 16), 16, 16));
+        glyph.Arrange(new Rect(EntryTable.RowPaddingLeft, QtCenter(height, 16), 16, 16));
         // Text { width: Math.min(implicitWidth, available); anchors.verticalCenter }.
         double nameWidth = Math.Min(name.DesiredSize.Width, NameCellAvailable());
         double nameHeight = name.DesiredSize.Height;
-        name.Arrange(new Rect(36, QtCenter(height, nameHeight), nameWidth, nameHeight));
-        double countHeight = childCount.DesiredSize.Height;
-        childCount.Arrange(new Rect(36 + nameWidth + 10, QtCenter(height, countHeight), childCount.DesiredSize.Width, countHeight));
+        name.Arrange(new Rect(NameOffset, QtCenter(height, nameHeight), nameWidth, nameHeight));
         // Full-height Texts with AlignVCenter: Qt places the line box half a pixel lower when it can't centre.
         double typeHeight = type.DesiredSize.Height;
-        type.Arrange(new Rect(NameWidth, QtTextCenter(height, typeHeight), EntryTable.TypeWidth, typeHeight));
+        type.Arrange(new Rect(typeLeft, QtTextCenter(height, typeHeight), EntryTable.TypeWidth, typeHeight));
         double sizeHeight = size.DesiredSize.Height;
-        size.Arrange(new Rect(NameWidth + EntryTable.TypeWidth, QtTextCenter(height, sizeHeight), EntryTable.SizeWidth, sizeHeight));
+        size.Arrange(new Rect(typeLeft + EntryTable.TypeWidth, QtTextCenter(height, sizeHeight), EntryTable.SizeWidth, sizeHeight));
         return finalSize;
     }
 
@@ -568,7 +576,7 @@ public sealed class EntryRow : Panel
                 : row.IsPointerOver ? Ui.Theme.HoverBg
                 : null;
             if (brush is not null)
-                context.FillRectangle(brush, new Rect(Bounds.Size));
+                context.DrawRectangle(brush, null, new Rect(Bounds.Size), Ui.Theme.ItemRadius, Ui.Theme.ItemRadius);
         }
     }
 }

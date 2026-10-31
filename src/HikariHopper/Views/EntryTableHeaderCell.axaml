@@ -10,7 +10,7 @@
     <Border Name="Fill" />
     <StackPanel Name="ContentRow" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
       <TextBlock Name="Label" FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                 FontWeight="Bold" LetterSpacing="0.9" VerticalAlignment="Center" />
+                 FontWeight="Bold" LetterSpacing="1.4" VerticalAlignment="Center" />
       <c:ChromeIcon Name="Caret" Stroke="{x:Static ui:Theme.TextRow}" Thickness="1.4" Width="10" Height="10"
                     VerticalAlignment="Center" />
     </StackPanel>

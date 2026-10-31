@@ -6,9 +6,10 @@
              Width="{x:Static ui:Theme.GridCellWidth}" Height="{x:Static ui:Theme.GridCellHeight}"
              Background="Transparent">
   <!-- Port of EntryGridCell.qml: one icon-field cell. The name wraps anywhere onto two lines
-       and elides the second. -->
+       and elides the second; the rounded fill matches the list's rows. -->
   <Canvas>
-    <Border Name="Fill" Canvas.Left="{x:Static ui:Theme.GridCellInset}" Canvas.Top="{x:Static ui:Theme.GridCellInset}" />
+    <Border Name="Fill" Canvas.Left="{x:Static ui:Theme.GridCellInset}" Canvas.Top="{x:Static ui:Theme.GridCellInset}"
+            CornerRadius="{x:Static ui:Theme.ItemCorner}" />
     <c:FileGlyph Name="Glyph" Canvas.Top="16" Width="{x:Static ui:Theme.GridGlyphSize}" Height="{x:Static ui:Theme.GridGlyphSize}" />
     <TextBlock Name="NameText" Canvas.Left="9" Canvas.Top="57" Height="32"
                FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
