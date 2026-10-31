@@ -347,16 +347,19 @@ public sealed class FolderRow : Panel
         if (e.InitialPressMouseButton != MouseButton.Left || (!togglePressed && !rowPressed))
             return;
         e.Handled = true;
+        // Releasing the capture raises OnPointerCaptureLost synchronously, which clears the press
+        // state, so read it first.
+        bool wasToggle = togglePressed;
+        togglePressed = false;
+        rowPressed = false;
         e.Pointer.Capture(null);
         Point point = e.GetPosition(this);
-        if (togglePressed)
+        if (wasToggle)
         {
-            togglePressed = false;
             if (ToggleRect.Contains(point))
                 Toggle();
             return;
         }
-        rowPressed = false;
         if (doubleClicked || !new Rect(Bounds.Size).Contains(point) || Item is not { } item || panel is null)
             return;
         panel.Bridge?.FocusTreePath(item.Path);

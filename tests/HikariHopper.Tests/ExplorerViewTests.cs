@@ -125,6 +125,28 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ClickingTheTreeToggleExpandsAndCollapsesAFolder()
+    {
+        Explorer ui = OpenExplorer();
+        Directory.CreateDirectory(Path.Combine(Work, "folder00", "child"));
+        ui.Bridge.Refresh();
+        Pump();
+        TreeItem folder = ui.Bridge.TreeModel.First(item => item.Label == "folder00");
+        Assert.True(folder.HasChildren);
+        Assert.False(folder.Expanded);
+        FolderRow row = ui.Window.GetVisualDescendants().OfType<FolderRow>().First(candidate => candidate.Item == folder);
+        // The [+] box sits in the 16px toggle cell at 7 + depth × 15.
+        Point toggle = row.TranslatePoint(new Point(7 + folder.Depth * 15 + 7, row.Bounds.Height / 2), ui.Window)!.Value;
+        Click(ui.Window, toggle);
+        Assert.True(ui.Bridge.TreeModel.First(item => item.Label == "folder00").Expanded);
+        Assert.Contains(ui.Bridge.TreeModel, item => item.Label == "child");
+        // A quick second click on the [−] collapses it again; the toggle has no double-click.
+        Click(ui.Window, toggle);
+        Assert.False(ui.Bridge.TreeModel.First(item => item.Label == "folder00").Expanded);
+        Assert.DoesNotContain(ui.Bridge.TreeModel, item => item.Label == "child");
+    }
+
+    [AvaloniaFact]
     public void DoubleClickOpensAFolder()
     {
         Explorer ui = OpenExplorer();
