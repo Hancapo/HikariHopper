@@ -510,7 +510,7 @@ public sealed class TextureWindowTests
         Assert.True(harness.Window.MenuRow.FileMenu.IsOpen);
         Assert.True(harness.Window.MenuRow.FileButton.MenuOpen);
         Size size = RetroMenuPlacement.MenuSize(harness.Window.Rail.ContextMenuPopup);
-        Assert.Equal(new Size(232, 8 + 12 * Ui.Theme.MenuItemHeight + 2 * Ui.Theme.MenuSeparatorHeight), size);
+        Assert.Equal(new Size(Ui.Theme.MenuWidth, 8 + 12 * Ui.Theme.MenuItemHeight + 2 * Ui.Theme.MenuSeparatorHeight), size);
     }
 
     [AvaloniaFact]

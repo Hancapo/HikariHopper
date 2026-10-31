@@ -2,8 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
-  <!-- Port of RetroMenuSeparator.qml: menuSeparatorHeight tall, inset 11px each side, a hard
-       seam at y 4. -->
+  <!-- Port of RetroMenuSeparator.qml: menuSeparatorHeight tall, a quiet 1px rule at y 4 that
+       stops short of the rounded highlights. -->
   <ControlTheme x:Key="{x:Type c:RetroMenuSeparator}" TargetType="c:RetroMenuSeparator">
     <Setter Property="Height" Value="{x:Static ui:Theme.MenuSeparatorHeight}" />
     <Setter Property="MinWidth" Value="{x:Static ui:Theme.MenuMinimumWidth}" />
@@ -11,8 +11,8 @@
     <Setter Property="Focusable" Value="False" />
     <Setter Property="Template">
       <ControlTemplate>
-        <Panel Margin="11,0">
-          <Border Height="1" Margin="0,4,0,0" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
+        <Panel Margin="8,0">
+          <Border Height="1" Margin="0,4,0,0" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
         </Panel>
       </ControlTemplate>
     </Setter>

@@ -6,7 +6,7 @@
              x:Class="HikariHopper.Views.ExplorerContextMenu"
              x:DataType="vm:ExplorerViewModel">
   <!-- Port of ExplorerContextMenu.qml. Its DataContext is the tab's view model. -->
-  <c:RetroMenuItem Text="Open" Triggered="OnOpen">
+  <c:RetroMenuItem Text="Open" ShortcutText="Enter" IconName="external-link" Triggered="OnOpen">
     <c:RetroMenuItem.IsEnabled>
       <MultiBinding Converter="{x:Static BoolConverters.And}">
         <Binding Path="SelectionCount" Converter="{x:Static ObjectConverters.Equal}" ConverterParameter="{x:Static v:ExplorerContextMenu.One}" />
@@ -18,7 +18,6 @@
   <c:RetroMenuItem Name="NewEntryMenu" Text="New" IconName="plus" IsEnabled="{Binding !EntryOperationBusy}">
     <c:RetroMenuItem Text="Folder" IconName="folder" Triggered="OnNewFolder" />
     <c:RetroMenuItem Name="CreateYtdMenuItem" Text="Texture dictionary" IconName="image" Triggered="OnNewYtd" />
-    <c:RetroMenuSeparator />
     <c:RetroMenuSection Name="RpfArchiveSection" Text="RPF ARCHIVE" />
     <c:RetroMenuItem Name="CreateEmptyRpfMenuItem" Text="Empty" IconName="package-plus" Triggered="OnNewEmptyRpf" />
     <c:RetroMenuItem Name="CreateRpfFromFolderMenuItem" Text="From folder…" IconName="folder-input" Triggered="OnNewRpfFromFolder" />
@@ -27,7 +26,7 @@
 
   <c:RetroMenuSeparator />
 
-  <c:RetroMenuItem Text="Paste" ShortcutText="Ctrl+V" IsEnabled="False" />
+  <c:RetroMenuItem Text="Paste" ShortcutText="Ctrl+V" IconName="clipboard" IsEnabled="False" />
   <c:RetroMenuItem Name="DeleteMenuItem" Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete">
     <c:RetroMenuItem.IsEnabled>
       <MultiBinding Converter="{x:Static BoolConverters.And}">

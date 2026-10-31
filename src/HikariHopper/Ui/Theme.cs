@@ -111,14 +111,18 @@ public static class Theme
     public static readonly CornerRadius ItemCorner = new(ItemRadius);
     public static readonly CornerRadius InnerCorner = new(InnerRadius);
     public static readonly CornerRadius KeyCapCorner = new(KeyCapRadius);
+    public static readonly Thickness MenuInset = new(MenuPadding);
 
     public const double WindowTitleHeight = 30;
     public const double MainTitleHeight = 38;  // the explorer's title row, which carries the menus
     public const double MainCaptionWidth = 46;
     public const double MenuHeight = 26;
-    public const double MenuItemHeight = 25;
+    public const double MenuItemHeight = 26;   // the list's row rhythm
     public const double MenuSeparatorHeight = 9;
+    public const double MenuSectionHeight = 24;
+    public const double MenuPadding = 4;       // the frame's inset around its rows
     public const double MenuMinimumWidth = 230;
+    public const double MenuWidth = MenuMinimumWidth + 2 * MenuPadding;
     public const double TabStripHeight = 36;
     public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
     public const double TabWidth = 220;

@@ -11,7 +11,7 @@ namespace HikariHopper.Views;
 /// </summary>
 internal static class RetroMenuPlacement
 {
-    private const double MenuVerticalPadding = 8;
+    private const double MenuVerticalPadding = 2 * Ui.Theme.MenuPadding;
 
     /// <summary>Opens <paramref name="menu"/> at <paramref name="point"/> in <paramref name="relativeTo"/>'s coordinates.</summary>
     public static void Open(RetroMenu menu, Visual relativeTo, Point point)
@@ -35,12 +35,12 @@ internal static class RetroMenuPlacement
             height += item switch
             {
                 RetroMenuSeparator => Ui.Theme.MenuSeparatorHeight,
-                RetroMenuSection => 22,
+                RetroMenuSection => Ui.Theme.MenuSectionHeight,
                 Control control when !double.IsNaN(control.Height) => control.Height,
                 _ => Ui.Theme.MenuItemHeight,
             };
         }
-        double width = double.IsNaN(menu.Width) ? Ui.Theme.MenuMinimumWidth + 2 : menu.Width;
+        double width = double.IsNaN(menu.Width) ? Ui.Theme.MenuWidth : menu.Width;
         return new Size(width, height);
     }
 }
