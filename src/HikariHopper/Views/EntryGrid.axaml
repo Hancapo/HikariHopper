@@ -5,7 +5,7 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.EntryGrid"
              x:DataType="vm:ExplorerViewModel"
-             Background="{x:Static ui:Theme.PanelBg}">
+             Background="Transparent">
   <!-- Port of EntryGrid.qml: the icon field. Cells are 148×112 inside a 10px content inset; rows
        of cells are virtualized. -->
   <DockPanel>

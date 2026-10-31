@@ -6,23 +6,22 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.EntryTable"
              x:DataType="vm:ExplorerViewModel"
-             Background="{x:Static ui:Theme.PanelBg}">
-  <!-- Port of EntryTable.qml: the details list. Column widths follow the panel width
-       (NAME = clamp(round(width × 0.46), 300, 500), TYPE 190, SIZE 124); rows end at the data block. -->
+             Background="Transparent">
+  <!-- Port of EntryTable.qml: the details list. Rows sit 6px inside the panel and span it; the
+       NAME column takes what TYPE (200), SIZE (120) and a 14px scrollbar lane leave. -->
   <DockPanel>
-    <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.HeaderBg}">
-      <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
-      <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-      <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
-        <v:EntryTableHeaderCell Name="NameHeader" Text="NAME" LeftPadding="10" Clicked="OnSortName" />
-        <v:EntryTableHeaderCell Name="TypeHeader" Text="TYPE" LeftPadding="10" Width="190" Clicked="OnSortType" />
-        <v:EntryTableHeaderCell Name="SizeHeader" Text="SIZE" AlignRight="True" RightPadding="12" Width="124" Clicked="OnSortSize" />
+    <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
+      <StackPanel Orientation="Horizontal">
+        <v:EntryTableHeaderCell Name="NameHeader" Text="NAME" LeftPadding="16" Clicked="OnSortName" />
+        <v:EntryTableHeaderCell Name="TypeHeader" Text="TYPE" LeftPadding="12" Width="{x:Static v:EntryTable.TypeWidth}" Clicked="OnSortType" />
+        <v:EntryTableHeaderCell Name="SizeHeader" Text="SIZE" AlignRight="True" RightPadding="12" Width="{x:Static v:EntryTable.SizeWidth}" Clicked="OnSortSize" />
       </StackPanel>
     </Panel>
 
-    <Panel Name="ListArea">
-      <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">
+    <Panel Name="ListArea" Margin="0,4" Background="Transparent">
+      <ScrollViewer Name="Scroller" Theme="{StaticResource QuietOverlayScrollViewer}">
         <v:EntryRowList Name="EntryList" ItemsSource="{Binding EntriesModel}" Background="Transparent"
+                        Margin="{x:Static v:EntryTable.RowMargin}"
                         Focusable="True" IsTabStop="True" FocusAdorner="{x:Null}"
                         AutomationProperties.Name="Archive entries">
           <v:EntryRowList.ItemsPanel>
@@ -33,7 +32,7 @@
         </v:EntryRowList>
       </ScrollViewer>
 
-      <v:QtCenteredPanel Margin="0,0,12,0">
+      <v:QtCenteredPanel>
       <StackPanel Name="EmptyState" Spacing="12">
         <TextBlock Name="EmptyText" HorizontalAlignment="Center" IsHitTestVisible="False" Foreground="{x:Static ui:Theme.TextDim}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
@@ -42,7 +41,7 @@
       </StackPanel>
       </v:QtCenteredPanel>
 
-      <Canvas Name="MarqueeLayer" Margin="0,0,12,0" IsHitTestVisible="False" ClipToBounds="False">
+      <Canvas Name="MarqueeLayer" IsHitTestVisible="False" ClipToBounds="False">
         <v:SelectionMarquee Name="Marquee" IsVisible="False" />
       </Canvas>
     </Panel>

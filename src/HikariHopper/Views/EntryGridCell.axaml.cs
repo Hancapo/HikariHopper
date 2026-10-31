@@ -10,8 +10,9 @@ using HikariHopper.ViewModels;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// One icon-field cell (port of <c>EntryGridCell.qml</c>): the inset selection/hover fill, the 34px
-/// glyph, the name (Text.WrapAnywhere, two lines, the second elided) and the size or item count.
+/// One icon-field cell (port of <c>EntryGridCell.qml</c>): the inset, rounded selection/hover fill,
+/// the 34px glyph, the name (Text.WrapAnywhere, two lines, the second elided) and the size, or for a
+/// folder its item count ("Empty" when it holds nothing).
 /// Pointer input is routed by <see cref="EntryGrid"/>.
 /// </summary>
 public partial class EntryGridCell : UserControl
@@ -72,7 +73,7 @@ public partial class EntryGridCell : UserControl
         Glyph.Selected = selected;
         NameText.Foreground = selected ? Ui.Theme.SelectionText : Ui.Theme.TextRow;
         WrapName(NameText.Inlines!, item.Name, owner?.Bridge?.SearchQuery, selected ? Ui.Theme.SelectionText : Ui.Theme.Brass);
-        SizeText.Text = item.ChildCount > 0 ? $"{item.ChildCount} items" : item.SizeLabel;
+        SizeText.Text = item.SizeText;
         SizeText.Foreground = selected ? Ui.Theme.SelectionInk : Ui.Theme.TextFaint;
         AutomationProperties.SetName(this, item.Name);
     }
