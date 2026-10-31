@@ -7,23 +7,26 @@
         x:DataType="v:MainWindow"
         Width="1360" Height="840" MinWidth="940" MinHeight="580"
         WindowStartupLocation="CenterScreen"
-        Background="{x:Static ui:Theme.AppBg}"
+        Background="{x:Static ui:Theme.WindowBg}"
         FontFamily="{x:Static ui:Theme.UiFont}"
         FontSize="{x:Static ui:Theme.FontSize}"
         Foreground="{x:Static ui:Theme.Text}"
         Title="HikariHopper — RPF Explorer">
-  <!-- Port of main.qml: the frameless window. It owns the title bar and the blue piping. -->
+  <!-- Port of main.qml: the frameless window. It owns the title bar and the blue piping; the
+       explorer puts its menus into the title row (the tab names the document, so no title text). -->
   <Panel>
     <DockPanel>
-      <c:WindowTitleBar Name="TitleBar" DockPanel.Dock="Top"
+      <c:WindowTitleBar Name="TitleBar" DockPanel.Dock="Top" x:FieldModifier="public"
+                        Height="{x:Static ui:Theme.MainTitleHeight}" Background="{x:Static ui:Theme.ChromeBg}"
+                        ShowTitle="False" EmblemSize="16" Seams="False" ControlWidth="{x:Static ui:Theme.MainCaptionWidth}"
                         TitleText="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" />
       <!-- ExplorerScreen goes here (QML: ExplorerScreen { tabs: window.tabs }). -->
       <ContentControl Name="ExplorerScreenHost" x:FieldModifier="public" />
     </DockPanel>
 
     <!-- Blue piping around the whole window, the way the reference uniform runs its trim along
-         every edge. Drawn on top so no panel seam covers it. -->
-    <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+         every edge. On Windows 11 the window manager draws it along the rounded corners instead. -->
+    <c:WindowPiping />
 
     <c:WindowResizeFrame />
   </Panel>

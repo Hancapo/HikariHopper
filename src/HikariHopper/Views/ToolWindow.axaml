@@ -38,7 +38,7 @@
                                   Margin="{TemplateBinding BodyThickness}" />
               </DockPanel>
               <!-- The blue piping every window that owns its frame carries. -->
-              <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+              <c:WindowPiping />
             </Panel>
           </VisualLayerManager>
         </Panel>
