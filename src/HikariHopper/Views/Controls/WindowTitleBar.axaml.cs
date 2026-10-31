@@ -165,7 +165,7 @@ public partial class WindowTitleBar : UserControl
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
-        doubleTapPending = e.ClickCount == 2;
+        doubleTapPending = e.ClickCount % 2 == 0;
         if (doubleTapPending)
         {
             dragPress = null;

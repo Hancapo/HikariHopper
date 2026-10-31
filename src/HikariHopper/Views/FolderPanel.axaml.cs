@@ -336,7 +336,7 @@ public sealed class FolderRow : Panel
             return;
         }
         rowPressed = true;
-        doubleClicked = e.ClickCount == 2;
+        doubleClicked = e.ClickCount % 2 == 0;
         if (doubleClicked)
             panel?.Bridge?.ActivateTreeRow(Index);
     }

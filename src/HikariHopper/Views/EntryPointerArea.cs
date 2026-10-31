@@ -66,7 +66,9 @@ public sealed class EntryPointerArea
         if (selectionChangedOnPress)
             model.SelectEntry(index, e.KeyModifiers);
         focusTarget().Focus(NavigationMethod.Pointer);
-        doubleClicked = e.ClickCount == 2;
+        // Avalonia keeps counting while presses stay close in time and place; as on Windows,
+        // every second press of the sequence is a double-click.
+        doubleClicked = e.ClickCount % 2 == 0;
         if (doubleClicked && !dragStarted)
             model.ActivateEntry(index);
     }
