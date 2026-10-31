@@ -215,7 +215,7 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
-    public void RetroMenuIsFixedWidthWithTwentyFivePixelRows() => UiThread.Run(() =>
+    public void RetroMenuIsFixedWidthWithRowHeightRows() => UiThread.Run(() =>
     {
         var root = new Panel { Background = T.ChromeBg };
         Window window = Show(root, 400, 200, T.ChromeBg);
@@ -223,10 +223,35 @@ public sealed class ControlMetricsTests
         var menu = new RetroMenu { Items = { item, new RetroMenuSeparator(), new RetroMenuItem { Text = "Exit" } } };
         menu.Open(root, 1, 25);
         Pump();
-        Assert.Equal(232, menu.Bounds.Width);
+        Assert.Equal(T.MenuWidth, menu.Bounds.Width);
         Assert.Equal(T.MenuItemHeight, item.Bounds.Height);
         Assert.Equal(T.MenuMinimumWidth, item.Bounds.Width);
-        Assert.Equal(4 + 25 + 9 + 25 + 4, menu.Bounds.Height);
+        Assert.Equal(4 + 26 + 9 + 26 + 4, menu.Bounds.Height);
+        // Rows sit inside the frame's 4px padding, the label in the column after the icon cell.
+        Assert.Equal(new Point(4, 4), item.TranslatePoint(default, menu));
+        menu.Close();
+        window.Close();
+    });
+
+    [AvaloniaFact]
+    public void SubmenusOpenClearOfTheMenuWithTheirFirstRowLevel() => UiThread.Run(() =>
+    {
+        var root = new Panel { Background = T.ChromeBg };
+        Window window = Show(root, 800, 400, T.WindowBg);
+        var child = new RetroMenuItem { Text = "Folder", IconName = "folder" };
+        var parent = new RetroMenuItem { Text = "New", IconName = "plus", Items = { child } };
+        var menu = new RetroMenu { Items = { new RetroMenuItem { Text = "Open" }, parent } };
+        menu.Open(root, 20, 20);
+        Pump();
+        parent.IsSubMenuOpen = true;
+        Pump();
+        Point menuAt = menu.TranslatePoint(default, window)!.Value;
+        Point parentAt = parent.TranslatePoint(default, window)!.Value;
+        Point childAt = child.TranslatePoint(default, window)!.Value;
+        // 4px between the frames; the submenu's first row level with the row that opened it.
+        Assert.Equal(menuAt.X + T.MenuWidth + RetroMenuItem.SubmenuGap + T.MenuPadding, childAt.X);
+        Assert.Equal(parentAt.Y, childAt.Y);
+        parent.IsSubMenuOpen = false;
         menu.Close();
         window.Close();
     });

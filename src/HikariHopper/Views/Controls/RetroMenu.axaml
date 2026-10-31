@@ -2,13 +2,13 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
-  <!-- Port of RetroMenu.qml: padding 4 top/bottom and 1 left/right, at least menuMinimumWidth
-       plus padding wide, no transitions. -->
+  <!-- Port of RetroMenu.qml: a rounded frame with 4px padding on every side, menuMinimumWidth
+       plus that padding wide, no transitions. -->
   <ControlTheme x:Key="{x:Type c:RetroMenu}" TargetType="c:RetroMenu">
     <!-- Qt sizes the menu to menuMinimumWidth + padding whatever the items: the Basic Menu's
          ListView reports no implicit width, so long labels run under their shortcut. -->
-    <Setter Property="Width" Value="232" />
-    <Setter Property="Padding" Value="1,4" />
+    <Setter Property="Width" Value="{x:Static ui:Theme.MenuWidth}" />
+    <Setter Property="Padding" Value="{x:Static ui:Theme.MenuInset}" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="WindowManagerAddShadowHint" Value="False" />
     <Setter Property="ItemsPanel">
@@ -30,8 +30,8 @@
     </Setter>
   </ControlTheme>
 
-  <!-- Port of RetroMenuItem.qml. The 20px indicator gutter sits at x 0 (the QML replaces the
-       indicator without positioning it); the text row starts at leftPadding 24. -->
+  <!-- Port of RetroMenuItem.qml: a rounded highlight across the row, a 16px icon or check cell
+       8px in, the label at 32 and the shortcut in faint mono on the right. -->
   <ControlTheme x:Key="{x:Type c:RetroMenuItem}" TargetType="c:RetroMenuItem">
     <Setter Property="Height" Value="{x:Static ui:Theme.MenuItemHeight}" />
     <Setter Property="MinWidth" Value="{x:Static ui:Theme.MenuMinimumWidth}" />
@@ -44,16 +44,14 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Panel Background="Transparent">
-          <Border Name="PART_Background" Margin="3,0" CornerRadius="{x:Static ui:Theme.InnerCorner}" />
-          <Border Name="PART_Marker" Width="2" Height="13" Margin="5,0,0,0" CornerRadius="1"
-                  HorizontalAlignment="Left" VerticalAlignment="Center" Background="{x:Static ui:Theme.TextRow}" />
-          <Panel Name="PART_Indicator" Width="20" HorizontalAlignment="Left">
-            <c:ChromeIcon Name="PART_Check" Kind="check" Thickness="1.8" Width="12" Height="12"
+          <Border Name="PART_Background" CornerRadius="{x:Static ui:Theme.InnerCorner}" />
+          <Panel Name="PART_Indicator" Width="16" Margin="8,0,0,0" HorizontalAlignment="Left">
+            <c:ChromeIcon Name="PART_Check" Kind="check" Thickness="1.6" Width="12" Height="12"
                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <c:LucideIcon Name="PART_Icon" IconName="{TemplateBinding IconName}" Width="14" Height="14"
+            <c:LucideIcon Name="PART_Icon" IconName="{TemplateBinding IconName}" Weight="1.6" Width="14" Height="14"
                           HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Panel>
-          <DockPanel Name="PART_Content" Margin="24,0,11,0">
+          <DockPanel Name="PART_Content" Margin="32,0,10,0">
             <TextBlock Name="PART_Shortcut" DockPanel.Dock="Right" Margin="18,0,0,0" Text="{TemplateBinding ShortcutText}"
                        FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                        TextAlignment="Right" VerticalAlignment="Center" />
@@ -61,15 +59,15 @@
                        FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
                        VerticalAlignment="Center" />
           </DockPanel>
-          <c:ChromeIcon Name="PART_Arrow" Kind="chevron" Thickness="1.8" Width="12" Height="12" Margin="0,0,8,0"
+          <c:ChromeIcon Name="PART_Arrow" Kind="chevron" Thickness="1.5" Width="12" Height="12" Margin="0,0,8,0"
                         HorizontalAlignment="Right" VerticalAlignment="Center" />
           <Popup Name="PART_Popup"
                  IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}"
                  Placement="RightEdgeAlignedTop" HorizontalOffset="-1" VerticalOffset="-4"
                  IsLightDismissEnabled="False" WindowManagerAddShadowHint="False">
-            <Panel Width="232">
+            <Panel Width="{x:Static ui:Theme.MenuWidth}">
               <c:RetroMenuFrame ConnectionWidth="0" />
-              <ScrollViewer Theme="{StaticResource BareScrollViewer}" Margin="1,4"
+              <ScrollViewer Theme="{StaticResource BareScrollViewer}" Margin="{x:Static ui:Theme.MenuInset}"
                             HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
                 <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
                                 KeyboardNavigation.TabNavigation="Continue" />

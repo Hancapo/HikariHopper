@@ -2,18 +2,19 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
-  <!-- Port of RetroMenuSection.qml: a 22px mono, bold, letterspaced caps heading. -->
+  <!-- Port of RetroMenuSection.qml: a faint mono, bold, letterspaced caps heading, aligned with
+       the labels and sitting close to the rows it names. -->
   <ControlTheme x:Key="{x:Type c:RetroMenuSection}" TargetType="c:RetroMenuSection">
-    <Setter Property="Height" Value="22" />
+    <Setter Property="Height" Value="{x:Static ui:Theme.MenuSectionHeight}" />
     <Setter Property="MinWidth" Value="{x:Static ui:Theme.MenuMinimumWidth}" />
     <Setter Property="Margin" Value="0" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="Template">
       <ControlTemplate>
-        <TextBlock Text="{TemplateBinding Text}" Margin="11,0"
-                   Foreground="{x:Static ui:Theme.TextDim}"
+        <TextBlock Text="{TemplateBinding Text}" Margin="32,0,10,4"
+                   Foreground="{x:Static ui:Theme.TextFaint}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                   FontWeight="Bold" LetterSpacing="1" VerticalAlignment="Center" />
+                   FontWeight="Bold" LetterSpacing="1.4" VerticalAlignment="Bottom" />
       </ControlTemplate>
     </Setter>
   </ControlTheme>
