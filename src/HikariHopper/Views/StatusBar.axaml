@@ -1,72 +1,58 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:c="using:HikariHopper.Views.Controls"
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.StatusBar"
              x:DataType="vm:ExplorerViewModel"
-             Height="{x:Static ui:Theme.StatusHeight}"
-             Background="{x:Static ui:Theme.ChromeBg}">
-  <!-- Port of StatusBar.qml. Each cell is separated by a hard seam plus a light edge — the
-       bevelled status bar a desktop tool has, not a flat strip. -->
+             Height="{x:Static ui:Theme.ExplorerStatusHeight}">
+  <!-- Port of StatusBar.qml, on the window's base under the panels: the item count, the open
+       edition behind a signal lamp, the latest status message, and the two keys that move you. -->
   <UserControl.Styles>
     <Style Selector="TextBlock">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
-      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="FontSize" Value="11" />
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
     </Style>
-    <Style Selector="Border.seam">
-      <Setter Property="Width" Value="2" />
-      <Setter Property="Background" Value="{x:Static ui:Theme.BorderHard}" />
-      <Setter Property="BorderBrush" Value="{x:Static ui:Theme.Border}" />
-      <Setter Property="BorderThickness" Value="0,0,1,0" />
+    <Style Selector="Border.divider">
+      <Setter Property="Width" Value="1" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{x:Static ui:Theme.BorderSoft}" />
     </Style>
   </UserControl.Styles>
-  <Panel>
-    <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-    <Grid Margin="0,1,0,0" ColumnDefinitions="190,Auto,*,Auto,Auto">
-      <Panel Grid.Column="0">
-        <TextBlock Padding="10,0,0,0" Foreground="{x:Static ui:Theme.TextDim}" IsVisible="{Binding HasWorkspace}"
-                   Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
-        <TextBlock Padding="10,0,0,0" Foreground="{x:Static ui:Theme.TextDim}" IsVisible="{Binding !HasWorkspace}"
-                   Text="NO GAME" />
-      </Panel>
-
-      <Border Grid.Column="1" Classes="seam" />
-
-      <DockPanel Grid.Column="2" ClipToBounds="True">
-        <Panel DockPanel.Dock="Left">
-          <TextBlock Padding="10,0,0,0" Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis"
-                     IsVisible="{Binding HasSelection}" Text="Selected" />
-          <TextBlock Name="StatusText" Padding="10,0,0,0" Foreground="{x:Static ui:Theme.TextFaint}"
-                     TextTrimming="CharacterEllipsis" IsVisible="{Binding !HasSelection}" Text="{Binding Status}" />
-        </Panel>
-        <TextBlock DockPanel.Dock="Left" Margin="8,0,0,0" Foreground="{x:Static ui:Theme.Text}"
-                   Text="{Binding SelectedName}" />
-        <TextBlock Margin="8,0,0,0" Foreground="{x:Static ui:Theme.TextFaint}" Text="{Binding SelectedSize}" />
-      </DockPanel>
-
-      <Border Grid.Column="3" Classes="seam" />
-
-      <!-- Function keys, spelled the way a desktop tool spells them: the key in bright ink, what it
-           does in dim. -->
-      <StackPanel Name="Hints" Grid.Column="4" Orientation="Horizontal" Spacing="14">
-        <StackPanel Orientation="Horizontal" Spacing="5">
-          <TextBlock Foreground="{x:Static ui:Theme.TextRow}" Text="Ctrl+O" />
-          <TextBlock Foreground="{x:Static ui:Theme.TextFaint}" Text="Configured game" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="5">
-          <TextBlock Foreground="{x:Static ui:Theme.TextRow}" Text="Enter" />
-          <TextBlock Foreground="{x:Static ui:Theme.TextFaint}" Text="Open" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="5">
-          <TextBlock Foreground="{x:Static ui:Theme.TextRow}" Text="Backspace" />
-          <TextBlock Foreground="{x:Static ui:Theme.TextFaint}" Text="Up" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="5">
-          <TextBlock Foreground="{x:Static ui:Theme.TextRow}" Text="F3" />
-          <TextBlock Foreground="{x:Static ui:Theme.TextFaint}" Text="Search" />
-        </StackPanel>
+  <DockPanel Margin="14,0">
+    <!-- Key hints, the key on a cap and what it does beside it. -->
+    <StackPanel Name="Hints" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="14" Margin="14,0,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <c:KeyCap Text="Enter" />
+        <TextBlock Text="Open" />
       </StackPanel>
-    </Grid>
-  </Panel>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <c:KeyCap IconName="delete" AutomationProperties.Name="Backspace" />
+        <TextBlock Text="Up" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="14">
+      <Panel>
+        <TextBlock IsVisible="{Binding HasWorkspace}" Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
+        <TextBlock IsVisible="{Binding !HasWorkspace}" Text="NO GAME" />
+      </Panel>
+      <Border Name="EditionDivider" Classes="divider" />
+      <!-- The signal lamp: lit while a game is open. -->
+      <StackPanel Name="Edition" Orientation="Horizontal" Spacing="8">
+        <Panel Width="14" Height="14" VerticalAlignment="Center">
+          <Ellipse Width="14" Height="14" Fill="{x:Static ui:Theme.SelectionHalo}" />
+          <Ellipse Width="8" Height="8" Fill="{x:Static ui:Theme.Selection}" />
+        </Panel>
+        <TextBlock Name="EditionText" Foreground="{x:Static ui:Theme.TextRow}" Text="{Binding GameEdition}" />
+      </StackPanel>
+      <Border Name="StatusDivider" Classes="divider" />
+    </StackPanel>
+
+    <TextBlock Name="StatusText" Margin="14,0,0,0" Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis"
+               Text="{Binding Status}" />
+  </DockPanel>
 </UserControl>

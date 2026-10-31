@@ -440,7 +440,7 @@ public sealed partial class ExplorerViewModel
             sourceSaver: sourceTarget is not null ? sourceTarget.Save : null,
             sourcePrepare: sourceTarget is not null ? () => PrepareTextureWrite(sourceTarget) : null,
             sourceRootPath: sourceTarget?.RootPath ?? "");
-        SetStatus($"Opening {entry.Name}  ·  FiveFury");
+        SetStatus($"Opening {entry.Name}");
     }
 
     private void PrepareArchiveWrite(string rootPath)
@@ -461,7 +461,7 @@ public sealed partial class ExplorerViewModel
         RefreshExternalContent(target);
         ContentChanged?.Invoke(this, target);
         if (result.Success)
-            SetStatus($"Saved {(TextureViewer.IsDrawable ? "YDR" : "YTD")} inside RPF  ·  FiveFury");
+            SetStatus($"Saved {(TextureViewer.IsDrawable ? "YDR" : "YTD")} inside RPF");
     }
 
     /// <summary>Releases what the tab holds once it is closed (Python's object destruction).</summary>

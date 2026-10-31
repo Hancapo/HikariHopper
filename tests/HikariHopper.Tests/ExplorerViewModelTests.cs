@@ -289,7 +289,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(1, bridge.VisibleCount);
         Assert.Equal(2, bridge.TreeModel.Count);
         Assert.Equal(-1, bridge.SelectedIndex);
-        Assert.Equal("Opened sample.rpf  ·  FiveFury", bridge.Status);
+        Assert.Equal("Opened sample.rpf", bridge.Status);
     });
 
     [AvaloniaFact]
@@ -313,7 +313,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.True(bridge.TreeModel[1].Selected);
         Assert.Equal(nestedPath, bridge.TreeFocusPath);
         Assert.Equal(1, bridge.TreeFocusIndex);
-        Assert.Equal("Opened nested archive  ·  FiveFury", bridge.Status);
+        Assert.Equal("Opened nested archive", bridge.Status);
     });
 
     [AvaloniaFact]
@@ -354,7 +354,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(3, bridge.VisibleCount);
         Assert.Equal(3, bridge.TreeModel.Count);
         Assert.Equal(-1, bridge.SelectedIndex);
-        Assert.Equal("Loaded GTA V Legacy  ·  FiveFury", bridge.Status);
+        Assert.Equal("Loaded GTA V Legacy", bridge.Status);
 
         bridge.SelectEntry(0);
         Assert.Equal(0, bridge.SelectedIndex);
