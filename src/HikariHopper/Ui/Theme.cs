@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 
@@ -17,10 +18,13 @@ public static class Theme
     // Every grey below is derived from the navy's hue; none of them is neutral.
 
     // Surfaces, darkest to lightest.
+    public static IImmutableSolidColorBrush WindowBg { get; } = Hex("#17182A");      // the base the panels float on
     public static IImmutableSolidColorBrush WindowChrome { get; } = Hex("#1B1C2C");  // hard seams and sunken wells
     public static IImmutableSolidColorBrush AppBg { get; } = Hex("#1E1F30");         // the list canvas
     public static IImmutableSolidColorBrush PanelBg { get; } = Hex("#1E1F30");
     public static IImmutableSolidColorBrush TabActive { get; } = Hex("#1E1F30");     // active tab merges into the canvas
+    public static IImmutableSolidColorBrush TabStripBg { get; } = Hex("#1F2033");    // the strip the tabs hang from
+    public static IImmutableSolidColorBrush ListHeaderBg { get; } = Hex("#24253A");  // column titles over the list canvas
     public static IImmutableSolidColorBrush ChromeBg { get; } = Hex("#2C2D43");      // menu, toolbars, headers, status
     public static IImmutableSolidColorBrush SidebarBg { get; } = Hex("#2C2D43");
     public static IImmutableSolidColorBrush NavigationBg { get; } = Hex("#2C2D43");
@@ -59,6 +63,7 @@ public static class Theme
     public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.58);
     public static IImmutableSolidColorBrush SelectionWash { get; } = Rgba(0.819, 0.941, 0.667, 0.13);  // unfocused pane
     public static IImmutableSolidColorBrush SelectionRing { get; } = Rgba(0.819, 0.941, 0.667, 0.55);
+    public static IImmutableSolidColorBrush SelectionHalo { get; } = Rgba(0.819, 0.941, 0.667, 0.16);  // the status lamp's halo
 
     // Neutral marquee: it is the selection instrument, not selected state.
     // Green appears only on rows that the marquee has actually included.
@@ -90,15 +95,41 @@ public static class Theme
     public static FontFamily UiFont { get; } = new("avares://HikariHopper/Assets/Fonts#Archivo");
     public static FontFamily MonoFont { get; } = new("avares://HikariHopper/Assets/Fonts#Space Mono");
 
+    // Corner radii, largest to smallest. The window and its floating panels carry the largest;
+    // anything that sits inside a well steps down so the inner curve stays parallel to the outer.
+    public const double WindowRadius = 10;     // the mockup's window; Windows 11 rounds by 8
+    public const double PanelRadius = 9;       // the folder and entry panels
+    public const double TabRadius = 8;         // active tab top corners, its concave foot, menus
+    public const double ControlRadius = 7;     // fields, combo boxes, segmented groups
+    public const double ItemRadius = 6;        // rows, menu titles, tabs on hover, buttons
+    public const double InnerRadius = 5;       // a button inside a group or a field, menu highlights
+    public const double KeyCapRadius = 4;      // key caps, check boxes, scrollbar thumbs
+    public static readonly CornerRadius WindowCorner = new(WindowRadius);
+    public static readonly CornerRadius PanelCorner = new(PanelRadius);
+    public static readonly CornerRadius TabCorner = new(TabRadius);
+    public static readonly CornerRadius ControlCorner = new(ControlRadius);
+    public static readonly CornerRadius ItemCorner = new(ItemRadius);
+    public static readonly CornerRadius InnerCorner = new(InnerRadius);
+    public static readonly CornerRadius KeyCapCorner = new(KeyCapRadius);
+
     public const double WindowTitleHeight = 30;
+    public const double MainTitleHeight = 38;  // the explorer's title row, which carries the menus
+    public const double MainCaptionWidth = 46;
     public const double MenuHeight = 26;
     public const double MenuItemHeight = 25;
     public const double MenuSeparatorHeight = 9;
     public const double MenuMinimumWidth = 230;
-    public const double TabHeight = 28;
-    public const double NavigationHeight = 40;
+    public const double TabStripHeight = 36;
+    public const double TabHeight = 30;        // the active tab; it merges into the toolbar below
+    public const double IdleTabHeight = 26;
+    public const double NavigationHeight = 46;
+    public const double ToolbarControlHeight = 30;
+    public const double PanelGutter = 8;
     public const double HeaderHeight = 24;
+    public const double ListHeaderHeight = 30;
+    public const double ListInset = 6;         // rows sit this far inside the panel edge
     public const double StatusHeight = 24;
+    public const double ExplorerStatusHeight = 32;
     public const double StatusHintInset = 10;
     public const double SplitHandleHitWidth = 8;
     public const double GridCellWidth = 148;

@@ -8,8 +8,9 @@ namespace HikariHopper.Views.Controls;
 
 /// <summary>
 /// Compact content-width top-level menu title (port of <c>MenuBarButton.qml</c>): the label's
-/// width plus 12px on each side, <see cref="Theme.MenuHeight"/> tall. Bind <see cref="MenuOpen"/>
-/// to the popup's visibility so title and popup read as one connected object.
+/// width plus the horizontal padding (12px each side by default), <see cref="Theme.MenuHeight"/>
+/// tall, with a rounded highlight. Bind <see cref="MenuOpen"/> to the popup's visibility so the
+/// title stays lit while its menu is open.
 /// </summary>
 public class MenuBarButton : Button
 {
@@ -20,8 +21,6 @@ public class MenuBarButton : Button
         AvaloniaProperty.Register<MenuBarButton, bool>(nameof(MenuOpen));
 
     private Border? background;
-    private Border? bevel;
-    private Border? openSeam;
     private Border? focusRule;
     private TextBlock? label;
 
@@ -48,8 +47,6 @@ public class MenuBarButton : Button
     {
         base.OnApplyTemplate(e);
         background = e.NameScope.Find<Border>("PART_Background");
-        bevel = e.NameScope.Find<Border>("PART_Bevel");
-        openSeam = e.NameScope.Find<Border>("PART_OpenSeam");
         focusRule = e.NameScope.Find<Border>("PART_FocusRule");
         label = e.NameScope.Find<TextBlock>("PART_Text");
         Refresh();
@@ -73,16 +70,14 @@ public class MenuBarButton : Button
 
     private void Refresh()
     {
-        if (background is null || bevel is null || openSeam is null || focusRule is null || label is null)
+        if (background is null || focusRule is null || label is null)
             return;
         background.Background = MenuOpen
-            ? Ui.Theme.ChromeRaised
+            ? Ui.Theme.HoverChrome
             : IsPressed ? Ui.Theme.BorderSoft
             : IsPointerOver ? Ui.Theme.HoverChrome
             : Brushes.Transparent;
-        bevel.IsVisible = MenuOpen;
-        openSeam.IsVisible = MenuOpen;
         focusRule.IsVisible = IsFocused && !MenuOpen;
-        label.Foreground = MenuOpen || IsPointerOver || IsPressed || IsFocused ? Ui.Theme.Text : Ui.Theme.TextRow;
+        label.Foreground = Ui.Theme.Text;
     }
 }

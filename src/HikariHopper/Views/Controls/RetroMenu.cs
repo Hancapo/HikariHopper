@@ -54,8 +54,8 @@ public class RetroMenu : ContextMenu
 }
 
 /// <summary>
-/// The menu surface as Qt renders RetroMenu.qml's background: chromeRaised with hard left, right
-/// and bottom seams and a bevel along the inner left edge (the declared top seam is zero-width).
+/// The menu surface: chromeRaised with a 1px hard border on <see cref="Ui.Theme.TabRadius"/>
+/// corners, floating clear of the bar that opened it.
 /// </summary>
 public class RetroMenuFrame : Control
 {
@@ -75,17 +75,10 @@ public class RetroMenuFrame : Control
 
     public override void Render(DrawingContext context)
     {
-        double w = Bounds.Width;
-        double h = Bounds.Height;
-        double connection = ConnectionWidth;
-        context.FillRectangle(Ui.Theme.ChromeRaised, new Rect(0, 0, w, h));
-        context.FillRectangle(Ui.Theme.BorderHard, new Rect(0, 0, 1, h));
-        context.FillRectangle(Ui.Theme.BorderHard, new Rect(w - 1, 0, 1, h));
-        context.FillRectangle(Ui.Theme.BorderHard, new Rect(0, h - 1, w, 1));
-        context.FillRectangle(Ui.Theme.Bevel, new Rect(1, 1, 1, Math.Max(0, h - 2)));
-        // RetroMenu.qml declares a top seam and bevel from connectionWidth to the right edge, but
-        // gives them `x` plus `anchors.right` and no width, so Qt sizes both to zero and the menu
-        // has no top edge at all. Drawn the way Qt renders it; ConnectionWidth is kept for the API.
-        _ = connection;
+        var bounds = new Rect(Bounds.Size);
+        double radius = Ui.Theme.TabRadius;
+        context.DrawRectangle(Ui.Theme.ChromeRaised, new Pen(Ui.Theme.BorderHard, 1), bounds.Deflate(0.5), radius - 0.5, radius - 0.5);
+        // ConnectionWidth is kept for the API: the menu floats below its title instead of joining it.
+        _ = ConnectionWidth;
     }
 }

@@ -7,8 +7,8 @@
                       Width="470">
   <!-- Port of TextureUnsavedChangesDialog.qml: header, a 126px body with the file glyph and the
        question, and Cancel / Don't save / Save. -->
+  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
   <Panel>
-    <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" />
     <DockPanel>
       <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
         <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
@@ -37,5 +37,7 @@
         </StackPanel>
       </v:QtGrid>
     </DockPanel>
+    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
   </Panel>
+  </Border>
 </v:TextureModalDialog>

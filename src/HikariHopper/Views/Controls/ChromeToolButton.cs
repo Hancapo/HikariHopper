@@ -45,10 +45,26 @@ public class ChromeToolButton : Button
     public static readonly StyledProperty<bool> SunkenProperty =
         AvaloniaProperty.Register<ChromeToolButton, bool>(nameof(Sunken));
 
+    /// <summary>
+    /// The button is a segment inside a sunken group: selected (<see cref="Sunken"/>) it sits on a
+    /// raised fill with a dark inner top edge instead of sinking into the well.
+    /// </summary>
+    public static readonly StyledProperty<bool> InWellProperty =
+        AvaloniaProperty.Register<ChromeToolButton, bool>(nameof(InWell));
+
+    /// <summary>The icon's stroke in pixels (1.8 by default, lighter on the toolbar and tabs).</summary>
+    public static readonly StyledProperty<double> IconThicknessProperty =
+        AvaloniaProperty.Register<ChromeToolButton, double>(nameof(IconThickness), 1.8);
+
+    /// <summary>The icon's square size (16 by default).</summary>
+    public static readonly StyledProperty<double> IconSizeProperty =
+        AvaloniaProperty.Register<ChromeToolButton, double>(nameof(IconSize), 16);
+
     /// <summary>Draws a <see cref="ChromeIcon"/> of this kind instead of <see cref="Text"/>.</summary>
     public static readonly StyledProperty<string> IconKindProperty =
         AvaloniaProperty.Register<ChromeToolButton, string>(nameof(IconKind), "");
 
+    private static readonly IImmutableSolidColorBrush SegmentShadow = new ImmutableSolidColorBrush(Ui.Theme.RgbaColor(0, 0, 0, 0.35));
     private static readonly IImmutableSolidColorBrush PrimaryBevel = new ImmutableSolidColorBrush(Ui.Theme.RgbaColor(1, 1, 1, 0.4));
     private static readonly IImmutableSolidColorBrush ErrorHover = new ImmutableSolidColorBrush(Ui.Theme.Lighter(Ui.Theme.Error.Color, 1.11));
     private static readonly IImmutableSolidColorBrush ErrorDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Error.Color, 1.12));
@@ -102,6 +118,24 @@ public class ChromeToolButton : Button
         set => SetValue(SunkenProperty, value);
     }
 
+    public bool InWell
+    {
+        get => GetValue(InWellProperty);
+        set => SetValue(InWellProperty, value);
+    }
+
+    public double IconThickness
+    {
+        get => GetValue(IconThicknessProperty);
+        set => SetValue(IconThicknessProperty, value);
+    }
+
+    public double IconSize
+    {
+        get => GetValue(IconSizeProperty);
+        set => SetValue(IconSizeProperty, value);
+    }
+
     public string IconKind
     {
         get => GetValue(IconKindProperty);
@@ -153,7 +187,9 @@ public class ChromeToolButton : Button
             || change.Property == BorderedProperty || change.Property == PrimaryProperty
             || change.Property == DestructiveProperty || change.Property == RaisedProperty
             || change.Property == HoverFillProperty || change.Property == SunkenProperty
-            || change.Property == IconKindProperty)
+            || change.Property == IconKindProperty || change.Property == InWellProperty
+            || change.Property == IconSizeProperty || change.Property == CornerRadiusProperty
+            || change.Property == IconThicknessProperty)
             Refresh();
     }
 
@@ -173,16 +209,22 @@ public class ChromeToolButton : Button
         background.Background = !IsEffectivelyEnabled
             ? (framed ? Ui.Theme.ChromeRaised : Brushes.Transparent)
             : Sunken
-                ? Ui.Theme.InsetBg
+                ? (InWell ? Ui.Theme.ChromeRaised : Ui.Theme.InsetBg)
                 : !HoverFill
                     ? FillBase
                     : IsPressed
                         ? FillDown
                         : IsPointerOver ? FillHover : FillBase;
         background.BorderThickness = new Thickness(framed ? 1 : 0);
-        bevel.IsVisible = framed && !Sunken && !IsPressed;
-        bevel.Background = (Primary || Destructive) && IsEffectivelyEnabled ? PrimaryBevel : Ui.Theme.Bevel;
+        bool segmentEdge = InWell && Sunken && IsEffectivelyEnabled;
+        bevel.IsVisible = segmentEdge || framed && !Sunken && !IsPressed;
+        bevel.Background = segmentEdge ? SegmentShadow
+            : (Primary || Destructive) && IsEffectivelyEnabled ? PrimaryBevel : Ui.Theme.Bevel;
+        // The 1px top edge stops where the corners start to curve.
+        bevel.Margin = new Thickness(Math.Max(1, CornerRadius.TopLeft), segmentEdge ? 0 : 1, Math.Max(1, CornerRadius.TopRight), 0);
         IBrush ink = CurrentForeground;
+        icon.Width = icon.Height = IconSize;
+        icon.Thickness = IconThickness;
         icon.IsVisible = IconKind.Length > 0;
         icon.Stroke = ink;
         label.IsVisible = IconKind.Length == 0;

@@ -10,7 +10,7 @@ namespace HikariHopper.Views.Controls;
 
 /// <summary>
 /// The shared vertical scrollbar (port of <c>QuietScrollBar.qml</c>): a fixed 12px gutter with a
-/// 4px idle thumb that widens to 8px while hovered or pressed. It is always on, like Qt's
+/// rounded 4px idle thumb that widens to 8px while hovered or pressed. It is always on, like Qt's
 /// <c>ScrollBar.AlwaysOn</c>, and draws nothing while the content fits.
 /// </summary>
 /// <remarks>
@@ -104,14 +104,10 @@ public class QuietScrollBar : ScrollBar
     {
         if (!Scrollable)
             return;
-        var bounds = new Rect(Bounds.Size);
-        if (IsPointerOver || pressed)
-        {
-            context.FillRectangle(Ui.Theme.InsetBg, bounds);
-            context.FillRectangle(Ui.Theme.BorderHard, new Rect(0, 0, 1, bounds.Height));
-        }
-        IBrush thumb = pressed ? Ui.Theme.TextRow : IsPointerOver ? Ui.Theme.TextDim : Ui.Theme.Guide;
-        context.FillRectangle(thumb, ThumbRect);
+        IBrush thumb = pressed ? Ui.Theme.TextRow : IsPointerOver ? Ui.Theme.TextDim : Ui.Theme.Border;
+        Rect rect = ThumbRect;
+        double radius = rect.Width / 2;
+        context.DrawRectangle(thumb, null, rect, radius, radius);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)

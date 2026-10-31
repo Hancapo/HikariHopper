@@ -6,11 +6,12 @@
        the QML binding expressions part by part. -->
   <ControlTheme x:Key="{x:Type c:ChromeToolButton}" TargetType="c:ChromeToolButton">
     <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ItemCorner}" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
-          <Border Name="PART_Background" BorderBrush="{x:Static ui:Theme.BorderHard}" />
+          <Border Name="PART_Background" BorderBrush="{x:Static ui:Theme.BorderHard}" CornerRadius="{TemplateBinding CornerRadius}" />
           <Border Name="PART_Bevel" Height="1" Margin="1,1,1,0" VerticalAlignment="Top" />
           <c:ChromeIcon Name="PART_Icon" Kind="{TemplateBinding IconKind}"
                         HorizontalAlignment="Center" VerticalAlignment="Center" />

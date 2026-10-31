@@ -16,8 +16,8 @@
     </Setter>
   </ControlTheme>
 
-  <!-- Port of FlatTextField.qml: a sunken well in Space Mono 11 with an optional leading icon
-       and a key cap rendered inside the field. States are computed in FlatTextField.cs. -->
+  <!-- Port of FlatTextField.qml: a rounded sunken well in Space Mono 11 with an optional leading
+       icon and a key cap rendered inside the field. States are computed in FlatTextField.cs. -->
   <ControlTheme x:Key="{x:Type c:FlatTextField}" TargetType="c:FlatTextField">
     <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
     <Setter Property="CaretBrush" Value="{x:Static ui:Theme.Text}" />
@@ -30,20 +30,15 @@
     <Setter Property="Cursor" Value="Ibeam" />
     <Setter Property="AcceptsReturn" Value="False" />
     <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
           <Border Name="PART_Background" BorderThickness="1" />
           <c:ChromeIcon Name="PART_LeadingIcon" Kind="{TemplateBinding LeadingIcon}" Stroke="{TemplateBinding LeadingColor}"
-                        Width="13" Height="13" Margin="8,0,0,0"
+                        Thickness="1.5" Width="14" Height="14" Margin="10,0,0,0"
                         HorizontalAlignment="Left" VerticalAlignment="Center" />
-          <Border Name="PART_KeyCap" Height="16" Margin="0,0,4,0" Padding="4,0"
-                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                  Background="{x:Static ui:Theme.ChromeRaised}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1">
-            <TextBlock Text="{TemplateBinding KeyCap}" Foreground="{x:Static ui:Theme.TextDim}"
-                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="10"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Border>
+          <c:KeyCap Name="PART_KeyCap" Margin="0,0,5,0" HorizontalAlignment="Right" Text="{TemplateBinding KeyCap}" />
           <ScrollViewer Name="PART_ScrollViewer" Theme="{StaticResource BareScrollViewer}" Margin="{TemplateBinding Padding}">
             <Panel>
               <TextBlock Name="PART_Placeholder" Text="{TemplateBinding PlaceholderText}"

@@ -8,7 +8,8 @@ namespace HikariHopper.Views.Controls;
 /// <summary>
 /// The 1px panel divider (port of <c>SplitViewHandle.qml</c>): <c>border</c> at rest, <c>textDim</c>
 /// hovered, <c>textRow</c> while dragged, with a <see cref="Theme.SplitHandleHitWidth"/> hit area
-/// centred on the line.
+/// centred on the line. Between floating panels the gutter already separates them, so the line
+/// can stay hidden until the handle is hovered (<see cref="ShowsLineAtRest"/>).
 /// </summary>
 /// <remarks>
 /// Put it in a 1px-wide <c>Auto</c> grid column between the panels. Its default width and margins
@@ -17,11 +18,20 @@ namespace HikariHopper.Views.Controls;
 /// </remarks>
 public class SplitViewHandle : GridSplitter
 {
+    public static readonly StyledProperty<bool> ShowsLineAtRestProperty =
+        AvaloniaProperty.Register<SplitViewHandle, bool>(nameof(ShowsLineAtRest), true);
+
     private Border? line;
     private bool dragging;
 
     /// <summary>Qt <c>SplitHandle.pressed</c>.</summary>
     public bool Pressed => dragging;
+
+    public bool ShowsLineAtRest
+    {
+        get => GetValue(ShowsLineAtRestProperty);
+        set => SetValue(ShowsLineAtRestProperty, value);
+    }
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
     {
@@ -33,7 +43,7 @@ public class SplitViewHandle : GridSplitter
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == IsPointerOverProperty)
+        if (change.Property == IsPointerOverProperty || change.Property == ShowsLineAtRestProperty)
             Refresh();
     }
 
@@ -65,6 +75,8 @@ public class SplitViewHandle : GridSplitter
     {
         if (line is null)
             return;
-        line.Background = dragging ? Ui.Theme.TextRow : IsPointerOver ? Ui.Theme.TextDim : Ui.Theme.Border;
+        line.Background = dragging ? Ui.Theme.TextRow
+            : IsPointerOver ? Ui.Theme.TextDim
+            : ShowsLineAtRest ? Ui.Theme.Border : null;
     }
 }
