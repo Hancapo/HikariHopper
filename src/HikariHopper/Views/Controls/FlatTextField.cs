@@ -12,8 +12,8 @@ using Avalonia.Threading;
 namespace HikariHopper.Views.Controls;
 
 /// <summary>
-/// Every text input (port of <c>FlatTextField.qml</c>): a sunken well that lightens on hover and
-/// takes an accent border while focused, an error border when <see cref="Invalid"/>.
+/// Every text input (port of <c>FlatTextField.qml</c>): a rounded sunken well that lightens on
+/// hover and takes an accent border while focused, an error border when <see cref="Invalid"/>.
 /// </summary>
 /// <remarks>
 /// <see cref="TextBox.PlaceholderText"/> is QML <c>placeholderText</c>. <see cref="EditingFinished"/>
@@ -129,7 +129,8 @@ public class FlatTextField : TextBox
         }
         if (change.Property == IsPointerOverProperty || change.Property == IsKeyboardFocusWithinProperty
             || change.Property == InvalidProperty || change.Property == LeadingIconProperty
-            || change.Property == KeyCapProperty || change.Property == TextProperty)
+            || change.Property == KeyCapProperty || change.Property == TextProperty
+            || change.Property == CornerRadiusProperty || change.Property == BoundsProperty)
             Refresh();
     }
 
@@ -159,15 +160,19 @@ public class FlatTextField : TextBox
         RaiseEvent(new RoutedEventArgs(EditingFinishedEvent));
     }
 
-    /// <summary>leftPadding 10 (28 with a leading icon), rightPadding 10 (40 with a key cap), no vertical padding.</summary>
+    /// <summary>leftPadding 10 (32 with a leading icon), rightPadding 10 (40 with a key cap), no vertical padding.</summary>
     private void UpdatePadding() =>
-        Padding = new Thickness(LeadingIcon.Length == 0 ? 10 : 28, 0, KeyCap.Length == 0 ? 10 : 40, 0);
+        Padding = new Thickness(LeadingIcon.Length == 0 ? 10 : 32, 0, KeyCap.Length == 0 ? 10 : 40, 0);
 
     private void Refresh()
     {
         if (background is null)
             return;
         bool focused = IsKeyboardFocusWithin;
+        // A short field (the texture tools' number boxes) keeps a quarter of its height as its
+        // radius, so it never turns into a pill.
+        double radius = Math.Min(CornerRadius.TopLeft, Math.Floor(Bounds.Height / 4));
+        background.CornerRadius = new CornerRadius(Math.Max(0, radius));
         background.Background = IsPointerOver && !focused ? HoverWell : Ui.Theme.InsetBg;
         background.BorderBrush = Invalid
             ? Ui.Theme.Error

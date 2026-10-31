@@ -6,7 +6,7 @@ using Avalonia.Media;
 namespace HikariHopper.Views.Controls;
 
 /// <summary>
-/// Application-drawn 1px title-bar marks: minimize, maximize, restore and close
+/// Application-drawn 1px title-bar marks (the maximize and restore squares rounded like the window): minimize, maximize, restore and close
 /// (port of <c>WindowControlGlyph.qml</c>). The 18x18 mark is centred in the control and steps
 /// down by 1px while <see cref="Pressed"/>.
 /// </summary>
@@ -60,17 +60,17 @@ public class WindowControlGlyph : Control
             switch (Kind)
             {
                 case "minimize":
-                    context.FillRectangle(ink, new Rect(4, 11, 10, 1));
+                    // Centred on the same line as the other marks.
+                    context.FillRectangle(ink, new Rect(4, 8, 10, 1));
                     break;
                 case "maximize":
-                    Outline(context, new Rect(4, 4, 10, 10), null, ink);
+                    // The rounded square that matches the window's own corners.
+                    context.DrawRectangle(null, new Pen(ink, 1), new Rect(4.5, 4.5, 9, 9), 2, 2);
                     break;
                 case "restore":
-                    context.FillRectangle(ink, new Rect(6, 4, 9, 1));
-                    context.FillRectangle(ink, new Rect(14, 4, 1, 9));
-                    context.FillRectangle(ink, new Rect(6, 4, 1, 3));
-                    context.FillRectangle(ink, new Rect(12, 12, 3, 1));
-                    Outline(context, new Rect(3, 6, 10, 9), Ui.Theme.ChromeRaised, ink);
+                    context.DrawGeometry(null, new Pen(ink, 1), StreamGeometry.Parse(
+                        "M5.5,6.5 L5.5,6 A1.5,1.5 0 0 1 7,4.5 L12,4.5 A1.5,1.5 0 0 1 13.5,6 L13.5,11 A1.5,1.5 0 0 1 12,12.5 L11.5,12.5"));
+                    context.DrawRectangle(null, new Pen(ink, 1), new Rect(3.5, 6.5, 8, 8), 2, 2);
                     break;
                 case "close":
                     Bar(context, ink, 45);
@@ -78,17 +78,6 @@ public class WindowControlGlyph : Control
                     break;
             }
         }
-    }
-
-    /// <summary>A QML Rectangle with a 1px border: fill, then the border inside the bounds.</summary>
-    private static void Outline(DrawingContext context, Rect rect, IBrush? fill, IBrush ink)
-    {
-        if (fill is not null)
-            context.FillRectangle(fill, rect);
-        context.FillRectangle(ink, new Rect(rect.X, rect.Y, rect.Width, 1));
-        context.FillRectangle(ink, new Rect(rect.X, rect.Bottom - 1, rect.Width, 1));
-        context.FillRectangle(ink, new Rect(rect.X, rect.Y + 1, 1, rect.Height - 2));
-        context.FillRectangle(ink, new Rect(rect.Right - 1, rect.Y + 1, 1, rect.Height - 2));
     }
 
     /// <summary>

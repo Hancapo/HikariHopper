@@ -6,9 +6,8 @@
              Width="480">
   <!-- Port of ExplorerCreateDialog.qml: a modal Qt Quick Dialog (header, content, footer) that
        names a new folder, texture dictionary or RPF. Hosted in a ModalOverlay. -->
+  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
   <Panel>
-    <!-- background: chromeBg with a hard 1px border; the header and footer cover its ends. -->
-    <Border Background="{x:Static ui:Theme.ChromeBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" />
     <DockPanel>
       <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
         <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
@@ -45,5 +44,7 @@
         <Panel c:QtColumnLayout.FillHeight="True" />
       </c:QtColumnLayout>
     </DockPanel>
+    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
   </Panel>
+  </Border>
 </UserControl>

@@ -2,21 +2,20 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
-  <!-- Port of MenuBarButton.qml: a compact content-width top-level menu title. While its popup
-       is open it keeps the chromeRaised surface and opens its bottom seam. -->
+  <!-- Port of MenuBarButton.qml: a compact content-width top-level menu title with a rounded
+       highlight while hovered or while its menu is open. -->
   <ControlTheme x:Key="{x:Type c:MenuBarButton}" TargetType="c:MenuBarButton">
     <Setter Property="Padding" Value="12,0" />
+    <Setter Property="FontSize" Value="{x:Static ui:Theme.FontSize}" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
-          <Border Name="PART_Background" />
-          <Border Name="PART_Bevel" Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
-          <Border Name="PART_OpenSeam" Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.ChromeRaised}" />
+          <Border Name="PART_Background" CornerRadius="{x:Static ui:Theme.ItemCorner}" />
           <Border Name="PART_FocusRule" Width="12" Height="1" Margin="0,0,0,2"
                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.TextRow}" />
           <TextBlock Name="PART_Text" Text="{TemplateBinding Text}" Margin="{TemplateBinding Padding}"
-                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{TemplateBinding FontSize}"
                      HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
         </Panel>
       </ControlTemplate>

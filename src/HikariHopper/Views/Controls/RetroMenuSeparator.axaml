@@ -3,7 +3,7 @@
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
   <!-- Port of RetroMenuSeparator.qml: menuSeparatorHeight tall, inset 11px each side, a hard
-       seam at y 3 over a bevel at y 4. -->
+       seam at y 4. -->
   <ControlTheme x:Key="{x:Type c:RetroMenuSeparator}" TargetType="c:RetroMenuSeparator">
     <Setter Property="Height" Value="{x:Static ui:Theme.MenuSeparatorHeight}" />
     <Setter Property="MinWidth" Value="{x:Static ui:Theme.MenuMinimumWidth}" />
@@ -12,8 +12,7 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Panel Margin="11,0">
-          <Border Height="1" Margin="0,3,0,0" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
-          <Border Height="1" Margin="0,4,0,0" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+          <Border Height="1" Margin="0,4,0,0" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
         </Panel>
       </ControlTemplate>
     </Setter>

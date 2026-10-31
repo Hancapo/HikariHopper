@@ -2,8 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
-  <!-- Port of SquareCheckBox.qml: a 16px sunken square with an 8px accent fill when checked,
-       on the Qt Basic CheckBox geometry (6px padding, 8px spacing). -->
+  <!-- Port of SquareCheckBox.qml: a 16px sunken square (4px corners) with an 8px accent fill when
+       checked, on the Qt Basic CheckBox geometry (6px padding, 8px spacing). -->
   <ControlTheme x:Key="{x:Type c:SquareCheckBox}" TargetType="c:SquareCheckBox">
     <Setter Property="Padding" Value="6" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
@@ -14,8 +14,8 @@
         <Panel Background="Transparent">
           <Panel Margin="{TemplateBinding Padding}">
             <Border Name="PART_Indicator" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center"
-                    Background="{x:Static ui:Theme.InsetBg}" BorderThickness="1">
-              <Border Name="PART_Check" Margin="3" Background="{x:Static ui:Theme.Accent}" />
+                    Background="{x:Static ui:Theme.InsetBg}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.KeyCapCorner}">
+              <Border Name="PART_Check" Margin="3" CornerRadius="2" Background="{x:Static ui:Theme.Accent}" />
             </Border>
             <TextBlock Name="PART_Text" Text="{TemplateBinding Text}" Margin="24,0,0,0"
                        FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"

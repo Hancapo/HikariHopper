@@ -3,7 +3,7 @@
                     xmlns:c="using:HikariHopper.Views.Controls"
                     xmlns:ui="using:HikariHopper.Ui">
   <!-- Port of FlatComboBox.qml. The popup sits directly under the well, as wide as it, at most
-       280px tall with 4px padding, framed like RetroMenu (hard border plus an inner bevel ring). -->
+       280px tall with 4px padding, framed like RetroMenu (a hard border on rounded corners). -->
   <ControlTheme x:Key="{x:Type c:FlatComboBox}" TargetType="c:FlatComboBox">
     <Setter Property="Height" Value="28" />
     <Setter Property="Padding" Value="0" />
@@ -19,7 +19,7 @@
     <Setter Property="Template">
       <ControlTemplate>
         <Panel>
-          <Border Name="PART_Background" BorderThickness="1" />
+          <Border Name="PART_Background" BorderThickness="1" CornerRadius="{x:Static ui:Theme.ControlCorner}" />
           <TextBlock Name="PART_Display" Margin="10,0,8,0"
                      FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -31,9 +31,9 @@
                  IsLightDismissEnabled="True"
                  InheritsTransform="True">
             <Border Name="PART_PopupFrame" MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                    Background="{x:Static ui:Theme.ChromeRaised}"
+                    Background="{x:Static ui:Theme.ChromeRaised}" CornerRadius="{x:Static ui:Theme.TabCorner}"
                     BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
-              <Border BorderBrush="{x:Static ui:Theme.Bevel}" BorderThickness="1" Padding="2">
+              <Border Padding="3">
                 <ScrollViewer Theme="{StaticResource BareScrollViewer}" VerticalScrollBarVisibility="Hidden"
                               HorizontalScrollBarVisibility="Disabled">
                   <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
@@ -52,7 +52,7 @@
     <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="Template">
       <ControlTemplate>
-        <Border Name="PART_Background">
+        <Border Name="PART_Background" CornerRadius="{x:Static ui:Theme.InnerCorner}">
           <DockPanel Margin="{TemplateBinding Padding}">
             <TextBlock Name="PART_Note" DockPanel.Dock="Right" Margin="8,0,0,0" Text="{TemplateBinding Note}"
                        Foreground="{x:Static ui:Theme.TextFaint}"
