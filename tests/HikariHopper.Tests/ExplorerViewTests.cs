@@ -508,8 +508,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.Equal(2, tabs.Length);
-        // Sized to the title: "New tab" is 7 mono characters plus 73px of glyph, gaps and close mark.
-        Assert.InRange(tabs[1].Bounds.Width, 110, 130);
+        Assert.Equal(220, tabs[1].Bounds.Width);
         Click(ui.Window, tabs[0].TranslatePoint(new Point(30, 12), ui.Window)!.Value);
         Assert.Equal(0, ui.Tabs.ActiveIndex);
         Click(ui.Window, tabs[1].TranslatePoint(new Point(tabs[1].Bounds.Width - 14, 12), ui.Window)!.Value);
@@ -569,15 +568,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         MenuRow menus = ui.Find<MenuRow>();
         Assert.Contains(menus, bar.GetVisualDescendants());
 
-        // The tab strip; the active tab rises 30px and meets the toolbar, the other sits 26px tall.
+        // The tab strip: 32px tabs edge to edge on its floor, the active one meeting the toolbar.
         TabStrip strip = ui.Find<TabStrip>();
         Assert.Equal((new Point(0, 38), 36.0), (At(strip), strip.Bounds.Height));
         TabStripTab[] tabs = window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.True(tabs[0].Active);
-        Assert.Equal((new Point(14, 44), 30.0), (At(tabs[0]), tabs[0].Bounds.Height));
-        Assert.Equal((71.0, 26.0), (At(tabs[1]).Y + tabs[1].Bounds.Height, tabs[1].Bounds.Height));
-        // The gap after the active tab leaves room for its curved foot.
-        Assert.Equal(At(tabs[0]).X + tabs[0].Bounds.Width + 10, At(tabs[1]).X);
+        Assert.Equal(new Rect(14, 42, 220, 32), new Rect(At(tabs[0]), tabs[0].Bounds.Size));
+        Assert.Equal(new Rect(234, 42, 220, 32), new Rect(At(tabs[1]), tabs[1].Bounds.Size));
 
         NavigationBar navigation = ui.Find<NavigationBar>();
         Assert.Equal((new Point(0, 74), 46.0), (At(navigation), navigation.Bounds.Height));
@@ -600,6 +597,14 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 1000, 50));
         Assert.Equal(HikariHopper.Ui.Theme.ChromeBg.Color, Pixel(frame, 13, 73));        // the active tab's foot
         Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 7, 67));       // outside its curve
+        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 300, 50));     // a bare inactive tab
+
+        // Hovering an inactive tab raises the same shape a shade lighter.
+        window.MouseMove(new Point(300, 58));
+        Pump();
+        using var hovered = window.CaptureRenderedFrame()!;
+        Assert.Equal(HikariHopper.Ui.Theme.TabBg.Color, Pixel(hovered, 300, 50));
+        Assert.Equal(HikariHopper.Ui.Theme.TabBg.Color, Pixel(hovered, 456, 73));       // its foot, past its edge
     }
 
     [AvaloniaFact]

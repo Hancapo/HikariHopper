@@ -115,25 +115,24 @@ public partial class TabStrip : UserControl
 }
 
 /// <summary>
-/// One tab of <see cref="TabStrip"/> (the QML delegate), sized to its title (<c>title + 73</c>,
-/// between 110 and 220): a 15px glyph, the mono title and a 20px close mark; clicking anywhere
-/// left of the close mark activates the tab.
+/// One tab of <see cref="TabStrip"/> (the QML delegate), <see cref="Ui.Theme.TabWidth"/> wide: a
+/// 15px glyph, the mono title (elided) and a 20px close mark pinned to the right; clicking
+/// anywhere left of the close mark activates the tab.
 /// </summary>
 /// <remarks>
-/// The active tab is 30px tall with 8px top corners and flares into the toolbar below with
-/// concave 8px curves on both sides of its foot, so it is spaced 10px from its neighbours. The
-/// others are flat and 26px tall, rounded only when hovered, with a 1px divider between two
-/// adjacent ones.
+/// Every tab has the same shape, the way a browser draws them: <see cref="Ui.Theme.TabHeight"/>
+/// tall on the strip's floor with 8px top corners and a foot that curves out 8px into the toolbar
+/// on both sides. The active tab fills it with the toolbar's colour and sits on top; a hovered
+/// tab fills it a shade lighter beneath the active one; the rest are bare, with a 1px divider
+/// between two of them.
 /// </remarks>
 public sealed class TabStripTab : Decorator
 {
     public static readonly StyledProperty<ExplorerViewModel?> TabProperty =
         AvaloniaProperty.Register<TabStripTab, ExplorerViewModel?>(nameof(Tab));
 
-    /// <summary>The active tab's foot curves out this far on each side.</summary>
+    /// <summary>A filled tab's foot curves out this far on each side.</summary>
     public const double FootRadius = Ui.Theme.TabRadius;
-
-    private const double FootGap = FootRadius + 2;
 
     private readonly FileGlyph glyph = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock title = new()
@@ -203,11 +202,9 @@ public sealed class TabStripTab : Decorator
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        title.Measure(Size.Infinity);
-        double width = Math.Max(110, Math.Min(220, Math.Ceiling(title.DesiredSize.Width) + 73));
-        double height = Active ? Ui.Theme.TabHeight : Ui.Theme.IdleTabHeight;
-        base.MeasureOverride(new Size(width, height));
-        return new Size(width, height);
+        var size = new Size(Ui.Theme.TabWidth, Ui.Theme.TabHeight);
+        base.MeasureOverride(size);
+        return size;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -246,10 +243,10 @@ public sealed class TabStripTab : Decorator
         TabStrip? strip = Strip;
         int index = Tab is null || strip is null ? -1 : strip.IndexOf(Tab);
         TabStripTab? previous = strip?.TabAt(index - 1);
-        Margin = active
-            ? new Thickness(index > 0 ? FootGap : 0, 0, FootGap, 0)
-            : new Thickness(0, 0, 0, 3);
         divider = !active && !hovered && previous is { Active: false, IsPointerOver: false };
+        // The active tab's feet overlap its neighbours, a hovered tab's feet overlap bare ones.
+        if (Parent is Control host)
+            host.ZIndex = active ? 2 : hovered ? 1 : 0;
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
         title.Text = text;
         title.Foreground = active || hovered ? Ui.Theme.Text : Ui.Theme.TextDim;
@@ -267,22 +264,20 @@ public sealed class TabStripTab : Decorator
     {
         double w = Bounds.Width;
         double h = Bounds.Height;
-        if (Active)
+        if (Active || IsPointerOver)
         {
-            context.DrawGeometry(Ui.Theme.ChromeBg, null, ActiveShape(w, h));
+            context.DrawGeometry(Active ? Ui.Theme.ChromeBg : Ui.Theme.TabBg, null, TabShape(w, h));
             return;
         }
-        if (IsPointerOver)
-            context.DrawRectangle(Ui.Theme.TabBg, null, new Rect(0, 0, w, h), Ui.Theme.ItemRadius, Ui.Theme.ItemRadius);
         if (divider)
-            context.FillRectangle(Ui.Theme.BorderSoft, new Rect(-1, 6, 1, Math.Max(0, h - 12)));
+            context.FillRectangle(Ui.Theme.BorderSoft, new Rect(-1, Math.Floor(h / 2) - 8, 1, 16));
     }
 
     /// <summary>
-    /// The active tab's outline: rounded top corners and a foot that curves out into the toolbar
-    /// on both sides, extending <see cref="FootRadius"/> beyond the tab's bounds.
+    /// A filled tab's outline: rounded top corners and a foot that curves out into the toolbar on
+    /// both sides, extending <see cref="FootRadius"/> beyond the tab's bounds.
     /// </summary>
-    internal static Geometry ActiveShape(double w, double h)
+    internal static Geometry TabShape(double w, double h)
     {
         double r = FootRadius;
         var geometry = new StreamGeometry();
