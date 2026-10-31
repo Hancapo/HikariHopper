@@ -14,9 +14,14 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class ExplorerViewTests : ExplorerTestBase
 {
-    // Title bar 30 + menu 26 + tabs 28 + navigation 40 + header 24.
-    private const double FirstRowTop = 148;
-    private const double TableLeft = 248;
+    // Title row 38 (with the menus) + tabs 36 + navigation 46 + gutter 8 + header 30 + list inset 4.
+    private const double FirstRowTop = 162;
+    // The entries panel: gutter 8 + folders 238 + gutter 8. Rows start 6px further in.
+    private const double TableLeft = 254;
+    // The grid has no list inset under its header.
+    private const double GridTop = 158;
+    // The folder tree's first row: below the gutter and the panel's 6px inset.
+    private const double TreeTop = 134;
 
     private sealed record Explorer(MainWindow Window, ExplorerSession Session)
     {
@@ -84,12 +89,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         EntryTable table = ui.Find<EntryTable>();
         double width = table.Bounds.Width;
 
-        Assert.Equal(Math.Max(300, Math.Min(500, Math.Floor(width * 0.46 + 0.5))), table.NameWidth);
-        Assert.Equal(table.NameWidth + 190 + 124, table.DataBlockWidth);
+        // Rows span the panel 6px in from each side; NAME takes what TYPE, SIZE, the scrollbar lane
+        // and the row's own padding leave.
+        Assert.Equal(width - 12, table.DataBlockWidth);
+        Assert.Equal(width - 12 - 10 - 200 - 120 - 14 - 6, table.NameWidth);
         EntryRow row = table.GetVisualDescendants().OfType<EntryRow>().First();
         Assert.Equal(26, row.Bounds.Height);
-        Assert.Equal(Math.Min(table.DataBlockWidth, table.Bounds.Width - 12), row.Bounds.Width);
-        Assert.Equal(247, ui.Find<FolderPanel>().Bounds.Width);
+        Assert.Equal(width - 12, row.Bounds.Width);
+        Assert.Equal(new Point(TableLeft + 6, FirstRowTop), row.TranslatePoint(default, ui.Window));
+        Assert.Equal(238, ui.Find<FolderPanel>().Bounds.Width);
+        Assert.Equal(1360 - 8 - TableLeft, table.Bounds.Width);
     }
 
     [AvaloniaFact]
@@ -135,12 +144,12 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.True(folder.HasChildren);
         Assert.False(folder.Expanded);
         FolderRow row = ui.Window.GetVisualDescendants().OfType<FolderRow>().First(candidate => candidate.Item == folder);
-        // The [+] box sits in the 16px toggle cell at 7 + depth × 15.
-        Point toggle = row.TranslatePoint(new Point(7 + folder.Depth * 15 + 7, row.Bounds.Height / 2), ui.Window)!.Value;
+        // The chevron sits in the 16px toggle cell at 4 + depth × 16.
+        Point toggle = row.TranslatePoint(new Point(4 + folder.Depth * 16 + 8, row.Bounds.Height / 2), ui.Window)!.Value;
         Click(ui.Window, toggle);
         Assert.True(ui.Bridge.TreeModel.First(item => item.Label == "folder00").Expanded);
         Assert.Contains(ui.Bridge.TreeModel, item => item.Label == "child");
-        // A quick second click on the [−] collapses it again; the toggle has no double-click.
+        // A quick second click on the chevron collapses it again; the toggle has no double-click.
         Click(ui.Window, toggle);
         Assert.False(ui.Bridge.TreeModel.First(item => item.Label == "folder00").Expanded);
         Assert.DoesNotContain(ui.Bridge.TreeModel, item => item.Label == "child");
@@ -184,29 +193,35 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     [AvaloniaFact]
     public void BackgroundClickClearsAndDragDrawsAMarquee()
     {
+        // Ten files, the game executable and two folders: thirteen rows; the panel below them is background.
         Explorer ui = OpenExplorer(files: 10);
         EntryTable table = ui.Find<EntryTable>();
         ui.Bridge.SelectEntry(0);
-        double background = TableLeft + table.DataBlockWidth + 20;
+        double background = Row(14).Y;
 
-        Click(ui.Window, new Point(background, Row(1).Y));
+        Click(ui.Window, new Point(500, background));
         Assert.Equal(0, ui.Bridge.SelectionCount);
 
-        // A drag that starts beside the rows selects the rows the band crosses.
-        ui.Window.MouseMove(new Point(background, Row(2).Y));
-        ui.Window.MouseDown(new Point(background, Row(2).Y), MouseButton.Left);
-        ui.Window.MouseMove(new Point(background - 3, Row(2).Y + 3), RawInputModifiers.LeftMouseButton);
+        // The panel's inset beside the rows is background too.
+        ui.Bridge.SelectEntry(0);
+        Click(ui.Window, new Point(TableLeft + 3, Row(1).Y));
+        Assert.Equal(0, ui.Bridge.SelectionCount);
+
+        // A drag that starts below the rows selects the rows the band crosses.
+        ui.Window.MouseMove(new Point(500, background));
+        ui.Window.MouseDown(new Point(500, background), MouseButton.Left);
+        ui.Window.MouseMove(new Point(503, background - 3), RawInputModifiers.LeftMouseButton);
         Pump();
         Assert.False(table.MarqueeActive);
-        ui.Window.MouseMove(new Point(500, Row(5).Y), RawInputModifiers.LeftMouseButton);
+        ui.Window.MouseMove(new Point(700, Row(8).Y), RawInputModifiers.LeftMouseButton);
         Pump();
         Assert.True(table.MarqueeActive);
         Assert.True(table.MarqueeVisual.IsVisible);
-        Assert.Equal(4, ui.Bridge.SelectionCount);
-        ui.Window.MouseUp(new Point(500, Row(5).Y), MouseButton.Left);
+        Assert.Equal(5, ui.Bridge.SelectionCount);
+        ui.Window.MouseUp(new Point(700, Row(8).Y), MouseButton.Left);
         Pump();
         Assert.False(table.MarqueeVisual.IsVisible);
-        Assert.Equal([2, 3, 4, 5], ui.Bridge.EntriesModel.Select((item, index) => (item, index)).Where(pair => pair.item.Selected).Select(pair => pair.index));
+        Assert.Equal([8, 9, 10, 11, 12], ui.Bridge.EntriesModel.Select((item, index) => (item, index)).Where(pair => pair.item.Selected).Select(pair => pair.index));
     }
 
     [AvaloniaFact]
@@ -249,14 +264,14 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     {
         Explorer ui = OpenExplorer(files: 3);
         EntryTable table = ui.Find<EntryTable>();
-        Point size = new(TableLeft + table.NameWidth + 190 + 60, 136);
+        Point size = new(TableLeft + 16 + table.NameWidth + 200 + 60, 143);
         Click(ui.Window, size);
         Assert.Equal("size", ui.Bridge.SortColumn);
         Assert.True(ui.Bridge.SortAscending);
         Click(ui.Window, size);
         Assert.False(ui.Bridge.SortAscending);
         Assert.Equal("file000.txt", ui.Bridge.EntriesModel[^1].Name);
-        Click(ui.Window, new Point(TableLeft + 40, 136));
+        Click(ui.Window, new Point(TableLeft + 40, 143));
         Assert.Equal("name", ui.Bridge.SortColumn);
     }
 
@@ -393,7 +408,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     {
         Explorer ui = OpenExplorer();
         // Tree rows: game root, folder00, folder01.
-        Click(ui.Window, new Point(120, FirstRowTop - 24 + 26 + 13));
+        Click(ui.Window, new Point(120, TreeTop + 26 + 13));
         Assert.Equal(1, ui.Bridge.TreeFocusIndex);
         Key(ui.Window, PhysicalKey.ArrowDown);
         Assert.Equal(2, ui.Bridge.TreeFocusIndex);
@@ -411,7 +426,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         int columns = grid.ColumnsVisible;
         Assert.Equal(Math.Max(1, (int)Math.Floor((grid.Bounds.Width - 12 - 20) / 148)), columns);
         // First cell: 10px content inset, the top margin scrolled away (contentY 0).
-        Click(ui.Window, new Point(TableLeft + 10 + 74, FirstRowTop + 56));
+        Click(ui.Window, new Point(TableLeft + 10 + 74, GridTop + 56));
         Assert.Equal(0, ui.Bridge.SelectedIndex);
         Key(ui.Window, PhysicalKey.ArrowRight);
         Assert.Equal(1, ui.Bridge.SelectedIndex);
@@ -429,15 +444,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         EntryGrid grid = ui.Find<EntryGrid>();
         double right = TableLeft + 10 + grid.ColumnsVisible * 148 + 4;
-        ui.Window.MouseMove(new Point(right, FirstRowTop + 40));
-        ui.Window.MouseDown(new Point(right, FirstRowTop + 40), MouseButton.Left);
-        ui.Window.MouseMove(new Point(TableLeft + 10 + 148 + 160, FirstRowTop + 120), RawInputModifiers.LeftMouseButton);
+        ui.Window.MouseMove(new Point(right, GridTop + 40));
+        ui.Window.MouseDown(new Point(right, GridTop + 40), MouseButton.Left);
+        ui.Window.MouseMove(new Point(TableLeft + 10 + 148 + 160, GridTop + 120), RawInputModifiers.LeftMouseButton);
         Pump();
         Assert.True(grid.MarqueeActive);
         var expected = GridMath.IndicesInRect(ui.Bridge.EntriesModel.Count, grid.ColumnsVisible, 148, 112, 10, 10,
             TableLeft + 10 + 148 + 160 - TableLeft - 10, right - TableLeft - 10, 40, 120);
         Assert.Equal(expected.Count, ui.Bridge.SelectionCount);
-        ui.Window.MouseUp(new Point(TableLeft + 300, FirstRowTop + 120), MouseButton.Left);
+        ui.Window.MouseUp(new Point(TableLeft + 300, GridTop + 120), MouseButton.Left);
     }
 
     [AvaloniaFact]
@@ -493,12 +508,175 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.Equal(2, tabs.Length);
-        Assert.Equal(150, tabs[1].Bounds.Width);
+        // Sized to the title: "New tab" is 7 mono characters plus 73px of glyph, gaps and close mark.
+        Assert.InRange(tabs[1].Bounds.Width, 110, 130);
         Click(ui.Window, tabs[0].TranslatePoint(new Point(30, 12), ui.Window)!.Value);
         Assert.Equal(0, ui.Tabs.ActiveIndex);
         Click(ui.Window, tabs[1].TranslatePoint(new Point(tabs[1].Bounds.Width - 14, 12), ui.Window)!.Value);
         Assert.Single(ui.Tabs.Tabs);
         Assert.Single(ui.Session.TextureWindows);
+    }
+
+    [AvaloniaFact]
+    public void FoldersShowTheirItemCountInTheSizeColumnAndNoType()
+    {
+        Explorer ui = OpenExplorer(files: 2, folders: 3);
+        Write(Path.Combine(Work, "folder00", "a.txt"), "a");
+        Write(Path.Combine(Work, "folder00", "b.txt"), "b");
+        Write(Path.Combine(Work, "folder01", "c.txt"), "c");
+        ui.Bridge.Refresh();
+        Pump();
+        EntryTable table = ui.Find<EntryTable>();
+        TextBlock[] Cells(string name) => table.GetVisualDescendants().OfType<EntryRow>()
+            .Single(row => row.Item?.Name == name).GetVisualChildren().OfType<TextBlock>().ToArray();
+
+        // Name, type and size only: the count no longer trails the name.
+        TextBlock[] full = Cells("folder00");
+        Assert.Equal(3, full.Length);
+        Assert.Equal(("", "2 items"), (full[1].Text, full[2].Text));
+        Assert.Equal(HikariHopper.Ui.Theme.TextFaint, full[2].Foreground);
+        Assert.Equal("1 item", Cells("folder01")[2].Text);
+        Assert.Equal(("", "Empty"), (Cells("folder02")[1].Text, Cells("folder02")[2].Text));
+
+        // Files are unchanged.
+        EntryItem file = ui.Bridge.EntriesModel.First(item => item.Name == "file001.txt");
+        TextBlock[] fileCells = Cells("file001.txt");
+        Assert.Equal((file.Kind, file.SizeLabel), (fileCells[1].Text, fileCells[2].Text));
+        Assert.Equal(HikariHopper.Ui.Theme.TextRow, fileCells[2].Foreground);
+
+        // The grid cell says the same.
+        ui.Bridge.SetViewMode("grid");
+        Pump();
+        EntryGridCell cell = ui.Window.GetVisualDescendants().OfType<EntryGridCell>().First(candidate => candidate.Item?.Name == "folder02");
+        Assert.Equal("Empty", cell.SizeText.Text);
+    }
+
+    [AvaloniaFact]
+    public void TheTitleRowCarriesTheMenusAndTheChromeHasTheRefreshedMetrics()
+    {
+        Explorer ui = OpenExplorer();
+        ui.Tabs.NewTab();
+        ui.Tabs.ActivateTab(0);
+        Pump(100);
+        Window window = ui.Window;
+        Point At(Visual visual) => visual.TranslatePoint(default, window)!.Value;
+
+        // One 38px title row: emblem, menus, empty draggable space and 46px caption buttons.
+        Views.Controls.WindowTitleBar bar = ui.Window.TitleBar;
+        Assert.Equal(38, bar.Bounds.Height);
+        Assert.False(bar.TitleLabel.IsVisible);
+        Assert.Equal(46, bar.CloseButton.Bounds.Width);
+        MenuRow menus = ui.Find<MenuRow>();
+        Assert.Contains(menus, bar.GetVisualDescendants());
+
+        // The tab strip; the active tab rises 30px and meets the toolbar, the other sits 26px tall.
+        TabStrip strip = ui.Find<TabStrip>();
+        Assert.Equal((new Point(0, 38), 36.0), (At(strip), strip.Bounds.Height));
+        TabStripTab[] tabs = window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
+        Assert.True(tabs[0].Active);
+        Assert.Equal((new Point(14, 44), 30.0), (At(tabs[0]), tabs[0].Bounds.Height));
+        Assert.Equal((71.0, 26.0), (At(tabs[1]).Y + tabs[1].Bounds.Height, tabs[1].Bounds.Height));
+        // The gap after the active tab leaves room for its curved foot.
+        Assert.Equal(At(tabs[0]).X + tabs[0].Bounds.Width + 10, At(tabs[1]).X);
+
+        NavigationBar navigation = ui.Find<NavigationBar>();
+        Assert.Equal((new Point(0, 74), 46.0), (At(navigation), navigation.Bounds.Height));
+
+        // Two panels floating on the base with 8px gutters, and the status bar under them.
+        WorkspaceView workspace = ui.Find<WorkspaceView>();
+        Assert.Equal(new Rect(8, 128, 238, 672), new Rect(At(workspace.FoldersFrame), workspace.FoldersFrame.Bounds.Size));
+        Assert.Equal(new Point(254, 128), At(workspace.EntriesFrame));
+        Assert.Equal(new CornerRadius(9), workspace.FoldersFrame.CornerRadius);
+        Assert.Equal(new CornerRadius(9), workspace.EntriesFrame.CornerRadius);
+        StatusBar status = ui.Find<StatusBar>();
+        Assert.Equal((new Point(0, 808), 32.0), (At(status), status.Bounds.Height));
+
+        using var frame = window.CaptureRenderedFrame()!;
+        Assert.Equal(HikariHopper.Ui.Theme.WindowBg.Color, Pixel(frame, 4, 400));        // left gutter
+        Assert.Equal(HikariHopper.Ui.Theme.WindowBg.Color, Pixel(frame, 250, 400));      // gutter between the panels
+        Assert.Equal(HikariHopper.Ui.Theme.SidebarBg.Color, Pixel(frame, 100, 700));     // tree panel
+        Assert.Equal(HikariHopper.Ui.Theme.PanelBg.Color, Pixel(frame, 700, 700));       // entries panel
+        Assert.NotEqual(HikariHopper.Ui.Theme.PanelBg.Color, Pixel(frame, 254, 128));    // its rounded corner
+        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 1000, 50));
+        Assert.Equal(HikariHopper.Ui.Theme.ChromeBg.Color, Pixel(frame, 13, 73));        // the active tab's foot
+        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 7, 67));       // outside its curve
+    }
+
+    [AvaloniaFact]
+    public void TheTitleRowStillMaximizesAndItsMenusOpenBelowIt()
+    {
+        Explorer ui = OpenExplorer();
+        var empty = new Point(700, 19);
+        ui.Window.MouseMove(empty);
+        for (int press = 0; press < 2; press++)
+        {
+            ui.Window.MouseDown(empty, MouseButton.Left);
+            ui.Window.MouseUp(empty, MouseButton.Left);
+        }
+        Pump();
+        Assert.Equal(WindowState.Maximized, ui.Window.WindowState);
+        ui.Window.WindowState = WindowState.Normal;
+        Pump(100);
+
+        MenuRow menus = ui.Find<MenuRow>();
+        Views.Controls.MenuBarButton file = menus.FileButton;
+        Point center = file.TranslatePoint(new Point(file.Bounds.Width / 2, file.Bounds.Height / 2), ui.Window)!.Value;
+        Click(ui.Window, center);
+        Views.Controls.RetroMenu menu = menus.MenuFor(file);
+        Assert.True(menu.IsOpen);
+        Assert.True(file.MenuOpen);
+        Assert.Equal(new Point(file.TranslatePoint(default, ui.Window)!.Value.X, 40), menu.TranslatePoint(default, ui.Window));
+        menu.Close();
+    }
+
+    [AvaloniaFact]
+    public void StatusBarShowsTheEditionLampAndOnlyTheKeysThatMove()
+    {
+        Explorer ui = OpenExplorer();
+        StatusBar status = ui.Find<StatusBar>();
+        Assert.Equal("GTA V Legacy", ui.Bridge.GameEdition);
+        Assert.True(status.Edition.IsVisible);
+        Assert.Equal("GTA V Legacy", status.EditionText.Text);
+        // The load confirmation only repeats the lamp.
+        Assert.Equal("Loaded GTA V Legacy", ui.Bridge.Status);
+        Assert.Equal("", status.VisibleStatus);
+        Assert.False(StatusBar.StatusWorthShowing("Loaded GTA V Legacy", "GTA V Legacy"));
+        Assert.True(StatusBar.StatusWorthShowing("Dragging one item as a copy", "GTA V Legacy"));
+        Assert.True(StatusBar.StatusWorthShowing("Opened sample.rpf", ""));
+        Assert.False(StatusBar.StatusWorthShowing("", ""));
+
+        string[] texts = status.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text ?? "").ToArray();
+        Assert.DoesNotContain(texts, text => text.Contains("FiveFury") || text.Contains("Ctrl+O") || text.Contains("F3"));
+        var caps = status.GetVisualDescendants().OfType<Views.Controls.KeyCap>().ToArray();
+        Assert.Equal(["Enter", ""], caps.Select(cap => cap.Text));
+        Assert.Equal("delete", caps[1].IconName);
+
+        // A standalone archive has no edition, so no lamp.
+        ui.Bridge.CloseArchive();
+        ui.Tabs.NewTab();
+        Pump();
+        Assert.Equal("", ui.Tabs.ActiveBridge.GameEdition);
+    }
+
+    [AvaloniaFact]
+    public void ThePaintedPipingStepsAsideForTheNativeBorder()
+    {
+        Explorer ui = OpenExplorer();
+        Views.Controls.WindowPiping piping = ui.Find<Views.Controls.WindowPiping>();
+        // Headless there is no DWM, so the square fallback piping is painted.
+        Assert.True(piping.IsVisible);
+        Views.Controls.WindowPiping.SetNativeBorder(ui.Window, true);
+        Assert.False(piping.IsVisible);
+    }
+
+    private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)
+    {
+        using Avalonia.Platform.ILockedFramebuffer buffer = frame.Lock();
+        var bytes = new byte[4];
+        System.Runtime.InteropServices.Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, bytes, 0, 4);
+        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
+            ? Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
+            : Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
     }
 
     private DataTransfer DroppedFile(TopLevel top, string name, bool fromExplorer = false)

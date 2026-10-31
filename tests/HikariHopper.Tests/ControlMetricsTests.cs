@@ -64,7 +64,8 @@ public sealed class ControlMetricsTests
 
         Assert.Equal(new Size(32, 28), ghost.Bounds.Size);
         Assert.Equal(T.ChromeBg.Color, Pixel(window, 3, 25));            // ghost: transparent at rest
-        Assert.Equal(T.BorderHard.Color, Pixel(window, 0, 40));          // 1px hard border
+        Assert.Equal(T.BorderHard.Color, Pixel(window, 16, 40));         // 1px hard border
+        Assert.NotEqual(T.BorderHard.Color, Pixel(window, 0, 40));       // rounded corner
         Assert.Equal(T.ChromeRaised.Color, Pixel(window, 3, 65));        // raised fill
         Assert.Equal(T.Selection.Color, Pixel(window, 4, 94));           // primary fill
         Assert.Equal(T.SelectionText, primary.CurrentForeground);
@@ -136,12 +137,13 @@ public sealed class ControlMetricsTests
 
         Assert.Equal(T.ScrollbarWidth, bar.Bounds.Width);
         Assert.Equal(new Rect(4, 0, 4, 28), bar.ThumbRect);              // 200/1560 of 200px < 28px minimum
-        Assert.Equal(T.Guide.Color, Pixel(window, 153, 10));
+        Assert.Equal(T.Border.Color, Pixel(window, 153, 10));
+        Assert.NotEqual(T.Border.Color, Pixel(window, 152, 0));          // rounded end
         window.MouseMove(new Point(154, 100));
         Pump();
         Assert.Equal(new Rect(2, 0, 8, 28), bar.ThumbRect);
-        Assert.Equal(T.InsetBg.Color, Pixel(window, 150, 150));          // gutter well while hovered
-        Assert.Equal(T.BorderHard.Color, Pixel(window, 148, 150));
+        Assert.Equal(T.TextDim.Color, Pixel(window, 151, 14));           // the widened thumb
+        Assert.Equal(T.AppBg.Color, Pixel(window, 150, 150));            // no gutter well
 
         // Qt: a press outside the thumb grabs it by its centre; releasing there scrolls.
         window.MouseDown(new Point(154, 150), MouseButton.Left);
@@ -159,6 +161,44 @@ public sealed class ControlMetricsTests
         fits.Close();
     });
 
+    [Fact]
+    public void Windows11RoundsTheFramelessWindowsCorners()
+    {
+        if (!OperatingSystem.IsWindows())
+            Assert.Skip("DWM is Windows-only.");
+        // A hidden native popup window, never shown on screen.
+        nint handle = CreateWindowExW(0, "STATIC", "HikariHopper corner probe", 0x80000000, 0, 0, 100, 100, 0, 0, 0, 0);
+        Assert.NotEqual(0, handle);
+        try
+        {
+            Assert.Equal(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000), QtFramelessWindow.RoundCorners(handle));
+        }
+        finally
+        {
+            DestroyWindow(handle);
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern nint CreateWindowExW(int exStyle, string className, string windowName, uint style,
+        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool DestroyWindow(nint handle);
+
+    [AvaloniaFact]
+    public void KeyCapIsARoundedRaisedKey() => UiThread.Run(() =>
+    {
+        var cap = (KeyCap)TopLeft(new KeyCap { Text = "F3" });
+        Window window = Show(cap, 60, 30, T.InsetBg);
+        Assert.Equal(18, cap.Bounds.Height);
+        Assert.Equal(T.KeyCapCorner, cap.CornerRadius);
+        Assert.Equal(T.Border.Color, Pixel(window, 0, 9));                // outer ring
+        Assert.Equal(T.BorderHard.Color, Pixel(window, (int)cap.Bounds.Width / 2, 16));  // dark lower edge
+        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded corner
+        window.Close();
+    });
+
     [AvaloniaFact]
     public void MenuBarButtonIsContentWidthPlusPadding() => UiThread.Run(() =>
     {
@@ -166,9 +206,11 @@ public sealed class ControlMetricsTests
         Window window = Show(file, 100, 40, T.ChromeBg);
         // Archivo 12 "File" on Qt's whole-pixel advances: 8 + 3 + 3 + 7 = 20, plus 12px each side.
         Assert.Equal(new Size(44, T.MenuHeight), file.Bounds.Size);
+        Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));            // transparent at rest
         file.MenuOpen = true;
         Pump();
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 2, 25));        // the open seam joins the popup
+        Assert.Equal(T.HoverChrome.Color, Pixel(window, 4, 13));         // lit while its menu is open
+        Assert.NotEqual(T.HoverChrome.Color, Pixel(window, 0, 0));       // rounded corner
         window.Close();
     });
 
@@ -196,7 +238,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Thickness(10, 0, 10, 0), field.Padding);
         field.LeadingIcon = "search";
         field.KeyCap = "F3";
-        Assert.Equal(new Thickness(28, 0, 40, 0), field.Padding);
+        Assert.Equal(new Thickness(32, 0, 40, 0), field.Padding);
         field.Text = "texture_01";
         Assert.Equal(10, field.CaretIndex);                               // Qt moves the cursor to the end
     });
