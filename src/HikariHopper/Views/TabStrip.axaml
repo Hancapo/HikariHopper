@@ -10,15 +10,15 @@
              Background="{x:Static ui:Theme.TabStripBg}">
   <!-- Port of TabStrip.qml, reshaped the way a modern browser hangs its tabs: the tab list (as
        wide as its tabs, at most the strip width - 45) on the strip's floor, then the new-tab
-       button. The active tab rises into the toolbar below; the others stay flat. -->
+       button. The active tab flows into the toolbar below; the others stay bare until hovered. -->
   <Grid Name="Row" ColumnDefinitions="Auto,Auto,*">
     <ScrollViewer Name="TabList" Grid.Column="0" ClipToBounds="True"
                   HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
       <ItemsControl Name="TabItems" ItemsSource="{Binding Tabs}">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
-            <!-- 14px in, so the first tab's concave foot stays inside the list. -->
-            <StackPanel Orientation="Horizontal" Margin="14,0,0,0" />
+            <!-- Room on both sides, so the end tabs' curved feet stay inside the list. -->
+            <StackPanel Orientation="Horizontal" Margin="14,0,8,0" />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
@@ -28,7 +28,7 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
-    <c:ChromeToolButton Name="NewTabButton" Grid.Column="1" Width="26" Height="26" Margin="4,0,0,3"
+    <c:ChromeToolButton Name="NewTabButton" Grid.Column="1" Width="26" Height="26" Margin="2,0,0,3"
                         VerticalAlignment="Bottom" Bordered="False" IconKind="plus" IconSize="15" IconThickness="1.5"
                         AutomationProperties.Name="New explorer tab" Click="OnNewTab" />
   </Grid>

@@ -120,8 +120,8 @@ public static class Theme
     public const double MenuSeparatorHeight = 9;
     public const double MenuMinimumWidth = 230;
     public const double TabStripHeight = 36;
-    public const double TabHeight = 30;        // the active tab; it merges into the toolbar below
-    public const double IdleTabHeight = 26;
+    public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
+    public const double TabWidth = 220;
     public const double NavigationHeight = 46;
     public const double ToolbarControlHeight = 30;
     public const double PanelGutter = 8;
