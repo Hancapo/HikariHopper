@@ -188,6 +188,12 @@ public sealed class ExplorerStateRenders
                 case "new_tab":
                     session.Tabs.NewTab();
                     break;
+                case "open_archive":
+                    bridge.OpenArchive(Path.Combine(legacy, op[1].GetString()!));
+                    break;
+                case "activate_tab":
+                    session.Tabs.ActivateTab(op[1].GetInt32());
+                    break;
                 case "folders":
                     bridge.SetFoldersVisible(op[1].GetBoolean());
                     break;
