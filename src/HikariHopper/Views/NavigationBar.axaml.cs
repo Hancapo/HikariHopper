@@ -98,13 +98,14 @@ public partial class NavigationBar : UserControl
         ExplorerViewModel? model = Bridge;
         bool hasWorkspace = model?.HasWorkspace == true;
         bool rootArchive = model is { InArchive: true, HasGame: false };
+        IReadOnlyList<PathSegment> parts = model?.NavigationPathSegments ?? [];
+        // The location you are in reads brightest, whether it is the root or the last segment.
         RootSegment.Set(
             hasWorkspace ? (model!.HasGame ? model.GameName : model.ArchiveRootName) : "Select the GTA V folder",
             rootArchive,
-            rootArchive ? Ui.Theme.Accent : Ui.Theme.TextDim);
+            rootArchive ? Ui.Theme.Accent : hasWorkspace && parts.Count == 0 ? Ui.Theme.Text : Ui.Theme.TextDim);
 
         Segments.Children.Clear();
-        IReadOnlyList<PathSegment> parts = model?.NavigationPathSegments ?? [];
         for (int index = 0; index < parts.Count; index++)
         {
             PathSegment part = parts[index];
@@ -133,9 +134,9 @@ public partial class NavigationBar : UserControl
         bool list = Bridge?.ViewMode == "list";
         bool grid = Bridge?.ViewMode == "grid";
         ListModeButton.Sunken = list;
-        ListModeButton.Foreground = list ? Ui.Theme.Text : Ui.Theme.TextDim;
+        ListModeButton.Foreground = list ? Ui.Theme.Text : Ui.Theme.TextRow;
         GridModeButton.Sunken = grid;
-        GridModeButton.Foreground = grid ? Ui.Theme.Text : Ui.Theme.TextDim;
+        GridModeButton.Foreground = grid ? Ui.Theme.Text : Ui.Theme.TextRow;
     }
 
     private void RefreshSearchField()
@@ -181,8 +182,8 @@ public partial class NavigationBar : UserControl
 }
 
 /// <summary>
-/// One address-bar segment: 22px tall, its content plus 7px each side, hoverChrome while hovered,
-/// an optional 13px blue package mark and the mono label, centred.
+/// One address-bar segment: 24px tall, its content plus 7px each side, a rounded hoverChrome
+/// highlight while hovered, an optional 13px blue package mark and the mono label, centred.
 /// </summary>
 public sealed class NavigationSegment : Border
 {
@@ -203,7 +204,8 @@ public sealed class NavigationSegment : Border
 
     public NavigationSegment()
     {
-        Height = 22;
+        Height = 24;
+        CornerRadius = Ui.Theme.InnerCorner;
         VerticalAlignment = VerticalAlignment.Center;
         Background = Brushes.Transparent;
         Padding = new Thickness(7, 0);

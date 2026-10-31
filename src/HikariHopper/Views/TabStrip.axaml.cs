@@ -1,7 +1,10 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -30,10 +33,16 @@ public partial class TabStrip : UserControl
     {
         base.OnDataContextChanged(e);
         if (tabs is not null)
+        {
             tabs.PropertyChanged -= OnTabsPropertyChanged;
+            tabs.Tabs.CollectionChanged -= OnTabsChanged;
+        }
         tabs = Tabs;
         if (tabs is not null)
+        {
             tabs.PropertyChanged += OnTabsPropertyChanged;
+            tabs.Tabs.CollectionChanged += OnTabsChanged;
+        }
     }
 
     /// <summary><c>Layout.maximumWidth: strip.width - 45</c> for the tab list.</summary>
@@ -48,8 +57,15 @@ public partial class TabStrip : UserControl
     {
         // onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
         if (e.PropertyName == nameof(ExplorerTabsViewModel.ActiveIndex))
+        {
+            RefreshTabs();
             Dispatcher.UIThread.Post(PositionActiveTab, DispatcherPriority.Loaded);
+        }
     }
+
+    // A tab's spacing and divider depend on its neighbours.
+    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        Dispatcher.UIThread.Post(RefreshTabs, DispatcherPriority.Loaded);
 
     private void PositionActiveTab()
     {
@@ -79,19 +95,47 @@ public partial class TabStrip : UserControl
         if (Tabs is { } owner && owner.Tabs.IndexOf(tab) is var index and >= 0)
             owner.ActivateTab(index);
     }
+
+    /// <summary>The tab's position in the strip, or -1.</summary>
+    internal int IndexOf(ExplorerViewModel tab) => Tabs?.Tabs.IndexOf(tab) ?? -1;
+
+    /// <summary>The tab drawn at <paramref name="index"/>, when it is realized.</summary>
+    internal TabStripTab? TabAt(int index) =>
+        index >= 0 && TabItems.ContainerFromIndex(index) is ContentPresenter { Child: TabStripTab tab } ? tab : null;
+
+    /// <summary>Re-evaluates every tab's spacing, divider and hover state.</summary>
+    internal void RefreshTabs()
+    {
+        foreach (Control container in TabItems.GetRealizedContainers())
+        {
+            if (container is ContentPresenter { Child: TabStripTab tab })
+                tab.Refresh();
+        }
+    }
 }
 
 /// <summary>
-/// One tab of <see cref="TabStrip"/> (the QML delegate): <c>max(150, min(220, title width + 66))</c>
-/// wide, tabActive/hoverChrome/tabBg fill with an accent/guide/border edge, a 16px glyph, the mono
-/// title and a 20px close mark; clicking anywhere left of the close mark activates the tab.
+/// One tab of <see cref="TabStrip"/> (the QML delegate), sized to its title (<c>title + 73</c>,
+/// between 110 and 220): a 15px glyph, the mono title and a 20px close mark; clicking anywhere
+/// left of the close mark activates the tab.
 /// </summary>
-public sealed class TabStripTab : Border
+/// <remarks>
+/// The active tab is 30px tall with 8px top corners and flares into the toolbar below with
+/// concave 8px curves on both sides of its foot, so it is spaced 10px from its neighbours. The
+/// others are flat and 26px tall, rounded only when hovered, with a 1px divider between two
+/// adjacent ones.
+/// </remarks>
+public sealed class TabStripTab : Decorator
 {
     public static readonly StyledProperty<ExplorerViewModel?> TabProperty =
         AvaloniaProperty.Register<TabStripTab, ExplorerViewModel?>(nameof(Tab));
 
-    private readonly FileGlyph glyph = new() { VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>The active tab's foot curves out this far on each side.</summary>
+    public const double FootRadius = Ui.Theme.TabRadius;
+
+    private const double FootGap = FootRadius + 2;
+
+    private readonly FileGlyph glyph = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock title = new()
     {
         FontFamily = Ui.Theme.MonoFont,
@@ -102,25 +146,27 @@ public sealed class TabStripTab : Border
     private readonly ChromeToolButton close = new()
     {
         Width = 20,
-        Height = double.NaN,
-        VerticalAlignment = VerticalAlignment.Stretch,
+        Height = 20,
+        VerticalAlignment = VerticalAlignment.Center,
         Bordered = false,
-        HoverFill = false,
+        CornerRadius = Ui.Theme.InnerCorner,
         IconKind = "close",
+        IconSize = 12,
+        IconThickness = 1.4,
     };
-    private readonly Border clickArea = new() { Background = Brushes.Transparent, Margin = new Thickness(0, 0, 24, 0) };
+    private readonly Border clickArea = new() { Background = Brushes.Transparent, Margin = new Thickness(0, 0, 27, 0) };
     private ExplorerViewModel? subscribed;
     private bool pressed;
+    private bool divider;
 
     public TabStripTab()
     {
-        BorderThickness = new Thickness(1);
+        VerticalAlignment = VerticalAlignment.Bottom;
         var row = new Grid
         {
-            // anchors.fill: parent; leftMargin 11; rightMargin 4 — the border does not inset it.
-            Margin = new Thickness(10, -1, 3, -1),
+            Margin = new Thickness(12, 0, 7, 0),
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
-            ColumnSpacing = 7,
+            ColumnSpacing = 9,
         };
         row.Children.Add(glyph);
         Grid.SetColumn(title, 1);
@@ -131,7 +177,6 @@ public sealed class TabStripTab : Border
         panel.Children.Add(row);
         panel.Children.Add(clickArea);
         Child = panel;
-        clickArea.Margin = new Thickness(-1, -1, 23, -1);
         close.Click += (_, _) =>
         {
             if (Tab is { } tab)
@@ -148,14 +193,21 @@ public sealed class TabStripTab : Border
         set => SetValue(TabProperty, value);
     }
 
+    /// <summary>True for the active tab, which merges into the toolbar.</summary>
+    public bool Active => Tab?.TabActive == true;
+
+    /// <summary>The 1px rule drawn on the left edge, between two inactive tabs.</summary>
+    public bool DividerVisible => divider;
+
     private TabStrip? Strip => this.FindAncestorOfType<TabStrip>();
 
     protected override Size MeasureOverride(Size availableSize)
     {
         title.Measure(Size.Infinity);
-        double width = Math.Max(150, Math.Min(220, title.DesiredSize.Width + 66));
-        base.MeasureOverride(new Size(width, availableSize.Height));
-        return new Size(width, double.IsInfinity(availableSize.Height) ? 0 : availableSize.Height);
+        double width = Math.Max(110, Math.Min(220, Math.Ceiling(title.DesiredSize.Width) + 73));
+        double height = Active ? Ui.Theme.TabHeight : Ui.Theme.IdleTabHeight;
+        base.MeasureOverride(new Size(width, height));
+        return new Size(width, height);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -172,7 +224,11 @@ public sealed class TabStripTab : Border
         }
         else if (change.Property == IsPointerOverProperty)
         {
-            Refresh();
+            // The neighbour's divider gives way to the hovered tab, too.
+            if (Strip is { } strip)
+                strip.RefreshTabs();
+            else
+                Refresh();
         }
     }
 
@@ -182,19 +238,67 @@ public sealed class TabStripTab : Border
             Refresh();
     }
 
-    private void Refresh()
+    internal void Refresh()
     {
         string text = Tab?.TabTitle ?? "";
-        bool active = Tab?.TabActive == true;
+        bool active = Active;
         bool hovered = IsPointerOver;
-        Background = active ? Ui.Theme.TabActive : hovered ? Ui.Theme.HoverChrome : Ui.Theme.TabBg;
-        BorderBrush = active ? Ui.Theme.BorderAccent : hovered ? Ui.Theme.Guide : Ui.Theme.Border;
+        TabStrip? strip = Strip;
+        int index = Tab is null || strip is null ? -1 : strip.IndexOf(Tab);
+        TabStripTab? previous = strip?.TabAt(index - 1);
+        Margin = active
+            ? new Thickness(index > 0 ? FootGap : 0, 0, FootGap, 0)
+            : new Thickness(0, 0, 0, 3);
+        divider = !active && !hovered && previous is { Active: false, IsPointerOver: false };
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
         title.Text = text;
         title.Foreground = active || hovered ? Ui.Theme.Text : Ui.Theme.TextDim;
         title.FontWeight = active ? FontWeight.Bold : FontWeight.Normal;
+        if (active || hovered)
+            close.ClearValue(TemplatedControl.ForegroundProperty);
+        else
+            close.Foreground = Ui.Theme.TextFaint;
         AutomationProperties.SetName(close, $"Close {text}");
         InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        double w = Bounds.Width;
+        double h = Bounds.Height;
+        if (Active)
+        {
+            context.DrawGeometry(Ui.Theme.ChromeBg, null, ActiveShape(w, h));
+            return;
+        }
+        if (IsPointerOver)
+            context.DrawRectangle(Ui.Theme.TabBg, null, new Rect(0, 0, w, h), Ui.Theme.ItemRadius, Ui.Theme.ItemRadius);
+        if (divider)
+            context.FillRectangle(Ui.Theme.BorderSoft, new Rect(-1, 6, 1, Math.Max(0, h - 12)));
+    }
+
+    /// <summary>
+    /// The active tab's outline: rounded top corners and a foot that curves out into the toolbar
+    /// on both sides, extending <see cref="FootRadius"/> beyond the tab's bounds.
+    /// </summary>
+    internal static Geometry ActiveShape(double w, double h)
+    {
+        double r = FootRadius;
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext path = geometry.Open())
+        {
+            path.BeginFigure(new Point(-r, h), true);
+            path.ArcTo(new Point(0, h - r), new Size(r, r), 0, false, SweepDirection.CounterClockwise);
+            path.LineTo(new Point(0, r));
+            path.ArcTo(new Point(r, 0), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.LineTo(new Point(w - r, 0));
+            path.ArcTo(new Point(w, r), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.LineTo(new Point(w, h - r));
+            path.ArcTo(new Point(w + r, h), new Size(r, r), 0, false, SweepDirection.CounterClockwise);
+            path.EndFigure(true);
+        }
+        return geometry;
     }
 
     private void OnPressed(object? sender, PointerPressedEventArgs e)
