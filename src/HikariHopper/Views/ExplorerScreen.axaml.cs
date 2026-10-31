@@ -20,6 +20,12 @@ public partial class ExplorerScreen : UserControl
         Menu.SearchRequested += (_, _) => Bridge?.RequestSearchFocus();
     }
 
+    /// <summary>
+    /// The File/Edit/View/Go/Help bar. The window shows it in its title row
+    /// (<see cref="Controls.WindowTitleBar.LeadingContent"/>); it acts on these tabs.
+    /// </summary>
+    public MenuRow Menu { get; } = new();
+
     /// <summary>The page currently shown (a <see cref="WorkspaceView"/> or a <see cref="StartPage"/>).</summary>
     public Control? Page => PageHost.Content as Control;
 
@@ -35,6 +41,7 @@ public partial class ExplorerScreen : UserControl
         tabs = Tabs;
         if (tabs is not null)
             tabs.PropertyChanged += OnTabsPropertyChanged;
+        Menu.DataContext = tabs;
         TrackBridge();
     }
 

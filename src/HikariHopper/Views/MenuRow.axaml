@@ -6,9 +6,15 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.MenuRow"
              x:DataType="vm:ExplorerTabsViewModel"
-             Height="{x:Static ui:Theme.MenuHeight}"
-             Background="{x:Static ui:Theme.ChromeBg}">
-  <!-- Port of MenuRow.qml. Its DataContext is the tabs; "bridge" is tabs.ActiveBridge. -->
+             Height="{x:Static ui:Theme.MenuHeight}" VerticalAlignment="Center">
+  <!-- Port of MenuRow.qml, shown in the window's title row. Its DataContext is the tabs; "bridge"
+       is tabs.ActiveBridge. The gaps between the titles stay part of the draggable title area. -->
+  <UserControl.Styles>
+    <Style Selector="c|MenuBarButton">
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+  </UserControl.Styles>
   <UserControl.Resources>
     <c:RetroMenu x:Key="FileMenu" x:DataType="vm:ExplorerTabsViewModel">
       <c:RetroMenuItem Text="New tab" ShortcutText="Ctrl+T" Triggered="OnNewTab" />
@@ -73,14 +79,11 @@
     </c:RetroMenu>
   </UserControl.Resources>
 
-  <Panel>
-    <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-    <StackPanel Orientation="Horizontal" Margin="1,0,0,0">
-      <c:MenuBarButton Name="FileButton" Text="File" Click="OnMenuButton" />
-      <c:MenuBarButton Name="EditButton" Text="Edit" Click="OnMenuButton" />
-      <c:MenuBarButton Name="ViewButton" Text="View" Click="OnMenuButton" />
-      <c:MenuBarButton Name="GoButton" Text="Go" Click="OnMenuButton" />
-      <c:MenuBarButton Name="HelpButton" Text="Help" Click="OnMenuButton" />
-    </StackPanel>
-  </Panel>
+  <StackPanel Orientation="Horizontal" Spacing="2">
+    <c:MenuBarButton Name="FileButton" Text="File" Click="OnMenuButton" />
+    <c:MenuBarButton Name="EditButton" Text="Edit" Click="OnMenuButton" />
+    <c:MenuBarButton Name="ViewButton" Text="View" Click="OnMenuButton" />
+    <c:MenuBarButton Name="GoButton" Text="Go" Click="OnMenuButton" />
+    <c:MenuBarButton Name="HelpButton" Text="Help" Click="OnMenuButton" />
+  </StackPanel>
 </UserControl>

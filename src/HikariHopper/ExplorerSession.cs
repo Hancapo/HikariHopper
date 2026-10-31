@@ -36,7 +36,9 @@ public sealed class ExplorerSession : IStartupSession
     public void Attach(MainWindow mainWindow)
     {
         window = mainWindow;
-        mainWindow.ExplorerScreenHost.Content = new ExplorerScreen { DataContext = Tabs };
+        var screen = new ExplorerScreen { DataContext = Tabs };
+        mainWindow.ExplorerScreenHost.Content = screen;
+        mainWindow.TitleBar.LeadingContent = screen.Menu;
         Tabs.PropertyChanged += OnTabsPropertyChanged;
         Tabs.Tabs.CollectionChanged += OnTabsChanged;
         foreach (ExplorerViewModel tab in Tabs.Tabs)

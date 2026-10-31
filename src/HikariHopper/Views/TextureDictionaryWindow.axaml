@@ -38,7 +38,7 @@
       </v:TextureImageDropArea>
     </DockPanel>
 
-    <Border BorderBrush="{x:Static ui:Theme.BorderAccent}" BorderThickness="1" IsHitTestVisible="False" />
+    <c:WindowPiping />
 
     <c:WindowResizeFrame />
 

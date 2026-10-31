@@ -18,6 +18,9 @@ public partial class MenuRow : UserControl
     // QML: readonly property int popupOpticalOffset: 0
     private const double PopupOpticalOffset = 0;
 
+    // The row is centred in the title row; menus open 2px below that row, not under the titles.
+    private const double PopupGap = (Ui.Theme.MainTitleHeight - Ui.Theme.MenuHeight) / 2 + 2;
+
     private readonly Dictionary<MenuBarButton, RetroMenu> menus = [];
     private SettingsWindow? settingsWindow;
     private ShortcutsWindow? shortcutsWindow;
@@ -73,11 +76,15 @@ public partial class MenuRow : UserControl
     {
         if (sender is not MenuBarButton button)
             return;
-        // openPopup(menu, button): x = button's x in the row (+ the optical offset), y = height - 1.
+        // openPopup(menu, button): x = button's x in the row (+ the optical offset), y = just below
+        // the title row the menu bar sits in. That point is outside the row, and a popup anchored
+        // to a control ignores a placement rectangle outside it, so it is anchored to the window.
         RetroMenu menu = menus[button];
         menu.ConnectionWidth = button.Bounds.Width;
         double x = button.TranslatePoint(default, this)?.X ?? 0;
-        menu.Open(this, x + PopupOpticalOffset, Bounds.Height - 1);
+        Control target = TopLevel.GetTopLevel(this) ?? (Control)this;
+        Point at = this.TranslatePoint(new Point(x + PopupOpticalOffset, Bounds.Height + PopupGap), target) ?? default;
+        menu.Open(target, at.X, at.Y);
     }
 
     private void OnNewTab(object? sender, RoutedEventArgs e) => Tabs?.NewTab();

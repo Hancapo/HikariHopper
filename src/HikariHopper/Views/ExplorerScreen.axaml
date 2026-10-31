@@ -5,11 +5,11 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.ExplorerScreen"
              x:DataType="vm:ExplorerTabsViewModel"
-             Background="{x:Static ui:Theme.AppBg}">
-  <!-- Port of ExplorerScreen.qml: menu row, tab strip, then the active tab's workspace or start
-       page with the game-loading cover on top. Its DataContext is the tabs. -->
+             Background="{x:Static ui:Theme.WindowBg}">
+  <!-- Port of ExplorerScreen.qml: tab strip, then the active tab's workspace or start page with
+       the game-loading cover on top. Its DataContext is the tabs. The menu row lives in the
+       window's title row (see Menu). -->
   <DockPanel>
-    <v:MenuRow Name="Menu" DockPanel.Dock="Top" />
     <v:TabStrip DockPanel.Dock="Top" />
     <Panel>
       <ContentControl Name="PageHost" />
