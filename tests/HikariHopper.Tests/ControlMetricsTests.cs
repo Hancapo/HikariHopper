@@ -83,11 +83,16 @@ public sealed class ControlMetricsTests
     [AvaloniaFact]
     public void SelectedSegmentIsAPlainRaisedFill() => UiThread.Run(() =>
     {
-        var segment = (ChromeToolButton)TopLeft(new ChromeToolButton { InWell = true, Sunken = true, IconKind = "list" });
+        // Configured like the toolbar's segments (NavigationBar.axaml, ChromeToolButton.segment).
+        var segment = (ChromeToolButton)TopLeft(new ChromeToolButton
+        {
+            Bordered = false, InWell = true, Sunken = true, IconKind = "list",
+            Width = 30, Height = 26, CornerRadius = T.InnerCorner,
+        });
         Window window = Show(new Panel { Children = { segment } }, 40, 30, T.InsetBg);
 
         // A raised fill and nothing else: no dark edge along its top.
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 16, 4));
+        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 15, 0));
         Assert.False(segment.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "PART_Bevel").IsVisible);
         window.Close();
     });
