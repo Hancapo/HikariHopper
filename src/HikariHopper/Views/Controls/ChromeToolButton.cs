@@ -47,7 +47,7 @@ public class ChromeToolButton : Button
 
     /// <summary>
     /// The button is a segment inside a sunken group: selected (<see cref="Sunken"/>) it sits on a
-    /// raised fill with a dark inner top edge instead of sinking into the well.
+    /// raised fill instead of sinking into the well.
     /// </summary>
     public static readonly StyledProperty<bool> InWellProperty =
         AvaloniaProperty.Register<ChromeToolButton, bool>(nameof(InWell));
@@ -64,7 +64,6 @@ public class ChromeToolButton : Button
     public static readonly StyledProperty<string> IconKindProperty =
         AvaloniaProperty.Register<ChromeToolButton, string>(nameof(IconKind), "");
 
-    private static readonly IImmutableSolidColorBrush SegmentShadow = new ImmutableSolidColorBrush(Ui.Theme.RgbaColor(0, 0, 0, 0.35));
     private static readonly IImmutableSolidColorBrush PrimaryBevel = new ImmutableSolidColorBrush(Ui.Theme.RgbaColor(1, 1, 1, 0.4));
     private static readonly IImmutableSolidColorBrush ErrorHover = new ImmutableSolidColorBrush(Ui.Theme.Lighter(Ui.Theme.Error.Color, 1.11));
     private static readonly IImmutableSolidColorBrush ErrorDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Error.Color, 1.12));
@@ -216,12 +215,10 @@ public class ChromeToolButton : Button
                         ? FillDown
                         : IsPointerOver ? FillHover : FillBase;
         background.BorderThickness = new Thickness(framed ? 1 : 0);
-        bool segmentEdge = InWell && Sunken && IsEffectivelyEnabled;
-        bevel.IsVisible = segmentEdge || framed && !Sunken && !IsPressed;
-        bevel.Background = segmentEdge ? SegmentShadow
-            : (Primary || Destructive) && IsEffectivelyEnabled ? PrimaryBevel : Ui.Theme.Bevel;
+        bevel.IsVisible = framed && !Sunken && !IsPressed;
+        bevel.Background = (Primary || Destructive) && IsEffectivelyEnabled ? PrimaryBevel : Ui.Theme.Bevel;
         // The 1px top edge stops where the corners start to curve.
-        bevel.Margin = new Thickness(Math.Max(1, CornerRadius.TopLeft), segmentEdge ? 0 : 1, Math.Max(1, CornerRadius.TopRight), 0);
+        bevel.Margin = new Thickness(Math.Max(1, CornerRadius.TopLeft), 1, Math.Max(1, CornerRadius.TopRight), 0);
         IBrush ink = CurrentForeground;
         icon.Width = icon.Height = IconSize;
         icon.Thickness = IconThickness;
