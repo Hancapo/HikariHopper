@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  pre_merge_checks:
+    # Counts doc comments on every touched function with a branch, private helpers included,
+    # which says nothing about whether a change is understandable.
+    docstrings:
+      mode: "off"
