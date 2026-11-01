@@ -251,6 +251,10 @@ public sealed class ControlMetricsTests
         // 4px between the frames; the submenu's first row level with the row that opened it.
         Assert.Equal(menuAt.X + T.MenuWidth + RetroMenuItem.SubmenuGap + T.MenuPadding, childAt.X);
         Assert.Equal(parentAt.Y, childAt.Y);
+        // The gap belongs to the submenu, so a pointer crossing it never leaves the submenu.
+        TopLevel host = TopLevel.GetTopLevel(child)!;
+        Point gap = child.TranslatePoint(new Point(-T.MenuPadding - RetroMenuItem.SubmenuGap / 2, T.MenuItemHeight / 2), host)!.Value;
+        Assert.Equal("PART_SubmenuBridge", Assert.IsAssignableFrom<Control>(host.InputHitTest(gap)).Name);
         parent.IsSubMenuOpen = false;
         menu.Close();
         window.Close();

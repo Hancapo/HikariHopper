@@ -65,14 +65,17 @@
                  IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}"
                  Placement="RightEdgeAlignedTop" HorizontalOffset="-1" VerticalOffset="-4"
                  IsLightDismissEnabled="False" WindowManagerAddShadowHint="False">
-            <Panel Width="{x:Static ui:Theme.MenuWidth}">
-              <c:RetroMenuFrame ConnectionWidth="0" />
-              <ScrollViewer Theme="{StaticResource BareScrollViewer}" Margin="{x:Static ui:Theme.MenuInset}"
-                            HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
-                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
-                                KeyboardNavigation.TabNavigation="Continue" />
-              </ScrollViewer>
-            </Panel>
+            <!-- The bridge fills the gap to the parent menu, so the pointer is over the submenu while it crosses. -->
+            <Border Name="PART_SubmenuBridge" Background="Transparent">
+              <Panel Width="{x:Static ui:Theme.MenuWidth}">
+                <c:RetroMenuFrame ConnectionWidth="0" />
+                <ScrollViewer Theme="{StaticResource BareScrollViewer}" Margin="{x:Static ui:Theme.MenuInset}"
+                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
+                  <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
+                                  KeyboardNavigation.TabNavigation="Continue" />
+                </ScrollViewer>
+              </Panel>
+            </Border>
           </Popup>
         </Panel>
       </ControlTemplate>

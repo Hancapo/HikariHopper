@@ -72,27 +72,36 @@ public partial class ExplorerScreen : UserControl
     {
         if (bridge is null)
         {
-            PageHost.Content = null;
+            Show(null);
             return;
         }
         if (bridge.HasWorkspace)
         {
             if (PageHost.Content is not WorkspaceView workspace)
-            {
-                workspace = new WorkspaceView();
-                PageHost.Content = workspace;
-            }
+                Show(workspace = new WorkspaceView());
             workspace.DataContext = bridge;
         }
         else
         {
             if (PageHost.Content is not StartPage start)
-            {
-                start = new StartPage();
-                PageHost.Content = start;
-            }
+                Show(start = new StartPage());
             start.DataContext = bridge;
             start.Tabs = tabs;
         }
+    }
+
+    /// <summary>
+    /// Replaces the page. The old one lets go of its view models, so its views drop their
+    /// subscriptions and the bridge does not keep the discarded tree alive.
+    /// </summary>
+    private void Show(Control? page)
+    {
+        if (PageHost.Content is Control old)
+        {
+            old.DataContext = null;
+            if (old is StartPage start)
+                start.Tabs = null;
+        }
+        PageHost.Content = page;
     }
 }

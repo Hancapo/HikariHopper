@@ -75,7 +75,7 @@ public partial class WorkspaceView : UserControl
     {
         bool visible = Bridge?.FoldersVisible != false;
         ColumnDefinition column = Split.ColumnDefinitions[0];
-        if (!visible && Folders.IsVisible)
+        if (!visible && FoldersFrame.IsVisible)
             folderWidth = column.Width;
         FoldersFrame.IsVisible = visible;
         Handle.IsVisible = visible;

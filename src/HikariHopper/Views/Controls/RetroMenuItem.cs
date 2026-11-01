@@ -45,6 +45,7 @@ public class RetroMenuItem : MenuItem
     private TextBlock? label;
     private TextBlock? shortcut;
     private Control? content;
+    private Border? bridge;
     // Avalonia toggles IsChecked just before raising Click, in the same call; this marks that window.
     private bool checkChangedPending;
 
@@ -96,6 +97,9 @@ public class RetroMenuItem : MenuItem
         label = e.NameScope.Find<TextBlock>("PART_Text");
         shortcut = e.NameScope.Find<TextBlock>("PART_Shortcut");
         content = e.NameScope.Find<Control>("PART_Content");
+        bridge = e.NameScope.Find<Border>("PART_SubmenuBridge");
+        if (bridge is not null)
+            bridge.Padding = new Thickness(SubmenuGap, 0, 0, 0);
         if (e.NameScope.Find<Popup>("PART_Popup") is { } popup)
         {
             popup.Placement = PlacementMode.Custom;
@@ -139,18 +143,24 @@ public class RetroMenuItem : MenuItem
     /// <summary>
     /// QQuickMenu cascading, with a gap: the submenu opens 4px clear of this menu's frame with its
     /// first row level with this one; when it does not fit it opens on the left instead
-    /// (Avalonia's flip would keep the right-hand offset).
+    /// (Avalonia's flip would keep the right-hand offset). The gap is the popup's own transparent
+    /// padding on the side facing this menu: Avalonia closes a submenu once the pointer has been
+    /// off it for 400ms, so the pointer must never leave it on the way across.
     /// </summary>
     private void PlaceSubmenu(CustomPopupPlacement placement)
     {
         placement.ConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX | PopupPositionerConstraintAdjustment.SlideY;
         // This row sits MenuPadding inside its menu's frame, so the frame edge is that far out.
-        double reach = Ui.Theme.MenuPadding + SubmenuGap;
+        double reach = Ui.Theme.MenuPadding;
         double right = Bounds.Width;
         double available = TopLevel.GetTopLevel(this) is { } top && this.TranslatePoint(new Point(right, 0), top) is { } edge
             ? top.Bounds.Width - edge.X
             : double.PositiveInfinity;
-        if (placement.PopupSize.Width + reach <= available)
+        bool opensRight = placement.PopupSize.Width + reach <= available;
+        // Moving the padding to the other side keeps the popup's size, so this does not re-measure it.
+        if (bridge is not null)
+            bridge.Padding = opensRight ? new Thickness(SubmenuGap, 0, 0, 0) : new Thickness(0, 0, SubmenuGap, 0);
+        if (opensRight)
         {
             placement.Anchor = PopupAnchor.TopRight;
             placement.Gravity = PopupGravity.BottomRight;

@@ -83,6 +83,46 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ClosingAWorkspaceReleasesItsViews()
+    {
+        Explorer ui = OpenExplorer();
+        var workspace = Assert.IsType<WorkspaceView>(ui.Find<ExplorerScreen>().Page);
+        StatusBar status = ui.Find<StatusBar>();
+
+        ui.Bridge.CloseWorkspace();
+        Pump();
+
+        // The discarded page lets go of the bridge, so the bridge's subscribers do not keep it alive.
+        Assert.IsType<StartPage>(ui.Find<ExplorerScreen>().Page);
+        Assert.Null(workspace.DataContext);
+        Assert.Null(status.DataContext);
+    }
+
+    [AvaloniaFact]
+    public void HiddenFoldersKeepTheirWidthAcrossTabs()
+    {
+        Explorer ui = OpenExplorer();
+        ui.Tabs.NewTab();
+        ui.Bridge.OpenGame(Work);
+        Pump();
+        ui.Bridge.SetFoldersVisible(false);
+        Pump();
+        ExplorerViewModel second = ui.Bridge;
+
+        // Both tabs hide their folders; switching between them must not save the collapsed width.
+        ui.Tabs.ActivateTab(0);
+        ui.Bridge.SetFoldersVisible(false);
+        Pump();
+        ui.Tabs.ActivateTab(1);
+        Pump();
+        Assert.Same(second, ui.Bridge);
+        ui.Bridge.SetFoldersVisible(true);
+        Pump();
+
+        Assert.Equal(238, ui.Find<FolderPanel>().Bounds.Width);
+    }
+
+    [AvaloniaFact]
     public void TableColumnsFollowThePanelWidth()
     {
         Explorer ui = OpenExplorer();
