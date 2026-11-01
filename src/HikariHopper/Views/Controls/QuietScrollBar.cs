@@ -67,6 +67,13 @@ public class QuietScrollBar : ScrollBar
     /// <summary>Qt binds <c>enabled</c> to <c>size &lt; 1</c>: a bar with nothing to scroll is inert.</summary>
     public bool Scrollable => VisibleSize < 1.0;
 
+    /// <summary>
+    /// How far a bar floating over <paramref name="viewer"/>'s right edge reaches into rows that sit
+    /// <paramref name="inset"/> inside that edge. 0 while everything fits, when the bar draws nothing.
+    /// </summary>
+    public static double Overlap(ScrollViewer viewer, double inset) =>
+        viewer.Extent.Height > viewer.Viewport.Height ? Math.Max(0, Ui.Theme.ScrollbarWidth - inset) : 0;
+
     private double AvailableLength => Bounds.Height;
 
     private double MinimumSize => AvailableLength > 0 ? Math.Min(1, Ui.Theme.ScrollbarMinThumbLength / AvailableLength) : 1;

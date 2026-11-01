@@ -99,6 +99,23 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void HighlightsStopShortOfTheScrollbar()
+    {
+        // Enough folders for both the tree and the list to scroll.
+        Explorer ui = OpenExplorer(folders: 40);
+        Click(ui.Window, Row(0));
+        FolderRow selected = ui.Window.GetVisualDescendants().OfType<FolderRow>().Single(row => row.IsSelected);
+        int treeRow = (int)selected.TranslatePoint(new Point(0, 13), ui.Window)!.Value.Y;
+        using var frame = ui.Window.CaptureRenderedFrame()!;
+
+        // The 12px scrollbar lane at each panel's right edge, beside the thumb: a highlighted row
+        // shows there exactly what a plain row does.
+        Assert.Equal(HikariHopper.Ui.Theme.Selection.Color, Pixel(frame, 1336, (int)Row(0).Y));
+        Assert.Equal(Pixel(frame, 1342, (int)Row(2).Y), Pixel(frame, 1342, (int)Row(0).Y));
+        Assert.Equal(Pixel(frame, 236, treeRow + 3 * 26), Pixel(frame, 236, treeRow));
+    }
+
+    [AvaloniaFact]
     public void HiddenFoldersKeepTheirWidthAcrossTabs()
     {
         Explorer ui = OpenExplorer();

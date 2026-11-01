@@ -61,6 +61,13 @@ public partial class EntryTable : UserControl
         EntryList.KeyDown += OnListKeyDown;
         SizeChanged += (_, _) => UpdateColumns();
         Scroller.SizeChanged += (_, _) => UpdateColumns();
+        Scroller.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentDelta.Y == 0 && e.ViewportDelta.Y == 0)
+                return;
+            foreach (Control container in EntryList.GetRealizedContainers())
+                (container as EntryRow)?.RefreshFill();
+        };
         UpdateColumns();
     }
 
@@ -79,6 +86,9 @@ public partial class EntryTable : UserControl
     internal double ListWidth => Math.Max(0, ListArea.Bounds.Width);
 
     internal double RowWidth => Math.Max(0, ListWidth - 2 * Ui.Theme.ListInset);
+
+    /// <summary>How much of a row's right end the scrollbar covers; the fill stops short of it.</summary>
+    internal double ScrollbarOverlap => QuietScrollBar.Overlap(Scroller, Ui.Theme.ListInset);
 
     internal Control FocusTarget => EntryList;
 
@@ -435,9 +445,10 @@ public sealed class EntryRowList : ItemsControl
 }
 
 /// <summary>
-/// One table row (the QML delegate): a rounded selection/hover fill as wide as the row, the 16px
-/// glyph, the name with its matched characters marked, the type in the UI face and the
-/// right-aligned size — for a folder, its item count in faint ink and no type.
+/// One table row (the QML delegate): a rounded selection/hover fill as wide as the row, short of
+/// the scrollbar while it shows, the 16px glyph, the name with its matched characters marked, the
+/// type in the UI face and the right-aligned size — for a folder, its item count in faint ink and
+/// no type.
 /// </summary>
 public sealed class EntryRow : Panel
 {
@@ -525,6 +536,8 @@ public sealed class EntryRow : Panel
             fill.InvalidateVisual();
     }
 
+    internal void RefreshFill() => fill.InvalidateVisual();
+
     private double NameWidth => owner?.NameWidth ?? 300;
 
     protected override Size MeasureOverride(Size availableSize)
@@ -575,8 +588,9 @@ public sealed class EntryRow : Panel
             IBrush? brush = row.item?.Selected == true ? Ui.Theme.Selection
                 : row.IsPointerOver ? Ui.Theme.HoverBg
                 : null;
+            double width = Math.Max(0, Bounds.Width - (row.owner?.ScrollbarOverlap ?? 0));
             if (brush is not null)
-                context.DrawRectangle(brush, null, new Rect(Bounds.Size), Ui.Theme.ItemRadius, Ui.Theme.ItemRadius);
+                context.DrawRectangle(brush, null, new Rect(0, 0, width, Bounds.Height), Ui.Theme.ItemRadius, Ui.Theme.ItemRadius);
         }
     }
 }

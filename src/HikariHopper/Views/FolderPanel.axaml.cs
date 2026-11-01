@@ -35,9 +35,17 @@ public partial class FolderPanel : UserControl
         wheel = QtWheelScrolling.Attach(Scroller);
         FolderList.Owner = this;
         FolderList.KeyDown += OnListKeyDown;
+        Scroller.ScrollChanged += (_, e) =>
+        {
+            if (e.ExtentDelta.Y != 0 || e.ViewportDelta.Y != 0)
+                RefreshRows();
+        };
     }
 
     internal ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
+
+    /// <summary>How much of a row's right end the scrollbar covers; highlights stop short of it.</summary>
+    internal double ScrollbarOverlap => QuietScrollBar.Overlap(Scroller, Ui.Theme.ListInset);
 
     /// <summary>ListView.currentIndex.</summary>
     internal int CurrentIndex => Bridge?.TreeFocusIndex ?? -1;
@@ -273,6 +281,7 @@ public sealed class FolderRow : Panel
     private void Draw(DrawingContext context)
     {
         var bounds = new Rect(Bounds.Size);
+        var highlight = new Rect(0, 0, Math.Max(0, bounds.Width - (panel?.ScrollbarOverlap ?? 0)), bounds.Height);
         bool selected = IsSelected;
         bool focused = IsFocusedRow;
         IBrush? fill = selected ? Ui.Theme.SelectionWash
@@ -284,11 +293,11 @@ public sealed class FolderRow : Panel
         {
             // The ring sits inside the row, over its wash.
             IBrush ring = selected ? Ui.Theme.SelectionRing : Ui.Theme.Border;
-            context.DrawRectangle(fill, new Pen(ring, 1), bounds.Deflate(0.5), radius - 0.5, radius - 0.5);
+            context.DrawRectangle(fill, new Pen(ring, 1), highlight.Deflate(0.5), radius - 0.5, radius - 0.5);
         }
         else if (fill is not null)
         {
-            context.DrawRectangle(fill, null, bounds, radius, radius);
+            context.DrawRectangle(fill, null, highlight, radius, radius);
         }
 
         // Dotted guides, one per level of depth, each under its parent's chevron.
