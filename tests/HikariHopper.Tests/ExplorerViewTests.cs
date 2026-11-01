@@ -623,8 +623,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         WorkspaceView workspace = ui.Find<WorkspaceView>();
         Assert.Equal(new Rect(8, 128, 238, 672), new Rect(At(workspace.FoldersFrame), workspace.FoldersFrame.Bounds.Size));
         Assert.Equal(new Point(254, 128), At(workspace.EntriesFrame));
-        Assert.Equal(new CornerRadius(9), workspace.FoldersFrame.CornerRadius);
-        Assert.Equal(new CornerRadius(9), workspace.EntriesFrame.CornerRadius);
+        Assert.Equal(new CornerRadius(6), workspace.FoldersFrame.CornerRadius);
+        Assert.Equal(new CornerRadius(6), workspace.EntriesFrame.CornerRadius);
         StatusBar status = ui.Find<StatusBar>();
         Assert.Equal((new Point(0, 808), 32.0), (At(status), status.Bounds.Height));
 

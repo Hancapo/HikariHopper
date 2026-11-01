@@ -97,13 +97,13 @@ public static class Theme
 
     // Corner radii, largest to smallest. The window and its floating panels carry the largest;
     // anything that sits inside a well steps down so the inner curve stays parallel to the outer.
-    public const double WindowRadius = 10;     // the mockup's window; Windows 11 rounds by 8
-    public const double PanelRadius = 9;       // the folder and entry panels
-    public const double TabRadius = 8;         // active tab top corners, its concave foot, menus
-    public const double ControlRadius = 7;     // fields, combo boxes, segmented groups
-    public const double ItemRadius = 6;        // rows, menu titles, tabs on hover, buttons
-    public const double InnerRadius = 5;       // a button inside a group or a field, menu highlights
-    public const double KeyCapRadius = 4;      // key caps, check boxes, scrollbar thumbs
+    public const double WindowRadius = 7;      // Windows 11 rounds by 8
+    public const double PanelRadius = 6;       // the folder and entry panels
+    public const double TabRadius = 6;         // active tab top corners, its concave foot, menus
+    public const double ControlRadius = 5;     // fields, combo boxes, segmented groups
+    public const double ItemRadius = 4;        // rows, menu titles, tabs on hover, buttons
+    public const double InnerRadius = 4;       // a button inside a group or a field, menu highlights
+    public const double KeyCapRadius = 3;      // key caps, check boxes, scrollbar thumbs
     public static readonly CornerRadius WindowCorner = new(WindowRadius);
     public static readonly CornerRadius PanelCorner = new(PanelRadius);
     public static readonly CornerRadius TabCorner = new(TabRadius);
