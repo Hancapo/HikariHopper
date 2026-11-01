@@ -189,13 +189,13 @@ public sealed class SmoothScrolling
     {
         if (viewer.Content is not Visual content)
             return;
-        double offset = Math.Round(stretch);
-        if (offset == 0)
+        // Fractional on purpose: a stretch of a few pixels moved in whole pixels visibly steps.
+        if (stretch == 0)
             content.RenderTransform = null;
         else if (content.RenderTransform is TranslateTransform translate)
-            translate.Y = offset;
+            translate.Y = stretch;
         else
-            content.RenderTransform = new TranslateTransform(0, offset);
+            content.RenderTransform = new TranslateTransform(0, stretch);
     }
 
     private static int WheelScrollLines()

@@ -846,6 +846,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(40);
         Assert.Equal(0, scroller.Offset.Y);
         Assert.True(rows.RenderTransform is Avalonia.Media.TranslateTransform { Y: > 0 }, "The top of the list should stretch down");
+        // It springs back in sub-pixel steps; whole-pixel steps look choppy over a few pixels.
+        var stretches = new List<double>();
+        for (int sample = 0; sample < 20; sample++)
+        {
+            if (rows.RenderTransform is Avalonia.Media.TranslateTransform translate)
+                stretches.Add(translate.Y);
+            Pump(15);
+        }
+        Assert.Contains(stretches, y => Math.Abs(y - Math.Round(y)) > 0.01);
         Pump(600);
         Assert.Null(rows.RenderTransform);
 
