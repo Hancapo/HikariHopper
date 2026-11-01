@@ -29,7 +29,7 @@ public partial class TextureRail : UserControl
     {
         InitializeComponent();
         FlickScrolling.Attach(Scroller);
-        WheelFlick.Attach(Scroller);
+        SmoothScrolling.Attach(Scroller);
         Scroller.TemplateApplied += (_, e) =>
         {
             if (e.NameScope.Find<QuietScrollBar>("PART_VerticalScrollBar") is { } bar)

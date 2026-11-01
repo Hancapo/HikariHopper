@@ -32,7 +32,7 @@ public partial class EntryTable : UserControl
     /// <summary>Rows sit <see cref="Ui.Theme.ListInset"/> inside the panel's left and right edges.</summary>
     public static readonly Thickness RowMargin = new(Ui.Theme.ListInset, 0);
 
-    private readonly QtWheelScrolling wheel;
+    private readonly SmoothScrolling wheel;
     private readonly EntryPointerArea pointerArea;
     private readonly ListHighlightTracker highlight;
     private ExplorerViewModel? bridge;
@@ -50,7 +50,7 @@ public partial class EntryTable : UserControl
     public EntryTable()
     {
         InitializeComponent();
-        wheel = QtWheelScrolling.Attach(Scroller);
+        wheel = SmoothScrolling.Attach(Scroller);
         pointerArea = new EntryPointerArea(() => Bridge, () => EntryList, RequestContextMenu);
         highlight = new ListHighlightTracker(Scroller, wheel, Ui.Theme.RowHeight);
         EntryList.Owner = this;

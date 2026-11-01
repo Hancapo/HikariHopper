@@ -26,13 +26,13 @@ public partial class FolderPanel : UserControl
     /// <summary>Rows sit this far inside the panel's left and right edges.</summary>
     public static readonly Thickness RowInset = new(Ui.Theme.ListInset, 0);
 
-    private readonly QtWheelScrolling wheel;
+    private readonly SmoothScrolling wheel;
     private ExplorerViewModel? bridge;
 
     public FolderPanel()
     {
         InitializeComponent();
-        wheel = QtWheelScrolling.Attach(Scroller);
+        wheel = SmoothScrolling.Attach(Scroller);
         FolderList.Owner = this;
         FolderList.KeyDown += OnListKeyDown;
         Scroller.ScrollChanged += (_, e) =>

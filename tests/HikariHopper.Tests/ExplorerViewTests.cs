@@ -806,16 +806,78 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void WheelScrollsThreeLinesPerNotch()
+    public void WheelGlidesOneNotchAtATime()
     {
         Explorer ui = OpenExplorer(files: 80);
         ScrollViewer scroller = ui.Find<EntryTable>().FindControl<ScrollViewer>("Scroller")!;
         ui.Window.MouseMove(new Point(600, 400));
         ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
         Pump(30);
-        Assert.InRange(scroller.Offset.Y, 1, 71);
+        Assert.InRange(scroller.Offset.Y, 1, SmoothScrolling.NotchDistance - 1);
         Pump(400);
-        Assert.Equal(QtWheelScrolling.NotchDistance, scroller.Offset.Y, 3);
+        Assert.Equal(SmoothScrolling.NotchDistance, scroller.Offset.Y, 3);
+    }
+
+    [AvaloniaFact]
+    public void FastWheelTurnsAddUp()
+    {
+        Explorer ui = OpenExplorer(files: 80);
+        ScrollViewer scroller = ui.Find<EntryTable>().FindControl<ScrollViewer>("Scroller")!;
+        ui.Window.MouseMove(new Point(600, 400));
+        // Notches that arrive mid-glide extend it instead of restarting from where the view is.
+        for (int notch = 0; notch < 3; notch++)
+        {
+            ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
+            Pump(15);
+        }
+        Pump(500);
+        Assert.Equal(3 * SmoothScrolling.NotchDistance, scroller.Offset.Y, 3);
+    }
+
+    [AvaloniaFact]
+    public void WheelAtAnEndStretchesTheListAndSpringsBack()
+    {
+        Explorer ui = OpenExplorer(files: 80);
+        ScrollViewer scroller = ui.Find<EntryTable>().FindControl<ScrollViewer>("Scroller")!;
+        Control rows = (Control)scroller.Content!;
+        ui.Window.MouseMove(new Point(600, 400));
+
+        ui.Window.MouseWheel(new Point(600, 400), new Vector(0, 1));
+        Pump(40);
+        Assert.Equal(0, scroller.Offset.Y);
+        Assert.True(rows.RenderTransform is Avalonia.Media.TranslateTransform { Y: > 0 }, "The top of the list should stretch down");
+        Pump(600);
+        Assert.Null(rows.RenderTransform);
+
+        // The bottom stretches the other way.
+        scroller.Offset = scroller.Offset.WithY(scroller.Extent.Height - scroller.Viewport.Height);
+        Pump();
+        ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
+        Pump(40);
+        Assert.True(rows.RenderTransform is Avalonia.Media.TranslateTransform { Y: < 0 }, "The bottom of the list should stretch up");
+        Pump(600);
+        Assert.Null(rows.RenderTransform);
+    }
+
+    [AvaloniaFact]
+    public void DraggingTheScrollbarTakesOverFromAGlide()
+    {
+        Explorer ui = OpenExplorer(files: 80);
+        ScrollViewer scroller = ui.Find<EntryTable>().FindControl<ScrollViewer>("Scroller")!;
+        ui.Window.MouseMove(new Point(600, 400));
+        ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -3));
+        Pump(20);
+        // Pressing the scrollbar thumb (near the top of the lane at the panel's right edge) stops the
+        // glide where it is.
+        var lane = new Point(1346, 200);
+        ui.Window.MouseMove(lane);
+        ui.Window.MouseDown(lane, MouseButton.Left);
+        Pump(20);
+        double held = scroller.Offset.Y;
+        Assert.InRange(held, 1, 3 * SmoothScrolling.NotchDistance - 1);
+        Pump(400);
+        Assert.Equal(held, scroller.Offset.Y, 3);
+        ui.Window.MouseUp(lane, MouseButton.Left);
     }
 
     [AvaloniaFact]

@@ -19,7 +19,7 @@ public partial class EntryGrid : UserControl
     private const double CellWidth = Ui.Theme.GridCellWidth;
     private const double CellHeight = Ui.Theme.GridCellHeight;
 
-    private readonly QtWheelScrolling wheel;
+    private readonly SmoothScrolling wheel;
     private readonly EntryPointerArea pointerArea;
     private readonly ItemCollection<int> rows = [];
     private ExplorerViewModel? bridge;
@@ -37,7 +37,7 @@ public partial class EntryGrid : UserControl
     public EntryGrid()
     {
         InitializeComponent();
-        wheel = QtWheelScrolling.Attach(Scroller);
+        wheel = SmoothScrolling.Attach(Scroller);
         pointerArea = new EntryPointerArea(() => Bridge, () => RowList, RequestContextMenu);
         RowList.Owner = this;
         RowList.ItemsSource = rows;
