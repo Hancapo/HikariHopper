@@ -17,7 +17,7 @@ public sealed class ListHighlightTracker
     private const double Velocity = 400;
 
     private readonly ScrollViewer viewer;
-    private readonly QtWheelScrolling scrolling;
+    private readonly SmoothScrolling scrolling;
     private readonly double rowHeight;
     private readonly DispatcherTimer timer;
     private readonly Stopwatch clock = new();
@@ -36,7 +36,7 @@ public sealed class ListHighlightTracker
     private double totalTime;
     private double direction;
 
-    public ListHighlightTracker(ScrollViewer viewer, QtWheelScrolling scrolling, double rowHeight)
+    public ListHighlightTracker(ScrollViewer viewer, SmoothScrolling scrolling, double rowHeight)
     {
         this.viewer = viewer;
         this.scrolling = scrolling;
