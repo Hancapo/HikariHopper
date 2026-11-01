@@ -67,7 +67,9 @@ public sealed class YdrTextureTests
         var (header, system, graphics) = Sections(saved);
         Assert.Equal(165u, oldHeader.Version);
         Assert.Equal(165u, header.Version);
-        Assert.Equal(oldGraphics, graphics[..oldGraphics.Length]);
+        // Only the old texture dictionary's own allocations may be reused; everything else keeps its bytes and address.
+        var (reclaimedSystem, reclaimedGraphics) = Document(original).Reclaimable();
+        AssertSameOutside(oldGraphics, graphics, reclaimedGraphics);
         // Only page-info, dictionary and shader texture parameter pointers may change.
         byte[] expected = oldSystem.ToArray();
         int group = Offset(oldSystem, 0x10);
@@ -83,9 +85,44 @@ public sealed class YdrTextureTests
         }
         foreach (int field in permitted)
             system.AsSpan(field, 8).CopyTo(expected.AsSpan(field));
-        Assert.Equal(expected, system[..oldSystem.Length]);
+        AssertSameOutside(expected, system, reclaimedSystem);
         Assert.Equal(1, header.SystemFlags.TotalPageCount);
         Assert.Equal(1, header.GraphicsFlags.TotalPageCount);
+    }
+
+    private static void AssertSameOutside(byte[] original, byte[] saved, IReadOnlyList<(int Start, int End)> reclaimed)
+    {
+        int position = 0;
+        foreach ((int start, int end) in reclaimed.Append((original.Length, original.Length)))
+        {
+            int stop = Math.Min(start, original.Length);
+            if (stop > position)
+            {
+                // A save may drop the source page's trailing zero padding, never real bytes.
+                int kept = Math.Min(stop, saved.Length);
+                if (kept > position)
+                    Assert.Equal(original[position..kept], saved[position..kept]);
+                Assert.True(original.AsSpan(Math.Max(position, kept), stop - Math.Max(position, kept)).IndexOfAnyExcept((byte)0) < 0,
+                    $"Preserved bytes up to 0x{stop:X} were truncated");
+            }
+            position = Math.Max(position, end);
+        }
+    }
+
+    private static (int System, int Graphics) SectionSizes(byte[] data)
+    {
+        var (_, system, graphics) = Sections(data);
+        return (system.Length, graphics.Length);
+    }
+
+    /// <summary>Graphics offset of each embedded texture's payload, by name.</summary>
+    private static Dictionary<string, ulong> PayloadAddresses(byte[] data)
+    {
+        YdrTextureDocument document = Document(data);
+        var (_, system, _) = Sections(data);
+        ulong dictionary = BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(document.Group + 8));
+        return YdrTextureDocument.Descriptors(system, dictionary)
+            .ToDictionary(pair => pair.Key, pair => BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(pair.Value + 0x70)));
     }
 
     /// <summary>Material texture names read independently by FiveFury.NET's drawable reader.</summary>
@@ -119,6 +156,68 @@ public sealed class YdrTextureTests
         Assert.Equal(textures[0].Data.ToArray(), reopened.Data.ToArray());
         Assert.Equal(old.Width * 2, reopened.Width);
         Assert.Equal(result, document.Serialize(Legacy(textures), NoRenames));
+    }
+
+    [AvaloniaFact]
+    public void RenameKeepsPayloadsInPlaceWithoutGrowing()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument document = Document(raw);
+        Texture old = document.Dictionary.Textures[0];
+        byte[] result = document.Serialize(
+            Legacy(document.Dictionary.Textures.Select(texture => ReferenceEquals(texture, old) ? TextureOperations.WithName(texture, "hikari_renamed") : texture)),
+            new Dictionary<string, string> { [old.Name!] = "hikari_renamed" });
+        AssertPreserved(raw, result);
+        // Untouched pixel data stays where it was and the graphics section does not grow.
+        Dictionary<string, ulong> before = PayloadAddresses(raw), after = PayloadAddresses(result);
+        Assert.Equal(before[old.Name!], after["hikari_renamed"]);
+        foreach (Texture texture in document.Dictionary.Textures.Skip(1))
+            Assert.Equal(before[texture.Name!], after[texture.Name!]);
+        Assert.True(SectionSizes(result).Graphics <= SectionSizes(raw).Graphics);
+    }
+
+    [AvaloniaFact]
+    public void RepeatedEditSessionsDoNotGrowTheResource()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument first = Document(raw);
+        List<Texture> textures = [.. first.Dictionary.Textures];
+        textures[0] = TextureOperations.Resize(textures[0], textures[0].Width * 2, textures[0].Height * 2, ImageFilter.Mitchell, 4, true);
+        byte[] current = first.Serialize(Legacy(textures), NoRenames);
+        (int System, int Graphics) settled = SectionSizes(current);
+        // Each round reopens the saved file, as closing and reopening the editor does, and edits it again.
+        for (int round = 0; round < 6; round++)
+        {
+            YdrTextureDocument document = Document(current);
+            Texture target = document.Dictionary.Textures[round % document.Dictionary.Textures.Length];
+            string name = round % 2 == 0 ? target.Name + "_x" : target.Name![..^2];
+            byte[] next = document.Serialize(
+                Legacy(document.Dictionary.Textures.Select(texture => ReferenceEquals(texture, target) ? TextureOperations.WithName(texture, name) : texture)),
+                new Dictionary<string, string> { [target.Name!] = name });
+            AssertPreserved(current, next);
+            Assert.Equal(MaterialNames(current).Select(material => material == target.Name ? name : material), MaterialNames(next));
+            (int System, int Graphics) size = SectionSizes(next);
+            Assert.True(size.Graphics <= settled.Graphics, $"Round {round}: graphics grew from {settled.Graphics} to {size.Graphics}");
+            Assert.True(size.System <= settled.System + 64, $"Round {round}: system grew from {settled.System} to {size.System}");
+            current = next;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ReplacingATextureReusesItsOldSpace()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument document = Document(raw);
+        List<Texture> textures = [.. document.Dictionary.Textures];
+        Texture old = textures[0];
+        // Same size, different pixels: the new payload fits where the old one was.
+        textures[0] = TextureOperations.Resize(TextureOperations.Resize(old, old.Width / 2, old.Height / 2, ImageFilter.Point, 4, true),
+            old.Width, old.Height, ImageFilter.Point, 4, true);
+        Assert.Equal(old.Data.Length, textures[0].Data.Length);
+        byte[] result = document.Serialize(Legacy(textures), NoRenames);
+        AssertPreserved(raw, result);
+        Assert.True(SectionSizes(result).Graphics <= SectionSizes(raw).Graphics);
+        Assert.Equal(textures[0].Data.ToArray(), Document(result).Dictionary.Textures.Single(texture => texture.Name == old.Name).Data.ToArray());
     }
 
     [AvaloniaFact]
