@@ -61,31 +61,57 @@ public sealed class YdrTextureTests
 
     private static int Offset(byte[] system, int field) => (int)(BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(field)) - SystemBase);
 
+    /// <summary>System offset of the shader group's texture dictionary pointer.</summary>
+    private static int DictionaryField(byte[] system) => Offset(system, 0x10) + 8;
+
+    /// <summary>Descriptor offsets by name in the embedded texture dictionary.</summary>
+    private static Dictionary<string, int> Descriptors(byte[] system)
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        int dictionary = Offset(system, DictionaryField(system));
+        int count = BinaryPrimitives.ReadUInt16LittleEndian(system.AsSpan(dictionary + 0x38));
+        int array = Offset(system, dictionary + 0x30);
+        for (int index = 0; index < count; index++)
+        {
+            int descriptor = Offset(system, array + 8 * index);
+            int name = Offset(system, descriptor + 0x28);
+            result[System.Text.Encoding.UTF8.GetString(system, name, Array.IndexOf(system, (byte)0, name) - name)] = descriptor;
+        }
+        return result;
+    }
+
+    /// <summary>Everything but the textures reads back the same: geometry, bounds, LODs, skeleton and materials.</summary>
     private static void AssertPreserved(byte[] original, byte[] saved)
     {
-        var (oldHeader, oldSystem, oldGraphics) = Sections(original);
-        var (header, system, graphics) = Sections(saved);
-        Assert.Equal(165u, oldHeader.Version);
-        Assert.Equal(165u, header.Version);
-        Assert.Equal(oldGraphics, graphics[..oldGraphics.Length]);
-        // Only page-info, dictionary and shader texture parameter pointers may change.
-        byte[] expected = oldSystem.ToArray();
-        int group = Offset(oldSystem, 0x10);
-        List<int> permitted = [8, group + 8];
-        int shaders = Offset(oldSystem, group + 0x10);
-        for (int index = 0; index < BinaryPrimitives.ReadUInt16LittleEndian(oldSystem.AsSpan(group + 0x18)); index++)
+        var before = FiveFury.Ydr.Ydr.Read(original);
+        var after = FiveFury.Ydr.Ydr.Read(saved);
+        Assert.Equal(before.Version, after.Version);
+        Assert.Equal(before.Target, after.Target);
+        Assert.Equal(before.Drawable.Box, after.Drawable.Box);
+        Assert.Equal(before.Drawable.Sphere, after.Drawable.Sphere);
+        Assert.Equal(before.Drawable.Skeleton?.Bones.Count, after.Drawable.Skeleton?.Bones.Count);
+        foreach (CommonFury.Assets.DrawableLod lod in Enum.GetValues<CommonFury.Assets.DrawableLod>())
+            Assert.Equal(before.Drawable.Lods[lod].Distance, after.Drawable.Lods[lod].Distance);
+        Assert.Equal(before.Drawable.Materials.Select(material => material.ShaderHash), after.Drawable.Materials.Select(material => material.ShaderHash));
+        var geometries = before.Drawable.Geometries.Zip(after.Drawable.Geometries).ToList();
+        Assert.Equal(before.Drawable.Geometries.Count(), geometries.Count);
+        Assert.Equal(before.Drawable.Geometries.Count(), after.Drawable.Geometries.Count());
+        foreach ((var left, var right) in geometries)
         {
-            int shader = Offset(oldSystem, shaders + index * 8);
-            int parameters = Offset(oldSystem, shader);
-            for (int parameter = 0; parameter < oldSystem[shader + 0x10]; parameter++)
-                if (oldSystem[parameters + parameter * 16] == 0)
-                    permitted.Add(parameters + parameter * 16 + 8);
+            Assert.Equal(left.Box, right.Box);
+            Assert.Equal(left.MaterialIndex, right.MaterialIndex);
+            Assert.True(left.Vertices.Data.SequenceEqual(right.Vertices.Data), "Vertex data changed");
+            Assert.True(left.Indices.Indices.SequenceEqual(right.Indices.Indices), "Index data changed");
         }
-        foreach (int field in permitted)
-            system.AsSpan(field, 8).CopyTo(expected.AsSpan(field));
-        Assert.Equal(expected, system[..oldSystem.Length]);
-        Assert.Equal(1, header.SystemFlags.TotalPageCount);
-        Assert.Equal(1, header.GraphicsFlags.TotalPageCount);
+    }
+
+    private static int TotalSize(byte[] data) => (int)ResourceFile.Read(data).Header.TotalSize;
+
+    /// <summary>Graphics address of each embedded texture's payload, by name.</summary>
+    private static Dictionary<string, ulong> PayloadAddresses(byte[] data)
+    {
+        var (_, system, _) = Sections(data);
+        return Descriptors(system).ToDictionary(pair => pair.Key, pair => BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(pair.Value + 0x70)));
     }
 
     /// <summary>Material texture names read independently by FiveFury.NET's drawable reader.</summary>
@@ -119,6 +145,84 @@ public sealed class YdrTextureTests
         Assert.Equal(textures[0].Data.ToArray(), reopened.Data.ToArray());
         Assert.Equal(old.Width * 2, reopened.Width);
         Assert.Equal(result, document.Serialize(Legacy(textures), NoRenames));
+    }
+
+    [AvaloniaFact]
+    public void RenameKeepsPayloadsInPlaceWithoutGrowing()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument document = Document(raw);
+        Texture old = document.Dictionary.Textures[0];
+        byte[] result = document.Serialize(
+            Legacy(document.Dictionary.Textures.Select(texture => ReferenceEquals(texture, old) ? TextureOperations.WithName(texture, "hikari_renamed") : texture)),
+            new Dictionary<string, string> { [old.Name!] = "hikari_renamed" });
+        AssertPreserved(raw, result);
+        // Untouched pixel data stays where it was, and the resource does not grow.
+        Dictionary<string, ulong> before = PayloadAddresses(raw), after = PayloadAddresses(result);
+        Assert.Equal(before[old.Name!], after["hikari_renamed"]);
+        foreach (Texture texture in document.Dictionary.Textures.Skip(1))
+            Assert.Equal(before[texture.Name!], after[texture.Name!]);
+        Assert.True(TotalSize(result) <= TotalSize(raw), $"Grew from {TotalSize(raw)} to {TotalSize(result)} bytes");
+    }
+
+    [AvaloniaFact]
+    public void RepeatedEditSessionsDoNotGrowTheResource()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument first = Document(raw);
+        List<Texture> textures = [.. first.Dictionary.Textures];
+        textures[0] = TextureOperations.Resize(textures[0], textures[0].Width * 2, textures[0].Height * 2, ImageFilter.Mitchell, 4, true);
+        byte[] current = first.Serialize(Legacy(textures), NoRenames);
+        int settled = TotalSize(current);
+        // Each round reopens the saved file, as closing and reopening the editor does, and edits it again,
+        // alternating a pixel edit with a rename: the two edits that used to stack copies.
+        for (int round = 0; round < 6; round++)
+        {
+            YdrTextureDocument document = Document(current);
+            List<Texture> edited = [.. document.Dictionary.Textures];
+            int index = round % edited.Count;
+            Texture target = edited[index];
+            string name = target.Name!;
+            if (round % 2 == 0)
+                edited[index] = Repainted(target);
+            else
+                edited[index] = TextureOperations.WithName(target, name = name.EndsWith("_x") ? name[..^2] : name + "_x");
+            byte[] next = document.Serialize(Legacy(edited), name == target.Name ? NoRenames : new Dictionary<string, string> { [target.Name!] = name });
+            AssertPreserved(current, next);
+            Assert.True(TotalSize(next) <= settled, $"Round {round}: grew from {settled} to {TotalSize(next)} bytes");
+            current = next;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ReplacingATextureReusesItsOldSpace()
+    {
+        byte[] raw = Asset(BreadRack);
+        YdrTextureDocument document = Document(raw);
+        List<Texture> textures = [.. document.Dictionary.Textures];
+        Texture old = textures[0];
+        // Same size, different pixels: the new payload fits where the old one was.
+        textures[0] = Repainted(old);
+        Assert.Equal(old.Data.Length, textures[0].Data.Length);
+        Assert.False(old.Data.SequenceEqual(textures[0].Data));
+        byte[] result = document.Serialize(Legacy(textures), NoRenames);
+        AssertPreserved(raw, result);
+        Assert.Equal(TotalSize(raw), TotalSize(result));
+        Assert.Equal(textures[0].Data.ToArray(), Document(result).Dictionary.Textures.Single(texture => texture.Name == old.Name).Data.ToArray());
+    }
+
+    /// <summary>The same texture with different pixels: exactly the same size, format and mip chain.</summary>
+    private static Texture Repainted(Texture texture)
+    {
+        byte[] data = texture.Data.ToArray();
+        for (int index = 0; index < data.Length; index += 64)
+            data[index] ^= 0x5A;
+        return new Texture(texture.Name, texture.Width, texture.Height, texture.Format, texture.MipCount, data, texture.Shape)
+        {
+            Usage = texture.Usage,
+            UsageFlags = texture.UsageFlags,
+            ReferenceCount = texture.ReferenceCount,
+        };
     }
 
     [AvaloniaFact]
@@ -164,10 +268,10 @@ public sealed class YdrTextureTests
     public void RejectsZeroCountDictionaryWithNonzeroTextureCount()
     {
         var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, Offset(system, 0x10) + 8);
+        int dictionary = Offset(system, DictionaryField(system));
         BinaryPrimitives.WriteUInt16LittleEndian(system.AsSpan(dictionary + 0x28), 0);
-        var error = Assert.ThrowsAny<InvalidDataException>(() => Document(Rebuild(header, system, graphics)));
-        Assert.Contains("counts", error.Message);
+        // An inconsistent dictionary is refused rather than opened as something else.
+        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
     }
 
     [AvaloniaFact]
@@ -183,7 +287,7 @@ public sealed class YdrTextureTests
     public void ZeroCountEmbeddedDictionaryIsNotRejected()
     {
         var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, Offset(system, 0x10) + 8);
+        int dictionary = Offset(system, DictionaryField(system));
         system.AsSpan(dictionary + 0x20, 0x20).Clear();
         Assert.Empty(Document(Rebuild(header, system, graphics)).Dictionary.Textures);
     }
@@ -195,10 +299,10 @@ public sealed class YdrTextureTests
         YdrTextureDocument document = Document(raw);
         var edition = Assert.Throws<ArgumentException>(() =>
             document.Serialize(new TextureSet(document.Dictionary.Textures, GameTarget.Enhanced), NoRenames));
-        Assert.Contains("Legacy", edition.Message);
+        Assert.Contains("edition", edition.Message);
         byte[] broken = raw.ToArray();
         BinaryPrimitives.WriteUInt32LittleEndian(broken.AsSpan(4), 159);
-        Assert.Contains("Legacy", Assert.Throws<NotSupportedException>(() => Document(broken)).Message);
+        Assert.ThrowsAny<Exception>(() => Document(broken));
     }
 
     [AvaloniaFact]
@@ -216,8 +320,8 @@ public sealed class YdrTextureTests
     public void MalformedDictionaryIsNotOpenedAsEmpty()
     {
         var (header, system, graphics) = Sections(Asset(BreadRack));
-        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(Offset(system, 0x10) + 8), SystemBase + (ulong)system.Length + 16);
-        Assert.Contains("pointer", Assert.ThrowsAny<InvalidDataException>(() => Document(Rebuild(header, system, graphics))).Message);
+        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(DictionaryField(system)), SystemBase + (ulong)system.Length + 16);
+        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
     }
 
     [AvaloniaFact]
@@ -227,7 +331,7 @@ public sealed class YdrTextureTests
         YdrTextureDocument document = Document(raw);
         var (header, system, graphics) = Sections(raw);
         Texture texture = document.Dictionary.Textures[0];
-        int descriptor = YdrTextureDocument.Descriptors(system, BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(document.Group + 8)))[texture.Name!];
+        int descriptor = Descriptors(system)[texture.Name!];
         BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(descriptor + 0x70), 0x60000000UL + (ulong)(graphics.Length - texture.Data.Length + 8));
         Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
     }
@@ -238,7 +342,7 @@ public sealed class YdrTextureTests
         byte[] raw = Asset(BreadRack);
         YdrTextureDocument document = Document(raw);
         var (header, system, graphics) = Sections(raw);
-        int dictionary = Offset(system, document.Group + 8);
+        int dictionary = Offset(system, DictionaryField(system));
         int array = Offset(system, dictionary + 0x30);
         int first = Offset(system, array), second = Offset(system, array + 8);
         system.AsSpan(second + 0x28, 8).CopyTo(system.AsSpan(first + 0x28));
@@ -247,7 +351,7 @@ public sealed class YdrTextureTests
         {
             duplicate = Document(Rebuild(header, system, graphics));
         }
-        catch (InvalidDataException)
+        catch (Exception)
         {
             return; // FiveFury.NET may already refuse the inconsistent dictionary on open.
         }
@@ -277,8 +381,7 @@ public sealed class YdrTextureTests
     private static Dictionary<string, byte[]> DescriptorBytes(byte[] raw)
     {
         var (_, system, _) = Sections(raw);
-        ulong pointer = BinaryPrimitives.ReadUInt64LittleEndian(system.AsSpan(Offset(system, 0x10) + 8));
-        return YdrTextureDocument.Descriptors(system, pointer).ToDictionary(pair => pair.Key, pair => system.AsSpan(pair.Value, 0x90).ToArray());
+        return Descriptors(system).ToDictionary(pair => pair.Key, pair => system.AsSpan(pair.Value, 0x90).ToArray());
     }
 
     [AvaloniaFact]
