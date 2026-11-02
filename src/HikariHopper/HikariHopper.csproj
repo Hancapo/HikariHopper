@@ -20,6 +20,10 @@
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The native linker records only the PDB's file name (MSVC's %_PDB%), not this machine's path to it. -->
+    <LinkerArg Include="/PDBALTPATH:%25_PDB%25" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
