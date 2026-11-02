@@ -23,6 +23,19 @@ dotnet test --solution HikariHopper.slnx
 Real-asset checks run when `HIKARI_TEST_LEGACY` points to a GTA V Legacy installation; they
 only read from it.
 
+## Releasing
+
+Releases are Native AOT builds, so users don't need .NET installed. Publishing needs the
+Visual Studio C++ build tools.
+
+```sh
+pwsh tools/release.ps1 -GameRoot "D:\Path\To\Grand Theft Auto V"
+```
+
+The script publishes the AOT build and fails on any AOT compiler warning. It then runs
+`HikariHopper.exe --self-test` on the native binary against the game, checks that the window
+opens, and zips the result into `artifacts\`.
+
 ## Game keys
 
 No encryption keys are included. HikariHopper finds the AES key in your own `GTA5.exe` or

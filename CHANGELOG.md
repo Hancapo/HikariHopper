@@ -9,6 +9,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Changed
 
 - Text uses Avalonia's own rendering, keeping each font's letter widths and line heights instead of rounding them the way Qt does.
+- Releases are native builds and no longer need the .NET 10 Runtime.
 
 ## [0.0.1] - 2026-11-02
 

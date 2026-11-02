@@ -1,13 +1,16 @@
 using Avalonia;
 using Avalonia.Controls.Platform;
+using HikariHopper.Core;
+using HikariHopper.Infrastructure;
 
 namespace HikariHopper;
 
 internal static class Program
 {
     [STAThread]
-    public static int Main(string[] args) =>
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    public static int Main(string[] args) => args is ["--self-test", .. var rest]
+        ? SelfTest.Run(rest is [var root, ..] ? root : GameSettings.ConfiguredGameRootToOpen(), Console.Out)
+        : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
     public static AppBuilder BuildAvaloniaApp()
     {
