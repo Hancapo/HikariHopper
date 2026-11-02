@@ -12,9 +12,9 @@ namespace HikariHopper.Views;
 /// <see cref="Render"/>.
 /// </summary>
 /// <remarks>
-/// A press grabs the slider and takes focus without moving it; dragging and releasing move the
-/// value to the snapped pointer position. Left/Right step it, holding the handle pressed while the
-/// key is down. <see cref="Moved"/> is QML <c>moved</c>: raised whenever the user changes the
+/// The whole control takes the pointer, not just the track and handle it draws: a press anywhere
+/// on it moves the value straight to the snapped pointer position and takes focus, and dragging
+/// keeps it there. Left/Right step it, holding the handle pressed while the key is down. <see cref="Moved"/> is QML <c>moved</c>: raised whenever the user changes the
 /// position. Like Qt, the wheel does nothing.
 /// </remarks>
 public class TextureMipSlider : Control
@@ -89,6 +89,8 @@ public class TextureMipSlider : Control
 
     public override void Render(DrawingContext context)
     {
+        // Avalonia hit-tests what a control draws; this makes the empty space around the 3px track clickable too.
+        context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         double available = AvailableWidth;
         double availableHeight = Math.Max(0, Bounds.Height - 2 * SliderPadding);
         double backgroundX = SliderPadding;
@@ -119,6 +121,7 @@ public class TextureMipSlider : Control
         pressed = true;
         e.Pointer.Capture(this);
         e.Handled = true;
+        MoveTo(e.GetPosition(this).X);
         InvalidateVisual();
     }
 

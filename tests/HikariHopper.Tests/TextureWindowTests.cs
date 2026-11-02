@@ -315,6 +315,30 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void MipSliderJumpsToAPressOffTheHandle()
+    {
+        Texture mipped = new("mips", 64, 64, TextureFormat.B8G8R8A8Unorm, 3,
+            TextureTestKit.Repeat([1, 2, 3, 255], 64 * 64 + 32 * 32 + 16 * 16));
+        TextureWindowHarness harness = Opened(mipped);
+        TextureMipSlider slider = harness.Window.Preview.MipBar.Slider;
+        // Near the right end, 3px from the top edge: empty space, well away from the 3px track and the handle.
+        Point right = slider.TranslatePoint(new Point(slider.Bounds.Width - 8, 3), harness.Window)!.Value;
+        harness.Window.MouseMove(right);
+        harness.Window.MouseDown(right, MouseButton.Left);
+        harness.Settle();
+        // The value moves on the press itself, not on release.
+        Assert.Equal(2, harness.ViewModel.MipLevel);
+        harness.Window.MouseUp(right, MouseButton.Left);
+        harness.Settle();
+        Assert.Equal(2, harness.ViewModel.MipLevel);
+
+        Point left = slider.TranslatePoint(new Point(8, slider.Bounds.Height - 3), harness.Window)!.Value;
+        harness.Click(left.X, left.Y);
+        harness.Settle();
+        Assert.Equal(0, harness.ViewModel.MipLevel);
+    }
+
+    [AvaloniaFact]
     public void ToolDialogsAreCentredWithTheQmlSize()
     {
         TextureWindowHarness harness = Opened();
