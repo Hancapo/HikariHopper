@@ -1,23 +1,11 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:c="using:HikariHopper.Views.Controls"
              x:Class="HikariHopper.App"
              RequestedThemeVariant="Dark">
   <!-- Fluent is only the base for controls nobody has ported yet; every HikariHopper control
        below replaces its template entirely with the QML one. -->
   <Application.Styles>
     <FluentTheme />
-    <!-- Qt's text line box (round(ascent) + round(descent)) for every label. -->
-    <Style Selector="TextBlock" x:CompileBindings="False">
-      <Setter Property="LineHeight">
-        <MultiBinding Converter="{x:Static c:QtTextMetrics.LineHeightConverter}">
-          <Binding Path="FontFamily" RelativeSource="{RelativeSource Self}" />
-          <Binding Path="FontSize" RelativeSource="{RelativeSource Self}" />
-          <Binding Path="FontWeight" RelativeSource="{RelativeSource Self}" />
-          <Binding Path="FontStyle" RelativeSource="{RelativeSource Self}" />
-        </MultiBinding>
-      </Setter>
-    </Style>
     <StyleInclude Source="avares://HikariHopper/Views/Textures/TextureDialogStyles.axaml" />
   </Application.Styles>
   <Application.Resources>

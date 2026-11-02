@@ -316,14 +316,13 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
-    public void TextUsesQtWholePixelMetrics() => UiThread.Run(() =>
+    public void TextKeepsTheFontsDesignMetrics() => UiThread.Run(() =>
     {
+        // Avalonia's own shaping: glyph advances are not rounded to whole pixels.
         var label = new TextBlock { Text = "Repair alpha edges", FontFamily = T.UiFont, FontSize = 12 };
-        var mono = new TextBlock { Text = "FILE", FontFamily = T.MonoFont, FontSize = 9, FontWeight = FontWeight.Bold };
-        Window window = Show(new StackPanel { Children = { TopLeft(label), TopLeft(mono) } }, 300, 100);
-        Assert.Equal(108, label.Bounds.Width);                            // design width 102.4
-        Assert.Equal(14, label.Bounds.Height);
-        Assert.Equal(13, mono.Bounds.Height);                             // round(10.08) + round(3.25)
+        Window window = Show(new StackPanel { Children = { TopLeft(label) } }, 300, 100);
+        Assert.Equal(103, label.Bounds.Width);                            // design width 102.4, laid out on whole pixels
+        // Text fields still centre their line on Qt's rounded line box.
         Assert.Equal(24, QtTextMetrics.LineHeight(T.MonoFont, 16, FontWeight.Bold));
         Assert.Equal(40, QtTextMetrics.LineHeight(T.UiFont, 36, FontWeight.Bold));
         window.Close();
