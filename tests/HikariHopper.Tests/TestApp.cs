@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Headless;
-using HikariHopper.Infrastructure;
 using HikariHopper.Tests;
 
 [assembly: AvaloniaTestApplication(typeof(TestAppBuilder))]
@@ -14,7 +13,7 @@ namespace HikariHopper.Tests;
 public static class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
-        QtTextShaper.Use(AppBuilder.Configure<App>()
+        AppBuilder.Configure<App>()
             .UseSkia()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false, OverlayPopups = true }));
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false, OverlayPopups = true });
 }
