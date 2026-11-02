@@ -63,6 +63,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     private int mipLevel;
     private string previewUrl = "";
     private Bitmap? previewImage;
+    private Texture? previewTexture;
     private int previewRevision;
     // Every decoded mip of the selected texture in the current channel, so moving between mips shows one at once.
     private readonly Dictionary<int, Bitmap> mips = [];
@@ -573,6 +574,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     {
         previewRevision++;
         SetPreview($"image://textureviewer/{session}/preview/{row}/{mode}/{mip}/{previewRevision}", bitmap);
+        previewTexture = RecordAt(row)?.Texture;
         previewLoading = false;
         SetStatus($"Previewing {SelectedName} · mip {mip}");
         EmitStateChanged();
@@ -628,6 +630,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     private void ClearPreview()
     {
         SetPreview("", null);
+        previewTexture = null;
         UseMips(null, "");
     }
 
