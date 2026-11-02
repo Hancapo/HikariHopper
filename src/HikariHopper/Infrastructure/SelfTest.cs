@@ -107,12 +107,19 @@ public static class SelfTest
             }
             finally
             {
+                AppSettings.RegistryPath = previous;
                 // Only this run's key: another self-test may be running at the same time.
                 Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(scratch, throwOnMissingSubKey: false);
-                using (Microsoft.Win32.RegistryKey? parent = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\HikariHopperSelfTest"))
-                    if (parent is { SubKeyCount: 0, ValueCount: 0 })
-                        Microsoft.Win32.Registry.CurrentUser.DeleteSubKey(@"Software\HikariHopperSelfTest", throwOnMissingSubKey: false);
-                AppSettings.RegistryPath = previous;
+                try
+                {
+                    using (Microsoft.Win32.RegistryKey? parent = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\HikariHopperSelfTest"))
+                        if (parent is { SubKeyCount: 0, ValueCount: 0 })
+                            Microsoft.Win32.Registry.CurrentUser.DeleteSubKey(@"Software\HikariHopperSelfTest", throwOnMissingSubKey: false);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Another run added its key in the meantime; it removes the parent when it finishes.
+                }
             }
         });
         archive?.Close();
