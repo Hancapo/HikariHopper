@@ -64,7 +64,12 @@ public sealed partial class TextureViewerViewModel
         if (normalized == mipLevel)
             return;
         mipLevel = normalized;
-        ClearPreview();
+        if (DecodedMip(normalized) is { } decoded)
+        {
+            ShowMip(selectedIndex, channel, normalized, decoded);
+            return;
+        }
+        // Not decoded yet: the current mip stays on screen until this one is.
         previewLoading = true;
         EmitSelectionChanged();
         EmitStateChanged();
