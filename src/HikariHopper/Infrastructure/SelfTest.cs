@@ -49,8 +49,13 @@ public static class SelfTest
                 ArchiveNode nested = archive.OpenNested(entry);
                 foreach (RpfResourceFileEntry resource in nested.Archive.EnumerateEntries().OfType<RpfResourceFileEntry>())
                 {
+                    // Both need at least one texture for the checks below.
                     if (ytd is null && resource.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
-                        ytd = resource.ReadStandalone();
+                    {
+                        byte[] data = resource.ReadStandalone();
+                        if (YtdSaving.Read(data).Textures.Length > 0)
+                            ytd = data;
+                    }
                     else if (ydr is null && resource.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase)
                         && YdrTextureDocument.Read(resource.ReadStandalone()) is { Dictionary.Textures.Length: > 0 } document)
                         ydr = document.Original;
