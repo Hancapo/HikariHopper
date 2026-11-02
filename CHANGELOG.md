@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
 - The mip slider moves to wherever it is pressed, not only when its handle is dragged. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
+- Moving between mips in the texture viewer is instant. ([#21](https://github.com/Hancapo/HikariHopper/pull/21))
 - Release builds no longer contain the folder paths of the machine that built them. ([#18](https://github.com/Hancapo/HikariHopper/pull/18))
 
 ### Removed
