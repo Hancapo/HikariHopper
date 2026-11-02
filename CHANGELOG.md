@@ -6,6 +6,14 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
 ## [0.0.2] - 2026-11-02
 
 ### Changed
