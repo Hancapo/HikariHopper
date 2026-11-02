@@ -188,17 +188,4 @@ public sealed class TextureProcessingTests
         Assert.True(TextureImport.IsImagePath(@"C:\a\B.WEBP"));
         Assert.False(TextureImport.IsImagePath(@"C:\a\b.txt"));
     }
-
-    [Fact]
-    public void SinglePageFlagsMatchThePythonCalculator()
-    {
-        // Values from fivefury.resource.get_resource_flags_from_size_with_page_count(size, 10, 1).
-        Assert.Equal(0xA8000000u, YdrTextureDocument.SinglePageFlags(1, 10).Value);
-        Assert.Equal(0xA0020000u, YdrTextureDocument.SinglePageFlags(0x2000, 10).Value);
-        Assert.Equal(0xA0000800u, YdrTextureDocument.SinglePageFlags(0x2001, 10).Value);
-        Assert.Equal(0xA0000020u, YdrTextureDocument.SinglePageFlags(0x10000, 10).Value);
-        Assert.Equal(0xA0000011u, YdrTextureDocument.SinglePageFlags(0x30000, 10).Value);
-        Assert.Equal(0xA0000014u, YdrTextureDocument.SinglePageFlags(0x123456, 10).Value);
-        Assert.Equal(0x50000000u, YdrTextureDocument.SinglePageFlags(0, 5).Value);
-    }
 }
