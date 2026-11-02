@@ -339,6 +339,23 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void MovingBetweenMipsIsInstant()
+    {
+        Texture mipped = new("mips", 64, 64, TextureFormat.B8G8R8A8Unorm, 3,
+            TextureTestKit.Repeat([1, 2, 3, 255], 64 * 64 + 32 * 32 + 16 * 16));
+        TextureWindowHarness harness = Opened(mipped);
+        // Once the first preview is up, the other mips are decoded in the background.
+        harness.Settle();
+        foreach (int level in new[] { 2, 1, 0, 2 })
+        {
+            harness.ViewModel.SetMipLevel(level);
+            // No settling: the decoded mip is on screen in the same call, with nothing loading.
+            Assert.False(harness.ViewModel.PreviewLoading);
+            Assert.Equal(64 >> level, harness.ViewModel.PreviewImage!.PixelSize.Width);
+        }
+    }
+
+    [AvaloniaFact]
     public void ToolDialogsAreCentredWithTheQmlSize()
     {
         TextureWindowHarness harness = Opened();

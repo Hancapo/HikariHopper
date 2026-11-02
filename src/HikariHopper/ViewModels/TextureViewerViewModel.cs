@@ -16,7 +16,7 @@ namespace HikariHopper.ViewModels;
 public sealed partial class TextureViewerViewModel : ObservableObject
 {
     private const int UndoLimit = 24;
-    private const int PriorityThumbnail = 0, PriorityPreview = 2, PriorityTransform = 3, PrioritySave = 4;
+    private const int PriorityThumbnail = 0, PriorityMips = 1, PriorityPreview = 2, PriorityTransform = 3, PrioritySave = 4;
 
     // Python stateChanged / selectionChanged notify signals.
     private static readonly string[] StateProperties =
@@ -64,6 +64,11 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     private string previewUrl = "";
     private Bitmap? previewImage;
     private int previewRevision;
+    // Every decoded mip of the selected texture in the current channel, so moving between mips shows one at once.
+    private readonly Dictionary<int, Bitmap> mips = [];
+    private readonly HashSet<int> mipsRequested = [];
+    private Texture? mipsTexture;
+    private string mipsChannel = "";
     private bool loading, previewLoading, operationBusy, saving, externalWriteBusy;
     private string savingRootPath = "";
     private readonly List<TextureUndoAction> undoStack = [];
@@ -505,7 +510,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
             StartImageTask(row, TexturesModel[row].Texture, "rgba", 0, thumbnail: true);
     }
 
-    private void StartImageTask(int row, Texture texture, string mode, int mip, bool thumbnail)
+    private void StartImageTask(int row, Texture texture, string mode, int mip, bool thumbnail, bool prefetch = false)
     {
         int token = generation;
         Func<Texture, string, int, RgbaImage> decode = DecodeImage;
@@ -522,11 +527,11 @@ public sealed partial class TextureViewerViewModel : ObservableObject
                 Post(() => ImageFailed(token, row, thumbnail, mode, mip, exception.Message));
                 return;
             }
-            Post(() => ImageLoaded(token, row, thumbnail, mode, mip, bitmap));
-        }, thumbnail ? PriorityThumbnail : PriorityPreview);
+            Post(() => ImageLoaded(token, row, texture, thumbnail, prefetch, mode, mip, bitmap));
+        }, thumbnail ? PriorityThumbnail : prefetch ? PriorityMips : PriorityPreview);
     }
 
-    private void ImageLoaded(int token, int row, bool thumbnail, string mode, int mip, Bitmap bitmap)
+    private void ImageLoaded(int token, int row, Texture texture, bool thumbnail, bool prefetch, string mode, int mip, Bitmap bitmap)
     {
         if (token != generation)
         {
@@ -541,17 +546,59 @@ public sealed partial class TextureViewerViewModel : ObservableObject
                 bitmap.Dispose();
             return;
         }
-        if (row != selectedIndex || mode != channel || mip != mipLevel)
+        if (row != selectedIndex || mode != channel || !ReferenceEquals(SelectedRecord()?.Texture, texture))
         {
             bitmap.Dispose();
             return;
         }
+        UseMips(texture, mode);
+        if (!mips.TryAdd(mip, bitmap))
+        {
+            bitmap.Dispose();
+            bitmap = mips[mip];
+        }
+        if (mip == mipLevel && !ReferenceEquals(previewImage, bitmap))
+            ShowMip(row, mode, mip, bitmap);
+        // Once the preview is up, decode the texture's other mips so moving between them is instant.
+        if (!prefetch)
+        {
+            for (int level = 0; level < texture.MipCount; level++)
+                if (!mips.ContainsKey(level) && mipsRequested.Add(level))
+                    StartImageTask(row, texture, mode, level, thumbnail: false, prefetch: true);
+        }
+    }
+
+    /// <summary>Shows a decoded mip of the selected texture as the preview.</summary>
+    private void ShowMip(int row, string mode, int mip, Bitmap bitmap)
+    {
         previewRevision++;
         SetPreview($"image://textureviewer/{session}/preview/{row}/{mode}/{mip}/{previewRevision}", bitmap);
         previewLoading = false;
         SetStatus($"Previewing {SelectedName} · mip {mip}");
         EmitStateChanged();
         EmitSelectionChanged();
+    }
+
+    /// <summary>The decoded mip for the selected texture and channel, if it is already there.</summary>
+    private Bitmap? DecodedMip(int mip) =>
+        SelectedRecord() is { } record && ReferenceEquals(record.Texture, mipsTexture) && channel == mipsChannel
+            && mips.TryGetValue(mip, out Bitmap? bitmap) ? bitmap : null;
+
+    /// <summary>Keeps the decoded mips for <paramref name="texture"/> in <paramref name="mode"/>, releasing any others.</summary>
+    private void UseMips(Texture? texture, string mode)
+    {
+        if (ReferenceEquals(texture, mipsTexture) && mode == mipsChannel)
+            return;
+        foreach (Bitmap bitmap in mips.Values)
+        {
+            // The one on screen is released by SetPreview when it is replaced.
+            if (!ReferenceEquals(bitmap, previewImage))
+                TextureBitmaps.DisposeLater(bitmap);
+        }
+        mips.Clear();
+        mipsRequested.Clear();
+        mipsTexture = texture;
+        mipsChannel = mode;
     }
 
     private void ImageFailed(int token, int row, bool thumbnail, string mode, int mip, string message)
@@ -574,11 +621,15 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         Bitmap? previous = previewImage;
         previewUrl = url;
         previewImage = bitmap;
-        if (previous is not null && !ReferenceEquals(previous, bitmap))
+        if (previous is not null && !ReferenceEquals(previous, bitmap) && !mips.ContainsValue(previous))
             TextureBitmaps.DisposeLater(previous);
     }
 
-    private void ClearPreview() => SetPreview("", null);
+    private void ClearPreview()
+    {
+        SetPreview("", null);
+        UseMips(null, "");
+    }
 
     private void SetTextures(IEnumerable<Texture> textures)
     {
