@@ -489,6 +489,48 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
+    public void UnopenedFlatGameRpfsLoseTheirExpandArrow() => OnUiThread(() =>
+    {
+        MakeGame();
+        SaveArchive(Path.Combine(Work, "flat.rpf"), ("navmesh.ynv", "flat"));
+        SaveArchive(Path.Combine(Work, "structured.rpf"), ("folder/readme.txt", "structured"));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+
+        // Until its table has been read in the background, an unopened RPF may have children.
+        Assert.True(TreeRow(bridge, "flat.rpf").HasChildren);
+        WaitFor(() => !TreeRow(bridge, "flat.rpf").HasChildren);
+        Assert.True(TreeRow(bridge, "structured.rpf").HasChildren);
+    });
+
+    [AvaloniaFact]
+    public void UnopenedFlatNestedRpfsLoseTheirExpandArrow() => OnUiThread(() =>
+    {
+        var flat = Archive("flat.rpf", ("navmesh.ynv", "flat"));
+        var structured = Archive("structured.rpf", ("inner.rpf", Archive("inner.rpf", ("a.txt", "a"))));
+        string outer = SaveArchive(Path.Combine(Work, "outer.rpf"), ("flat.rpf", flat), ("structured.rpf", structured));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenArchive(outer);
+
+        WaitFor(() => !TreeRow(bridge, "flat.rpf").HasChildren);
+        // A nested RPF counts as something to expand, like a folder.
+        Assert.True(TreeRow(bridge, "structured.rpf").HasChildren);
+        Assert.False(TreeRow(bridge, "flat.rpf").Expanded);
+    });
+
+    /// <summary>Runs the UI thread's queued work until <paramref name="condition"/> holds, for up to five seconds.</summary>
+    private static void WaitFor(Func<bool> condition)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), "Timed out waiting for the background archive read");
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+    }
+
+    [AvaloniaFact]
     public void ArchiveKeepsItsGameRelativeBreadcrumb() => OnUiThread(() =>
     {
         MakeGame();

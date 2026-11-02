@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using HikariHopper.Core;
 
 namespace HikariHopper.ViewModels;
@@ -6,6 +7,8 @@ namespace HikariHopper.ViewModels;
 public sealed partial class ExplorerViewModel
 {
     private HashSet<string> expandedNodes = new(StringComparer.Ordinal);
+    private readonly ArchiveTreeProbe archiveProbe = new();
+    private int treeRefreshQueued;
     private string treeFocusPath = "";
     private int treeFocusIndex = -1;
 
@@ -274,7 +277,9 @@ public sealed partial class ExplorerViewModel
             bool isLoadedArchive = isArchive && entry.Path == Provider.ArchiveGamePath;
             bool hasChildren = isLoadedArchive
                 ? Provider.ArchiveHasTreeChildren("")
-                : isArchive || entry.NavigableChildren > 0;
+                : isArchive
+                    ? archiveProbe.HasTreeChildren(Path.Combine(Provider.GamePath, entry.Path), "", Provider.Crypto)
+                    : entry.NavigableChildren > 0;
             bool expanded = hasChildren && expandedNodes.Contains(key);
             bool selected = (isLoadedArchive && Provider.InArchive && Provider.ArchivePrefix.Length == 0 && currentPath == ".")
                 || (entry.IsDirectory && !Provider.InArchive && currentPath == entry.Path);
@@ -299,7 +304,7 @@ public sealed partial class ExplorerViewModel
             string childPrefix = RpfProvider.LoadedNestedPrefix(entry);
             bool hasChildren = entry.IsDirectory
                 ? entry.NavigableChildren > 0
-                : childPrefix.Length == 0 || Provider.ArchiveHasTreeChildren(childPrefix);
+                : childPrefix.Length == 0 ? UnopenedArchiveHasChildren(entry) : Provider.ArchiveHasTreeChildren(childPrefix);
             bool expanded = expandedNodes.Contains(key) && (entry.IsDirectory || childPrefix.Length > 0);
             string entryPrefix = RpfProvider.EntryArchivePrefix(entry);
             string localPath = RpfProvider.EntryLocalPath(entry);
@@ -316,6 +321,24 @@ public sealed partial class ExplorerViewModel
             else
                 AppendArchiveChildren(rows, childPrefix, ".", depth + 1);
         }
+    }
+
+    /// <summary>A nested RPF the explorer hasn't opened: asks the probe, which reads it from its root file.</summary>
+    private bool UnopenedArchiveHasChildren(EntryRecord entry) =>
+        entry.ArchiveItem?.Node is not { Root.SourcePath: { } rootFile } node
+        || archiveProbe.HasTreeChildren(rootFile, entry.Path, node.Crypto);
+
+    /// <summary>The probe found an archive with nothing to expand: rebuild the tree once, on the UI thread.</summary>
+    private void OnArchiveProbeFound(object? sender, EventArgs e)
+    {
+        if (Interlocked.Exchange(ref treeRefreshQueued, 1) == 1)
+            return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            Volatile.Write(ref treeRefreshQueued, 0);
+            if (Provider.IsOpen)
+                RefreshTree();
+        });
     }
 
     private void ExpandCurrentBranch()

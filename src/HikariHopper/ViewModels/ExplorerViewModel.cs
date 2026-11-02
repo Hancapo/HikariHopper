@@ -62,6 +62,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         TextureViewer = new TextureViewerViewModel();
         TextureViewer.SourceWriteFinished += OnTextureSourceWriteFinished;
         TextureViewer.PropertyChanged += OnTextureViewerPropertyChanged;
+        archiveProbe.Found += OnArchiveProbeFound;
     }
 
     /// <summary>Loads a game folder's keys; tests replace it so fake installations open without keys.</summary>
