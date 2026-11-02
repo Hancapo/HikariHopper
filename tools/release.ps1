@@ -41,10 +41,13 @@ $exe = Join-Path $build 'HikariHopper.exe'
 Write-Host 'Running the self-test on the native build...'
 $report = Join-Path $Output 'self-test.txt'
 $arguments = @('--self-test')
-if ($GameRoot) { $arguments += "`"$GameRoot`"" }
+# Backslashes before the closing quote are doubled, or a path ending in \ would escape it.
+if ($GameRoot) { $arguments += '"' + ($GameRoot -replace '(\\+)$', '$1$1') + '"' }
+# Start-Process -Wait, because PowerShell doesn't wait for a GUI exe started with & and would read a stale exit code.
 $test = Start-Process $exe -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $report
 Get-Content $report | Write-Host
 if ($test.ExitCode -ne 0) { throw 'Self-test failed' }
+if (-not (Select-String -Path $report -Pattern '^Self-test passed$' -Quiet)) { throw 'The self-test reported nothing' }
 
 Write-Host 'Starting the app...'
 $app = Start-Process $exe -PassThru
