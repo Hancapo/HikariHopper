@@ -68,7 +68,8 @@ public static class SelfTest
             if (image.Width != texture.Width || image.Height != texture.Height)
                 throw new InvalidDataException($"Decoded {image.Width}x{image.Height} from a {texture.Width}x{texture.Height} texture");
             TextureSet reread = YtdSaving.Read(YtdSaving.Serialize(dictionary));
-            if (!reread.Textures.Zip(dictionary.Textures).All(pair => TextureComparison.SameContent(pair.First, pair.Second)))
+            if (reread.Textures.Length != dictionary.Textures.Length
+                || !reread.Textures.Zip(dictionary.Textures).All(pair => TextureComparison.SameContent(pair.First, pair.Second)))
                 throw new InvalidDataException("The dictionary changed in a save round trip");
         });
         Check("drawable texture edit", () =>
@@ -89,8 +90,8 @@ public static class SelfTest
         });
         Check("settings", () =>
         {
-            string previous = AppSettings.RegistryPath;
-            AppSettings.RegistryPath = $@"Software\HikariHopperSelfTest\{Guid.NewGuid():N}";
+            string previous = AppSettings.RegistryPath, scratch = $@"Software\HikariHopperSelfTest\{Guid.NewGuid():N}";
+            AppSettings.RegistryPath = scratch;
             try
             {
                 AppSettings.SetString("text", "hikari");
@@ -101,7 +102,11 @@ public static class SelfTest
             }
             finally
             {
-                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"Software\HikariHopperSelfTest", throwOnMissingSubKey: false);
+                // Only this run's key: another self-test may be running at the same time.
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(scratch, throwOnMissingSubKey: false);
+                using (Microsoft.Win32.RegistryKey? parent = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\HikariHopperSelfTest"))
+                    if (parent is { SubKeyCount: 0, ValueCount: 0 })
+                        Microsoft.Win32.Registry.CurrentUser.DeleteSubKey(@"Software\HikariHopperSelfTest", throwOnMissingSubKey: false);
                 AppSettings.RegistryPath = previous;
             }
         });
