@@ -140,6 +140,14 @@ public sealed partial class TextureViewerViewModel
     {
         selectedRows = [.. rows];
         ApplyModelSelection();
+        // Still the texture on screen (a right click on it, say): keep its preview and mip rather than decode it again.
+        if (current >= 0 && current == selectedIndex && previewImage is not null
+            && ReferenceEquals(RecordAt(current)?.Texture, previewTexture))
+        {
+            EmitSelectionChanged();
+            EmitStateChanged();
+            return;
+        }
         selectedIndex = current;
         mipLevel = 0;
         ClearPreview();

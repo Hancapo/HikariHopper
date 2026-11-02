@@ -170,6 +170,35 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void RightClickingTheShownTextureKeepsItsPreview()
+    {
+        Texture mipped = new("mips", 64, 64, TextureFormat.B8G8R8A8Unorm, 3,
+            TextureTestKit.Repeat([1, 2, 3, 255], 64 * 64 + 32 * 32 + 16 * 16));
+        TextureWindowHarness harness = Opened(mipped, Solid("flat", 4, 4));
+        harness.Settle();
+        int row = harness.ViewModel.TexturesModel.ToList().FindIndex(item => item.Name == "mips");
+        harness.ViewModel.SelectTexture(row);
+        harness.Settle();
+        harness.ViewModel.SetMipLevel(1);
+        harness.Settle();
+        Avalonia.Media.Imaging.Bitmap? shown = harness.ViewModel.PreviewImage;
+        Assert.NotNull(shown);
+        Assert.Equal(1, harness.ViewModel.MipLevel);
+
+        // The press alone, then the release that opens the menu: neither may drop or redecode the preview.
+        harness.Window.MouseMove(Row(row));
+        harness.Window.MouseDown(Row(row), MouseButton.Right);
+        Assert.Same(shown, harness.ViewModel.PreviewImage);
+        Assert.False(harness.ViewModel.PreviewLoading);
+        Assert.Equal(1, harness.ViewModel.MipLevel);
+        harness.Window.MouseUp(Row(row), MouseButton.Right);
+        harness.Settle();
+        Assert.True(harness.Window.Rail.ContextMenuPopup.IsOpen);
+        Assert.Same(shown, harness.ViewModel.PreviewImage);
+        Assert.Equal(1, harness.ViewModel.MipLevel);
+    }
+
+    [AvaloniaFact]
     public void RightClickKeepsTheSelectionAndOpensTheContextMenu()
     {
         TextureWindowHarness harness = Opened(Solid("a", 4, 4), Solid("b", 4, 4), Solid("c", 4, 4));
