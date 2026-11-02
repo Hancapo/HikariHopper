@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Release builds no longer contain the folder paths of the machine that built them. ([#18](https://github.com/Hancapo/HikariHopper/pull/18))
+
 ### Removed
 
 ## [0.0.2] - 2026-11-02
