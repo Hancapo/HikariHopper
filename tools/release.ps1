@@ -37,6 +37,19 @@ if ($warnings) { $warnings | Write-Host; throw 'The AOT compiler reported warnin
 Remove-Item (Join-Path $build 'licenses') -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem $build -Filter *.pdb | Remove-Item
 
+# Nothing shipped may name this machine's folders, such as a PDB path in a binary's debug directory.
+$private = @($env:USERPROFILE, (Resolve-Path (Join-Path $PSScriptRoot '..')).Path) | Where-Object { $_ }
+$leaks = foreach ($file in Get-ChildItem $build -Recurse -File) {
+    $bytes = [IO.File]::ReadAllBytes($file.FullName)
+    # Latin-1 for 8-bit strings; UTF-16 read from both even and odd offsets.
+    $texts = [Text.Encoding]::Latin1.GetString($bytes), [Text.Encoding]::Unicode.GetString($bytes),
+        [Text.Encoding]::Unicode.GetString($bytes, 1, [Math]::Max(0, $bytes.Length - 1))
+    foreach ($path in $private) {
+        if ($texts | Where-Object { $_.IndexOf($path, [StringComparison]::OrdinalIgnoreCase) -ge 0 }) { "$($file.Name) contains $path" }
+    }
+}
+if ($leaks) { $leaks | Write-Host; throw 'The build contains private paths' }
+
 $exe = Join-Path $build 'HikariHopper.exe'
 Write-Host 'Running the self-test on the native build...'
 $report = Join-Path $Output 'self-test.txt'
