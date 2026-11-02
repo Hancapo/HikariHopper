@@ -60,7 +60,7 @@ if ($app.HasExited) { throw "The app exited at startup with code $($app.ExitCode
 if ($app.MainWindowTitle -notlike 'HikariHopper*') { $app.Kill(); throw 'The app showed no window within 20 seconds' }
 Write-Host "Window: $($app.MainWindowTitle)"
 [void]$app.CloseMainWindow()
-if (-not $app.WaitForExit(5000)) { $app.Kill() }
+if (-not $app.WaitForExit(5000)) { $app.Kill(); $app.WaitForExit() }
 
 $zip = Join-Path $Output "$name.zip"
 Compress-Archive -Path $build -DestinationPath $zip -Force
