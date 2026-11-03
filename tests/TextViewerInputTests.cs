@@ -96,10 +96,14 @@ public sealed class TextViewerInputTests
         text.Append("{}]");
         var window = new MainWindow { Width = 1000, Height = 640 };
         window.Show();
+        // From opening on: loading, the first frame, then frames across the line.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var viewer = new TextViewer(TextDocument.Load("min.json", Encoding.UTF8.GetBytes(text.ToString()))) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(300);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        ExplorerStateRenders.Pump(50);
+        using (var first = window.CaptureRenderedFrame()!)
+        {
+        }
         for (int frame = 0; frame < 5; frame++)
         {
             viewer.TextScroller.Offset = new Vector(frame * 400_000, 0);
@@ -107,7 +111,7 @@ public sealed class TextViewerInputTests
             using var shot = window.CaptureRenderedFrame()!;
         }
         // Only the columns on screen are drawn: whole lines would take seconds a frame.
-        Assert.True(clock.ElapsedMilliseconds < 2500, $"{clock.ElapsedMilliseconds} ms for five frames");
+        Assert.True(clock.ElapsedMilliseconds < 3000, $"{clock.ElapsedMilliseconds} ms to open and draw six frames");
         viewer.Close();
         window.Close();
     }

@@ -47,10 +47,21 @@ public static class TextHighlighter
     }
 
     /// <summary>The coloured stretches of <paramref name="line"/>, starting in <paramref name="state"/>.</summary>
+    /// <summary>
+    /// Lines longer than this are not coloured, as code editors do: a minified file's one huge line would
+    /// cost seconds and millions of spans, mostly off screen. They carry their state on unchanged.
+    /// </summary>
+    public const int MaxColouredLength = 20_000;
+
     public static List<TextSpan> Spans(TextFormat format, string line, byte state, out byte next)
     {
         var spans = new List<TextSpan>();
         next = Start;
+        if (line.Length > MaxColouredLength)
+        {
+            next = state;
+            return spans;
+        }
         switch (format)
         {
             case TextFormat.Xml:

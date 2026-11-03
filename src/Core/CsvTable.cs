@@ -48,11 +48,25 @@ public sealed class CsvTable
         return tabs > commas && tabs >= semicolons ? '\t' : semicolons > commas ? ';' : ',';
     }
 
+    /// <summary>The first record of <paramref name="text"/>: up to its first line break outside quotes.</summary>
+    private static string FirstRecord(string text)
+    {
+        bool quoted = false;
+        for (int index = 0; index < text.Length; index++)
+        {
+            char current = text[index];
+            if (current == '"')
+                quoted = !quoted;
+            else if (!quoted && current is '\r' or '\n')
+                return text[..index];
+        }
+        return text;
+    }
+
     /// <summary>Reads <paramref name="text"/>, the whole file, into rows.</summary>
     public static CsvTable Parse(string text)
     {
-        int firstEnd = text.IndexOfAny(['\r', '\n']);
-        char separator = SeparatorOf(firstEnd < 0 ? text : text[..firstEnd]);
+        char separator = SeparatorOf(FirstRecord(text));
         var rows = new List<string[]>();
         var lines = new List<int>();
         var fields = new List<string>();
