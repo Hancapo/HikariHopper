@@ -87,6 +87,32 @@ public sealed class TextViewerInputTests
     }
 
     [AvaloniaFact]
+    public void AMinifiedFilesOneHugeLineDrawsAsQuicklyAsAShortOne()
+    {
+        // Two million characters on one line, as a minified JSON file has.
+        var text = new StringBuilder("[");
+        while (text.Length < 2_000_000)
+            text.Append("{\"key\":\"value\",\"n\":12345},");
+        text.Append("{}]");
+        var window = new MainWindow { Width = 1000, Height = 640 };
+        window.Show();
+        var viewer = new TextViewer(TextDocument.Load("min.json", Encoding.UTF8.GetBytes(text.ToString()))) { Anchor = window.ExplorerScreenHost };
+        viewer.Present();
+        ExplorerStateRenders.Pump(300);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        for (int frame = 0; frame < 5; frame++)
+        {
+            viewer.TextScroller.Offset = new Vector(frame * 400_000, 0);
+            ExplorerStateRenders.Pump(20);
+            using var shot = window.CaptureRenderedFrame()!;
+        }
+        // Only the columns on screen are drawn: whole lines would take seconds a frame.
+        Assert.True(clock.ElapsedMilliseconds < 2500, $"{clock.ElapsedMilliseconds} ms for five frames");
+        viewer.Close();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void AClickAnywhereInTheTextLands()
     {
         (MainWindow window, TextViewer viewer) = Open();

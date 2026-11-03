@@ -186,10 +186,11 @@ public sealed class TextLinesView : Control
             var builder = new System.Text.StringBuilder();
             for (int line = start.Line; line <= end.Line; line++)
             {
-                string text = document.Lines[line];
-                int from = line == start.Line ? Math.Min(start.Column, text.Length) : 0;
-                int to = line == end.Line ? Math.Min(end.Column, text.Length) : text.Length;
-                builder.Append(text, from, Math.Max(0, to - from));
+                int length = document.Lines[line].Length;
+                int from = line == start.Line ? Math.Min(start.Column, length) : 0;
+                int to = line == end.Line ? Math.Min(end.Column, length) : length;
+                // From the file's own line, so tabs stay tabs.
+                builder.Append(document.RawSlice(line, from, to));
                 if (line < end.Line)
                     builder.Append(newline);
             }
@@ -306,8 +307,13 @@ public sealed class TextLinesView : Control
         {
             (int line, int chunk) = LineOfRow(row);
             string text = document.Lines[line];
-            int from = wrap ? chunk * columnsPerRow : 0;
-            int to = wrap ? Math.Min(text.Length, from + columnsPerRow) : text.Length;
+            // Wrapped, the row's piece of the line; otherwise only the columns on screen and a screen either
+            // side, so a minified file's one huge line costs no more than a short one.
+            int from = wrap ? chunk * columnsPerRow
+                : Math.Clamp((int)Math.Floor((offset.X - viewport.Width - textLeft) / charWidth), 0, text.Length);
+            int to = wrap ? Math.Min(text.Length, from + columnsPerRow)
+                : Math.Clamp((int)Math.Ceiling((offset.X + 2 * viewport.Width - textLeft) / charWidth), from, text.Length);
+            double lineLeft = textLeft + (wrap ? 0 : from * charWidth);
             double top = TextPadding + row * lineHeight;
 
             // The caret's line, across the whole view.
@@ -320,9 +326,9 @@ public sealed class TextLinesView : Control
                 int a = line == selStart.Line ? selStart.Column : 0;
                 int b = line == selEnd.Line ? selEnd.Column : text.Length + 1;
                 a = Math.Max(a, from);
-                b = Math.Min(b, wrap ? to + (to == text.Length ? 1 : 0) : b);
+                b = Math.Min(b, to + (to == text.Length ? 1 : 0));
                 if (b > a)
-                    context.FillRectangle(TextViewerInk.SelectionWash, new Rect(textLeft + (a - from) * charWidth, top, (b - a) * charWidth, lineHeight), 2);
+                    context.FillRectangle(TextViewerInk.SelectionWash, new Rect(lineLeft + (a - from) * charWidth, top, (b - a) * charWidth, lineHeight), 2);
             }
             for (int index = FirstMatchOn(line); index >= 0 && index < matches.Count && matches[index].Line == line; index++)
             {
@@ -331,14 +337,16 @@ public sealed class TextLinesView : Control
                 TextMatch match = matches[index];
                 int a = Math.Max(match.Column, from), b = Math.Min(match.Column + match.Length, to);
                 if (b > a)
-                    context.FillRectangle(TextViewerInk.MatchWash, new Rect(textLeft + (a - from) * charWidth, top + 1, (b - a) * charWidth, lineHeight - 2), 2);
+                    context.FillRectangle(TextViewerInk.MatchWash, new Rect(lineLeft + (a - from) * charWidth, top + 1, (b - a) * charWidth, lineHeight - 2), 2);
             }
 
             if (to > from)
             {
                 FormattedText formatted = TextViewerInk.Text(text[from..to], size, Ui.Theme.TextRow);
-                foreach (TextSpan span in SpansOf(line))
+                List<TextSpan> lineSpans = SpansOf(line);
+                for (int index = FirstSpanEndingAfter(lineSpans, from); index < lineSpans.Count && lineSpans[index].Start < to; index++)
                 {
+                    TextSpan span = lineSpans[index];
                     int a = Math.Max(span.Start, from), b = Math.Min(span.Start + span.Length, to);
                     if (b > a)
                         formatted.SetForegroundBrush(TextViewerInk.Of(span.Kind), a - from, b - a);
@@ -352,12 +360,12 @@ public sealed class TextLinesView : Control
                     formatted.SetForegroundBrush(Ui.Theme.Brass, a - from, b - a);
                     formatted.SetTextDecorations(TextViewerInk.Underline, a - from, b - a);
                 }
-                context.DrawText(formatted, new Point(textLeft, top + textBaseline));
+                context.DrawText(formatted, new Point(lineLeft, top + textBaseline));
             }
 
             // The caret, while the view has focus.
             if (IsFocused && caretShown && line == caret.Line && caret.Column >= from && (caret.Column < to || caret.Column == to && (to == text.Length || !wrap)))
-                context.FillRectangle(Ui.Theme.Text, new Rect(Math.Round(textLeft + (caret.Column - from) * charWidth), top + 3, 1, lineHeight - 6));
+                context.FillRectangle(Ui.Theme.Text, new Rect(Math.Round(lineLeft + (caret.Column - from) * charWidth), top + 3, 1, lineHeight - 6));
         }
 
         // The gutter, kept at the left edge however far the text has scrolled.
@@ -607,6 +615,21 @@ public sealed class TextLinesView : Control
         found = TextHighlighter.Spans(document!.Format, document.Lines[line], states[line], out _);
         spans[line] = found;
         return found;
+    }
+
+    /// <summary>The first of <paramref name="spans"/> (in order, apart) that ends after <paramref name="column"/>.</summary>
+    private static int FirstSpanEndingAfter(List<TextSpan> spans, int column)
+    {
+        int low = 0, high = spans.Count;
+        while (low < high)
+        {
+            int middle = (low + high) / 2;
+            if (spans[middle].Start + spans[middle].Length <= column)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        return low;
     }
 
     /// <summary>The first match on <paramref name="line"/>, or -1; matches are in document order.</summary>

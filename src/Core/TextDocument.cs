@@ -46,11 +46,16 @@ public sealed class TextDocument
         [".lua"] = TextFormat.Lua,
     };
 
-    private TextDocument(string name, string text, IReadOnlyList<string> lines, string encoding, string lineEnding, TextFormat format, long size)
+    // The file's own lines where they differ from the shown ones (they had tabs), by line; null elsewhere.
+    private readonly Dictionary<int, string> rawLines;
+
+    private TextDocument(string name, string text, IReadOnlyList<string> lines, Dictionary<int, string> rawLines, string encoding,
+        string lineEnding, TextFormat format, long size)
     {
         Name = name;
         Text = text;
         Lines = lines;
+        this.rawLines = rawLines;
         Encoding = encoding;
         LineEnding = lineEnding;
         Format = format;
@@ -86,6 +91,32 @@ public sealed class TextDocument
         TextFormat.Lua => "LUA",
         _ => "TEXT",
     };
+
+    /// <summary>
+    /// The file's own characters for shown columns <paramref name="from"/> to <paramref name="to"/> of
+    /// <paramref name="line"/>: tabs as tabs. A column inside a tab's spaces takes the whole tab.
+    /// </summary>
+    public string RawSlice(int line, int from, int to)
+    {
+        if (!rawLines.TryGetValue(line, out string? raw))
+            return Lines[line][from..to];
+        int start = RawIndex(raw, from, roundUp: false), end = RawIndex(raw, to, roundUp: true);
+        return raw[start..Math.Max(start, end)];
+    }
+
+    /// <summary>Where shown <paramref name="column"/> falls in <paramref name="raw"/>, its tabs expanded.</summary>
+    private static int RawIndex(string raw, int column, bool roundUp)
+    {
+        int shown = 0;
+        for (int index = 0; index < raw.Length; index++)
+        {
+            int next = raw[index] == '\t' ? shown + TabWidth - shown % TabWidth : shown + 1;
+            if (column < next)
+                return column == shown || !roundUp ? index : index + 1;
+            shown = next;
+        }
+        return raw.Length;
+    }
 
     /// <summary>Whether <paramref name="name"/> is a kind of file the viewer opens.</summary>
     public static bool IsTextName(string name) => FormatOf(name) is not null;
@@ -125,6 +156,7 @@ public sealed class TextDocument
     {
         (string text, string encoding) = Decode(data);
         var lines = new List<string>();
+        var rawLines = new Dictionary<int, string>();
         int crlf = 0, lf = 0, cr = 0;
         int start = 0;
         for (int index = 0; index < text.Length; index++)
@@ -132,7 +164,7 @@ public sealed class TextDocument
             char current = text[index];
             if (current is not ('\r' or '\n'))
                 continue;
-            lines.Add(ExpandTabs(text, start, index - start));
+            AddLine(text, start, index - start, lines, rawLines);
             if (current == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
             {
                 crlf++;
@@ -148,7 +180,7 @@ public sealed class TextDocument
             }
             start = index + 1;
         }
-        lines.Add(ExpandTabs(text, start, text.Length - start));
+        AddLine(text, start, text.Length - start, lines, rawLines);
         string ending = (crlf, lf, cr) switch
         {
             (0, 0, 0) => "",
@@ -160,7 +192,7 @@ public sealed class TextDocument
         TextFormat format = FormatOf(name) ?? TextFormat.Plain;
         if (format == TextFormat.Plain)
             format = Sniff(text);
-        return new TextDocument(name, text, lines, encoding, ending, format, data.LongLength);
+        return new TextDocument(name, text, lines, rawLines, encoding, ending, format, data.LongLength);
     }
 
     /// <summary>A plain-named file that is really XML or JSON reads as that.</summary>
@@ -225,6 +257,15 @@ public sealed class TextDocument
                 chars[index] = value is >= 0x80 and <= 0x9F ? Cp1252High[value - 0x80] : (char)value;
             }
         });
+    }
+
+    /// <summary>Adds a line as shown, and keeps the file's own when showing it changed it.</summary>
+    private static void AddLine(string text, int start, int length, List<string> lines, Dictionary<int, string> rawLines)
+    {
+        string shown = ExpandTabs(text, start, length);
+        if (shown.Length != length)
+            rawLines[lines.Count] = text.Substring(start, length);
+        lines.Add(shown);
     }
 
     private static string ExpandTabs(string text, int start, int length)

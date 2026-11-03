@@ -101,6 +101,12 @@ public sealed class ExplorerSession : IStartupSession
         TextViewer?.Close();
         var viewer = new TextViewer(document) { Anchor = window?.ExplorerScreenHost };
         TextViewer = viewer;
+        // Let go of it once closed: it holds the whole file.
+        viewer.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(TextViewer, viewer))
+                TextViewer = null;
+        };
         viewer.Present();
     }
 }

@@ -56,6 +56,10 @@ public sealed class TextDocumentTests
         Assert.Equal(TextFormat.Xml, document.Format);
         Assert.Equal("XML", document.FormatName);
         Assert.Equal(document.Text.Length, document.Size);
+        // What is copied is the file's own text: shown columns map back to the tabs they came from.
+        Assert.Equal("\t<b>\tx</b>", document.RawSlice(1, 0, document.Lines[1].Length));
+        Assert.Equal("\t<b>", document.RawSlice(1, 2, 7));
+        Assert.Equal("<a>", document.RawSlice(0, 0, 3));
     }
 
     [Fact]
@@ -127,5 +131,7 @@ public sealed class TextDocumentTests
         Assert.Equal('\t', CsvTable.SeparatorOf("a\tb\tc"));
         Assert.Equal(',', CsvTable.SeparatorOf("\"a;b\",c"));
         Assert.Equal(["1", "2"], CsvTable.Parse("a;b\n1;2").Rows[1]);
+        Assert.Equal('\t', CsvTable.Parse("a\tb\n1\t2").Separator);
+        Assert.Equal(';', CsvTable.Parse("a;b\n1;2").Separator);
     }
 }

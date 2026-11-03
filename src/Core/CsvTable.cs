@@ -6,12 +6,16 @@ namespace HikariHopper.Core;
 /// </summary>
 public sealed class CsvTable
 {
-    private CsvTable(IReadOnlyList<string[]> rows, int columns, int[] lineOfRow)
+    private CsvTable(IReadOnlyList<string[]> rows, int columns, int[] lineOfRow, char separator)
     {
         Rows = rows;
         Columns = columns;
         LineOfRow = lineOfRow;
+        Separator = separator;
     }
+
+    /// <summary>The separator the file was split on: comma, semicolon or tab.</summary>
+    public char Separator { get; }
 
     /// <summary>Every row, the first being the header. Short rows are not padded.</summary>
     public IReadOnlyList<string[]> Rows { get; }
@@ -119,6 +123,6 @@ public sealed class CsvTable
             rows.Add([.. fields]);
             lines.Add(rowLine);
         }
-        return new CsvTable(rows, rows.Count == 0 ? 0 : rows.Max(row => row.Length), [.. lines]);
+        return new CsvTable(rows, rows.Count == 0 ? 0 : rows.Max(row => row.Length), [.. lines], separator);
     }
 }
