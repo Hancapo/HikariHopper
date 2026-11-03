@@ -62,6 +62,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         TextureViewer = new TextureViewerViewModel();
         TextureViewer.SourceWriteFinished += OnTextureSourceWriteFinished;
         TextureViewer.PropertyChanged += OnTextureViewerPropertyChanged;
+        TextureViewer.OpenDeclined += (_, message) => SetStatus(message);
         archiveProbe.Found += OnArchiveProbeFound;
     }
 

@@ -97,8 +97,14 @@ public sealed partial class TextureViewerViewModel : ObservableObject
             new TextureFormatOption(Formatting.FormatTextureFormat(name, includeExact: true), name))];
     }
 
-    /// <summary>Raised when a document starts loading, so the window can be shown.</summary>
+    /// <summary>
+    /// Raised when a document starts loading, so the window can be shown. A YDR is read first: it is only
+    /// worth showing when it embeds textures.
+    /// </summary>
     public event EventHandler? OpenRequested;
+
+    /// <summary>A YDR was not opened because it embeds no textures; the argument says so, for the explorer.</summary>
+    public event EventHandler<string>? OpenDeclined;
 
     /// <summary>Raised after a save into the source finishes (Qt <c>sourceWriteFinished(str, bool)</c>), only for saves
     /// that were given a source root path.</summary>
@@ -390,10 +396,11 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         SetStatus("Reading texture dictionary…");
         EmitStateChanged();
         EmitSelectionChanged();
-        OpenRequested?.Invoke(this, EventArgs.Empty);
+        bool drawable = IsDrawable;
+        if (!drawable)
+            OpenRequested?.Invoke(this, EventArgs.Empty);
 
         int token = generation;
-        bool drawable = IsDrawable;
         pool.Start(() =>
         {
             try
@@ -457,7 +464,16 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     {
         if (token != generation)
             return;
+        // A drawable with no textures of its own has nothing to edit here: don't open it at all.
+        if (document.Dictionary.Textures.IsEmpty)
+        {
+            string name = sourceName;
+            ResetDocument();
+            OpenDeclined?.Invoke(this, $"{name} has no embedded textures");
+            return;
+        }
         ydrDocument = document;
+        OpenRequested?.Invoke(this, EventArgs.Empty);
         DictionaryLoaded(token, document.Dictionary);
     }
 
@@ -496,6 +512,9 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         previewLoading = false;
         error = message;
         SetStatus($"Could not read texture dictionary: {message}");
+        // A YDR that couldn't be read is shown now, so the error is seen.
+        if (IsDrawable)
+            OpenRequested?.Invoke(this, EventArgs.Empty);
         EmitStateChanged();
     }
 
