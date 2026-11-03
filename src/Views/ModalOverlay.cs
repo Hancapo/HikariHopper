@@ -139,6 +139,9 @@ public sealed class ModalOverlay : Panel
             Blur(backdrop, true);
             StateChanged?.Invoke(null, host);
         }
+        // The title bar stays usable, so focus can land there (a click on Maximize); the keys still belong
+        // to the modal then.
+        host.AddHandler(KeyDownEvent, overlay.OnHostKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         overlay.Focus();
         return overlay;
     }
@@ -148,6 +151,7 @@ public sealed class ModalOverlay : Panel
         if (!IsShown)
             return;
         IsShown = false;
+        host.RemoveHandler(KeyDownEvent, OnHostKeyDown);
         bool last = false;
         if (OpenOverlays.TryGetValue(host, out var list))
         {
@@ -178,12 +182,44 @@ public sealed class ModalOverlay : Panel
     {
         if (e.Handled || e.Key != Key.Tab || (e.KeyModifiers & ~KeyModifiers.Shift) != KeyModifiers.None)
             return;
+        e.Handled = true;
+        MoveFocus(e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+    }
+
+    /// <summary>
+    /// The keys pressed while focus is outside the modal, on what it leaves usable (the title bar): Tab
+    /// comes back into the dialog and Escape closes it, as they would inside it. Only the topmost modal
+    /// takes them, and never from a popup (a combo box's list).
+    /// </summary>
+    private void OnHostKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key is not (Key.Tab or Key.Escape) || !IsShown || !IsTopmost)
+            return;
+        if (host.FocusManager?.GetFocusedElement() is Visual focused
+            && (focused == this || this.IsVisualAncestorOf(focused) || focused.GetVisualAncestors().Any(ancestor => ancestor is PopupRoot or OverlayPopupHost)))
+            return;
+        if (e.Key == Key.Tab)
+        {
+            if ((e.KeyModifiers & ~KeyModifiers.Shift) != KeyModifiers.None)
+                return;
+            MoveFocus(e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        }
+        else
+        {
+            Dismiss();
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>Whether this is the modal on top, the one the keys are for.</summary>
+    private bool IsTopmost => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0 && list[^1] == this;
+
+    private void MoveFocus(bool back)
+    {
         List<InputElement> stops = [.. dialog.GetVisualDescendants().OfType<InputElement>()
             .Where(element => element.Focusable && element.IsTabStop && element.IsEffectivelyEnabled && element.IsEffectivelyVisible)];
-        e.Handled = true;
         if (stops.Count == 0)
             return;
-        bool back = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         int current = host.FocusManager?.GetFocusedElement() is InputElement focused ? stops.IndexOf(focused) : -1;
         int next = current < 0
             ? (back ? stops.Count - 1 : 0)
@@ -291,10 +327,16 @@ public sealed class ModalOverlay : Panel
             return;
         if (e.Key != Key.Escape)
             return;
+        Dismiss();
+        e.Handled = true;
+    }
+
+    /// <summary>Escape: the content decides how it closes, or else the modal closes.</summary>
+    private void Dismiss()
+    {
         if (dialog is IModalContent content)
             content.RequestClose();
         else
             Close();
-        e.Handled = true;
     }
 }

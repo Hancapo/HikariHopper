@@ -244,8 +244,23 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         }
         // And it does move between the sheet's controls rather than sticking on one.
         Assert.True(seen.Count > 3);
-        settings.Close();
+
+        // The title bar stays usable, so focus can land on it: a click on Maximize. Tab still comes back
+        // into the modal, and Escape still closes it.
+        var maximize = ui.Window.GetVisualDescendants().OfType<Views.Controls.WindowControlButton>().Single(button => button.Name == "MaximizeButton");
+        Point onMaximize = maximize.TranslatePoint(new Point(maximize.Bounds.Width / 2, maximize.Bounds.Height / 2), ui.Window)!.Value;
+        Click(ui.Window, onMaximize);
+        maximize.Focus();
+        Assert.False(Inside());
+        Key(ui.Window, PhysicalKey.Tab);
+        Assert.True(Inside(), "Tab from the title bar did not come back into the modal");
+        maximize.Focus();
+        Key(ui.Window, PhysicalKey.Escape);
         Pump(250);
+        Assert.False(settings.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(ui.Window));
+        ui.Window.WindowState = WindowState.Normal;
+        Pump(100);
     }
 
     [AvaloniaFact]
