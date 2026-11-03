@@ -675,6 +675,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     {
         Explorer ui = OpenExplorer();
         ui.Tabs.NewTab();
+        // The tab that is left at the end has a game, so the strip stays: a lone empty tab hides it.
+        ui.Tabs.ActiveBridge.OpenGame(Work);
         ui.Tabs.NewTab();
         Pump(100);
         TabStrip strip = ui.Find<TabStrip>();
