@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextViewer"
+             v:ModalOverlay.FillsWindow="True"
+             Focusable="True"
+             FontFamily="{x:Static ui:Theme.UiFont}"
+             FontSize="{x:Static ui:Theme.FontSize}"
+             Foreground="{x:Static ui:Theme.Text}">
+  <!-- A text file, read only, as a modal that fills the main window over its blurred explorer, in the
+       texture editor's frame: a header naming the file with a close mark, a toolbar in the texture
+       toolbar's wells (find on the left; the table / text switch, wrapping, zoom and copy on the
+       right), the text or the table, and the status bar. -->
+  <UserControl.Styles>
+    <Style Selector="Border.well">
+      <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.well > StackPanel">
+      <Setter Property="Orientation" Value="Horizontal" />
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector="c|ChromeToolButton.tool">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinWidth" Value="26" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Bordered" Value="False" />
+      <Setter Property="InWell" Value="True" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
+      <Setter Property="IconSize" Value="14" />
+      <Setter Property="IconThickness" Value="1.5" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
+    </Style>
+    <Style Selector="TextBlock.status">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
+    </Style>
+    <Style Selector="Border.seam">
+      <Setter Property="Width" Value="2" />
+      <Setter Property="Background" Value="{x:Static ui:Theme.BorderHard}" />
+      <Setter Property="BorderBrush" Value="{x:Static ui:Theme.Border}" />
+      <Setter Property="BorderThickness" Value="0,0,1,0" />
+    </Style>
+  </UserControl.Styles>
+  <Border Background="{x:Static ui:Theme.AppBg}"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+    <c:RoundedClip Radius="{x:Static ui:Theme.SheetRadius}">
+      <Panel>
+        <DockPanel>
+          <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.WindowTitleHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+            <StackPanel Margin="12,0,44,0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <c:ChromeIcon Kind="text" Width="13" Height="13" Thickness="1.5" VerticalAlignment="Center"
+                            Stroke="{x:Static ui:Theme.InkData}" />
+              <TextBlock Name="TitleText" VerticalAlignment="Center" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <c:ChromeToolButton Name="CloseMark" Width="24" Height="22" Margin="0,0,6,0"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Bordered="False"
+                                CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="close" IconSize="11" IconThickness="1.4"
+                                AutomationProperties.Name="Close the text viewer" />
+          </Panel>
+
+          <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.TextureToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+            <StackPanel Margin="8,0,0,0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
+              <c:FlatTextField Name="FindField" Width="260" Height="28" VerticalAlignment="Center"
+                               FontSize="{x:Static ui:Theme.FontSize}" PlaceholderText="Find in file"
+                               LeadingIcon="search" KeyCap="Ctrl+F" AutomationProperties.Name="Find in file" />
+              <TextBlock Name="MatchText" Classes="status" />
+              <Border Name="FindWell" Classes="well" IsVisible="False">
+                <StackPanel>
+                  <c:ChromeToolButton Name="PreviousButton" Classes="tool" IconKind="caretUp" AutomationProperties.Name="Previous match" />
+                  <c:ChromeToolButton Name="NextButton" Classes="tool" IconKind="caretDown" AutomationProperties.Name="Next match" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+            <StackPanel Margin="0,0,8,0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+              <!-- CSV only: as a table or as text. -->
+              <c:SegmentedSwitch Name="ViewSwitch" IsVisible="False">
+                <c:SwitchSide Icon="text" Label="As text" />
+                <c:SwitchSide Icon="table" Label="As a table" />
+              </c:SegmentedSwitch>
+              <Border Name="WrapWell" Classes="well">
+                <StackPanel>
+                  <c:ChromeToolButton Name="WrapButton" Classes="tool" Width="28" IconKind="wrap" AutomationProperties.Name="Wrap long lines" />
+                </StackPanel>
+              </Border>
+              <Border Classes="well">
+                <StackPanel>
+                  <c:ChromeToolButton Name="ZoomOutButton" Classes="tool" Width="26" IconKind="minus" AutomationProperties.Name="Smaller text" />
+                  <c:ChromeToolButton Name="ZoomButton" Classes="tool" Width="52" AutomationProperties.Name="Actual text size" />
+                  <c:ChromeToolButton Name="ZoomInButton" Classes="tool" Width="26" IconKind="plus" AutomationProperties.Name="Larger text" />
+                </StackPanel>
+              </Border>
+              <Border Classes="well">
+                <StackPanel>
+                  <c:ChromeToolButton Name="CopyButton" Classes="tool" Width="64" Text="Copy" AutomationProperties.Name="Copy" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Panel>
+
+          <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.StatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+            <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,Auto,*,Auto">
+              <TextBlock Name="CaretText" Grid.Column="0" Classes="status" Margin="10,0,10,0" />
+              <Border Grid.Column="1" Classes="seam" />
+              <TextBlock Name="StatusText" Grid.Column="2" Classes="status" Margin="10,0,0,0"
+                         Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
+              <StackPanel Name="Facts" Grid.Column="3" Orientation="Horizontal" Spacing="14" Margin="0,0,12,0">
+                <TextBlock Name="LinesText" Classes="status" />
+                <TextBlock Name="SizeText" Classes="status" />
+                <TextBlock Name="EncodingText" Classes="status" />
+                <TextBlock Name="EndingText" Classes="status" />
+                <TextBlock Name="FormatText" Classes="status" Foreground="{x:Static ui:Theme.InkData}" />
+              </StackPanel>
+            </Grid>
+          </Panel>
+
+          <Panel>
+            <ScrollViewer Name="TextScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <v:TextLinesView Name="Lines" />
+            </ScrollViewer>
+            <ScrollViewer Name="TableScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" IsVisible="False">
+              <v:CsvTableView Name="Table" />
+            </ScrollViewer>
+          </Panel>
+        </DockPanel>
+
+        <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
+        <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"
+                IsHitTestVisible="False" />
+      </Panel>
+    </c:RoundedClip>
+  </Border>
+</UserControl>
