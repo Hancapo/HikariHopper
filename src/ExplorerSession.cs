@@ -31,6 +31,9 @@ public sealed class ExplorerSession : IStartupSession
     /// <summary>The texture editor of each open tab.</summary>
     public IReadOnlyDictionary<ExplorerViewModel, TextureEditor> TextureEditors => textureEditors;
 
+    /// <summary>The text viewer last opened, while it is showing.</summary>
+    public TextViewer? TextViewer { get; private set; }
+
     public void RestoreLastGame() => Tabs.RestoreLastGame();
 
     public void Attach(MainWindow mainWindow)
@@ -79,6 +82,7 @@ public sealed class ExplorerSession : IStartupSession
         {
             textureEditors.Remove(tab, out TextureEditor? editor);
             editor?.Destroy();
+            tab.TextFileOpened -= OnTextFileOpened;
         }
         foreach (ExplorerViewModel tab in Tabs.Tabs)
             AddTextureEditor(tab);
@@ -86,7 +90,17 @@ public sealed class ExplorerSession : IStartupSession
 
     private void AddTextureEditor(ExplorerViewModel tab)
     {
-        if (!textureEditors.ContainsKey(tab))
-            textureEditors[tab] = new TextureEditor(tab.TextureViewer) { Anchor = window?.ExplorerScreenHost };
+        if (textureEditors.ContainsKey(tab))
+            return;
+        textureEditors[tab] = new TextureEditor(tab.TextureViewer) { Anchor = window?.ExplorerScreenHost };
+        tab.TextFileOpened += OnTextFileOpened;
+    }
+
+    private void OnTextFileOpened(object? sender, Core.TextDocument document)
+    {
+        TextViewer?.Close();
+        var viewer = new TextViewer(document) { Anchor = window?.ExplorerScreenHost };
+        TextViewer = viewer;
+        viewer.Present();
     }
 }

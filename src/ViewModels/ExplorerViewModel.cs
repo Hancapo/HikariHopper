@@ -71,6 +71,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>A game was opened; the argument is its root folder.</summary>
     public event EventHandler<string>? GameOpened;
 
+    /// <summary>A text file was opened from the list, for the text viewer to show.</summary>
+    public event EventHandler<TextDocument>? TextFileOpened;
+
     /// <summary>
     /// Files changed at a location (an <see cref="EntryCreationTarget"/> or <see cref="EntryDeletionTarget"/>),
     /// so peer tabs refresh.

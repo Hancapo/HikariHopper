@@ -280,9 +280,41 @@ public sealed partial class ExplorerViewModel
             OpenTextureDictionary(entry);
             return;
         }
+        if (TextDocument.IsTextName(entry.Name))
+        {
+            OpenTextFile(entry);
+            return;
+        }
         if (!entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
             return;
         OpenArchiveEntry(entry);
+    }
+
+    /// <summary>Reads a text file and hands it to the text viewer, unless it is too big or isn't really text.</summary>
+    private void OpenTextFile(EntryRecord entry)
+    {
+        if (entry.Size > TextDocument.MaxSize)
+        {
+            SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(entry.Size)})");
+            return;
+        }
+        byte[] data;
+        try
+        {
+            data = Provider.ReadEntryBytes(entry);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open {entry.Name}: {error.Message}");
+            return;
+        }
+        if (!TextDocument.LooksLikeText(data))
+        {
+            SetStatus($"{entry.Name} isn't a text file");
+            return;
+        }
+        TextFileOpened?.Invoke(this, TextDocument.Load(entry.Name, data));
+        SetStatus($"Opened {entry.Name}");
     }
 
     private void OpenArchiveEntry(EntryRecord entry)

@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- A text viewer: double-clicking a TXT, XML, META, JSON, CSV, INI, LUA, LOG or DAT file opens it over the explorer, read only. The text is coloured by format, with line numbers, selection and copy, find (Ctrl+F, F3), wrapping and zoom. A CSV file opens as a table, and can be read as text too. Large files such as `handling.meta` scroll at once, and a binary file that only has a text file's name isn't opened. ([#46](https://github.com/Hancapo/HikariHopper/pull/46))
 - Settings can turn off reopening the last game at startup, and clear the recent games the start page lists. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - HikariHopper has its own logo and icon: the wordmark with a crescent moon for the dot of the i, and a rabbit leaping across the moon. They appear on the exe, the taskbar, the title bars, the About window and the splash screen. ([#34](https://github.com/Hancapo/HikariHopper/pull/34))
 - Dragging entries out of the explorer shows a cursor with an icon for what is being extracted and the number of items. ([#23](https://github.com/Hancapo/HikariHopper/pull/23), [#25](https://github.com/Hancapo/HikariHopper/pull/25))

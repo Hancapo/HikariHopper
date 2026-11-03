@@ -739,6 +739,96 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ATextFileOpensInTheTextViewerOverTheExplorer()
+    {
+        Explorer ui = OpenExplorer();
+        const string meta = "<CHandlingDataMgr>\r\n  <Item>\r\n    <fInitialDriveForce value=\"0.3\" />\r\n"
+            + "    <fInitialDriveMaxFlatVel value=\"160\" />\r\n  </Item>\r\n</CHandlingDataMgr>";
+        Write(Path.Combine(Work, "handling.meta"), meta);
+        File.WriteAllBytes(Path.Combine(Work, "binary.meta"), [0x52, 0x53, 0x43, 0x07, 0, 0, 0, 1]);
+        ui.Bridge.Refresh();
+        Pump();
+        int RowOf(string name) => ui.Bridge.EntriesModel.Select((item, row) => (item, row)).First(pair => pair.item.Name == name).row;
+
+        // A file that only has a text file's name is refused.
+        ui.Bridge.ActivateEntry(RowOf("binary.meta"));
+        Pump();
+        Assert.Null(ui.Session.TextViewer);
+        Assert.Equal("binary.meta isn't a text file", ui.Bridge.Status);
+
+        ui.Bridge.ActivateEntry(RowOf("handling.meta"));
+        Pump(300);
+        TextViewer viewer = ui.Session.TextViewer!;
+        Assert.True(viewer.IsOpen);
+        Assert.True(ModalOverlay.IsOpen(ui.Window));
+        Assert.Equal("handling.meta", viewer.TitleText.Text);
+        Assert.Equal(["6 lines", "UTF-8", "CRLF", "XML"], new[] { viewer.LinesText.Text, viewer.EncodingText.Text, viewer.EndingText.Text, viewer.FormatText.Text });
+        Assert.Equal("Read only", viewer.StatusText.Text);
+
+        // Ctrl+F, then typing finds; F3 steps through the matches.
+        Key(ui.Window, PhysicalKey.F, RawInputModifiers.Control);
+        Assert.True(viewer.FindField.IsKeyboardFocusWithin);
+        ui.Window.KeyTextInput("initialdrive");
+        Pump();
+        Assert.Equal(2, viewer.MatchCount);
+        Assert.Equal("1 of 2", viewer.MatchText.Text);
+        Assert.Equal(new TextPosition(2, 6), viewer.Lines.Selection.Start);
+        Key(ui.Window, PhysicalKey.F3);
+        Assert.Equal("2 of 2", viewer.MatchText.Text);
+        Assert.Equal(3, viewer.Lines.Caret.Line);
+
+        // Escape clears the find first; Ctrl+C copies the selection, or the whole file with none.
+        Key(ui.Window, PhysicalKey.Escape);
+        Assert.Equal("", viewer.FindField.Text);
+        Assert.True(viewer.IsOpen);
+        Key(ui.Window, PhysicalKey.C, RawInputModifiers.Control);
+        Assert.Equal("InitialDrive", Clipboard.Text);
+        viewer.Lines.MoveCaret(new TextPosition(0, 0));
+        Key(ui.Window, PhysicalKey.C, RawInputModifiers.Control);
+        Assert.Equal(meta, Clipboard.Text);
+        Assert.Equal("Copied handling.meta", viewer.StatusText.Text);
+
+        // Then Escape closes it.
+        Key(ui.Window, PhysicalKey.Escape);
+        Pump(250);
+        Assert.False(viewer.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(ui.Window));
+    }
+
+    [AvaloniaFact]
+    public void ACsvFileOpensAsATableAndCanBeReadAsText()
+    {
+        Explorer ui = OpenExplorer();
+        Write(Path.Combine(Work, "vehicles.csv"), "model,make,price\r\nadder,Truffade,1000000\r\nblista,Dinka,15000\r\n");
+        ui.Bridge.Refresh();
+        Pump();
+        ui.Bridge.ActivateEntry(ui.Bridge.EntriesModel.Select((item, row) => (item, row)).First(pair => pair.item.Name == "vehicles.csv").row);
+        Pump(300);
+        TextViewer viewer = ui.Session.TextViewer!;
+        Assert.True(viewer.ShowingTable);
+        Assert.True(viewer.ViewSwitch.IsVisible);
+        Assert.Equal(1, viewer.ViewSwitch.SelectedIndex);
+        Assert.Equal("2 rows", viewer.LinesText.Text);
+        Assert.Equal("Row 1 of 2", viewer.CaretText.Text);
+
+        // Find marks the cells; the current match's row becomes current.
+        viewer.FindField.Text = "dinka";
+        Pump();
+        Assert.Equal(1, viewer.MatchCount);
+        Assert.Equal(2, viewer.Table.CurrentRow);
+        Assert.Equal("blista,Dinka,15000", viewer.Copy());
+
+        // As text, the same file by its lines.
+        viewer.ShowTable(false);
+        Assert.False(viewer.ShowingTable);
+        Assert.Equal(0, viewer.ViewSwitch.SelectedIndex);
+        Assert.Equal("4 lines", viewer.LinesText.Text);
+        Assert.Equal(1, viewer.MatchCount);
+        viewer.Close();
+        Pump(250);
+    }
+
+    [AvaloniaFact]
     public void WindowShortcutsActAndYieldToTheSearchField()
     {
         Explorer ui = OpenExplorer();
