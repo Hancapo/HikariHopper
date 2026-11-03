@@ -138,7 +138,8 @@ public static class Theme
     /// <summary>A modal card: rounder than a panel, and lifted well clear of the blurred window.</summary>
     public const double SheetRadius = 10;
     public static readonly CornerRadius SheetCorner = new(SheetRadius);
-    public static readonly CornerRadius SheetInnerCorner = new(SheetRadius - 1);
+    public const double SheetInnerRadius = SheetRadius - 1;
+    public static readonly CornerRadius SheetInnerCorner = new(SheetInnerRadius);
     public static readonly BoxShadows SheetShadow = BoxShadows.Parse("0 18 48 0 #73080812, 0 2 8 0 #4D080812");
     public const double SheetHeaderHeight = 40;
     public const double TabStripHeight = 36;

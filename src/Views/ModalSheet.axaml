@@ -14,7 +14,8 @@
       <ControlTemplate>
         <Border Background="{TemplateBinding Background}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1"
                 CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
-          <Border CornerRadius="{x:Static ui:Theme.SheetInnerCorner}" ClipToBounds="True">
+          <!-- An exact rounded clip: the header and footer have backgrounds of their own. -->
+          <c:RoundedClip Radius="{x:Static ui:Theme.SheetInnerRadius}">
             <DockPanel>
               <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.SheetHeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
                 <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
@@ -44,7 +45,7 @@
                                 ContentTemplate="{TemplateBinding ContentTemplate}"
                                 Margin="{TemplateBinding BodyMargin}" />
             </DockPanel>
-          </Border>
+          </c:RoundedClip>
         </Border>
       </ControlTemplate>
     </Setter>
