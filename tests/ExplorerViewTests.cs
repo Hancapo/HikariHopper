@@ -705,6 +705,40 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheHomeMarkInAnRpfOpenedFromOutsideTheGameGoesToTheRpfsRoot()
+    {
+        Explorer ui = OpenExplorer();
+        NavigationBar navigation = ui.Find<NavigationBar>();
+        string elsewhere = Path.Combine(Path.GetTempPath(), $"hh-external-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(elsewhere);
+        try
+        {
+            string external = SaveArchive(Path.Combine(elsewhere, "addon.rpf"), ("stream/readme.txt", "addon"));
+            ui.Bridge.OpenArchive(external);
+            Pump();
+            ui.Bridge.ActivateEntry(ui.Bridge.EntriesModel.Select((item, row) => (item, row)).First(pair => pair.item.Name == "stream").row);
+            Pump();
+            Assert.Equal("stream", ui.Bridge.TabTitle);
+            Assert.Equal("addon.rpf", Avalonia.Automation.AutomationProperties.GetName(navigation.RootSegment));
+
+            // The home mark goes back to the RPF's root: the RPF stays open and the game is not shown.
+            Point home = navigation.RootSegment.TranslatePoint(new Point(navigation.RootSegment.Bounds.Width / 2, 12), ui.Window)!.Value;
+            Click(ui.Window, home);
+            Assert.True(ui.Bridge.InArchive);
+            Assert.True(ui.Bridge.ArchiveIsRoot);
+            Assert.Equal(".", ui.Bridge.CurrentPath);
+            Assert.Equal("addon.rpf", ui.Bridge.TabTitle);
+            Assert.False(navigation.RootSegment.IsVisible);
+            ui.Bridge.CloseArchive();
+            Pump();
+        }
+        finally
+        {
+            Directory.Delete(elsewhere, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public void WindowShortcutsActAndYieldToTheSearchField()
     {
         Explorer ui = OpenExplorer();

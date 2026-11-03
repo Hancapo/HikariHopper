@@ -11,6 +11,8 @@ public sealed partial class ExplorerViewModel
     private int treeRefreshQueued;
     private string treeFocusPath = "";
     private int treeFocusIndex = -1;
+    // The location the tree's focus was last synced for, so arriving somewhere new can be told apart.
+    private string treeFocusLocation = "";
 
     /// <summary>Row of <see cref="TreeModel"/> with keyboard focus, or -1.</summary>
     public int TreeFocusIndex => treeFocusIndex;
@@ -225,6 +227,16 @@ public sealed partial class ExplorerViewModel
 
     private void SyncTreeFocus()
     {
+        string location = $"{Provider.InArchive}|{Provider.ArchiveGamePath}|{Provider.ArchivePrefix}|{currentPath}";
+        bool arrived = location != treeFocusLocation;
+        treeFocusLocation = location;
+        // Arriving at the root, which has no row, leaves no row focused: the folder you came from is not
+        // where you are, and Enter must not open it again. A row focused after that keeps its focus.
+        if (arrived && NavigationPathSegments.Count == 0)
+        {
+            UpdateTreeFocus("", -1);
+            return;
+        }
         int index = TreeRowForPath(treeFocusPath);
         if (index < 0)
             index = SelectedTreeRow();

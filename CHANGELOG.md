@@ -27,6 +27,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - With Settings or another dialog open, Tab and Escape keep working after a click on the title bar: Tab goes back into the dialog and Escape closes it. ([#44](https://github.com/Hancapo/HikariHopper/pull/44))
+- Coming back to the root no longer leaves the folder you were in outlined in the folder tree, where Enter would open it again. ([#45](https://github.com/Hancapo/HikariHopper/pull/45))
 - About shows the app's real version, and credits Avalonia instead of Qt. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
 - The mip slider moves to wherever it is pressed, not only when its handle is dragged. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
