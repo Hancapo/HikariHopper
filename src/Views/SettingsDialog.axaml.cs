@@ -25,7 +25,6 @@ public partial class SettingsDialog : ModalSheet
     {
         this.tabs = tabs;
         InitializeComponent();
-        LaterText.Text = $"Coming later: {string.Join(", ", FutureGames)}.";
 
         BuildGameRows();
         OpenLastGame.IsCheckedChanged += (_, _) => GameSettings.OpenLastGameOnStartup = OpenLastGame.IsChecked == true;
@@ -36,18 +35,6 @@ public partial class SettingsDialog : ModalSheet
     }
 
     public GamePathSettings GamePaths => tabs.GamePathSettings;
-
-    /// <summary>Titles listed as coming, in PC release order.</summary>
-    public IReadOnlyList<string> FutureGames { get; } =
-    [
-        "Grand Theft Auto III",
-        "Grand Theft Auto: Vice City",
-        "Grand Theft Auto: San Andreas",
-        "Bully: Scholarship Edition",
-        "Grand Theft Auto IV",
-        "Red Dead Redemption 2",
-        "Red Dead Redemption",
-    ];
 
     /// <summary>The installation rows, in catalogue order.</summary>
     internal IReadOnlyList<GamePathRow> Rows => [.. GameRows.Children.OfType<GamePathRow>()];

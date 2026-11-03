@@ -500,18 +500,6 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
-    public void SettingsListsFutureGamesInPcReleaseOrder() => UiThread.Run(() =>
-    {
-        var settings = new SettingsDialog();
-        Assert.Equal(
-            ["Grand Theft Auto III", "Grand Theft Auto: Vice City", "Grand Theft Auto: San Andreas",
-             "Bully: Scholarship Edition", "Grand Theft Auto IV", "Red Dead Redemption 2", "Red Dead Redemption"],
-            settings.FutureGames);
-        // They're one line under the games, not a row each.
-        Assert.Equal($"Coming later: {string.Join(", ", settings.FutureGames)}.", settings.LaterText.Text);
-    });
-
-    [AvaloniaFact]
     public void GamePathRowReportsDetection() => UiThread.Run(() =>
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
