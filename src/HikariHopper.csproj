@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>HikariHopper</RootNamespace>
     <AssemblyName>HikariHopper</AssemblyName>
-    <Version>0.0.2</Version>
+    <Version>0.0.3</Version>
     <ApplicationIcon>Assets\Branding\HikariHopper.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>

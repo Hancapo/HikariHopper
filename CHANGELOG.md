@@ -8,6 +8,16 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.0.3] - 2026-11-03
+
+### Added
+
 - A read-only text viewer: double-click a TXT, XML, META, JSON, CSV, INI, LUA, LOG or DAT file to open it over the explorer, with syntax colours, line numbers, find (Ctrl+F), wrapping and zoom. CSV files open as a table, and can be switched to text. ([#46](https://github.com/Hancapo/HikariHopper/pull/46))
 - Settings can turn off reopening the last game at startup, and clear the recent games the start page lists. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - HikariHopper has its own logo and icon, on the exe, the taskbar, the title bars, About and the splash screen. ([#34](https://github.com/Hancapo/HikariHopper/pull/34))
@@ -41,8 +51,6 @@ All notable changes to HikariHopper are documented here. The format follows
 - Menu titles no longer keep a white line after their menu closes, and show focus only when it comes from the keyboard. ([#29](https://github.com/Hancapo/HikariHopper/pull/29))
 - Release builds no longer contain the build machine's folder paths. ([#18](https://github.com/Hancapo/HikariHopper/pull/18))
 
-### Removed
-
 ## [0.0.2] - 2026-11-02
 
 ### Changed
@@ -57,6 +65,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - RPF explorer for GTA V Legacy and Enhanced, with nested archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/Hancapo/HikariHopper/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Hancapo/HikariHopper/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Hancapo/HikariHopper/releases/tag/v0.0.1
