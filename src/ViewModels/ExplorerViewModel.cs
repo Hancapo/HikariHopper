@@ -327,10 +327,10 @@ public sealed partial class ExplorerViewModel : ObservableObject
         PublishNavigation();
     }
 
-    /// <summary>Opens the configured game synchronously (startup restore).</summary>
+    /// <summary>Opens the configured game synchronously (startup restore), unless Settings turned that off.</summary>
     public void RestoreLastGame()
     {
-        string path = ConfiguredGamePath();
+        string path = GameSettings.GameRootToRestore();
         if (path.Length > 0)
             OpenGame(path);
     }

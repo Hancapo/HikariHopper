@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:v="using:HikariHopper.Views"
+                    xmlns:c="using:HikariHopper.Views.Controls"
+                    xmlns:ui="using:HikariHopper.Ui">
+  <!-- The modal card: a header with the heading and a close mark, the body, and a footer with the
+       footer text and Close, on a rounded surface with a soft shadow over the blurred window. -->
+  <ControlTheme x:Key="{x:Type v:ModalSheet}" TargetType="v:ModalSheet">
+    <Setter Property="Background" Value="{x:Static ui:Theme.AppBg}" />
+    <Setter Property="FontFamily" Value="{x:Static ui:Theme.UiFont}" />
+    <Setter Property="FontSize" Value="{x:Static ui:Theme.FontSize}" />
+    <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1"
+                CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+          <Border CornerRadius="{x:Static ui:Theme.SheetInnerCorner}" ClipToBounds="True">
+            <DockPanel>
+              <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.SheetHeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+                <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+                <TextBlock Name="PART_Heading" Margin="16,0,0,0" Text="{TemplateBinding Heading}"
+                           Foreground="{x:Static ui:Theme.TextRow}"
+                           FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                           FontWeight="Bold" LetterSpacing="1.2" VerticalAlignment="Center" />
+                <c:ChromeToolButton Name="PART_CloseMark" Width="26" Height="26" Margin="0,0,8,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center" Bordered="False"
+                                    CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="close" IconSize="12" IconThickness="1.4"
+                                    AutomationProperties.Name="Close" />
+              </Panel>
+              <Border DockPanel.Dock="Bottom" Height="48" Background="{x:Static ui:Theme.ChromeBg}">
+                <Panel>
+                  <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
+                  <TextBlock Margin="16,0,0,0" Text="{TemplateBinding FooterText}"
+                             Foreground="{x:Static ui:Theme.TextFaint}"
+                             FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                             HorizontalAlignment="Left" VerticalAlignment="Center" />
+                  <c:ChromeToolButton Name="PART_CloseButton" Width="92" Height="28" Margin="0,0,12,0"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      Raised="True" Text="Close" />
+                </Panel>
+              </Border>
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Margin="{TemplateBinding BodyMargin}" />
+            </DockPanel>
+          </Border>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

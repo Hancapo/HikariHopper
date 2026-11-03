@@ -22,6 +22,22 @@ public partial class MainWindow : Window
     {
         QtFramelessWindow.Apply(this);
         InitializeComponent();
+        ModalOverlay.StateChanged += OnModalStateChanged;
+        Closed += (_, _) => ModalOverlay.StateChanged -= OnModalStateChanged;
+    }
+
+    /// <summary>
+    /// While a modal is up the title bar stays usable (move, minimise, close), but its menus are
+    /// switched off so nothing opens over the dialog.
+    /// </summary>
+    private void OnModalStateChanged(object? sender, TopLevel host)
+    {
+        if (host == this && TitleBar.LeadingContent is Control menus)
+        {
+            bool open = ModalOverlay.IsOpen(this);
+            menus.IsEnabled = !open;
+            menus.Opacity = open ? 0.45 : 1;
+        }
     }
 
     /// <summary>The window title for the active tab, exactly as main.qml computed it.</summary>

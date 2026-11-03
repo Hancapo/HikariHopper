@@ -60,7 +60,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     }
 
     /// <summary>Whether startup should show the splash while a saved game loads.</summary>
-    public static bool StartupSplashRequired() => GameSettings.ConfiguredGameRootToOpen().Length > 0;
+    public static bool StartupSplashRequired() => GameSettings.GameRootToRestore().Length > 0;
 
     public void RestoreLastGame() => ActiveBridge.RestoreLastGame();
 
@@ -172,6 +172,13 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     public void CloseActiveTab() => CloseTab(activeIndex);
 
     public void OpenRecentGame(string path) => ActiveBridge.OpenGameAsync(path);
+
+    /// <summary>Forgets the recent games the launcher lists.</summary>
+    public void ClearRecentGames()
+    {
+        AppSettings.SetStringList(GameSettings.RecentGameRootsKey, []);
+        OnPropertyChanged(nameof(RecentGames));
+    }
 
     private void RaiseActiveTabChanged()
     {

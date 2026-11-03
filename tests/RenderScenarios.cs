@@ -252,25 +252,25 @@ public sealed class RenderScenarios
             case "settings_group_rows":
             {
                 var column = new StackPanel { Background = T.SidebarBg };
-                column.Children.Add(new SettingsGroupRow { Label = "Game paths", Note = "9 titles", Selected = true });
-                column.Children.Add(new SettingsGroupRow { Label = "Explorer", Note = "Later", Available = false });
-                column.Children.Add(new SettingsGroupRow { Label = "Appearance", Note = "Later", Available = false });
+                column.Children.Add(new SettingsGroupRow { Label = "Games", Selected = true });
+                column.Children.Add(new SettingsGroupRow { Label = "Explorer", Note = "soon", Available = false });
+                column.Children.Add(new SettingsGroupRow { Label = "Appearance", Note = "soon", Available = false });
                 return Host(w, h, column);
             }
             case "gamepath_rows":
             {
                 var column = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
-                column.Children.Add(new GamePathRow { GameName = "Grand Theft Auto V Legacy", GamePath = @"D:\Games\GTAV", ExpectedExecutable = "GTA5.exe", Supported = true, PathValid = true });
-                column.Children.Add(new GamePathRow { GameName = "Grand Theft Auto V Enhanced", GamePath = @"C:\Nope", ExpectedExecutable = "GTA5_Enhanced.exe", Supported = true, PathValid = false });
-                column.Children.Add(new GamePathRow { GameName = "Grand Theft Auto IV" });
+                column.Children.Add(new GamePathRow { Title = "Legacy", Edition = GameSettings.LegacyEdition, GamePath = @"D:\Games\GTAV", ExpectedExecutable = "GTA5.exe", PathValid = true });
+                column.Children.Add(new GamePathRow { Title = "Enhanced", Edition = GameSettings.EnhancedEdition, GamePath = @"C:\Nope", ExpectedExecutable = "GTA5_Enhanced.exe", PathValid = false });
+                column.Children.Add(new GamePathRow { Title = "Enhanced", Edition = GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" });
                 return Host(w, h, column);
             }
             case "about":
-                return new AboutWindow();
+                return Host(w, h, new AboutDialog());
             case "shortcuts":
-                return new ShortcutsWindow();
+                return Host(w, h, new ShortcutsDialog());
             case "settings":
-                return new SettingsWindow(TestGamePaths());
+                return Host(w, h, TestSettings());
             case "splash":
                 return new SplashScreen { StartupMessage = "Loading FiveFury runtime and GTA V keys…", StartupPhase = "GAME" };
             case "splash_boot":
@@ -398,7 +398,8 @@ public sealed class RenderScenarios
     }
 
     /// <summary>A GamePathSettings reading a scratch registry key with the scenario's paths.</summary>
-    private static GamePathSettings TestGamePaths()
+    /// <summary>Settings over a scratch registry key with only the Legacy folder set.</summary>
+    private static SettingsDialog TestSettings()
     {
         string original = AppSettings.RegistryPath;
         AppSettings.RegistryPath = @"Software\HikariHopper\RenderScenarios";
@@ -406,7 +407,7 @@ public sealed class RenderScenarios
         {
             AppSettings.SetString(GameSettings.LegacyGameRootKey, LegacyPath);
             AppSettings.Remove(GameSettings.EnhancedGameRootKey);
-            return new GamePathSettings();
+            return new SettingsDialog();
         }
         finally
         {

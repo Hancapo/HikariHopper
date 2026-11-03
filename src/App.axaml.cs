@@ -50,5 +50,5 @@ public partial class App : Application
     }
 
     /// <summary>Python <c>startup_splash_required()</c>: only when a saved game will be opened.</summary>
-    public static bool StartupSplashRequired() => GameSettings.ConfiguredGameRootToOpen().Length > 0;
+    public static bool StartupSplashRequired() => GameSettings.GameRootToRestore().Length > 0;
 }

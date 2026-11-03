@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Settings can turn off reopening the last game at startup, and clear the recent games the start page lists. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - HikariHopper has its own logo and icon: the wordmark with a crescent moon for the dot of the i, and a rabbit leaping across the moon. They appear on the exe, the taskbar, the title bars, the About window and the splash screen. ([#34](https://github.com/Hancapo/HikariHopper/pull/34))
 - Dragging entries out of the explorer shows a cursor with an icon for what is being extracted and the number of items. ([#23](https://github.com/Hancapo/HikariHopper/pull/23), [#25](https://github.com/Hancapo/HikariHopper/pull/25))
 - A game tab shows which edition it has open with a V, grey for Legacy and green for Enhanced, and hovering a tab shows its path. ([#26](https://github.com/Hancapo/HikariHopper/pull/26))
@@ -15,11 +16,13 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Settings, About and Keyboard shortcuts open inside the main window, over the blurred explorer, instead of as separate windows. Settings lists each game's installations with their edition marks and a clear status, and the empty future-game rows are gone. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - The start page is a launcher: the games to open, grouped by game with their edition marks, and a standalone RPF. It no longer shows an empty explorer around them, nor the tab strip while it is the only tab. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
 - Menus hang from the title that opened them as one surface, and every menu casts a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
 
 ### Fixed
 
+- About shows the app's real version, and credits Avalonia instead of Qt. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
 - The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
 - The mip slider moves to wherever it is pressed, not only when its handle is dragged. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
 - Moving between mips in the texture viewer is instant. ([#21](https://github.com/Hancapo/HikariHopper/pull/21))

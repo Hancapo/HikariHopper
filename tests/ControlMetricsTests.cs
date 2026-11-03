@@ -187,15 +187,22 @@ public sealed class ControlMetricsTests
         Assert.True(gold, "the emblem shows the gold moon");
         Assert.Equal(T.ChromeRaised.Color, Pixel(window, (int)at.X + 16, (int)at.Y + 6));
         window.Close();
+    });
 
-        var about = new AboutWindow();
-        about.Show();
-        Pump();
-        WindowTitleBar toolBar = about.GetVisualDescendants().OfType<WindowTitleBar>().Single();
-        Assert.Equal(T.HeaderHeight, toolBar.Bounds.Height);
-        Assert.False(toolBar.MinimizeButton.IsVisible);
-        Assert.False(toolBar.MaximizeButton.IsVisible);
-        about.Close();
+    [AvaloniaFact]
+    public void SheetsHaveAHeadingACloseMarkAndAFooter() => UiThread.Run(() =>
+    {
+        var about = new AboutDialog { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        Window window = Show(about, 520, 460);
+        Assert.Equal(new Size(460, 400), about.Bounds.Size);
+        var heading = about.GetVisualDescendants().OfType<TextBlock>().Single(text => text.Name == "PART_Heading");
+        Assert.Equal("ABOUT", heading.Text);
+        var buttons = about.GetVisualDescendants().OfType<ChromeToolButton>().ToArray();
+        Assert.Contains(buttons, button => button.Name == "PART_CloseMark");
+        Assert.Contains(buttons, button => button.Name == "PART_CloseButton" && button.Text == "Close");
+        // The version comes from the build, not a hard-coded number.
+        Assert.Equal(StartPage.AppVersion, about.FindControl<TextBlock>("VersionText")!.Text);
+        window.Close();
     });
 
     private static int Distance(Color a, Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
@@ -204,15 +211,14 @@ public sealed class ControlMetricsTests
     public void EveryWindowCarriesTheAppIcon() => UiThread.Run(() =>
     {
         // The taskbar and Alt+Tab icon comes from one style, so every window class gets it.
-        foreach (Window window in new Window[] { new MainWindow(), new AboutWindow(), new SplashScreen() })
+        foreach (Window window in new Window[] { new MainWindow(), new SplashScreen() })
             Assert.NotNull(window.Icon);
-        var about = new AboutWindow();
-        about.Show();
-        Pump();
+        var about = new AboutDialog();
+        Window host = Show(about, 520, 460);
         Image icon = about.FindControl<Image>("AppIcon")!;
         Assert.Equal(new PixelSize(256, 256), Assert.IsAssignableFrom<Bitmap>(icon.Source).PixelSize);
         Assert.Equal(new Size(40, 40), icon.Bounds.Size);
-        about.Close();
+        host.Close();
 
         // The splash wears the lockup: the icon, then the official wordmark at its own proportions.
         var splash = new SplashScreen();
@@ -473,41 +479,41 @@ public sealed class ControlMetricsTests
         Assert.Equal(("Starting Qt interface…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
         Assert.True(splash.Topmost);
 
-        Assert.Equal((460.0, 340.0), (new AboutWindow().Width, new AboutWindow().Height));
-        Assert.Equal((470.0, 545.0), (new ShortcutsWindow().Width, new ShortcutsWindow().Height));
+        Assert.Equal((460.0, 400.0), (new AboutDialog().Width, new AboutDialog().Height));
+        Assert.Equal((470.0, 640.0), (new ShortcutsDialog().Width, new ShortcutsDialog().Height));
     });
 
     [AvaloniaFact]
     public void SettingsListsFutureGamesInPcReleaseOrder() => UiThread.Run(() =>
     {
-        var settings = new SettingsWindow(new Core.GamePathSettings());
+        var settings = new SettingsDialog();
         Assert.Equal(
             ["Grand Theft Auto III", "Grand Theft Auto: Vice City", "Grand Theft Auto: San Andreas",
              "Bully: Scholarship Edition", "Grand Theft Auto IV", "Red Dead Redemption 2", "Red Dead Redemption"],
             settings.FutureGames);
-        Assert.Equal((1080.0, 688.0, 820.0, 620.0), (settings.Width, settings.Height, settings.MinWidth, settings.MinHeight));
+        Assert.Equal((760.0, 520.0), (settings.Width, settings.Height));
+        // They're one line under the games, not a row each.
+        Assert.Equal($"Coming later: {string.Join(", ", settings.FutureGames)}.", settings.LaterText.Text);
     });
 
     [AvaloniaFact]
     public void GamePathRowReportsDetection() => UiThread.Run(() =>
     {
-        var row = new GamePathRow { GameName = "Grand Theft Auto V Enhanced", ExpectedExecutable = "GTA5_Enhanced.exe", Supported = true };
-        Assert.Equal("Not configured", row.StatusMessage);
+        var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
+        Assert.Equal("Not set", row.StatusMessage);
+        Assert.False(row.ClearButton.IsVisible);
+        Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
-        Assert.Equal("GTA5_Enhanced.exe not found", row.StatusMessage);
+        Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
+        Assert.Equal(T.Warning, row.StatusText.Foreground);
+        Assert.True(row.ClearButton.IsVisible);
         row.PathValid = true;
-        Assert.Equal("Executable detected", row.StatusMessage);
-        Assert.Equal(62, row.DesiredHeightFor());
-        row.Supported = false;
-        Assert.Equal(45, row.DesiredHeightFor());
+        Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);
+        Assert.Equal(T.Ok, row.StatusText.Foreground);
+        // The clear mark commits an empty folder.
+        string? committed = null;
+        row.PathCommitted += (_, path) => committed = path;
+        row.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal("", committed);
     });
-}
-
-internal static class GamePathRowTestExtensions
-{
-    public static double DesiredHeightFor(this GamePathRow row)
-    {
-        row.Measure(new Size(800, double.PositiveInfinity));
-        return row.DesiredSize.Height;
-    }
 }
