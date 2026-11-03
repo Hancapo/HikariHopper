@@ -7,7 +7,7 @@ namespace HikariHopper.Views;
 /// The texture preview pane (port of <c>TexturePreview.qml</c>): <see cref="TexturePreviewToolbar"/>,
 /// <see cref="TextureViewport"/> and <see cref="TextureMipBar"/>. The toolbar's zoom buttons step by
 /// 1.25 and 0.8 around the viewport centre. The F and 1 shortcuts are routed here by
-/// <see cref="TextureDictionaryWindow"/>.
+/// <see cref="TextureEditor"/>.
 /// </summary>
 public partial class TexturePreview : UserControl
 {

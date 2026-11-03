@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.TextureEditor"
+             x:DataType="v:TextureEditor"
+             v:ModalOverlay.FillsWindow="True"
+             FontFamily="{x:Static ui:Theme.UiFont}"
+             FontSize="{x:Static ui:Theme.FontSize}"
+             Foreground="{x:Static ui:Theme.Text}">
+  <!-- The texture editor of one tab, as a modal that fills the main window over its blurred
+       explorer: a header naming the document with a close mark, the menu row, the rail / preview
+       split under the image drop area, and the status bar, with its own dialog layer on top. The
+       header is as tall as the title bar it replaces, so everything below sits where it did. -->
+  <Border Background="{x:Static ui:Theme.AppBg}"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+    <Border CornerRadius="{x:Static ui:Theme.SheetCorner}" ClipToBounds="True">
+      <Panel>
+        <DockPanel>
+          <Panel Name="Header" DockPanel.Dock="Top" Height="{x:Static ui:Theme.WindowTitleHeight}"
+                 Background="{x:Static ui:Theme.ChromeRaised}">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+            <TextBlock Name="TitleText" Margin="14,0,44,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
+                       FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                       TextTrimming="CharacterEllipsis" />
+            <c:ChromeToolButton Name="CloseMark" Width="24" Height="22" Margin="0,0,6,0"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Bordered="False"
+                                CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="close" IconSize="11" IconThickness="1.4"
+                                AutomationProperties.Name="Close the texture editor" />
+          </Panel>
+          <v:TextureViewerMenuRow Name="MenuRow" DockPanel.Dock="Top" />
+          <v:TextureViewerStatusBar Name="StatusBar" DockPanel.Dock="Bottom" />
+          <v:TextureImageDropArea Name="DropArea">
+            <v:TextureImageDropArea.Body>
+              <Grid Name="SplitGrid">
+                <Grid.ColumnDefinitions>
+                  <!-- Width: Theme.TextureRailWidth, set in code. -->
+                  <ColumnDefinition MinWidth="280" MaxWidth="440" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <v:TextureRail Name="Rail" Grid.Column="0" />
+                <v:TexturePreview Name="Preview" Grid.Column="2" />
+                <c:SplitViewHandle Grid.Column="1" />
+              </Grid>
+            </v:TextureImageDropArea.Body>
+          </v:TextureImageDropArea>
+        </DockPanel>
+
+        <v:TextureDialogLayer Name="DialogLayer" />
+
+        <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
+        <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"
+                IsHitTestVisible="False" />
+      </Panel>
+    </Border>
+  </Border>
+</UserControl>

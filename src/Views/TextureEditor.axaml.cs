@@ -9,7 +9,7 @@ using HikariHopper.ViewModels;
 
 namespace HikariHopper.Views;
 
-/// <summary>The tool dialogs <see cref="TextureDictionaryWindow.OpenToolDialog"/> can show.</summary>
+/// <summary>The tool dialogs <see cref="TextureEditor.OpenToolDialog"/> can show.</summary>
 public enum TextureTool
 {
     Resize,
@@ -22,38 +22,40 @@ public enum TextureTool
 }
 
 /// <summary>
-/// The texture dictionary editor window of one explorer tab (port of <c>TextureDictionaryWindow.qml</c>).
+/// The texture editor of one explorer tab, shown as a modal that fills the main window over its
+/// blurred explorer (see <see cref="ModalOverlay"/>).
 /// </summary>
 /// <remarks>
-/// <para>A frameless 1250×738 window (at least 1080×620) that shows itself when the view model raises
-/// <see cref="TextureViewerViewModel.OpenRequested"/>, owned by <see cref="OwnerWindow"/> or else the
-/// application's main window. Closing it (title bar, Ctrl+W, File › Close) asks the view model via
-/// <see cref="TextureViewerViewModel.RequestClose"/>, which may show the unsaved-changes dialog;
-/// <see cref="TextureViewerViewModel.CloseRequested"/> then hides it. Closing the owner or the
-/// application closes it for real.</para>
-/// <para>Window shortcuts (F2, Del, Ctrl+C, Ctrl+Z, Ctrl+V, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+W, F, 1)
-/// take precedence over the focused control, and none fire while a dialog or menu is open, as Qt
-/// blocks shortcuts under a modal popup or menu.</para>
+/// <para>It shows itself over <see cref="Anchor"/> when the view model raises
+/// <see cref="TextureViewerViewModel.OpenRequested"/>. Closing it (the close mark, Esc, Ctrl+W,
+/// File › Close) asks the view model via <see cref="TextureViewerViewModel.RequestClose"/>, which may
+/// show the unsaved-changes dialog; <see cref="TextureViewerViewModel.CloseRequested"/> then hides
+/// it. Its tab closing removes it for good (<see cref="Destroy"/>).</para>
+/// <para>Its shortcuts (F2, Del, Ctrl+C, Ctrl+Z, Ctrl+V, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+W, F, 1)
+/// take precedence over the focused control, and none fire while a dialog or menu is open. The main
+/// window's own shortcuts are blocked while it is up, as under any modal.</para>
 /// </remarks>
-public partial class TextureDictionaryWindow : Window
+public partial class TextureEditor : UserControl, IModalContent
 {
     private readonly TextureViewerViewModel viewModel;
+    private ModalOverlay? overlay;
     private bool closeApproved;
     private TextureToolDialog? toolDialog;
     private TextureUnsavedChangesDialog? unsavedDialog;
     private TextureImportDialog? importDialog;
     private TexturePasteDialog? pasteDialog;
 
-    /// <summary>For the XAML designer only: a window over an empty view model.</summary>
-    public TextureDictionaryWindow() : this(new TextureViewerViewModel())
+    /// <summary>For the XAML designer only: an editor over an empty view model.</summary>
+    public TextureEditor() : this(new TextureViewerViewModel())
     {
     }
 
-    public TextureDictionaryWindow(TextureViewerViewModel viewModel)
+    public TextureEditor(TextureViewerViewModel viewModel)
     {
         this.viewModel = viewModel;
-        QtFramelessWindow.Apply(this);
         InitializeComponent();
+        // Its shortcuts tunnel down to the focused element, so focus lives inside the editor.
+        Focusable = true;
         DataContext = viewModel;
         SplitGrid.ColumnDefinitions[0].Width = new GridLength(Ui.Theme.TextureRailWidth);
 
@@ -77,6 +79,7 @@ public partial class TextureDictionaryWindow : Window
         viewModel.PasteImageRequested += (_, _) => OpenPasteDialog();
 
         MenuRow.CloseRequested += (_, _) => Close();
+        CloseMark.Click += (_, _) => Close();
         Rail.ResizeRequested += (_, _) => OpenToolDialog(TextureTool.Resize);
         Rail.PowerOfTwoRequested += (_, _) => OpenToolDialog(TextureTool.PowerOfTwo);
         Rail.MipmapsRequested += (_, _) => OpenToolDialog(TextureTool.Mipmaps);
@@ -91,12 +94,18 @@ public partial class TextureDictionaryWindow : Window
 
     public TextureViewerViewModel ViewModel => viewModel;
 
-    /// <summary>The window to own this one when it is shown; the application's main window when null.</summary>
-    public Window? OwnerWindow { get; set; }
+    /// <summary>What the editor shows over: a control in the main window. The main window's content when null.</summary>
+    public Control? Anchor { get; set; }
+
+    /// <summary>The document it shows, its state and kind: "name * — Texture Dictionary".</summary>
+    public string Title { get; private set; } = "";
+
+    /// <summary>Whether the editor is showing.</summary>
+    public bool IsOpen => overlay?.IsShown == true;
 
     private bool destroying;
 
-    /// <summary>QML <c>closeApproved</c>: the next close hides the window instead of asking the view model.</summary>
+    /// <summary>QML <c>closeApproved</c>: the next close hides the editor instead of asking the view model.</summary>
     public bool CloseApproved => closeApproved;
 
     /// <summary>The open tool dialog (QML <c>toolDialogLoader.item</c>), if any.</summary>
@@ -111,19 +120,45 @@ public partial class TextureDictionaryWindow : Window
     /// <summary>Whether a modal dialog or a menu is showing; window shortcuts are blocked meanwhile.</summary>
     public bool PopupOpen => DialogLayer.HasDialogs || MenuRow.MenuOpen || Rail.ContextMenuPopup.IsOpen;
 
-    /// <summary>QML <c>present()</c>: shows, raises and activates the window.</summary>
+    /// <summary>QML <c>present()</c>: shows the editor over the main window, or leaves it up if it is.</summary>
     public void Present()
     {
-        if (!IsVisible)
-        {
-            Window? owner = OwnerWindow
-                ?? (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-            if (owner is not null && owner != this && owner.IsVisible)
-                Show(owner);
-            else
-                Show();
-        }
-        Activate();
+        if (IsOpen)
+            return;
+        Control? anchor = Anchor
+            ?? ((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainWindow)?.ExplorerScreenHost;
+        if (anchor is null)
+            return;
+        overlay = ModalOverlay.Show(anchor, this);
+        if (overlay is not null)
+            overlay.Closed += (_, _) => overlay = null;
+        Dispatcher.UIThread.Post(() => Focus(), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Asks to close: hides the editor once the view model has approved (no unsaved changes, or they
+    /// were saved or discarded), and otherwise asks the view model, which may ask the user first.
+    /// </summary>
+    public void Close()
+    {
+        if (closeApproved || destroying)
+            overlay?.Close();
+        else if (IsOpen)
+            Dispatcher.UIThread.Post(viewModel.RequestClose);
+    }
+
+    /// <summary>
+    /// Escape peels back one layer at a time: an open menu or context menu closes first, a dialog
+    /// handles its own Escape, and only then does the editor itself close.
+    /// </summary>
+    void IModalContent.RequestClose()
+    {
+        if (Rail.ContextMenuPopup.IsOpen)
+            Rail.ContextMenuPopup.Close();
+        else if (MenuRow.MenuOpen)
+            MenuRow.CloseMenus();
+        else if (!DialogLayer.HasDialogs)
+            Close();
     }
 
     /// <summary>QML <c>openToolDialog(component)</c>: replaces any open tool dialog with a new one.</summary>
@@ -178,24 +213,11 @@ public partial class TextureDictionaryWindow : Window
         dialog.Open(DialogLayer);
     }
 
-    /// <summary>Closes the window for good when its tab is removed (QML's Instantiator destroying the delegate).</summary>
+    /// <summary>Removes the editor for good when its tab is removed (QML's Instantiator destroying the delegate).</summary>
     public void Destroy()
     {
         destroying = true;
-        Close();
-    }
-
-    protected override void OnClosing(WindowClosingEventArgs e)
-    {
-        base.OnClosing(e);
-        if (e.Cancel || destroying || e.CloseReason is WindowCloseReason.OwnerWindowClosing or WindowCloseReason.ApplicationShutdown
-            or WindowCloseReason.OSShutdown)
-            return;
-        e.Cancel = true;
-        if (closeApproved)
-            Hide();
-        else
-            Dispatcher.UIThread.Post(viewModel.RequestClose);
+        overlay?.Close();
     }
 
     private void OpenImportDialog()
@@ -249,9 +271,10 @@ public partial class TextureDictionaryWindow : Window
     private void RefreshTitle()
     {
         Title = viewModel.SourceName.Length == 0
-            ? "Texture Dictionary — HikariHopper"
+            ? "Texture Dictionary"
             : $"{viewModel.SourceName}{(viewModel.Modified && !viewModel.Saving ? " *" : "")} — "
-              + $"{(viewModel.IsDrawable ? "Embedded Textures" : "Texture Dictionary")} — HikariHopper";
+              + (viewModel.IsDrawable ? "Embedded Textures" : "Texture Dictionary");
+        TitleText.Text = Title;
     }
 
     private void RefreshDropEnabled() =>

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media;
 using FiveFury;
 using CommonFury.Textures;
 using FiveFury.Textures;
@@ -13,7 +14,7 @@ using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Tests;
 
-/// <summary>Behaviour of the texture dictionary window port (TextureDictionaryWindow.qml and its parts).</summary>
+/// <summary>Behaviour of the texture editor (once TextureDictionaryWindow.qml) and its parts.</summary>
 public sealed class TextureWindowTests
 {
     // Window layout: title bar 30 + menu row 26; rail 340 + 1px handle; toolbar 38 above the viewport.
@@ -32,21 +33,41 @@ public sealed class TextureWindowTests
     private static Point Row(int index) => new(150, RailTop + index * RowHeight + 20);
 
     [AvaloniaFact]
-    public void WindowHasTheQmlGeometryAndTitle()
+    public void TheEditorFillsItsWindowAsAModalAndNamesItsDocument()
     {
         TextureWindowHarness harness = Opened();
-        TextureDictionaryWindow window = harness.Window;
-        Assert.True(window.IsVisible);
-        Assert.Equal(1250, window.Width);
-        Assert.Equal(738, window.Height);
-        Assert.Equal(1080, window.MinWidth);
-        Assert.Equal(620, window.MinHeight);
-        Assert.Equal("test.ytd — Texture Dictionary — HikariHopper", window.Title);
+        TextureEditor editor = harness.Window;
+        Assert.True(editor.IsOpen);
+        // A modal over the blurred window, everything but a 24px margin.
+        Assert.Same(harness.Host, TopLevel.GetTopLevel(editor));
+        Assert.Equal(new Size(TextureWindowHarness.EditorWidth, TextureWindowHarness.EditorHeight), editor.Bounds.Size);
+        Assert.Equal(ModalOverlay.BlurRadius, Assert.IsAssignableFrom<IBlurEffect>(harness.Backdrop.Effect).Radius, 1);
+        // Its header names the document, its state and its kind.
+        Assert.Equal("test.ytd — Texture Dictionary", editor.Title);
+        Assert.Equal(editor.Title, editor.TitleText.Text);
         Assert.True(harness.ViewModel.RenameSelected("renamed"));
         harness.Settle();
-        Assert.Equal("test.ytd * — Texture Dictionary — HikariHopper", window.Title);
+        Assert.Equal("test.ytd * — Texture Dictionary", editor.Title);
         harness.ViewModel.SetSourceForTesting("model.ydr", "");
-        Assert.Equal("model.ydr * — Embedded Textures — HikariHopper", window.Title);
+        Assert.Equal("model.ydr * — Embedded Textures", editor.Title);
+    }
+
+    [AvaloniaFact]
+    public void TheCloseMarkAndEscapeCloseTheEditorThroughTheViewModel()
+    {
+        TextureWindowHarness harness = Opened();
+        harness.Window.CloseMark.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        harness.Settle();
+        Assert.False(harness.Window.IsOpen);
+        Assert.False(harness.ViewModel.HasDocument);
+
+        // Esc asks too, so a modified document still gets its question.
+        harness.Open("again.ytd", TextureTestKit.Bytes(new TextureSet([TextureTestKit.Red("again")], GameTarget.Legacy)));
+        Assert.True(harness.ViewModel.RenameSelected("renamed"));
+        harness.Key(Key.Escape);
+        harness.Settle();
+        Assert.True(harness.Window.IsOpen);
+        Assert.True(Assert.IsType<TextureUnsavedChangesDialog>(harness.Window.UnsavedDialog).IsOpen);
     }
 
     [AvaloniaFact]
@@ -55,7 +76,7 @@ public sealed class TextureWindowTests
         TextureWindowHarness harness = Opened();
         harness.Key(Key.W, RawInputModifiers.Control);
         harness.Settle();
-        Assert.False(harness.Window.IsVisible);
+        Assert.False(harness.Window.IsOpen);
         Assert.True(harness.Window.CloseApproved);
         Assert.False(harness.ViewModel.HasDocument);
     }
@@ -75,7 +96,7 @@ public sealed class TextureWindowTests
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(dialog.IsOpen);
-        Assert.True(harness.Window.IsVisible);
+        Assert.True(harness.Window.IsOpen);
         Assert.Null(harness.ViewModel.PendingChange);
     }
 
@@ -88,7 +109,7 @@ public sealed class TextureWindowTests
         harness.Settle();
         harness.Window.UnsavedDialog!.FindControl<ChromeToolButton>("DiscardButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         harness.Settle();
-        Assert.False(harness.Window.IsVisible);
+        Assert.False(harness.Window.IsOpen);
         Assert.False(harness.ViewModel.HasDocument);
     }
 
@@ -186,12 +207,12 @@ public sealed class TextureWindowTests
         Assert.Equal(1, harness.ViewModel.MipLevel);
 
         // The press alone, then the release that opens the menu: neither may drop or redecode the preview.
-        harness.Window.MouseMove(Row(row));
-        harness.Window.MouseDown(Row(row), MouseButton.Right);
+        harness.MouseMove(Row(row));
+        harness.MouseDown(Row(row), MouseButton.Right);
         Assert.Same(shown, harness.ViewModel.PreviewImage);
         Assert.False(harness.ViewModel.PreviewLoading);
         Assert.Equal(1, harness.ViewModel.MipLevel);
-        harness.Window.MouseUp(Row(row), MouseButton.Right);
+        harness.MouseUp(Row(row), MouseButton.Right);
         harness.Settle();
         Assert.True(harness.Window.Rail.ContextMenuPopup.IsOpen);
         Assert.Same(shown, harness.ViewModel.PreviewImage);
@@ -297,10 +318,10 @@ public sealed class TextureWindowTests
     {
         TextureWindowHarness harness = Opened(Solid("square", 100, 100));
         harness.Viewport.ShowActualSize();
-        harness.Window.MouseWheel(new Point(ViewportLeft + 300, ViewportTop + 200), new Vector(0, 1));
+        harness.MouseWheel(new Point(ViewportLeft + 300, ViewportTop + 200), new Vector(0, 1));
         harness.Settle();
         Assert.Equal(1.25, harness.Viewport.DisplayScale, 9);
-        harness.Window.MouseWheel(new Point(ViewportLeft + 300, ViewportTop + 200), new Vector(0, -2));
+        harness.MouseWheel(new Point(ViewportLeft + 300, ViewportTop + 200), new Vector(0, -2));
         harness.Settle();
         Assert.Equal(1.25 / 1.5625, harness.Viewport.DisplayScale, 9);
     }
@@ -312,17 +333,17 @@ public sealed class TextureWindowTests
         TextureViewport viewport = harness.Viewport;
         viewport.ShowActualSize();
         var start = new Point(ViewportLeft + 400, ViewportTop + 300);
-        TextureDictionaryWindow window = harness.Window;
-        window.MouseMove(start);
-        window.MouseDown(start, MouseButton.Left);
-        window.MouseMove(start + new Point(8, 6), RawInputModifiers.LeftMouseButton);
+        TextureEditor window = harness.Window;
+        harness.MouseMove(start);
+        harness.MouseDown(start, MouseButton.Left);
+        harness.MouseMove(start + new Point(8, 6), RawInputModifiers.LeftMouseButton);
         Assert.Equal(0, viewport.PanX);
         Assert.False(viewport.IsFocused);
-        window.MouseMove(start + new Point(30, 20), RawInputModifiers.LeftMouseButton);
+        harness.MouseMove(start + new Point(30, 20), RawInputModifiers.LeftMouseButton);
         Assert.Equal(30, viewport.PanX);
         Assert.Equal(20, viewport.PanY);
         Assert.True(viewport.IsFocused);
-        window.MouseUp(start + new Point(30, 20), MouseButton.Left);
+        harness.MouseUp(start + new Point(30, 20), MouseButton.Left);
         harness.Key(Key.Left);
         harness.Key(Key.Up);
         Assert.Equal(30 - TextureViewport.KeyboardPanStep, viewport.PanX);
@@ -366,12 +387,12 @@ public sealed class TextureWindowTests
         TextureMipSlider slider = harness.Window.Preview.MipBar.Slider;
         // Near the right end, 3px from the top edge: empty space, well away from the 3px track and the handle.
         Point right = slider.TranslatePoint(new Point(slider.Bounds.Width - 8, 3), harness.Window)!.Value;
-        harness.Window.MouseMove(right);
-        harness.Window.MouseDown(right, MouseButton.Left);
+        harness.MouseMove(right);
+        harness.MouseDown(right, MouseButton.Left);
         harness.Settle();
         // The value moves on the press itself, not on release.
         Assert.Equal(2, harness.ViewModel.MipLevel);
-        harness.Window.MouseUp(right, MouseButton.Left);
+        harness.MouseUp(right, MouseButton.Left);
         harness.Settle();
         Assert.Equal(2, harness.ViewModel.MipLevel);
 
@@ -437,9 +458,9 @@ public sealed class TextureWindowTests
         var dialog = (TextureRenameDialog)harness.Window.OpenToolDialog(TextureTool.Rename);
         harness.Settle();
         harness.Key(Key.Tab);
-        Assert.Equal("PART_CancelButton", (harness.Window.FocusManager!.GetFocusedElement() as Control)?.Name);
+        Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
         harness.Key(Key.Tab);
-        Assert.Equal("PART_ApplyButton", (harness.Window.FocusManager!.GetFocusedElement() as Control)?.Name);
+        Assert.Equal("PART_ApplyButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
         harness.Key(Key.Tab);
         Assert.True(dialog.NameField.IsFocused);
 
@@ -450,7 +471,7 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.True(mipmaps.IsFocused);
         harness.Key(Key.Tab);
-        Assert.Equal("PART_CancelButton", (harness.Window.FocusManager!.GetFocusedElement() as Control)?.Name);
+        Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(mipmaps.IsOpen);
@@ -504,7 +525,7 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.Equal("RESIZE TO POWER OF 2", dialog.Heading);
         Assert.False(dialog.WidthField.IsEffectivelyVisible);
-        Assert.True(dialog.RoundingCombo.IsFocused, $"focused: {harness.Window.FocusManager?.GetFocusedElement()}");
+        Assert.True(dialog.RoundingCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
         Assert.True(dialog.ApplyEnabled);
         Assert.Equal($"100 × 60  →  128 × 64  ·  {harness.ViewModel.EstimatedMipCount(128, 64, 4)} mips  ·  last "
             + harness.ViewModel.EstimatedSmallestMipDimensions(128, 64, 4), dialog.ResultText.Text);

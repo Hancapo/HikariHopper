@@ -9,7 +9,7 @@ namespace HikariHopper.Views;
 /// <summary>
 /// The texture window's menu bar (port of <c>TextureViewerMenuRow.qml</c>): File (save, save as,
 /// extract all, close) and Edit (undo, remove duplicates, paste). The keyboard shortcuts shown in
-/// the menus are handled by <see cref="TextureDictionaryWindow"/>.
+/// the menus are handled by <see cref="TextureEditor"/>.
 /// </summary>
 public partial class TextureViewerMenuRow : UserControl
 {
@@ -52,6 +52,13 @@ public partial class TextureViewerMenuRow : UserControl
 
     /// <summary>Whether either menu is showing.</summary>
     public bool MenuOpen => fileMenu.IsOpen || editMenu.IsOpen;
+
+    /// <summary>Closes whichever menu is open.</summary>
+    public void CloseMenus()
+    {
+        fileMenu.Close();
+        editMenu.Close();
+    }
 
     protected override void OnDataContextChanged(EventArgs e)
     {

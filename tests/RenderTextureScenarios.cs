@@ -63,7 +63,7 @@ public sealed class RenderTextureScenarios
         string file = scenario.GetProperty("file").GetString()!;
         string path = Path.Combine(data, file);
         harness.Open(file, File.ReadAllBytes(path), path);
-        TextureDictionaryWindow window = harness.Window;
+        Window window = harness.Host;
         bool pressed = false;
         foreach (JsonElement action in scenario.GetProperty("actions").EnumerateArray())
         {
@@ -97,7 +97,7 @@ public sealed class RenderTextureScenarios
                     harness.Viewport.PanBy(D(1), D(2));
                     break;
                 case "dialog":
-                    window.OpenToolDialog(action[1].GetString() switch
+                    harness.Window.OpenToolDialog(action[1].GetString() switch
                     {
                         "resize" => TextureTool.Resize,
                         "pow2" => TextureTool.PowerOfTwo,
@@ -109,7 +109,7 @@ public sealed class RenderTextureScenarios
                     });
                     break;
                 case "unsaved":
-                    window.OpenUnsavedDialog();
+                    harness.Window.OpenUnsavedDialog();
                     break;
                 case "import":
                     harness.ViewModel.ImportDroppedImages([.. action[1].EnumerateArray().Select(p => Path.Combine(data, p.GetString()!))]);
@@ -119,15 +119,15 @@ public sealed class RenderTextureScenarios
                     harness.ViewModel.RequestPasteImage().Wait();
                     break;
                 case "move":
-                    window.MouseMove(At(), pressed ? RawInputModifiers.LeftMouseButton : RawInputModifiers.None);
+                    harness.MouseMove(At(), pressed ? RawInputModifiers.LeftMouseButton : RawInputModifiers.None);
                     break;
                 case "wheel":
-                    window.MouseWheel(At(), new Vector(0, D(3) / 120));
+                    harness.MouseWheel(At(), new Vector(0, D(3) / 120));
                     break;
                 case "text":
                     TextBox field = action[1].GetString() switch
                     {
-                        "pasteName" => window.PasteDialog!.NameField,
+                        "pasteName" => harness.Window.PasteDialog!.NameField,
                         _ => throw new InvalidOperationException("Unknown field " + action[1].GetString()),
                     };
                     field.Focus();
@@ -137,22 +137,22 @@ public sealed class RenderTextureScenarios
                         window.KeyTextInput(typed);
                     break;
                 case "click":
-                    window.MouseMove(At(), Modifiers(action, 3));
-                    window.MouseDown(At(), MouseButton.Left, Modifiers(action, 3));
-                    window.MouseUp(At(), MouseButton.Left, Modifiers(action, 3));
+                    harness.MouseMove(At(), Modifiers(action, 3));
+                    harness.MouseDown(At(), MouseButton.Left, Modifiers(action, 3));
+                    harness.MouseUp(At(), MouseButton.Left, Modifiers(action, 3));
                     break;
                 case "rclick":
-                    window.MouseMove(At());
-                    window.MouseDown(At(), MouseButton.Right);
-                    window.MouseUp(At(), MouseButton.Right);
+                    harness.MouseMove(At());
+                    harness.MouseDown(At(), MouseButton.Right);
+                    harness.MouseUp(At(), MouseButton.Right);
                     break;
                 case "press":
-                    window.MouseMove(At());
-                    window.MouseDown(At(), MouseButton.Left);
+                    harness.MouseMove(At());
+                    harness.MouseDown(At(), MouseButton.Left);
                     pressed = true;
                     break;
                 case "release":
-                    window.MouseUp(At(), MouseButton.Left);
+                    harness.MouseUp(At(), MouseButton.Left);
                     pressed = false;
                     break;
                 case "key":
