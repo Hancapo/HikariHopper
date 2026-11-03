@@ -181,19 +181,14 @@ public partial class TexturePreviewToolbar : UserControl
     {
         presets ??= BuildPresets();
         foreach (RetroMenuItem item in presets.Items.OfType<RetroMenuItem>())
-            item.IsChecked = item.Tag is double scale ? !FitMode && PresetLabel(scale) == ZoomPercent : FitMode;
-        if (TopLevel.GetTopLevel(this) is not { } top || ZoomButton.TranslatePoint(new Point(0, ZoomButton.Bounds.Height + 4), top) is not { } at)
-            return;
-        presets.Open(top, at.X, at.Y);
+            item.IsChecked = item.Tag is double scale && PresetLabel(scale) == ZoomPercent;
+        presets.OpenUnder(ZoomButton, 4);
     }
 
     private RetroMenu BuildPresets()
     {
-        var menu = new RetroMenu { Width = 128 + 2 * Ui.Theme.MenuPadding };
-        var fit = new RetroMenuItem { Text = "Fit", ShortcutText = "F", Checkable = true, MinWidth = 0 };
-        fit.Triggered += (_, _) => FitRequested?.Invoke(this, EventArgs.Empty);
-        menu.Items.Add(fit);
-        menu.Items.Add(new RetroMenuSeparator());
+        // Only zooms: fitting has its own button beside the readout.
+        var menu = new RetroMenu { Width = 104 + 2 * Ui.Theme.MenuPadding };
         foreach (double scale in ZoomPresets)
         {
             var item = new RetroMenuItem { Text = PresetLabel(scale), Tag = scale, Checkable = true, MinWidth = 0 };
