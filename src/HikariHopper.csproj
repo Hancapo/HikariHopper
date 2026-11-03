@@ -8,6 +8,8 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The COM and P/Invoke source generators (ShellFileDrag) emit unsafe code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Releases are Native AOT (tools/release.ps1). This also runs the AOT and trimming analyzers on every build,
          and code they flag fails it rather than the published app. -->
     <PublishAot>true</PublishAot>

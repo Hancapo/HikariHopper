@@ -118,27 +118,21 @@ public sealed class EntryPointerArea
         IReadOnlyList<string> paths = model.StartEntryDrag(row);
         if (paths.Count == 0 || TopLevel.GetTopLevel(focusTarget()) is not { } top)
             return;
+        if (DragWithBadgeCursor(press, top, paths))
+        {
+            OnCanceled();
+            return;
+        }
         var data = new DataTransfer();
-        int folders = 0, files = 0;
         foreach (string path in paths)
         {
-            bool folder = Directory.Exists(path);
-            IStorageItem? item = folder
+            IStorageItem? item = Directory.Exists(path)
                 ? await top.StorageProvider.TryGetFolderFromPathAsync(path)
                 : await top.StorageProvider.TryGetFileFromPathAsync(path);
-            if (item is null)
-                continue;
-            data.Add(DataTransferItem.CreateFile(item));
-            if (folder)
-                folders++;
-            else
-                files++;
+            if (item is not null)
+                data.Add(DataTransferItem.CreateFile(item));
         }
         data.Add(DataTransferItem.Create(EntryDragFormat, [(byte)'1']));
-        // Nothing to count if no item resolved, and headless runs have no desktop to show it on.
-        DragCountBadge? badge = folders + files == 0 || Application.Current?.ApplicationLifetime is null ? null
-            : new DragCountBadge(folders, files);
-        badge?.ShowAtCursor();
         try
         {
             await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
@@ -147,11 +141,37 @@ public sealed class EntryPointerArea
         {
             // No platform drag source (headless); Qt would simply not start the drag.
         }
+        OnCanceled();
+    }
+
+    /// <summary>
+    /// Windows: drags the files with the badge as the cursor (<see cref="DragCountBadge"/>). False where that isn't
+    /// possible (headless, another platform, items without a shared parent folder), leaving the plain drag to the caller.
+    /// </summary>
+    private static bool DragWithBadgeCursor(PointerPressedEventArgs press, TopLevel top, IReadOnlyList<string> paths)
+    {
+        if (!OperatingSystem.IsWindows() || Application.Current?.ApplicationLifetime is null)
+            return false;
+        int folders = paths.Count(Directory.Exists);
+        int files = paths.Count - folders;
+        double scale = top.RenderScaling;
+        nint Cursor(bool blocked)
+        {
+            var (pixels, width, height) = DragCountBadge.Render(DragCountBadge.CursorVisual(folders, files, blocked), scale);
+            return Infrastructure.ShellFileDrag.CreateCursor(pixels, width, height, 0, 0);
+        }
+        nint cursor = Cursor(blocked: false), blockedCursor = Cursor(blocked: true);
+        try
+        {
+            // Windows' drag loop takes the mouse from here; the press must not stay captured.
+            press.Pointer.Capture(null);
+            return Infrastructure.ShellFileDrag.TryDrag(paths, ExplorerViewModel.EntryDragMime, cursor, blockedCursor);
+        }
         finally
         {
-            badge?.Close();
+            Infrastructure.ShellFileDrag.DestroyCursor(cursor);
+            Infrastructure.ShellFileDrag.DestroyCursor(blockedCursor);
         }
-        OnCanceled();
     }
 
     /// <summary>The internal format (the MIME type registered as a clipboard format) that marks drags started by the explorer itself.</summary>

@@ -93,6 +93,27 @@ public static class SelfTest
             if (!YdrTextureDocument.Read(saved).Dictionary.Textures.Single(item => item.Name == texture.Name).Data.SequenceEqual(pixels))
                 throw new InvalidDataException("The edited texture did not read back");
         });
+        Check("drag source", () =>
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+            // A cursor from rendered pixels, and a real shell drag of a scratch file that cancels at once.
+            nint cursor = ShellFileDrag.CreateCursor([.. Enumerable.Repeat((byte)255, 16 * 16 * 4)], 16, 16, 0, 0);
+            if (cursor == 0)
+                throw new InvalidOperationException("Windows refused the drag cursor");
+            ShellFileDrag.DestroyCursor(cursor);
+            string scratch = Path.Combine(Path.GetTempPath(), $"hikarihopper-self-test-{Guid.NewGuid():N}.txt");
+            File.WriteAllText(scratch, "drag");
+            try
+            {
+                if (!ShellFileDrag.Probe(scratch))
+                    throw new InvalidOperationException("The shell drag did not run");
+            }
+            finally
+            {
+                File.Delete(scratch);
+            }
+        });
         Check("settings", () =>
         {
             string previous = AppSettings.RegistryPath, scratch = $@"Software\HikariHopperSelfTest\{Guid.NewGuid():N}";

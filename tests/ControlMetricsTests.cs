@@ -124,6 +124,31 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
+    public void DragCursorIsTheArrowWithTheBadgeBesideIt() => UiThread.Run(() =>
+    {
+        static int Alpha(byte[] pixels, int width, int x, int y) => pixels[(y * width + x) * 4 + 3];
+        var (pixels, width, height) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 1);
+        // The arrow's tip is the hot spot at the top-left; the badge sits below and to the right of it.
+        Assert.Equal((12 + 44, 16 + 42), (width, height));
+        Assert.Equal(255, Alpha(pixels, width, 1, 2));
+        Assert.Equal(255, Alpha(pixels, width, 12 + 18, 16 + 18));       // the badge's tile
+        Assert.Equal(0, Alpha(pixels, width, width - 1, 0));            // empty corner above the badge
+        // Straight alpha, as cursors take it: an opaque white pixel of the arrow's fill stays white.
+        int white = (4 * width + 2) * 4;
+        Assert.Equal([255, 255, 255, 255], pixels[white..(white + 4)]);
+
+        // Where nothing can be dropped the badge stays opaque, so it reads on any background; its count circle turns neutral.
+        var (blocked, _, _) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3, blocked: true), 1);
+        Assert.Equal(255, Alpha(blocked, width, 12 + 18, 16 + 18));
+        int circle = ((16 + 42 - 5) * width + 12 + 44 - 9) * 4;
+        Assert.Equal(255, pixels[circle + 3]);
+        Assert.NotEqual(pixels[circle..(circle + 3)], blocked[circle..(circle + 3)]);
+
+        var (_, wide, tall) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 2);
+        Assert.Equal((2 * width, 2 * height), (wide, tall));
+    });
+
+    [AvaloniaFact]
     public void WindowControlButtonDrawsDividedCellAndPixelMarks() => UiThread.Run(() =>
     {
         var close = (WindowControlButton)TopLeft(new WindowControlButton { Kind = "close" });
