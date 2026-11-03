@@ -35,10 +35,3 @@ pwsh tools/release.ps1 -GameRoot "D:\Path\To\Grand Theft Auto V"
 The script publishes the AOT build and fails on any AOT compiler warning. It then runs
 `HikariHopper.exe --self-test` on the native binary against the game, checks that the window
 opens, and zips the result into `artifacts\`.
-
-## Game keys
-
-No encryption keys are included. HikariHopper finds the AES key in your own `GTA5.exe` or
-`GTA5_Enhanced.exe` (cached in `%LOCALAPPDATA%\fivefury\keys.json`) and uses it to unlock the
-bundled, encrypted NG tables in `src/Assets/Keys/keys.bin`, which are useless
-without the game. `tools/MakeKeyBlob.cs` regenerates that blob.
