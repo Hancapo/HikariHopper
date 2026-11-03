@@ -140,7 +140,9 @@ public static class Theme
     public static readonly CornerRadius SheetCorner = new(SheetRadius);
     public const double SheetInnerRadius = SheetRadius - 1;
     public static readonly CornerRadius SheetInnerCorner = new(SheetInnerRadius);
-    public static readonly BoxShadows SheetShadow = BoxShadows.Parse("0 18 48 0 #73080812, 0 2 8 0 #4D080812");
+    // Spread pulled in, so the dense part of the shadow stays under the card and only its soft falloff
+    // shows past the rounded corners.
+    public static readonly BoxShadows SheetShadow = BoxShadows.Parse("0 16 44 -14 #80080812, 0 2 6 -2 #40080812");
     public const double SheetHeaderHeight = 40;
     public const double TabStripHeight = 36;
     public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
