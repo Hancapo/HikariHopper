@@ -97,6 +97,14 @@ public sealed class ControlMetricsTests
         window.Close();
     });
 
+    [Theory]
+    [InlineData(0, 1, "Extracting 1 file")]
+    [InlineData(0, 3, "Extracting 3 files")]
+    [InlineData(1, 0, "Extracting 1 folder")]
+    [InlineData(2, 5, "Extracting 2 folders, 5 files")]
+    public void DragBadgeCountsFoldersAndFiles(int folders, int files, string expected) =>
+        Assert.Equal(expected, DragCountBadge.Describe(folders, files));
+
     [AvaloniaFact]
     public void WindowControlButtonDrawsDividedCellAndPixelMarks() => UiThread.Run(() =>
     {

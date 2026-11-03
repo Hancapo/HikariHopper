@@ -119,15 +119,26 @@ public sealed class EntryPointerArea
         if (paths.Count == 0 || TopLevel.GetTopLevel(focusTarget()) is not { } top)
             return;
         var data = new DataTransfer();
+        int folders = 0, files = 0;
         foreach (string path in paths)
         {
-            IStorageItem? item = Directory.Exists(path)
+            bool folder = Directory.Exists(path);
+            IStorageItem? item = folder
                 ? await top.StorageProvider.TryGetFolderFromPathAsync(path)
                 : await top.StorageProvider.TryGetFileFromPathAsync(path);
-            if (item is not null)
-                data.Add(DataTransferItem.CreateFile(item));
+            if (item is null)
+                continue;
+            data.Add(DataTransferItem.CreateFile(item));
+            if (folder)
+                folders++;
+            else
+                files++;
         }
         data.Add(DataTransferItem.Create(EntryDragFormat, [(byte)'1']));
+        // Headless runs have no desktop to show it on.
+        DragCountBadge? badge = Application.Current?.ApplicationLifetime is null ? null
+            : new DragCountBadge(DragCountBadge.Describe(folders, files));
+        badge?.ShowAtCursor();
         try
         {
             await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy);
@@ -135,6 +146,10 @@ public sealed class EntryPointerArea
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException)
         {
             // No platform drag source (headless); Qt would simply not start the drag.
+        }
+        finally
+        {
+            badge?.Close();
         }
         OnCanceled();
     }
