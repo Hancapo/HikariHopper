@@ -227,7 +227,9 @@ public sealed partial class ExplorerViewModel
 
     private void SyncTreeFocus()
     {
-        string location = $"{Provider.InArchive}|{Provider.ArchiveGamePath}|{Provider.ArchivePrefix}|{currentPath}";
+        // Which game and which RPF too: another game's root, or another RPF's, is somewhere new as well.
+        string location = $"{Provider.GamePath}|{(Provider.HasArchive ? Provider.ArchivePath : "")}|{Provider.InArchive}|"
+            + $"{Provider.ArchiveGamePath}|{Provider.ArchivePrefix}|{currentPath}";
         bool arrived = location != treeFocusLocation;
         treeFocusLocation = location;
         // Arriving at the root, which has no row, leaves no row focused: the folder you came from is not
