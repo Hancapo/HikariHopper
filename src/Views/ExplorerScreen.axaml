@@ -8,9 +8,9 @@
              Background="{x:Static ui:Theme.WindowBg}">
   <!-- Port of ExplorerScreen.qml: tab strip, then the active tab's workspace or start page with
        the game-loading cover on top. Its DataContext is the tabs. The menu row lives in the
-       window's title row (see Menu). -->
+       window's title row (see Menu). The strip is hidden while the only tab is the launcher. -->
   <DockPanel>
-    <v:TabStrip DockPanel.Dock="Top" />
+    <v:TabStrip Name="Strip" DockPanel.Dock="Top" />
     <Panel>
       <ContentControl Name="PageHost" />
       <v:GameLoadingView Name="LoadingView" DataContext="{Binding ActiveBridge}" />

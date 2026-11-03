@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Reflection;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -13,31 +15,28 @@ using HikariHopper.Views.Controls;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// The start page of a tab without a workspace (port of <c>StartPage.qml</c>). Its DataContext is the
-/// tab's view model; <see cref="Tabs"/> supplies the configured paths and the recent games.
+/// The launcher of a tab with nothing open. Its DataContext is the tab's view model; <see cref="Tabs"/>
+/// supplies the configured paths and the recent games. The games come from <see cref="GameCatalog"/>,
+/// one group each, so a new game adds a group rather than a layout.
 /// </summary>
 public partial class StartPage : UserControl
 {
-    // Settings owns installation discovery. This picker only chooses which of the two configured
-    // editions to open.
-    private static readonly (string Label, string Edition)[] Titles =
-    [
-        ("Grand Theft Auto V — Enhanced", GameSettings.EnhancedEdition),
-        ("Grand Theft Auto V — Legacy", GameSettings.LegacyEdition),
-    ];
-
     private ExplorerTabsViewModel? tabs;
 
     public StartPage()
     {
         InitializeComponent();
-        TitleBox.ItemsSource = Titles.Select(title => new FlatComboOption(title.Label, title.Edition)).ToList();
-        TitleBox.SelectedIndex = 0;
-        TitleBox.SelectionChanged += (_, _) => RefreshPicker();
-        RefreshPicker();
+        VersionText.Text = AppVersion;
+        RefreshGroups();
     }
 
-    /// <summary>QML <c>tabs</c>.</summary>
+    /// <summary>The app's version, as the project sets it ("0.0.2").</summary>
+    public static string AppVersion { get; } =
+        typeof(StartPage).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
+
+    /// <summary>Raised by the launcher's Settings links; the menu row owns the Settings window.</summary>
+    public event EventHandler? SettingsRequested;
+
     public ExplorerTabsViewModel? Tabs
     {
         get => tabs;
@@ -48,111 +47,195 @@ public partial class StartPage : UserControl
             if (tabs is not null)
             {
                 tabs.PropertyChanged -= OnTabsPropertyChanged;
-                tabs.GamePathSettings.PropertyChanged -= OnGamePathsChanged;
+                tabs.GamePathSettings.PathsChanged -= OnPathsChanged;
             }
             tabs = value;
             if (tabs is not null)
             {
                 tabs.PropertyChanged += OnTabsPropertyChanged;
-                tabs.GamePathSettings.PropertyChanged += OnGamePathsChanged;
+                tabs.GamePathSettings.PathsChanged += OnPathsChanged;
             }
-            RefreshPicker();
-            RefreshRecents();
+            RefreshGroups();
         }
     }
 
+    /// <summary>What the launcher lists, group by group.</summary>
+    internal IReadOnlyList<(SupportedGame Game, IReadOnlyList<LauncherEntry> Entries)> Entries { get; private set; } = [];
+
+    /// <summary>The row drawn for each entry, in order.</summary>
+    internal IReadOnlyList<LauncherRow> Rows => [.. Groups.Children.OfType<LauncherRow>()];
+
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
-
-    /// <summary><c>selectedEdition</c>.</summary>
-    public string SelectedEdition => TitleBox.SelectedIndex < 0 ? "" : Titles[TitleBox.SelectedIndex].Edition;
-
-    /// <summary><c>selectedPathValid</c>.</summary>
-    public bool SelectedPathValid => SelectedEdition switch
-    {
-        GameSettings.EnhancedEdition => tabs?.GamePathSettings.EnhancedPathValid == true,
-        GameSettings.LegacyEdition => tabs?.GamePathSettings.LegacyPathValid == true,
-        _ => false,
-    };
 
     private void OnTabsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ExplorerTabsViewModel.RecentGames))
-            RefreshRecents();
+            RefreshGroups();
     }
 
-    private void OnGamePathsChanged(object? sender, PropertyChangedEventArgs e) => RefreshPicker();
+    private void OnPathsChanged(object? sender, EventArgs e) => RefreshGroups();
 
-    private void RefreshPicker()
+    private void RefreshGroups()
     {
-        bool valid = SelectedPathValid;
-        OpenButton.IsEnabled = valid;
-        PathHint.IsVisible = !valid;
+        GamePathSettings? paths = tabs?.GamePathSettings;
+        Entries = GameCatalog.Launcher(edition => paths?.PathFor(edition) ?? "", tabs?.RecentGames.Select(game => game.Path) ?? []);
+        Groups.Children.Clear();
+        foreach ((SupportedGame game, IReadOnlyList<LauncherEntry> entries) in Entries)
+        {
+            Groups.Children.Add(new TextBlock
+            {
+                Text = game.Title.ToUpperInvariant(),
+                Margin = new Thickness(12, 10, 12, 4),
+                Foreground = Ui.Theme.TextFaint,
+                FontFamily = Ui.Theme.MonoFont,
+                FontSize = 9,
+                FontWeight = FontWeight.Bold,
+                LetterSpacing = 1.2,
+            });
+            foreach (LauncherEntry entry in entries)
+                Groups.Children.Add(new LauncherRow(entry, Activate));
+        }
     }
 
-    private void RefreshRecents()
+    private void Activate(LauncherEntry entry)
     {
-        RecentRows.Children.Clear();
-        IReadOnlyList<RecentGame> games = tabs?.RecentGames ?? [];
-        Recents.IsVisible = games.Count > 0;
-        foreach (RecentGame game in games)
-            RecentRows.Children.Add(RecentRow(game));
+        if (entry.SetUp)
+            Bridge?.OpenGameAsync(entry.Path);
+        else
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
-
-    private Control RecentRow(RecentGame game)
-    {
-        var row = new Border
-        {
-            Height = Ui.Theme.RowHeight,
-            Background = Brushes.Transparent,
-            Cursor = new Cursor(StandardCursorType.Hand),
-        };
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,104,*"), ColumnSpacing = 8 };
-        grid.Children.Add(new FileGlyph { Kind = "folder", Margin = new Thickness(2, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        var edition = new TextBlock
-        {
-            Text = game.Edition,
-            Foreground = Ui.Theme.TextRow,
-            FontFamily = Ui.Theme.MonoFont,
-            FontSize = Ui.Theme.SmallFontSize,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        Grid.SetColumn(edition, 1);
-        grid.Children.Add(edition);
-        var path = new TextBlock
-        {
-            Text = game.Path,
-            Foreground = Ui.Theme.TextFaint,
-            FontFamily = Ui.Theme.MonoFont,
-            FontSize = Ui.Theme.SmallFontSize,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.LeadingCharacterEllipsis,
-        };
-        Grid.SetColumn(path, 2);
-        grid.Children.Add(path);
-        row.Child = grid;
-        row.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == IsPointerOverProperty)
-                row.Background = row.IsPointerOver ? Ui.Theme.HoverBg : Brushes.Transparent;
-        };
-        PointerClick.Attach(row, _ => tabs?.OpenRecentGame(game.Path));
-        AutomationProperties.SetName(row, $"Open {game.Path}");
-        return row;
-    }
-
-    private void OnOpen(object? sender, RoutedEventArgs e) => Bridge?.OpenConfiguredGame(SelectedEdition);
 
     private void OnOpenStandalone(object? sender, RoutedEventArgs e) => _ = Bridge?.OpenArchiveDialog();
+
+    private void OnSettings(object? sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 }
 
 /// <summary>
-/// Hosts the start page picker: <c>anchors.centerIn: parent; anchors.verticalCenterOffset: -70;
-/// width: Math.min(560, parent.width - 64)</c>.
+/// One launcher row: the game's mark tinted by edition, the edition (or folder) name and the path.
+/// A game that isn't set up shows a dimmed mark and a link to Settings instead. Click, Enter or Space
+/// activates it.
+/// </summary>
+public sealed class LauncherRow : Border
+{
+    private readonly LauncherEntry entry;
+    private readonly Action<LauncherEntry> activate;
+
+    public LauncherRow(LauncherEntry entry, Action<LauncherEntry> activate)
+    {
+        this.entry = entry;
+        this.activate = activate;
+        Height = 40;
+        Padding = new Thickness(12, 0);
+        CornerRadius = Ui.Theme.ItemCorner;
+        Background = Brushes.Transparent;
+        Focusable = true;
+        Cursor = new Cursor(StandardCursorType.Hand);
+        FocusAdorner = null;
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,110,*"), ColumnSpacing = 12 };
+        Mark = GameMark(entry);
+        grid.Children.Add(Mark);
+        var title = new TextBlock
+        {
+            Text = entry.Title,
+            Foreground = entry.SetUp ? Ui.Theme.Text : Ui.Theme.TextDim,
+            FontFamily = Ui.Theme.UiFont,
+            FontSize = 13,
+            FontWeight = entry.SetUp ? FontWeight.SemiBold : FontWeight.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Grid.SetColumn(title, 1);
+        grid.Children.Add(title);
+        Detail = entry.SetUp
+            ? new TextBlock
+            {
+                Text = entry.Path,
+                Foreground = Ui.Theme.TextFaint,
+                FontFamily = Ui.Theme.MonoFont,
+                FontSize = Ui.Theme.SmallFontSize,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.LeadingCharacterEllipsis,
+            }
+            : new TextBlock
+            {
+                Inlines = [new Run("Add its installation in "), new Run("Settings…") { Foreground = Ui.Theme.Selection }],
+                Foreground = Ui.Theme.TextFaint,
+                FontFamily = Ui.Theme.UiFont,
+                FontSize = Ui.Theme.FontSize,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+        Grid.SetColumn(Detail, 2);
+        grid.Children.Add(Detail);
+        Child = grid;
+
+        PointerClick.Attach(this, _ => activate(entry));
+        AutomationProperties.SetName(this, entry.SetUp ? $"Open {entry.Game.Title} {entry.Title}, {entry.Path}" : $"Set up {entry.Game.Title} in Settings");
+    }
+
+    public LauncherEntry Entry => entry;
+
+    /// <summary>The game's mark, tinted by edition.</summary>
+    public Control Mark { get; }
+
+    /// <summary>The path, or the Settings link of a game that isn't set up.</summary>
+    public TextBlock Detail { get; }
+
+    /// <summary>
+    /// The mark of <paramref name="entry"/>'s game. GTA V is the only game so far; another game
+    /// brings its own mark here, tinted the same way by edition.
+    /// </summary>
+    private static Control GameMark(LauncherEntry entry) => new EditionMark
+    {
+        Width = 18,
+        Height = 18,
+        Enhanced = entry.Edition == GameSettings.EnhancedEdition,
+        Opacity = entry.SetUp ? 1 : 0.45,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>Lit while hovered, or focused from the keyboard (<c>:focus-visible</c>).</summary>
+    public bool Lit => IsPointerOver || IsFocused && Classes.Contains(":focus-visible");
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsPointerOverProperty)
+            RefreshBackground();
+    }
+
+    protected override void OnGotFocus(FocusChangedEventArgs e)
+    {
+        base.OnGotFocus(e);
+        RefreshBackground();
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        RefreshBackground();
+    }
+
+    private void RefreshBackground() => Background = Lit ? Ui.Theme.HoverBg : Brushes.Transparent;
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key is Key.Enter or Key.Space)
+        {
+            activate(entry);
+            e.Handled = true;
+        }
+    }
+}
+
+/// <summary>
+/// Hosts the launcher: centred, <c>min(560, width - 64)</c> wide and a little above the middle.
 /// </summary>
 public sealed class StartPickerHost : Panel
 {
-    private double PickerWidth(double width) => Math.Min(560, width - 64);
+    private static double PickerWidth(double width) => Math.Min(560, width - 64);
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -170,7 +253,7 @@ public sealed class StartPickerHost : Panel
             child.Measure(new Size(width, double.PositiveInfinity));
             double height = child.DesiredSize.Height;
             double x = QtCenter.Offset(finalSize.Width, width);
-            double y = QtCenter.Offset(finalSize.Height, height) - 70;
+            double y = Math.Max(0, QtCenter.Offset(finalSize.Height, height) - 40);
             child.Arrange(new Rect(x, y, width, height));
         }
         return finalSize;

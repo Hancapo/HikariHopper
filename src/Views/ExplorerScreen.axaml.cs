@@ -37,10 +37,16 @@ public partial class ExplorerScreen : UserControl
     {
         base.OnDataContextChanged(e);
         if (tabs is not null)
+        {
             tabs.PropertyChanged -= OnTabsPropertyChanged;
+            tabs.Tabs.CollectionChanged -= OnTabsChanged;
+        }
         tabs = Tabs;
         if (tabs is not null)
+        {
             tabs.PropertyChanged += OnTabsPropertyChanged;
+            tabs.Tabs.CollectionChanged += OnTabsChanged;
+        }
         Menu.DataContext = tabs;
         TrackBridge();
     }
@@ -51,6 +57,17 @@ public partial class ExplorerScreen : UserControl
             TrackBridge();
     }
 
+    private void OnTabsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RefreshStrip();
+
+    /// <summary>
+    /// The tab strip, hidden while the window's only tab is the launcher: there is nothing to switch
+    /// to. It comes back with a second tab, and as soon as a game or archive starts loading, so the
+    /// loading cover already sits where the workspace will.
+    /// </summary>
+    public bool StripVisible => tabs is null || bridge is null || tabs.Tabs.Count > 1 || bridge.HasWorkspace || bridge.GameLoading;
+
+    private void RefreshStrip() => Strip.IsVisible = StripVisible;
+
     private void TrackBridge()
     {
         if (bridge is not null)
@@ -59,12 +76,15 @@ public partial class ExplorerScreen : UserControl
         if (bridge is not null)
             bridge.PropertyChanged += OnBridgePropertyChanged;
         RefreshPage();
+        RefreshStrip();
     }
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ExplorerViewModel.HasWorkspace))
             RefreshPage();
+        if (e.PropertyName is nameof(ExplorerViewModel.HasWorkspace) or nameof(ExplorerViewModel.GameLoading))
+            RefreshStrip();
     }
 
     /// <summary>The Loader: the same component keeps its instance and only rebinds to the new tab.</summary>
@@ -84,7 +104,10 @@ public partial class ExplorerScreen : UserControl
         else
         {
             if (PageHost.Content is not StartPage start)
+            {
                 Show(start = new StartPage());
+                start.SettingsRequested += (_, _) => Menu.OpenSettings();
+            }
             start.DataContext = bridge;
             start.Tabs = tabs;
         }

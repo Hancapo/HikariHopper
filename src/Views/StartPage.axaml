@@ -7,110 +7,28 @@
              x:Class="HikariHopper.Views.StartPage"
              x:DataType="vm:ExplorerViewModel"
              Background="{x:Static ui:Theme.WindowBg}">
-  <!-- Port of StartPage.qml: the empty state for a tab with no workspace. The app wears its own
-       chrome from the first frame — the navigation bar and the column header are present but
-       inert — and the picker sits centred where the entries will appear. -->
-  <UserControl.Styles>
-    <Style Selector="TextBlock.columnTitle">
-      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
-      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
-      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
-      <Setter Property="FontWeight" Value="Bold" />
-      <Setter Property="LetterSpacing" Value="1.4" />
-      <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style Selector="Border.well">
-      <Setter Property="Height" Value="{x:Static ui:Theme.ToolbarControlHeight}" />
-      <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
-      <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
-    </Style>
-    <Style Selector="c|ChromeToolButton.segment">
-      <Setter Property="Width" Value="30" />
-      <Setter Property="Height" Value="26" />
-      <Setter Property="Bordered" Value="False" />
-      <Setter Property="IsEnabled" Value="False" />
-      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
-      <Setter Property="IconThickness" Value="1.5" />
-    </Style>
-  </UserControl.Styles>
-  <Panel>
-    <DockPanel>
-      <!-- An inert navigation bar, so the toolbar does not appear out of nowhere the moment a
-           workspace loads. -->
-      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.NavigationHeight}" Background="{x:Static ui:Theme.NavigationBg}">
-        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-        <Grid Margin="10,0" ColumnDefinitions="Auto,*,232" ColumnSpacing="8">
-          <Border Classes="well" Padding="2">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <c:ChromeToolButton Classes="segment" IconKind="back" />
-              <c:ChromeToolButton Classes="segment" IconKind="forward" />
-              <c:ChromeToolButton Classes="segment" IconKind="up" IconSize="15" />
-            </StackPanel>
-          </Border>
-          <Border Grid.Column="1" Classes="well">
-            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="No installation open"
-                       Foreground="{x:Static ui:Theme.TextFaint}" FontFamily="{x:Static ui:Theme.MonoFont}"
-                       FontSize="{x:Static ui:Theme.FontSize}" />
-          </Border>
-          <Border Grid.Column="2" Classes="well">
-            <c:ChromeIcon Margin="10,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" Width="14" Height="14"
-                          Kind="search" Thickness="1.5" Stroke="{x:Static ui:Theme.TextFaint}" />
-          </Border>
-        </Grid>
-      </Panel>
+  <!-- The launcher of a tab with nothing open. None of the explorer's chrome: no path bar, no
+       search, no column header, no status line, only the games to open, grouped by game, and a
+       standalone RPF. -->
+  <v:StartPickerHost Name="PickerHost">
+    <StackPanel Name="Launcher" Spacing="14">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Bottom"
+                   FontFamily="{x:Static ui:Theme.UiFont}" FontSize="17" FontWeight="SemiBold" />
+        <TextBlock Name="VersionText" Margin="0,0,0,2" Foreground="{x:Static ui:Theme.TextFaint}" VerticalAlignment="Bottom"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+      </StackPanel>
 
-      <!-- The entries panel to be, with its column header. -->
-      <Border Margin="{x:Static v:WorkspaceView.PanelMargin}" ClipToBounds="True"
-              CornerRadius="{x:Static ui:Theme.PanelCorner}" Background="{x:Static ui:Theme.PanelBg}">
-      <DockPanel>
-      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
-        <Grid ColumnDefinitions="*,200,120,14">
-          <TextBlock Classes="columnTitle" Margin="16,0,0,0" Text="NAME" />
-          <c:DottedRule HorizontalAlignment="Right" />
-          <TextBlock Grid.Column="1" Classes="columnTitle" Padding="12,0,0,0" Text="TYPE" />
-          <c:DottedRule Grid.Column="1" HorizontalAlignment="Right" />
-          <TextBlock Grid.Column="2" Classes="columnTitle" Padding="0,0,12,0" HorizontalAlignment="Right" Text="SIZE" />
-          <c:DottedRule Grid.Column="2" HorizontalAlignment="Right" />
-        </Grid>
-      </Panel>
-
-      <!-- The picker, centred where the entries will be. -->
-      <v:StartPickerHost Name="PickerHost">
-        <c:QtColumnLayout Name="Picker" Spacing="10">
-          <Grid ColumnDefinitions="Auto,*,92" ColumnSpacing="10">
-            <TextBlock VerticalAlignment="Center" Text="Game" Foreground="{x:Static ui:Theme.TextDim}"
-                       FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-            <c:FlatComboBox Name="TitleBox" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Stretch" />
-            <c:ChromeToolButton Name="OpenButton" Grid.Column="2" Height="28" VerticalAlignment="Center" Primary="True"
-                                Text="Open" AutomationProperties.Name="Open the configured game" Click="OnOpen" />
-          </Grid>
-
-          <TextBlock Name="PathHint" Margin="48,0,0,0" TextWrapping="Wrap"
-                     Text="Set this edition's installation path in Edit &gt; Settings."
-                     Foreground="{x:Static ui:Theme.TextFaint}" FontFamily="{x:Static ui:Theme.UiFont}"
-                     FontSize="{x:Static ui:Theme.SmallFontSize}" />
-
-          <!-- Recents use the entry table's row language, not a card. -->
-          <StackPanel Name="Recents" Margin="0,4,0,0">
-            <c:DottedRule Horizontal="True" Margin="0,0,0,9" />
-            <TextBlock Margin="0,0,0,4" Text="RECENT" Foreground="{x:Static ui:Theme.TextFaint}"
-                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" FontWeight="Bold" LetterSpacing="1.2" />
-            <StackPanel Name="RecentRows" />
-          </StackPanel>
-
-          <c:DottedRule Horizontal="True" Margin="0,5,0,0" />
-
-          <c:ChromeToolButton Margin="0,4,0,0" Width="168" Height="28" HorizontalAlignment="Left" Raised="True"
-                              Text="Open standalone RPF…" Click="OnOpenStandalone" />
-        </c:QtColumnLayout>
-      </v:StartPickerHost>
-      </DockPanel>
+      <Border Background="{x:Static ui:Theme.PanelBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,4">
+        <StackPanel Name="Groups" />
       </Border>
-    </DockPanel>
 
-    <TextBlock Margin="22,18" HorizontalAlignment="Left" VerticalAlignment="Bottom" Text="{Binding Status}"
-               Foreground="{x:Static ui:Theme.TextFaint}" FontFamily="{x:Static ui:Theme.MonoFont}"
-               FontSize="{x:Static ui:Theme.SmallFontSize}" />
-  </Panel>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <c:ChromeToolButton Name="StandaloneButton" Width="168" Height="28" Raised="True"
+                            Text="Open standalone RPF…" Click="OnOpenStandalone" />
+        <c:ChromeToolButton Name="SettingsButton" Width="84" Height="28" Bordered="False"
+                            Text="Settings…" Click="OnSettings" />
+      </StackPanel>
+    </StackPanel>
+  </v:StartPickerHost>
 </UserControl>
