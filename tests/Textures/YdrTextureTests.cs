@@ -284,6 +284,32 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
+    public Task AYdrWithNoEmbeddedTexturesIsNotOpened() => Headless.Run(() =>
+    {
+        byte[] withTextures = Asset(BreadRack);
+        byte[] without = Document(withTextures).Serialize(Legacy([]), NoRenames);
+        TextureViewerViewModel viewer = Viewer();
+        int opened = 0;
+        var declined = new List<string>();
+        viewer.OpenRequested += (_, _) => opened++;
+        viewer.OpenDeclined += (_, message) => declined.Add(message);
+
+        // Nothing to edit: the editor is never asked to open, and says why.
+        viewer.OpenDictionary("prop_bare.ydr", "", without);
+        Settle(viewer);
+        Assert.Equal(0, opened);
+        Assert.Equal(["prop_bare.ydr has no embedded textures"], declined);
+        Assert.False(viewer.HasDocument);
+
+        // One with textures opens as before.
+        viewer.OpenDictionary("prop_bread_rack_01.ydr", "", withTextures);
+        Settle(viewer);
+        Assert.Equal(1, opened);
+        Assert.True(viewer.HasDocument);
+        Assert.Single(declined);
+    });
+
+    [AvaloniaFact]
     public void ZeroCountEmbeddedDictionaryIsNotRejected()
     {
         var (header, system, graphics) = Sections(Asset(BreadRack));
