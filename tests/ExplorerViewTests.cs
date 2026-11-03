@@ -1119,7 +1119,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Click(ui.Window, CentreOf(menus.FileButton));
         Assert.True(menus.MenuFor(menus.FileButton).IsOpen);
         // Pointing at another title swaps the open menu for that one, one at a time.
-        foreach (Views.Controls.MenuBarButton title in new[] { menus.EditButton, menus.ViewButton, menus.HelpButton, menus.FileButton })
+        foreach (Views.Controls.MenuBarButton title in new[] { menus.EditButton, menus.ViewButton, menus.GoButton, menus.HelpButton, menus.FileButton })
         {
             ui.Window.MouseMove(CentreOf(title));
             Pump(20);
