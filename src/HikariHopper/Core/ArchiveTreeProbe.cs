@@ -18,7 +18,7 @@ public sealed class ArchiveTreeProbe
 {
     private readonly ConcurrentDictionary<string, bool> results = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> pending = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentQueue<(string Key, string RootFile, string NestedPath, GameCrypto? Crypto)> queue = new();
+    private readonly ConcurrentQueue<(string Key, string RootFile, string Version, string NestedPath, GameCrypto? Crypto)> queue = new();
     private int working;
 
     /// <summary>Raised on a worker thread when an archive turns out to have nothing to expand.</summary>
@@ -30,13 +30,14 @@ public sealed class ArchiveTreeProbe
     /// </summary>
     public bool HasTreeChildren(string rootFile, string nestedPath, GameCrypto? crypto)
     {
-        string key;
+        string key, version;
         try
         {
             var info = new FileInfo(rootFile);
             if (!info.Exists)
                 return true;
-            key = $"{info.FullName}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|{nestedPath}";
+            version = $"{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+            key = $"{info.FullName}|{version}|{nestedPath}";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -46,7 +47,7 @@ public sealed class ArchiveTreeProbe
             return known;
         if (pending.TryAdd(key, 0))
         {
-            queue.Enqueue((key, rootFile, nestedPath, crypto));
+            queue.Enqueue((key, rootFile, version, nestedPath, crypto));
             if (Interlocked.CompareExchange(ref working, 1, 0) == 0)
                 Task.Run(Work);
         }
@@ -56,7 +57,7 @@ public sealed class ArchiveTreeProbe
     private void Work()
     {
         ArchiveNode? root = null;
-        string rootFile = "";
+        string rootFile = "", rootVersion = "";
         try
         {
             while (true)
@@ -66,13 +67,16 @@ public sealed class ArchiveTreeProbe
                     bool has = true;
                     try
                     {
-                        // Requests come a folder at a time, so the last root stays open for the next one.
-                        if (root is null || !string.Equals(rootFile, request.RootFile, StringComparison.OrdinalIgnoreCase))
+                        // Requests come a folder at a time, so the last root stays open for the next one, as long as it is
+                        // still the version of the file the request saw.
+                        if (root is null || rootVersion != request.Version
+                            || !string.Equals(rootFile, request.RootFile, StringComparison.OrdinalIgnoreCase))
                         {
                             root?.Close();
                             root = null;
                             root = ArchiveNode.OpenRoot(request.RootFile, request.Crypto);
                             rootFile = request.RootFile;
+                            rootVersion = request.Version;
                         }
                         ArchiveNode? archive = request.NestedPath.Length == 0 ? root
                             : root.FindEntry(request.NestedPath) is ({ } node, RpfBinaryFileEntry entry) ? node.OpenNested(entry) : null;
