@@ -27,7 +27,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
-- A YDR with no embedded textures no longer opens an empty texture editor; the status bar says it has none. ([#48](https://github.com/Hancapo/HikariHopper/pull/48))
+- A YDR with no embedded textures no longer opens an empty texture editor. ([#48](https://github.com/Hancapo/HikariHopper/pull/48))
 - Tab and Escape keep working in a dialog after a click on the title bar. ([#44](https://github.com/Hancapo/HikariHopper/pull/44))
 - The folder tree no longer keeps the folder you left outlined after going back to the root, where Enter would open it again. ([#45](https://github.com/Hancapo/HikariHopper/pull/45))
 - About shows the app's real version, and credits Avalonia instead of Qt. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
