@@ -5,7 +5,7 @@
               xmlns:ui="using:HikariHopper.Ui"
               x:Class="HikariHopper.Views.ShortcutsDialog"
               x:DataType="v:ShortcutsDialog"
-              Width="470" Height="640"
+              WindowShare="0.4,0.8" MinSize="440,460" MaxSize="560,700"
               Heading="KEYBOARD SHORTCUTS">
   <!-- Port of ShortcutsWindow.qml: the keyboard reference laid out as a table. Keys go in mono
        at row weight, actions in the UI face — the status bar's key-then-action pairing. -->

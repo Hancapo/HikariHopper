@@ -13,7 +13,9 @@ namespace HikariHopper.Views;
 /// A header carries <see cref="Heading"/> and a close mark; the content sits in the body, inset by
 /// <see cref="BodyMargin"/>; a footer carries <see cref="FooterText"/> and a Close button. Esc, the
 /// close mark and Close all dismiss it. The sheet keeps its state between showings, so it reopens as
-/// it was left. Give it a Width and Height: it keeps them, shrinking only to fit a small window.
+/// it was left. It is sized with the window: its <see cref="WindowShare"/> of it, within
+/// <see cref="MinSize"/> and <see cref="MaxSize"/>, and never closer than 24px to its edges. It can't
+/// be moved; it stays centred.
 /// </remarks>
 public class ModalSheet : ContentControl
 {
@@ -25,6 +27,18 @@ public class ModalSheet : ContentControl
 
     public static readonly StyledProperty<Thickness> BodyMarginProperty =
         AvaloniaProperty.Register<ModalSheet, Thickness>(nameof(BodyMargin), new Thickness(18));
+
+    /// <summary>The share of the window the sheet takes, across and down.</summary>
+    public static readonly StyledProperty<Size> WindowShareProperty =
+        AvaloniaProperty.Register<ModalSheet, Size>(nameof(WindowShare), new Size(0.6, 0.7));
+
+    /// <summary>The least it shrinks to with the window, unless the window itself is smaller.</summary>
+    public static readonly StyledProperty<Size> MinSizeProperty =
+        AvaloniaProperty.Register<ModalSheet, Size>(nameof(MinSize), new Size(420, 320));
+
+    /// <summary>The most it grows to with the window.</summary>
+    public static readonly StyledProperty<Size> MaxSizeProperty =
+        AvaloniaProperty.Register<ModalSheet, Size>(nameof(MaxSize), new Size(1000, 760));
 
     private ModalOverlay? overlay;
 
@@ -44,6 +58,24 @@ public class ModalSheet : ContentControl
     {
         get => GetValue(BodyMarginProperty);
         set => SetValue(BodyMarginProperty, value);
+    }
+
+    public Size WindowShare
+    {
+        get => GetValue(WindowShareProperty);
+        set => SetValue(WindowShareProperty, value);
+    }
+
+    public Size MinSize
+    {
+        get => GetValue(MinSizeProperty);
+        set => SetValue(MinSizeProperty, value);
+    }
+
+    public Size MaxSize
+    {
+        get => GetValue(MaxSizeProperty);
+        set => SetValue(MaxSizeProperty, value);
     }
 
     /// <summary>Whether the sheet is showing.</summary>

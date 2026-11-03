@@ -192,9 +192,8 @@ public sealed class ControlMetricsTests
     [AvaloniaFact]
     public void SheetsHaveAHeadingACloseMarkAndAFooter() => UiThread.Run(() =>
     {
-        var about = new AboutDialog { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var about = new AboutDialog();
         Window window = Show(about, 520, 460);
-        Assert.Equal(new Size(460, 400), about.Bounds.Size);
         var heading = about.GetVisualDescendants().OfType<TextBlock>().Single(text => text.Name == "PART_Heading");
         Assert.Equal("ABOUT", heading.Text);
         var buttons = about.GetVisualDescendants().OfType<ChromeToolButton>().ToArray();
@@ -479,8 +478,25 @@ public sealed class ControlMetricsTests
         Assert.Equal(("Starting Qt interface…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
         Assert.True(splash.Topmost);
 
-        Assert.Equal((460.0, 400.0), (new AboutDialog().Width, new AboutDialog().Height));
-        Assert.Equal((470.0, 640.0), (new ShortcutsDialog().Width, new ShortcutsDialog().Height));
+    });
+
+    [AvaloniaFact]
+    public void SheetsAreSizedWithTheWindowWithinTheirBounds() => UiThread.Run(() =>
+    {
+        // Their share of the window, within their least and most, never closer than 24px to an edge.
+        var settings = new SettingsDialog();
+        Assert.Equal(new Size(870, 592), ModalOverlay.SizeFor(settings, new Size(1360, 800)));
+        Assert.Equal(new Size(1040, 760), ModalOverlay.SizeFor(settings, new Size(2560, 1400)));
+        Assert.Equal(new Size(700, 460), ModalOverlay.SizeFor(settings, new Size(940, 540)));
+        Assert.Equal(new Size(552, 352), ModalOverlay.SizeFor(settings, new Size(600, 400)));
+        var about = new AboutDialog();
+        Assert.Equal(new Size(540, 440), ModalOverlay.SizeFor(about, new Size(1360, 800)));
+        Assert.Equal(new Size(440, 380), ModalOverlay.SizeFor(about, new Size(940, 540)));
+        var shortcuts = new ShortcutsDialog();
+        Assert.Equal(new Size(544, 640), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        // A small dialog keeps its own size.
+        var fixedDialog = new Border { Width = 300, Height = 200 };
+        Assert.Equal(new Size(300, 200), ModalOverlay.SizeFor(fixedDialog, new Size(1360, 800)));
     });
 
     [AvaloniaFact]
@@ -491,7 +507,6 @@ public sealed class ControlMetricsTests
             ["Grand Theft Auto III", "Grand Theft Auto: Vice City", "Grand Theft Auto: San Andreas",
              "Bully: Scholarship Edition", "Grand Theft Auto IV", "Red Dead Redemption 2", "Red Dead Redemption"],
             settings.FutureGames);
-        Assert.Equal((760.0, 520.0), (settings.Width, settings.Height));
         // They're one line under the games, not a row each.
         Assert.Equal($"Coming later: {string.Join(", ", settings.FutureGames)}.", settings.LaterText.Text);
     });

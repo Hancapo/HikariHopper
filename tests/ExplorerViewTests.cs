@@ -168,6 +168,19 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.False(menus.IsEnabled);
         Assert.Equal(1, overlay.Opacity, 3);
 
+        // It is sized with the window, and follows it when the window is resized; it stays centred.
+        Assert.Equal(ModalOverlay.SizeFor(settings, overlay.Bounds.Size), settings.Bounds.Size);
+        Size before = settings.Bounds.Size;
+        ui.Window.Width = 1700;
+        ui.Window.Height = 1000;
+        Pump(50);
+        Assert.Equal(ModalOverlay.SizeFor(settings, overlay.Bounds.Size), settings.Bounds.Size);
+        Assert.True(settings.Bounds.Width > before.Width && settings.Bounds.Height > before.Height);
+        Assert.Equal(Math.Floor((overlay.Bounds.Width - settings.Bounds.Width) / 2 + 0.5), settings.Bounds.X);
+        ui.Window.Width = 1360;
+        ui.Window.Height = 840;
+        Pump(50);
+
         // Esc dismisses it and undoes all of that.
         Key(ui.Window, PhysicalKey.Escape);
         Pump(300);

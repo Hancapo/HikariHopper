@@ -5,7 +5,7 @@
               xmlns:ui="using:HikariHopper.Ui"
               x:Class="HikariHopper.Views.SettingsDialog"
               x:DataType="v:SettingsDialog"
-              Width="760" Height="520"
+              WindowShare="0.64,0.74" MinSize="700,460" MaxSize="1040,760"
               Heading="SETTINGS"
               BodyMargin="0"
               FooterText="Saved automatically">

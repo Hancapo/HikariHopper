@@ -48,8 +48,8 @@ public sealed class ModalOverlay : Panel
         previousFocus = host.FocusManager?.GetFocusedElement();
         Background = Ui.Theme.ModalDim;
         Focusable = true;
-        dialog.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left;
-        dialog.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
+        dialog.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;  // it fills the slot SizeFor gives it
+        dialog.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
         Children.Add(dialog);
         Transitions = [Fade(OpacityProperty)];
         dialog.Transitions =
@@ -175,21 +175,43 @@ public sealed class ModalOverlay : Panel
         backdrop.Effect = new BlurEffect { Radius = on ? BlurRadius : 0 };
     }
 
+    /// <summary>The room any dialog leaves on every side of the window.</summary>
+    public const double Inset = 24;
+
+    /// <summary>
+    /// How big <paramref name="dialog"/> is in a window of <paramref name="window"/>: a
+    /// <see cref="ModalSheet"/> takes its share of the window within its own minimum and maximum, so it
+    /// grows and shrinks with the window; any other dialog keeps its own Width and Height. Either way it
+    /// stays <see cref="Inset"/> clear of the edges.
+    /// </summary>
+    public static Size SizeFor(Control dialog, Size window)
+    {
+        double roomWidth = Math.Max(0, window.Width - 2 * Inset);
+        double roomHeight = Math.Max(0, window.Height - 2 * Inset);
+        if (dialog is ModalSheet sheet)
+        {
+            double width = Math.Clamp(window.Width * sheet.WindowShare.Width, sheet.MinSize.Width, sheet.MaxSize.Width);
+            double height = Math.Clamp(window.Height * sheet.WindowShare.Height, sheet.MinSize.Height, sheet.MaxSize.Height);
+            return new Size(Math.Floor(Math.Min(width, roomWidth)), Math.Floor(Math.Min(height, roomHeight)));
+        }
+        double fixedWidth = double.IsNaN(dialog.Width) ? dialog.DesiredSize.Width : dialog.Width;
+        double fixedHeight = double.IsNaN(dialog.Height) ? dialog.DesiredSize.Height : dialog.Height;
+        return new Size(Math.Min(fixedWidth, roomWidth), Math.Min(fixedHeight, roomHeight));
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
-        dialog.Measure(Size.Infinity);
+        if (dialog is ModalSheet && !double.IsInfinity(availableSize.Width) && !double.IsInfinity(availableSize.Height))
+            dialog.Measure(SizeFor(dialog, availableSize));
+        else
+            dialog.Measure(Size.Infinity);
         return availableSize;
     }
 
-    /// <summary>The dialog at its own size, kept 24px clear of the edges when the window is smaller.</summary>
+    /// <summary>The dialog centred at <see cref="SizeFor"/>.</summary>
     protected override Size ArrangeOverride(Size finalSize)
     {
-        double width = Math.Min(dialog.Width, Math.Max(0, finalSize.Width - 48));
-        double height = Math.Min(dialog.Height, Math.Max(0, finalSize.Height - 48));
-        if (double.IsNaN(width))
-            width = Math.Min(dialog.DesiredSize.Width, finalSize.Width);
-        if (double.IsNaN(height))
-            height = Math.Min(dialog.DesiredSize.Height, finalSize.Height);
+        (double width, double height) = SizeFor(dialog, finalSize);
         double x = Math.Floor((finalSize.Width - width) / 2 + 0.5);
         double y = Math.Floor((finalSize.Height - height) / 2 + 0.5);
         dialog.Arrange(new Rect(x, y, width, height));
