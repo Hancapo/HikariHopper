@@ -76,15 +76,11 @@
                        IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"
                        AutomationProperties.Name="Search current entries" />
 
-      <!-- One segmented control, not two loose buttons: the active mode sits raised in the well. -->
-      <Border Grid.Column="3" Classes="well">
-        <StackPanel Orientation="Horizontal" Spacing="2">
-          <c:ChromeToolButton Name="ListModeButton" Classes="segment" IconKind="list"
-                              AutomationProperties.Name="List view" Click="OnListMode" />
-          <c:ChromeToolButton Name="GridModeButton" Classes="segment" IconKind="grid" IconSize="15"
-                              AutomationProperties.Name="Grid view" Click="OnGridMode" />
-        </StackPanel>
-      </Border>
+      <!-- List or grid: one switch, whose thumb slides under the view in use. -->
+      <c:SegmentedSwitch Name="ViewModeSwitch" Grid.Column="3" Height="{x:Static ui:Theme.ToolbarControlHeight}">
+        <c:SwitchSide Icon="list" Width="30" IconSize="16" Label="List view" />
+        <c:SwitchSide Icon="grid" Width="30" IconSize="15" Label="Grid view" />
+      </c:SegmentedSwitch>
     </Grid>
   </Panel>
 </UserControl>

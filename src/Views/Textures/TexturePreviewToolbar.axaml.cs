@@ -1,12 +1,7 @@
 using System.ComponentModel;
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Automation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Media;
-using Avalonia.Media.Transformation;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
 
@@ -35,69 +30,30 @@ public partial class TexturePreviewToolbar : UserControl
     /// <summary>The zooms the readout offers, as display scales (1 is actual size).</summary>
     public static IReadOnlyList<double> ZoomPresets { get; } = [0.25, 0.5, 1, 2, 4, 8];
 
-    // Each channel's letter in its own colour; full strength when it is the one shown.
-    private static readonly (string Value, Color Tint)[] ChannelTints =
-    [
-        ("r", Color.Parse("#E8837E")),
-        ("g", Color.Parse("#98D684")),
-        ("b", Color.Parse("#7FAEEE")),
-        ("a", Color.Parse("#C6C8DA")),
-    ];
+    /// <summary>The channels, in the order of the channel switch's sides.</summary>
+    internal static string[] ChannelOrder { get; } = ["rgba", "r", "g", "b", "a"];
 
-    private readonly (ChromeToolButton Button, string Value)[] channels;
     private TextureViewerViewModel? viewModel;
     private RetroMenu? presets;
 
     public TexturePreviewToolbar()
     {
         InitializeComponent();
-        channels = [(RgbaButton, "rgba"), (RedButton, "r"), (GreenButton, "g"), (BlueButton, "b"), (AlphaButton, "a")];
-        foreach ((ChromeToolButton button, string value) in channels)
-            button.Click += (_, _) => viewModel?.SetChannel(value);
+        ChannelSwitch.SideRequested += (_, index) => viewModel?.SetChannel(ChannelOrder[index]);
         CheckerboardButton.Click += (_, _) => CheckerboardToggled?.Invoke(this, EventArgs.Empty);
-        // Smooth and Pixels are the two sides of one switch: a click anywhere on it flips it.
-        FilterSwitch.PointerPressed += (_, e) =>
+        // Smooth is the first side, Pixels the second.
+        FilterSwitch.SideRequested += (_, side) =>
         {
-            if (e.GetCurrentPoint(FilterSwitch).Properties.IsLeftButtonPressed)
-            {
+            if ((side == 1) == FilteredPreview)
                 FlipFilter();
-                e.Handled = true;
-            }
         };
-        // Keyboard: it takes focus like the buttons beside it, and Space or Enter flips it.
-        FilterSwitch.Focusable = true;
-        FilterSwitch.KeyDown += (_, e) =>
-        {
-            if (e.Key is Key.Space or Key.Enter)
-            {
-                FlipFilter();
-                e.Handled = true;
-            }
-        };
-        FilterThumb.Transitions =
-        [
-            new TransformOperationsTransition
-            {
-                Property = RenderTransformProperty,
-                Duration = TimeSpan.FromMilliseconds(140),
-                Easing = new CubicEaseOut(),
-            },
-        ];
-        FitButton.Click += (_, _) => FitRequested?.Invoke(this, EventArgs.Empty);
-        ActualSizeButton.Click += (_, _) => ActualSizeRequested?.Invoke(this, EventArgs.Empty);
+        // Fit is the first side, actual size the second; at any other zoom neither is in use.
+        FitSwitch.SideRequested += (_, side) => (side == 1 ? ActualSizeRequested : FitRequested)?.Invoke(this, EventArgs.Empty);
         ZoomOutButton.Click += (_, _) => ZoomOutRequested?.Invoke(this, EventArgs.Empty);
         ZoomInButton.Click += (_, _) => ZoomInRequested?.Invoke(this, EventArgs.Empty);
         ZoomButton.Click += (_, _) => OpenZoomPresets();
 
-        ThemedToolTip.Set(RgbaButton, "All channels");
-        ThemedToolTip.Set(RedButton, "Red channel");
-        ThemedToolTip.Set(GreenButton, "Green channel");
-        ThemedToolTip.Set(BlueButton, "Blue channel");
-        ThemedToolTip.Set(AlphaButton, "Alpha channel");
         ThemedToolTip.Set(CheckerboardButton, "Transparency grid");
-        ThemedToolTip.Set(FilterSwitch, "Smooth or pixels");
-        ThemedToolTip.Set(FitButton, "Fit to the view  (F)");
-        ThemedToolTip.Set(ActualSizeButton, "Actual size  (1)");
         ThemedToolTip.Set(ZoomOutButton, "Zoom out");
         ThemedToolTip.Set(ZoomInButton, "Zoom in");
         ThemedToolTip.Set(ZoomButton, "Zoom presets");
@@ -121,10 +77,7 @@ public partial class TexturePreviewToolbar : UserControl
     public event EventHandler<double>? ZoomPresetRequested;
 
     /// <summary>Whether the switch shows its Smooth side; Pixels otherwise.</summary>
-    internal bool SmoothSelected => FilteredPreview;
-
-    /// <summary>How far the switch's thumb sits from its Smooth side.</summary>
-    internal double FilterThumbOffset => FilterThumb.RenderTransform is TransformOperations operations ? operations.Value.M31 : 0;
+    internal bool SmoothSelected => FilterSwitch.SelectedIndex == 0;
 
     /// <summary>Flips the Smooth / Pixels switch, as a click on it does.</summary>
     internal void FlipFilter() => FilteredPreviewToggled?.Invoke(this, EventArgs.Empty);
@@ -183,17 +136,11 @@ public partial class TexturePreviewToolbar : UserControl
 
     private void RefreshChannels()
     {
-        // OnDataContextChanged can run during InitializeComponent, before the segments are known.
-        if (channels is null)
+        // OnDataContextChanged can run during InitializeComponent, before the switch is there.
+        if (ChannelSwitch is null)
             return;
-        string channel = viewModel?.Channel ?? "";
-        foreach ((ChromeToolButton button, string value) in channels)
-            SetSunken(button, channel == value);
-        foreach ((string value, Color tint) in ChannelTints)
-        {
-            ChromeToolButton button = channels.First(entry => entry.Value == value).Button;
-            button.Foreground = new SolidColorBrush(tint, channel == value ? 1 : 0.72);
-        }
+        int index = Array.IndexOf(ChannelOrder, viewModel?.Channel ?? "");
+        ChannelSwitch.SelectedIndex = index;
     }
 
     private void RefreshToggles()
@@ -201,14 +148,9 @@ public partial class TexturePreviewToolbar : UserControl
         if (CheckerboardButton is null)
             return;
         SetSunken(CheckerboardButton, CheckerboardVisible);
-        // The thumb slides to the side in use, whose glyph is in full ink.
-        TransformOperations.Builder slide = TransformOperations.CreateBuilder(1);
-        slide.AppendTranslate(FilteredPreview ? 0 : FilterThumb.Width, 0);
-        FilterThumb.RenderTransform = slide.Build();
-        SmoothIcon.Stroke = FilteredPreview ? Ui.Theme.Text : Ui.Theme.TextDim;
-        PixelsIcon.Stroke = FilteredPreview ? Ui.Theme.TextDim : Ui.Theme.Text;
-        AutomationProperties.SetName(FilterSwitch, FilteredPreview ? "Preview filtering: smooth" : "Preview filtering: pixels");
-        SetSunken(FitButton, FitMode);
+        FilterSwitch.SelectedIndex = FilteredPreview ? 0 : 1;
+        // On Fit while the texture fits, on 1:1 at actual size, on neither at any other zoom.
+        FitSwitch.SelectedIndex = FitMode ? 0 : ZoomPercent == PresetLabel(1) ? 1 : -1;
         ZoomButton.Text = ZoomPercent;
     }
 

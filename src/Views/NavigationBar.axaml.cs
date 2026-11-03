@@ -23,6 +23,7 @@ public partial class NavigationBar : UserControl
     {
         InitializeComponent();
         PointerClick.Attach(RootSegment, _ => OnRootClicked(), () => Bridge?.HasWorkspace == true);
+        ViewModeSwitch.SideRequested += (_, side) => Bridge?.SetViewMode(side == 1 ? "grid" : "list");
         SearchField.PropertyChanged += (_, e) =>
         {
             if (e.Property == TextBox.TextProperty)
@@ -131,12 +132,7 @@ public partial class NavigationBar : UserControl
 
     private void RefreshViewMode()
     {
-        bool list = Bridge?.ViewMode == "list";
-        bool grid = Bridge?.ViewMode == "grid";
-        ListModeButton.Sunken = list;
-        ListModeButton.Foreground = list ? Ui.Theme.Text : Ui.Theme.TextRow;
-        GridModeButton.Sunken = grid;
-        GridModeButton.Foreground = grid ? Ui.Theme.Text : Ui.Theme.TextRow;
+        ViewModeSwitch.SelectedIndex = Bridge?.ViewMode == "grid" ? 1 : 0;
     }
 
     private void RefreshSearchField()
@@ -176,9 +172,7 @@ public partial class NavigationBar : UserControl
 
     private void OnRefresh(object? sender, RoutedEventArgs e) => Bridge?.Refresh();
 
-    private void OnListMode(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("list");
 
-    private void OnGridMode(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("grid");
 }
 
 /// <summary>
