@@ -72,6 +72,19 @@ public sealed class SwitchTests
         Assert.False(choice.Segment.IsVisible);
         Click(0);
         Assert.Equal([1, 2, 1, 2, 0, 0], asked);
+
+        // Screen readers see a list of the sides, the one in use selected, and can select another.
+        var peer = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(choice);
+        Assert.Equal(Avalonia.Automation.Peers.AutomationControlType.List, peer.GetAutomationControlType());
+        var list = Assert.IsAssignableFrom<Avalonia.Automation.Provider.ISelectionProvider>(peer);
+        IReadOnlyList<Avalonia.Automation.Peers.AutomationPeer> items = peer.GetChildren();
+        Assert.Equal(["All channels", "Red channel", "Alpha channel"], items.Select(item => item.GetName()));
+        Assert.All(items, item => Assert.Equal(Avalonia.Automation.Peers.AutomationControlType.ListItem, item.GetAutomationControlType()));
+        Assert.Same(items[0], Assert.Single(list.GetSelection()));
+        Assert.IsAssignableFrom<Avalonia.Automation.Provider.ISelectionItemProvider>(items[2]).Select();
+        Assert.Equal(2, choice.SelectedIndex);
+        Assert.True(Assert.IsAssignableFrom<Avalonia.Automation.Provider.ISelectionItemProvider>(items[2]).IsSelected);
+        Assert.Same(items[2], Assert.Single(list.GetSelection()));
         window.Close();
     }
 }

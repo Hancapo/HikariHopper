@@ -667,6 +667,11 @@ public sealed class TextureWindowTests
         Assert.False(preview.FitMode);
         Assert.Equal(1, preview.DisplayScale, 6);
         Assert.Equal(1, toolbar.FitSwitch.SelectedIndex);
+        // A zoom that only rounds to 100% is not actual size.
+        preview.Viewport.ZoomBy(0.997);
+        harness.Settle();
+        Assert.Equal("100%", toolbar.ZoomButton.Text);
+        Assert.Equal(-1, toolbar.FitSwitch.SelectedIndex);
         preview.Viewport.ZoomBy(2);
         harness.Settle();
         Assert.Equal(-1, toolbar.FitSwitch.SelectedIndex);

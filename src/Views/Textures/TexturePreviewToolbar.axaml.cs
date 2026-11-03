@@ -27,6 +27,9 @@ public partial class TexturePreviewToolbar : UserControl
     public static readonly StyledProperty<string> ZoomPercentProperty =
         AvaloniaProperty.Register<TexturePreviewToolbar, string>(nameof(ZoomPercent), "");
 
+    public static readonly StyledProperty<double> DisplayScaleProperty =
+        AvaloniaProperty.Register<TexturePreviewToolbar, double>(nameof(DisplayScale), 1);
+
     /// <summary>The zooms the readout offers, as display scales (1 is actual size).</summary>
     public static IReadOnlyList<double> ZoomPresets { get; } = [0.25, 0.5, 1, 2, 4, 8];
 
@@ -109,11 +112,19 @@ public partial class TexturePreviewToolbar : UserControl
         set => SetValue(ZoomPercentProperty, value);
     }
 
+    /// <summary>The preview's exact display scale (1 is actual size); the readout rounds it.</summary>
+    public double DisplayScale
+    {
+        get => GetValue(DisplayScaleProperty);
+        set => SetValue(DisplayScaleProperty, value);
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         if (change.Property == FitModeProperty || change.Property == CheckerboardVisibleProperty
-            || change.Property == FilteredPreviewProperty || change.Property == ZoomPercentProperty)
+            || change.Property == FilteredPreviewProperty || change.Property == ZoomPercentProperty
+            || change.Property == DisplayScaleProperty)
             RefreshToggles();
     }
 
@@ -149,8 +160,9 @@ public partial class TexturePreviewToolbar : UserControl
             return;
         SetSunken(CheckerboardButton, CheckerboardVisible);
         FilterSwitch.SelectedIndex = FilteredPreview ? 0 : 1;
-        // On Fit while the texture fits, on 1:1 at actual size, on neither at any other zoom.
-        FitSwitch.SelectedIndex = FitMode ? 0 : ZoomPercent == PresetLabel(1) ? 1 : -1;
+        // On Fit while the texture fits, on 1:1 at actual size, on neither at any other zoom. Actual size is
+        // the exact scale: a zoom that only rounds to 100% is not it.
+        FitSwitch.SelectedIndex = FitMode ? 0 : Math.Abs(DisplayScale - 1) < 1e-9 ? 1 : -1;
         ZoomButton.Text = ZoomPercent;
     }
 
