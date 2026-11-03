@@ -574,6 +574,47 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void GameTabsShowTheirEditionAndTellTheirPath()
+    {
+        Explorer ui = OpenExplorer();
+        string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
+        ui.Tabs.NewTab();
+        ui.Tabs.ActiveBridge.OpenGame(enhanced);
+        ui.Tabs.NewTab();
+        Pump();
+        TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
+        Assert.Equal(3, tabs.Length);
+
+        // A grey V for Legacy, a green one for Enhanced, in place of the folder glyph.
+        Assert.True(tabs[0].EditionMark.IsVisible);
+        Assert.False(tabs[0].Glyph.IsVisible);
+        Assert.Equal(HikariHopper.Ui.Theme.TextDim, tabs[0].EditionMark.Fill);
+        Assert.True(tabs[1].EditionMark.IsVisible);
+        Assert.Equal(HikariHopper.Ui.Theme.Selection, tabs[1].EditionMark.Fill);
+        Assert.Equal($"Enhanced\nGTA V Enhanced\n{enhanced}", tabs[1].TipText);
+        Assert.Equal($"{Path.GetFileName(Work)}\nGTA V Legacy\n{Work.TrimEnd(Path.DirectorySeparatorChar)}", tabs[0].TipText);
+
+        // A new tab keeps its folder and has nothing to tell.
+        Assert.False(tabs[2].EditionMark.IsVisible);
+        Assert.True(tabs[2].Glyph.IsVisible);
+        Assert.Equal("", tabs[2].TipText);
+        Assert.False(ToolTip.GetServiceEnabled(tabs[2].TipHost));
+        Assert.True(ToolTip.GetServiceEnabled(tabs[1].TipHost));
+
+        // Opening a game there swaps the glyph for its mark.
+        ui.Tabs.ActiveBridge.OpenGame(enhanced);
+        Pump();
+        Assert.True(tabs[2].EditionMark.IsVisible);
+        Assert.Equal(HikariHopper.Ui.Theme.Selection, tabs[2].EditionMark.Fill);
+
+        // The V itself is drawn in its colour: solid where its arms meet, open between them above.
+        using var frame = ui.Window.CaptureRenderedFrame()!;
+        Point Inside(double x, double y) => tabs[1].EditionMark.TranslatePoint(new Point(x, y), ui.Window)!.Value;
+        Assert.Equal(HikariHopper.Ui.Theme.Selection.Color, Pixel(frame, (int)Inside(7.5, 10).X, (int)Inside(7.5, 10).Y));
+        Assert.NotEqual(HikariHopper.Ui.Theme.Selection.Color, Pixel(frame, (int)Inside(7.5, 4).X, (int)Inside(7.5, 4).Y));
+    }
+
+    [AvaloniaFact]
     public void FoldersShowTheirItemCountInTheSizeColumnAndNoType()
     {
         Explorer ui = OpenExplorer(files: 2, folders: 3);

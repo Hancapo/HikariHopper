@@ -135,6 +135,8 @@ public sealed class TabStripTab : Decorator
     public const double FootRadius = Ui.Theme.TabRadius;
 
     private readonly FileGlyph glyph = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
+    private readonly EditionMark edition = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock tip = new() { FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize, Foreground = Ui.Theme.Text };
     private readonly TextBlock title = new()
     {
         FontFamily = Ui.Theme.MonoFont,
@@ -168,6 +170,7 @@ public sealed class TabStripTab : Decorator
             ColumnSpacing = 9,
         };
         row.Children.Add(glyph);
+        row.Children.Add(edition);
         Grid.SetColumn(title, 1);
         row.Children.Add(title);
         Grid.SetColumn(close, 2);
@@ -185,6 +188,18 @@ public sealed class TabStripTab : Decorator
         clickArea.PointerReleased += OnReleased;
         clickArea.PointerCaptureLost += (_, _) => pressed = false;
     }
+
+    /// <summary>The game edition's mark, shown in place of the glyph on a tab with a game open.</summary>
+    internal EditionMark EditionMark => edition;
+
+    /// <summary>The folder or archive glyph of a tab without a game.</summary>
+    internal FileGlyph Glyph => glyph;
+
+    /// <summary>Where the tooltip shows: the tab left of its close mark.</summary>
+    internal Control TipHost => clickArea;
+
+    /// <summary>The tooltip's text: the full name, then the edition and the path where there are any.</summary>
+    internal string TipText => tip.Text ?? "";
 
     public ExplorerViewModel? Tab
     {
@@ -231,7 +246,8 @@ public sealed class TabStripTab : Decorator
 
     private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ExplorerViewModel.TabTitle) or nameof(ExplorerViewModel.TabActive))
+        if (e.PropertyName is nameof(ExplorerViewModel.TabTitle) or nameof(ExplorerViewModel.TabActive)
+            or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.HasArchive))
             Refresh();
     }
 
@@ -247,7 +263,12 @@ public sealed class TabStripTab : Decorator
         // The active tab's feet overlap its neighbours, a hovered tab's feet overlap bare ones.
         if (Parent is Control host)
             host.ZIndex = active ? 2 : hovered ? 1 : 0;
+        bool game = Tab?.HasGame == true;
+        edition.IsVisible = game;
+        edition.Enhanced = Tab?.GameEdition == "GTA V Enhanced";
+        glyph.IsVisible = !game;
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
+        RefreshTip(text);
         title.Text = text;
         title.Foreground = active || hovered ? Ui.Theme.Text : Ui.Theme.TextDim;
         title.FontWeight = active ? FontWeight.Bold : FontWeight.Normal;
@@ -258,6 +279,31 @@ public sealed class TabStripTab : Decorator
         AutomationProperties.SetName(close, $"Close {text}");
         InvalidateMeasure();
         InvalidateVisual();
+    }
+
+    private void RefreshTip(string text)
+    {
+        ExplorerViewModel? tab = Tab;
+        string[] lines = tab is null ? []
+            : tab.HasGame ? [text, tab.GameEdition, tab.GamePath]
+            : tab.HasArchive ? [text, tab.ArchivePath]
+            : [];
+        tip.Text = string.Join('\n', lines.Where(line => line.Length > 0).Distinct());
+        // Built on the first tab that has something to say, the tooltip stays and follows the text.
+        if (tip.Text.Length > 0 && ToolTip.GetTip(clickArea) is null)
+        {
+            ToolTip.SetTip(clickArea, new ToolTip
+            {
+                Content = tip,
+                Background = Ui.Theme.ChromeRaised,
+                BorderBrush = Ui.Theme.Border,
+                BorderThickness = new Thickness(1),
+                CornerRadius = Ui.Theme.ControlCorner,
+                Padding = new Thickness(8, 5),
+                MaxWidth = 640,
+            });
+        }
+        ToolTip.SetServiceEnabled(clickArea, tip.Text.Length > 0);
     }
 
     public override void Render(DrawingContext context)
