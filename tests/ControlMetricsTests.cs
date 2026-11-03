@@ -204,6 +204,34 @@ public sealed class ControlMetricsTests
         window.Close();
     });
 
+    [AvaloniaFact]
+    public void AboutSaysWhatItIsAndLinksToTheProject() => UiThread.Run(() =>
+    {
+        var about = new AboutDialog();
+        Window window = Show(about, 520, 460);
+        // A modding toolkit, with the credits in the footer line.
+        Assert.Contains(about.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "A modding toolkit for games");
+        Assert.Equal("FiveFury · Avalonia · Archivo, Space Mono, Inter", about.FooterText);
+        Assert.Equal(26, about.FindControl<Image>("Wordmark")!.Bounds.Height);
+
+        // The buttons open the project and its changelog in the browser.
+        var opened = new List<Uri>();
+        Action<TopLevel?, Uri> previous = AboutDialog.Launch;
+        AboutDialog.Launch = (_, uri) => opened.Add(uri);
+        try
+        {
+            foreach (string name in new[] { "GitHubButton", "ChangelogButton" })
+                about.FindControl<ChromeToolButton>(name)!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        }
+        finally
+        {
+            AboutDialog.Launch = previous;
+        }
+        Assert.Equal([AboutDialog.ProjectPage, AboutDialog.ChangelogPage], opened);
+        Assert.Equal("https://github.com/Hancapo/HikariHopper", AboutDialog.ProjectPage.ToString());
+        window.Close();
+    });
+
     private static int Distance(Color a, Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
 
     [AvaloniaFact]
@@ -216,7 +244,7 @@ public sealed class ControlMetricsTests
         Window host = Show(about, 520, 460);
         Image icon = about.FindControl<Image>("AppIcon")!;
         Assert.Equal(new PixelSize(256, 256), Assert.IsAssignableFrom<Bitmap>(icon.Source).PixelSize);
-        Assert.Equal(new Size(40, 40), icon.Bounds.Size);
+        Assert.Equal(new Size(56, 56), icon.Bounds.Size);
         host.Close();
 
         // The splash wears the lockup: the icon, then the official wordmark at its own proportions.

@@ -6,60 +6,31 @@
               x:Class="HikariHopper.Views.AboutDialog"
               x:DataType="v:AboutDialog"
               WindowShare="0.4,0.55" MinSize="440,380" MaxSize="540,460"
-              Heading="ABOUT">
-  <!-- Facts in the same key/value grammar the preview panel uses, so it
-       reads as part of the tool rather than as a splash. The content is 3px taller than the body;
-       QtColumnLayout shrinks the rows the way Qt's ColumnLayout does. -->
-  <c:QtColumnLayout>
-    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
-      <Image Name="AppIcon" Width="40" Height="40" VerticalAlignment="Center"
-             Source="avares://HikariHopper/Assets/Branding/icon-256.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
-      <StackPanel Spacing="2" VerticalAlignment="Center">
-        <TextBlock Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="16" FontWeight="Bold" />
-        <TextBlock Text="RPF Explorer" Foreground="{x:Static ui:Theme.TextFaint}"
-                   FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+              Heading="ABOUT"
+              FooterText="FiveFury · Avalonia · Archivo, Space Mono, Inter">
+  <!-- The app's own lockup, centred: the icon over the wordmark, what it is, the version in a
+       sunken chip, and links to the project and its changes. The credits sit in the footer line. -->
+  <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+    <Image Name="AppIcon" Width="56" Height="56" HorizontalAlignment="Center"
+           Source="avares://HikariHopper/Assets/Branding/icon-256.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
+    <Image Name="Wordmark" Height="26" Margin="0,14,0,0" HorizontalAlignment="Center" Stretch="Uniform"
+           Source="avares://HikariHopper/Assets/Branding/wordmark-on-dark.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
+    <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" Text="A modding toolkit for games"
+               Foreground="{x:Static ui:Theme.TextDim}" FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+    <Border Margin="0,14,0,0" HorizontalAlignment="Center" Padding="10,4"
+            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="Version " Foreground="{x:Static ui:Theme.TextRow}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+        <TextBlock Name="VersionText" Text="{x:Static v:StartPage.AppVersion}" Foreground="{x:Static ui:Theme.TextRow}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
       </StackPanel>
+    </Border>
+    <StackPanel Margin="0,22,0,0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+      <c:ChromeToolButton Name="GitHubButton" Width="104" Height="28" Raised="True" Text="GitHub"
+                          AutomationProperties.Name="Open HikariHopper on GitHub" />
+      <c:ChromeToolButton Name="ChangelogButton" Width="104" Height="28" Raised="True" Text="Changelog"
+                          AutomationProperties.Name="Open the changelog" />
     </StackPanel>
-    <Grid Height="24" ColumnDefinitions="84,*" ColumnSpacing="14">
-      <TextBlock Text="Version" Foreground="{x:Static ui:Theme.TextDim}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
-      <TextBlock Name="VersionText" Grid.Column="1" Text="{x:Static v:StartPage.AppVersion}" Foreground="{x:Static ui:Theme.Text}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <Grid Height="24" ColumnDefinitions="84,*" ColumnSpacing="14">
-      <TextBlock Text="Reads" Foreground="{x:Static ui:Theme.TextDim}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="GTA V Legacy and Enhanced" Foreground="{x:Static ui:Theme.Text}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <Grid Height="24" ColumnDefinitions="84,*" ColumnSpacing="14">
-      <TextBlock Text="Archives" Foreground="{x:Static ui:Theme.TextDim}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="RPF, including nested" Foreground="{x:Static ui:Theme.Text}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <c:DottedRule Horizontal="True" Margin="0,16,0,8" />
-    <TextBlock Margin="0,0,0,6" Text="BUILT ON" Foreground="{x:Static ui:Theme.TextFaint}"
-               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" FontWeight="Bold" LetterSpacing="1.2" />
-    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
-      <TextBlock Text="FiveFury" Foreground="{x:Static ui:Theme.TextRow}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="Archive parsing and game keys" Foreground="{x:Static ui:Theme.TextFaint}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
-      <TextBlock Text="Avalonia" Foreground="{x:Static ui:Theme.TextRow}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="User interface" Foreground="{x:Static ui:Theme.TextFaint}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
-      <TextBlock Text="Archivo · Space Mono · Inter" Foreground="{x:Static ui:Theme.TextRow}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="Typefaces, SIL Open Font License" Foreground="{x:Static ui:Theme.TextFaint}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-    </Grid>
-    <Panel c:QtColumnLayout.FillHeight="True" />
-  </c:QtColumnLayout>
+  </StackPanel>
 </v:ModalSheet>
