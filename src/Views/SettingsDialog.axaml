@@ -45,7 +45,6 @@
         <Border Background="{x:Static ui:Theme.WindowBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,6">
           <StackPanel Name="GameRows" />
         </Border>
-        <TextBlock Name="LaterText" Classes="note" Margin="2,10,0,0" Foreground="{x:Static ui:Theme.TextFaint}" />
 
         <TextBlock Classes="section" Margin="0,24,0,8" Text="STARTUP" />
         <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
