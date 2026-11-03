@@ -211,7 +211,7 @@ public partial class TextViewer : UserControl, IModalContent
             // The titles too: they are showing, at the top.
             for (int row = 0; row < table.Rows.Count && cellMatches.Count < MaxMatches; row++)
                 for (int column = 0; column < table.Rows[row].Length; column++)
-                    if (table.Rows[row][column].Contains(query, StringComparison.OrdinalIgnoreCase))
+                    if (CsvTableView.Shown(table.Rows[row][column]).Contains(query, StringComparison.OrdinalIgnoreCase))
                         cellMatches.Add((row, column));
             currentMatch = cellMatches.Count > 0 ? Math.Max(0, cellMatches.FindIndex(match => match.Row >= Table.CurrentRow)) : -1;
         }

@@ -229,7 +229,7 @@ public sealed class CsvTableView : Control
 
     private void DrawCell(DrawingContext context, int row, int column, string value, double left, double top, double textTop, double size)
     {
-        bool isMatch = query.Length > 0 && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+        bool isMatch = query.Length > 0 && Shown(value).Contains(query, StringComparison.OrdinalIgnoreCase);
         bool isCurrent = currentMatch >= 0 && currentMatch < matches.Count && matches[currentMatch] == (row, column);
         if (isCurrent)
             context.FillRectangle(TextViewerInk.MatchWash, new Rect(left + 4, top + 3, widths[column] - 8, RowHeight - 6), 2);
@@ -249,12 +249,15 @@ public sealed class CsvTableView : Control
         context.DrawText(text, new Point(x, top + textTop));
     }
 
+    /// <summary>A value as a cell shows it: on one line, its line breaks as spaces. Find searches this.</summary>
+    public static string Shown(string value) => value.ReplaceLineEndings(" ");
+
     /// <summary>The value cut to the column, with an ellipsis where it doesn't fit.</summary>
     private string Fit(string value, double width)
     {
         // A hair of slack, so a value exactly as long as its column is not cut by rounding.
         int room = Math.Max(1, (int)((width - 2 * CellPadding) / charWidth + 0.01));
-        string single = value.ReplaceLineEndings(" ");
+        string single = Shown(value);
         return single.Length <= room ? single : single[..Math.Max(0, room - 1)] + "…";
     }
 
