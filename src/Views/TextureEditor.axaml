@@ -15,7 +15,8 @@
        header is as tall as the title bar it replaces, so everything below sits where it did. -->
   <Border Background="{x:Static ui:Theme.AppBg}"
           CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
-    <Border CornerRadius="{x:Static ui:Theme.SheetCorner}" ClipToBounds="True">
+    <!-- An exact rounded clip: the header and the status bar have backgrounds of their own. -->
+    <c:RoundedClip Radius="{x:Static ui:Theme.SheetRadius}">
       <Panel>
         <DockPanel>
           <Panel Name="Header" DockPanel.Dock="Top" Height="{x:Static ui:Theme.WindowTitleHeight}"
@@ -54,6 +55,6 @@
         <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"
                 IsHitTestVisible="False" />
       </Panel>
-    </Border>
+    </c:RoundedClip>
   </Border>
 </UserControl>
