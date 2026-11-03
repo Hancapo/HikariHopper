@@ -255,6 +255,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Key(ui.Window, PhysicalKey.Tab);
         Assert.True(Inside(), "Tab from the title bar did not come back into the modal");
         maximize.Focus();
+        Assert.False(Inside());
         Key(ui.Window, PhysicalKey.Escape);
         Pump(250);
         Assert.False(settings.IsOpen);
