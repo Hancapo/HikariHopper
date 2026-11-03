@@ -21,7 +21,8 @@
                         ShowTitle="False" EmblemSize="16" Seams="False" ControlWidth="{x:Static ui:Theme.MainCaptionWidth}"
                         TitleText="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" />
       <!-- ExplorerScreen goes here (QML: ExplorerScreen { tabs: window.tabs }). -->
-      <ContentControl Name="ExplorerScreenHost" x:FieldModifier="public" />
+      <!-- What a modal blurs and dims; the title bar above stays live. -->
+      <ContentControl Name="ExplorerScreenHost" x:FieldModifier="public" v:ModalOverlay.IsBackdrop="True" />
     </DockPanel>
 
     <!-- Blue piping around the whole window, the way the reference uniform runs its trim along

@@ -1,56 +1,119 @@
 using System.Runtime.CompilerServices;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// A Qt Quick Controls modal <c>Dialog</c> parented to <c>Overlay.overlay</c>: the dialog sits centred
-/// (<c>Math.round((parent.width - width) / 2)</c>) over a full-window <c>Overlay.modal</c> dim that
-/// swallows pointer input, takes keyboard focus while open, closes on Escape
-/// (<c>closePolicy: Popup.CloseOnEscape</c>) and gives focus back to whatever had it before.
+/// An in-window modal: the dialog sits centred over a dim that swallows pointer input, takes keyboard
+/// focus while open, closes on Escape and gives focus back to whatever had it before.
 /// </summary>
+/// <remarks>
+/// The window marks its content with <see cref="IsBackdropProperty"/>. While a modal is open that
+/// content blurs and the dim covers only it, so the title bar above stays live: the window can still
+/// be moved, minimised or closed (its menus are switched off, see <see cref="StateChanged"/>). The dim
+/// fades in, the dialog rises into place, and both fade back out on close; the blur eases with them.
+/// </remarks>
 public sealed class ModalOverlay : Panel
 {
+    /// <summary>Marks the part of a window a modal blurs and covers; without one it covers the whole window.</summary>
+    public static readonly AttachedProperty<bool> IsBackdropProperty =
+        AvaloniaProperty.RegisterAttached<ModalOverlay, Control, bool>("IsBackdrop");
+
+    /// <summary>How soft the content behind a modal gets.</summary>
+    public const double BlurRadius = 14;
+
+    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(180);
     private static readonly ConditionalWeakTable<TopLevel, List<ModalOverlay>> OpenOverlays = new();
 
     private readonly Control dialog;
     private readonly TopLevel host;
     private readonly IInputElement? previousFocus;
+    private readonly Control? backdrop;
     private OverlayLayer? layer;
 
-    private ModalOverlay(TopLevel host, Control dialog, IBrush dim)
+    private ModalOverlay(TopLevel host, Control dialog, Control? backdrop)
     {
         this.host = host;
         this.dialog = dialog;
+        this.backdrop = backdrop;
         previousFocus = host.FocusManager?.GetFocusedElement();
-        Background = dim;
+        Background = Ui.Theme.ModalDim;
         Focusable = true;
         dialog.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left;
         dialog.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
         Children.Add(dialog);
+        Transitions = [Fade(OpacityProperty)];
+        dialog.Transitions =
+        [
+            Fade(OpacityProperty),
+            new TransformOperationsTransition { Property = RenderTransformProperty, Duration = FadeDuration, Easing = new CubicEaseOut() },
+        ];
     }
 
     /// <summary>Raised once the overlay is gone (QML <c>closed</c>).</summary>
     public event EventHandler? Closed;
 
+    /// <summary>Raised whenever a window gains its first modal or loses its last one.</summary>
+    public static event EventHandler<TopLevel>? StateChanged;
+
     public bool IsShown { get; private set; }
+
+    /// <summary>The dialog this overlay shows.</summary>
+    public Control Dialog => dialog;
+
+    public static bool GetIsBackdrop(Control control) => control.GetValue(IsBackdropProperty);
+
+    public static void SetIsBackdrop(Control control, bool value) => control.SetValue(IsBackdropProperty, value);
 
     /// <summary>Whether a modal overlay currently blocks <paramref name="host"/>.</summary>
     public static bool IsOpen(TopLevel host) => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0;
+
+    /// <summary>The window content a modal blurs: the control marked <see cref="IsBackdropProperty"/>.</summary>
+    public static Control? BackdropOf(TopLevel host) =>
+        host.GetVisualDescendants().OfType<Control>().FirstOrDefault(GetIsBackdrop);
 
     /// <summary>Opens <paramref name="dialog"/> over the window that contains <paramref name="anchor"/>.</summary>
     public static ModalOverlay? Show(Control anchor, Control dialog)
     {
         if (TopLevel.GetTopLevel(anchor) is not { } host || OverlayLayer.GetOverlayLayer(anchor) is not { } layer)
             return null;
-        var overlay = new ModalOverlay(host, dialog, Ui.Theme.MarqueeFill) { layer = layer };
+        Control? backdrop = BackdropOf(host);
+        // Shown again while its last overlay is still fading out: take it back from that one now.
+        (dialog.Parent as ModalOverlay)?.Detach();
+        var overlay = new ModalOverlay(host, dialog, backdrop) { layer = layer };
+        // Cover the backdrop only, so whatever sits above it (the title bar) keeps working.
+        if (backdrop?.TranslatePoint(default, layer) is { } top)
+            overlay.Margin = new Thickness(0, Math.Max(0, top.Y), 0, 0);
+        overlay.Opacity = 0;
+        dialog.Opacity = 0;
+        dialog.RenderTransform = Lift(10, 0.97);
         layer.Children.Add(overlay);
         overlay.IsShown = true;
-        OpenOverlays.GetOrCreateValue(host).Add(overlay);
+        List<ModalOverlay> open = OpenOverlays.GetOrCreateValue(host);
+        open.Add(overlay);
+        // In the next frame, so the transitions run from the starting values.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!overlay.IsShown)
+                return;
+            overlay.Opacity = 1;
+            dialog.Opacity = 1;
+            dialog.RenderTransform = Lift(0, 1);
+        }, DispatcherPriority.Render);
+        if (open.Count == 1)
+        {
+            Blur(backdrop, true);
+            StateChanged?.Invoke(null, host);
+        }
         overlay.Focus();
         return overlay;
     }
@@ -60,12 +123,56 @@ public sealed class ModalOverlay : Panel
         if (!IsShown)
             return;
         IsShown = false;
+        bool last = false;
         if (OpenOverlays.TryGetValue(host, out var list))
+        {
             list.Remove(this);
-        layer?.Children.Remove(this);
+            last = list.Count == 0;
+        }
+        // Stop taking input now, and leave once the fade is done.
+        IsHitTestVisible = false;
+        Opacity = 0;
+        dialog.Opacity = 0;
+        dialog.RenderTransform = Lift(6, 0.985);
+        DispatcherTimer.RunOnce(Detach, FadeDuration);
+        if (last)
+        {
+            Blur(backdrop, false);
+            StateChanged?.Invoke(null, host);
+        }
         if (previousFocus is InputElement element && TopLevel.GetTopLevel(element) == host)
             element.Focus();
         Closed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Leaves the window and lets go of the dialog, so it can be shown again.</summary>
+    private void Detach()
+    {
+        Children.Remove(dialog);
+        layer?.Children.Remove(this);
+        layer = null;
+    }
+
+    private static DoubleTransition Fade(AvaloniaProperty property) =>
+        new() { Property = property, Duration = FadeDuration, Easing = new CubicEaseOut() };
+
+    private static ITransform Lift(double y, double scale)
+    {
+        TransformOperations.Builder builder = TransformOperations.CreateBuilder(2);
+        builder.AppendTranslate(0, y);
+        builder.AppendScale(scale, scale);
+        return builder.Build();
+    }
+
+    /// <summary>Eases the backdrop's blur in or out.</summary>
+    private static void Blur(Control? backdrop, bool on)
+    {
+        if (backdrop is null)
+            return;
+        backdrop.Transitions ??= [];
+        if (!backdrop.Transitions.OfType<EffectTransition>().Any())
+            backdrop.Transitions.Add(new EffectTransition { Property = EffectProperty, Duration = FadeDuration, Easing = new CubicEaseOut() });
+        backdrop.Effect = new BlurEffect { Radius = on ? BlurRadius : 0 };
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -74,10 +181,15 @@ public sealed class ModalOverlay : Panel
         return availableSize;
     }
 
+    /// <summary>The dialog at its own size, kept 24px clear of the edges when the window is smaller.</summary>
     protected override Size ArrangeOverride(Size finalSize)
     {
-        double width = dialog.Width;
-        double height = dialog.Height;
+        double width = Math.Min(dialog.Width, Math.Max(0, finalSize.Width - 48));
+        double height = Math.Min(dialog.Height, Math.Max(0, finalSize.Height - 48));
+        if (double.IsNaN(width))
+            width = Math.Min(dialog.DesiredSize.Width, finalSize.Width);
+        if (double.IsNaN(height))
+            height = Math.Min(dialog.DesiredSize.Height, finalSize.Height);
         double x = Math.Floor((finalSize.Width - width) / 2 + 0.5);
         double y = Math.Floor((finalSize.Height - height) / 2 + 0.5);
         dialog.Arrange(new Rect(x, y, width, height));

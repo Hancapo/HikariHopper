@@ -20,9 +20,9 @@ public partial class MenuRow : UserControl
 
 
     private readonly Dictionary<MenuBarButton, RetroMenu> menus = [];
-    private SettingsWindow? settingsWindow;
-    private ShortcutsWindow? shortcutsWindow;
-    private AboutWindow? aboutWindow;
+    private SettingsDialog? settingsDialog;
+    private ShortcutsDialog? shortcutsDialog;
+    private AboutDialog? aboutDialog;
 
     public MenuRow()
     {
@@ -118,14 +118,16 @@ public partial class MenuRow : UserControl
 
     private void OnSettings(object? sender, RoutedEventArgs e) => OpenSettings();
 
-    /// <summary>Shows the Settings window, for the menu and the start page's links.</summary>
+    /// <summary>Shows Settings, for the menu and the start page's links.</summary>
     internal void OpenSettings()
     {
         if (Tabs is not { } tabs)
             return;
-        settingsWindow ??= new SettingsWindow(tabs.GamePathSettings);
-        ShowToolWindow(settingsWindow);
+        (settingsDialog ??= new SettingsDialog(tabs)).Present(this);
     }
+
+    /// <summary>The sheets this menu row opens, once they have been opened.</summary>
+    internal SettingsDialog? Settings => settingsDialog;
 
     private void OnListView(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("list");
 
@@ -143,18 +145,7 @@ public partial class MenuRow : UserControl
 
     private void OnUp(object? sender, RoutedEventArgs e) => Bridge?.GoUp();
 
-    private void OnShortcuts(object? sender, RoutedEventArgs e) => ShowToolWindow(shortcutsWindow ??= new ShortcutsWindow());
+    private void OnShortcuts(object? sender, RoutedEventArgs e) => (shortcutsDialog ??= new ShortcutsDialog()).Present(this);
 
-    private void OnAbout(object? sender, RoutedEventArgs e) => ShowToolWindow(aboutWindow ??= new AboutWindow());
-
-    private void ShowToolWindow(Window window)
-    {
-        // QML show() on a window that is already up leaves it as it is.
-        if (window.IsVisible)
-            return;
-        if (TopLevel.GetTopLevel(this) is Window owner)
-            window.Show(owner);
-        else
-            window.Show();
-    }
+    private void OnAbout(object? sender, RoutedEventArgs e) => (aboutDialog ??= new AboutDialog()).Present(this);
 }

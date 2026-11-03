@@ -4,13 +4,15 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.SettingsGroupRow"
              x:DataType="v:SettingsGroupRow">
-  <!-- Port of SettingsGroupRow.qml. -->
-  <Panel Name="Surface">
-    <Border Name="Marker" Width="2" HorizontalAlignment="Left" Background="{x:Static ui:Theme.SelectionText}" />
-    <TextBlock Name="LabelText" Margin="12,7,12,0" VerticalAlignment="Top"
-               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
-               TextTrimming="CharacterEllipsis" />
-    <TextBlock Name="NoteText" Margin="12,25,0,0" VerticalAlignment="Top" HorizontalAlignment="Left"
-               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" />
-  </Panel>
+  <!-- One group of the Settings rail: its name, and a note such as "soon" for groups still to come.
+       The selected group wears the explorer's selection: a soft wash with a ring. -->
+  <Border Name="Surface" Margin="6,1" Padding="10,0" CornerRadius="{x:Static ui:Theme.ItemCorner}" BorderThickness="1">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBlock Name="LabelText" VerticalAlignment="Center"
+                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                 TextTrimming="CharacterEllipsis" />
+      <TextBlock Name="NoteText" Grid.Column="1" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextFaint}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" />
+    </Grid>
+  </Border>
 </UserControl>

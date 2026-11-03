@@ -11,12 +11,12 @@ public sealed record ShortcutEntry(string Key, string Action);
 public sealed record ShortcutGroup(string Name, IReadOnlyList<ShortcutEntry> Keys, bool IsFirst = false);
 
 /// <summary>
-/// The keyboard reference (port of <c>ShortcutsWindow.qml</c>). Every entry is a shortcut the
+/// The keyboard reference, shown as a sheet over the main window. Every entry is a shortcut the
 /// app actually binds.
 /// </summary>
-public partial class ShortcutsWindow : ToolWindow
+public partial class ShortcutsDialog : ModalSheet
 {
-    public ShortcutsWindow()
+    public ShortcutsDialog()
     {
         AvaloniaXamlLoader.Load(this);
         DataContext = this;

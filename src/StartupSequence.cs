@@ -102,7 +102,7 @@ public sealed class StartupSequence
             Fail(error);
             return;
         }
-        string savedGame = GameSettings.ConfiguredGameRootToOpen();
+        string savedGame = GameSettings.GameRootToRestore();
         string message = savedGame.Length > 0 && Directory.Exists(savedGame)
             ? "Loading FiveFury runtime and GTA V keys…"
             : "Checking saved GTA V installation…";

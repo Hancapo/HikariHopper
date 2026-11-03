@@ -20,21 +20,19 @@ public partial class SettingsGroupRow : UserControl
     public static readonly StyledProperty<bool> AvailableProperty =
         AvaloniaProperty.Register<SettingsGroupRow, bool>(nameof(Available), true);
 
-    private readonly Panel surface;
-    private readonly Border marker;
+    private readonly Border surface;
     private readonly TextBlock labelText;
     private readonly TextBlock noteText;
 
     static SettingsGroupRow()
     {
-        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(44);
+        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(34);
     }
 
     public SettingsGroupRow()
     {
         AvaloniaXamlLoader.Load(this);
-        surface = this.FindControl<Panel>("Surface")!;
-        marker = this.FindControl<Border>("Marker")!;
+        surface = this.FindControl<Border>("Surface")!;
         labelText = this.FindControl<TextBlock>("LabelText")!;
         noteText = this.FindControl<TextBlock>("NoteText")!;
         Refresh();
@@ -76,14 +74,11 @@ public partial class SettingsGroupRow : UserControl
     {
         if (surface is null)
             return;
-        surface.Background = Selected ? Ui.Theme.Selection : Brushes.Transparent;
-        marker.IsVisible = Selected;
+        surface.Background = Selected ? Ui.Theme.SelectionWash : Brushes.Transparent;
+        surface.BorderBrush = Selected ? Ui.Theme.SelectionRing : Brushes.Transparent;
         labelText.Text = Label;
-        labelText.Foreground = Selected ? Ui.Theme.SelectionText : Ui.Theme.TextFaint;
-        labelText.FontWeight = Selected ? FontWeight.Bold : FontWeight.Normal;
-        labelText.Opacity = Available ? 1 : 0.7;
+        labelText.Foreground = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
+        labelText.FontWeight = Selected ? FontWeight.SemiBold : FontWeight.Normal;
         noteText.Text = Note;
-        noteText.Foreground = Selected ? Ui.Theme.SelectionInk : Ui.Theme.TextFaint;
-        noteText.Opacity = Available ? 1 : 0.7;
     }
 }

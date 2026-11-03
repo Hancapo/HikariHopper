@@ -10,6 +10,7 @@ public static class GameSettings
     public const string LegacyGameRootKey = "gameRoots/legacy";
     public const string EnhancedGameRootKey = "gameRoots/enhanced";
     public const string RecentGameRootsKey = "recentGameRoots";
+    public const string OpenLastGameOnStartupKey = "openLastGameOnStartup";
     public const string LegacyEdition = "legacy";
     public const string EnhancedEdition = "enhanced";
 
@@ -49,6 +50,16 @@ public static class GameSettings
     }
 
     public static string ConfiguredGameRoot(string edition) => AppSettings.GetString(GameRootKey(edition));
+
+    /// <summary>Whether the app reopens the last game when it starts (on unless turned off in Settings).</summary>
+    public static bool OpenLastGameOnStartup
+    {
+        get => AppSettings.GetInt(OpenLastGameOnStartupKey, 1) != 0;
+        set => AppSettings.SetInt(OpenLastGameOnStartupKey, value ? 1 : 0);
+    }
+
+    /// <summary>The game to reopen at startup: the configured one, unless that is turned off.</summary>
+    public static string GameRootToRestore() => OpenLastGameOnStartup ? ConfiguredGameRootToOpen() : "";
 
     public static string ConfiguredGameRootToOpen(string edition = "")
     {

@@ -26,7 +26,7 @@
         <ResourceInclude Source="avares://HikariHopper/Views/Controls/RetroMenuSection.axaml" />
         <ResourceInclude Source="avares://HikariHopper/Views/Controls/RetroMenuSeparator.axaml" />
         <ResourceInclude Source="avares://HikariHopper/Views/Controls/SplitViewHandle.axaml" />
-        <ResourceInclude Source="avares://HikariHopper/Views/ToolWindow.axaml" />
+        <ResourceInclude Source="avares://HikariHopper/Views/ModalSheet.axaml" />
         <ResourceInclude Source="avares://HikariHopper/Views/Textures/TextureToolDialog.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>

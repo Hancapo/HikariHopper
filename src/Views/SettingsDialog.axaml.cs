@@ -1,0 +1,118 @@
+using System.ComponentModel;
+using System.Runtime.Versioning;
+using Avalonia.Controls;
+using HikariHopper.Core;
+using HikariHopper.ViewModels;
+
+namespace HikariHopper.Views;
+
+/// <summary>
+/// Settings, shown as a sheet over the main window. The Games group lists every installation of the
+/// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>, and
+/// the startup options. Every change is saved as it is made.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public partial class SettingsDialog : ModalSheet
+{
+    private readonly ExplorerTabsViewModel tabs;
+
+    public SettingsDialog()
+        : this(new ExplorerTabsViewModel())
+    {
+    }
+
+    public SettingsDialog(ExplorerTabsViewModel tabs)
+    {
+        this.tabs = tabs;
+        InitializeComponent();
+        LaterText.Text = $"Coming later: {string.Join(", ", FutureGames)}.";
+
+        BuildGameRows();
+        OpenLastGame.IsCheckedChanged += (_, _) => GameSettings.OpenLastGameOnStartup = OpenLastGame.IsChecked == true;
+        ClearRecents.Click += (_, _) => tabs.ClearRecentGames();
+        GamePaths.PathsChanged += (_, _) => RefreshGameRows();
+        tabs.PropertyChanged += OnTabsChanged;
+        Refresh();
+    }
+
+    public GamePathSettings GamePaths => tabs.GamePathSettings;
+
+    /// <summary>Titles listed as coming, in PC release order.</summary>
+    public IReadOnlyList<string> FutureGames { get; } =
+    [
+        "Grand Theft Auto III",
+        "Grand Theft Auto: Vice City",
+        "Grand Theft Auto: San Andreas",
+        "Bully: Scholarship Edition",
+        "Grand Theft Auto IV",
+        "Red Dead Redemption 2",
+        "Red Dead Redemption",
+    ];
+
+    /// <summary>The installation rows, in catalogue order.</summary>
+    internal IReadOnlyList<GamePathRow> Rows => [.. GameRows.Children.OfType<GamePathRow>()];
+
+    protected override void OnPresented() => Refresh();
+
+    private void OnTabsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ExplorerTabsViewModel.RecentGames))
+            RefreshRecents();
+    }
+
+    private void BuildGameRows()
+    {
+        foreach (SupportedGame game in GameCatalog.Games)
+        {
+            GameRows.Children.Add(new TextBlock
+            {
+                Text = game.Title.ToUpperInvariant(),
+                Margin = new Avalonia.Thickness(10, 8, 10, 2),
+                Classes = { "section" },
+            });
+            foreach (GameEditionInfo edition in game.Editions)
+            {
+                var row = new GamePathRow
+                {
+                    Title = edition.Title,
+                    Edition = edition.Id,
+                    ExpectedExecutable = GameSettings.GameExecutable(edition.Id),
+                };
+                string id = edition.Id;
+                row.PathCommitted += (_, path) => GamePaths.SetPath(id, path);
+                row.BrowseRequested += async (_, _) => await GamePaths.Browse(id);
+                GameRows.Children.Add(row);
+            }
+        }
+        RefreshGameRows();
+    }
+
+    private void Refresh()
+    {
+        GamePaths.Refresh();
+        RefreshGameRows();
+        OpenLastGame.IsChecked = GameSettings.OpenLastGameOnStartup;
+        RefreshRecents();
+    }
+
+    private void RefreshGameRows()
+    {
+        foreach (GamePathRow row in Rows)
+        {
+            row.GamePath = GamePaths.PathFor(row.Edition);
+            row.PathValid = GamePaths.IsValid(row.Edition);
+        }
+    }
+
+    private void RefreshRecents()
+    {
+        int count = tabs.RecentGames.Count;
+        RecentText.Text = count switch
+        {
+            0 => "No recent games",
+            1 => "1 recent game on the start page",
+            _ => $"{count} recent games on the start page",
+        };
+        ClearRecents.IsEnabled = count > 0;
+    }
+}

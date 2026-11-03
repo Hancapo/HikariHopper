@@ -67,6 +67,9 @@ public static class Theme
 
     // Neutral marquee: it is the selection instrument, not selected state.
     // Green appears only on rows that the marquee has actually included.
+    // Modals: the dim over the blurred window behind them.
+    public static IImmutableSolidColorBrush ModalDim { get; } = Rgba(0.090, 0.094, 0.165, 0.38);
+
     public static IImmutableSolidColorBrush MarqueeFill { get; } = Rgba(0.173, 0.176, 0.263, 0.24);
     public static IImmutableSolidColorBrush MarqueeBorder { get; } = Rgba(0.776, 0.784, 0.855, 0.82);
     public static IImmutableSolidColorBrush MarqueeHatch { get; } = Rgba(0.604, 0.612, 0.706, 0.42);
@@ -91,6 +94,8 @@ public static class Theme
     // Kept for archive-parsing failures surfaced in the status bar. Outside the
     // character palette on purpose — nothing else in the UI should be red.
     public static IImmutableSolidColorBrush Error { get; } = Hex("#D9706C");
+    public static IImmutableSolidColorBrush Warning { get; } = Hex("#E0A458");   // something to fix, not a failure
+    public static IImmutableSolidColorBrush Ok { get; } = Hex("#A8D58A");        // a check that passed
 
     public static FontFamily UiFont { get; } = new("avares://HikariHopper/Assets/Fonts#Archivo");
     public static FontFamily MonoFont { get; } = new("avares://HikariHopper/Assets/Fonts#Space Mono");
@@ -129,6 +134,13 @@ public static class Theme
 
     /// <summary>The transparent room a menu leaves around itself for its shadow; none above, where it meets its title.</summary>
     public static readonly Thickness MenuShadowMargin = new(16, 0, 16, 24);
+
+    /// <summary>A modal card: rounder than a panel, and lifted well clear of the blurred window.</summary>
+    public const double SheetRadius = 10;
+    public static readonly CornerRadius SheetCorner = new(SheetRadius);
+    public static readonly CornerRadius SheetInnerCorner = new(SheetRadius - 1);
+    public static readonly BoxShadows SheetShadow = BoxShadows.Parse("0 18 48 0 #73080812, 0 2 8 0 #4D080812");
+    public const double SheetHeaderHeight = 40;
     public const double TabStripHeight = 36;
     public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
     public const double TabWidth = 220;

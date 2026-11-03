@@ -1,14 +1,13 @@
-<v:ToolWindow xmlns="https://github.com/avaloniaui"
+<v:ModalSheet xmlns="https://github.com/avaloniaui"
               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
               xmlns:v="using:HikariHopper.Views"
               xmlns:c="using:HikariHopper.Views.Controls"
               xmlns:ui="using:HikariHopper.Ui"
-              x:Class="HikariHopper.Views.AboutWindow"
-              x:DataType="v:AboutWindow"
-              Width="460" Height="340"
-              Title="About HikariHopper"
+              x:Class="HikariHopper.Views.AboutDialog"
+              x:DataType="v:AboutDialog"
+              Width="460" Height="400"
               Heading="ABOUT">
-  <!-- Port of AboutWindow.qml: facts in the same key/value grammar the preview panel uses, so it
+  <!-- Facts in the same key/value grammar the preview panel uses, so it
        reads as part of the tool rather than as a splash. The content is 3px taller than the body;
        QtColumnLayout shrinks the rows the way Qt's ColumnLayout does. -->
   <c:QtColumnLayout>
@@ -25,7 +24,7 @@
     <Grid Height="24" ColumnDefinitions="84,*" ColumnSpacing="14">
       <TextBlock Text="Version" Foreground="{x:Static ui:Theme.TextDim}"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="0.1.0" Foreground="{x:Static ui:Theme.Text}"
+      <TextBlock Name="VersionText" Grid.Column="1" Text="{x:Static v:StartPage.AppVersion}" Foreground="{x:Static ui:Theme.Text}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
     <Grid Height="24" ColumnDefinitions="84,*" ColumnSpacing="14">
@@ -43,24 +42,24 @@
     <c:DottedRule Horizontal="True" Margin="0,16,0,8" />
     <TextBlock Margin="0,0,0,6" Text="BUILT ON" Foreground="{x:Static ui:Theme.TextFaint}"
                FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" FontWeight="Bold" LetterSpacing="1.2" />
-    <Grid Height="22" ColumnDefinitions="150,*" ColumnSpacing="14">
+    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
       <TextBlock Text="FiveFury" Foreground="{x:Static ui:Theme.TextRow}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
       <TextBlock Grid.Column="1" Text="Archive parsing and game keys" Foreground="{x:Static ui:Theme.TextFaint}"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
-    <Grid Height="22" ColumnDefinitions="150,*" ColumnSpacing="14">
-      <TextBlock Text="PySide6" Foreground="{x:Static ui:Theme.TextRow}"
+    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
+      <TextBlock Text="Avalonia" Foreground="{x:Static ui:Theme.TextRow}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
-      <TextBlock Grid.Column="1" Text="Qt bindings" Foreground="{x:Static ui:Theme.TextFaint}"
+      <TextBlock Grid.Column="1" Text="User interface" Foreground="{x:Static ui:Theme.TextFaint}"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
-    <Grid Height="22" ColumnDefinitions="150,*" ColumnSpacing="14">
-      <TextBlock Text="Archivo · Space Mono" Foreground="{x:Static ui:Theme.TextRow}"
+    <Grid Height="22" ColumnDefinitions="200,*" ColumnSpacing="14">
+      <TextBlock Text="Archivo · Space Mono · Inter" Foreground="{x:Static ui:Theme.TextRow}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
       <TextBlock Grid.Column="1" Text="Typefaces, SIL Open Font License" Foreground="{x:Static ui:Theme.TextFaint}"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
     <Panel c:QtColumnLayout.FillHeight="True" />
   </c:QtColumnLayout>
-</v:ToolWindow>
+</v:ModalSheet>

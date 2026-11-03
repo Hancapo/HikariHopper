@@ -1,0 +1,60 @@
+<v:ModalSheet xmlns="https://github.com/avaloniaui"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:v="using:HikariHopper.Views"
+              xmlns:c="using:HikariHopper.Views.Controls"
+              xmlns:ui="using:HikariHopper.Ui"
+              x:Class="HikariHopper.Views.SettingsDialog"
+              x:DataType="v:SettingsDialog"
+              Width="760" Height="520"
+              Heading="SETTINGS"
+              BodyMargin="0"
+              FooterText="Saved automatically">
+  <!-- The groups rail, then the selected group's page. Only Games exists so far; the others are
+       listed as coming, so the rail is already the shape it will have. -->
+  <v:ModalSheet.Styles>
+    <Style Selector="TextBlock.section">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="9" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="1.2" />
+    </Style>
+    <Style Selector="TextBlock.note">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.UiFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </v:ModalSheet.Styles>
+  <Grid ColumnDefinitions="176,1,*">
+    <StackPanel Background="{x:Static ui:Theme.SidebarBg}">
+      <TextBlock Classes="section" Margin="16,16,0,8" Text="GROUPS" />
+      <v:SettingsGroupRow Name="GamesGroup" Label="Games" Selected="True" />
+      <v:SettingsGroupRow Label="Explorer" Note="soon" Available="False" />
+      <v:SettingsGroupRow Label="Appearance" Note="soon" Available="False" />
+    </StackPanel>
+
+    <Border Grid.Column="1" Background="{x:Static ui:Theme.BorderHard}" />
+
+    <ScrollViewer Grid.Column="2" Theme="{StaticResource BareScrollViewer}"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="20,16,20,16">
+        <TextBlock Classes="section" Text="GAMES" />
+        <TextBlock Classes="note" Margin="0,6,0,10"
+                   Text="Where each installation lives. HikariHopper checks the folder for the game's executable." />
+        <Border Background="{x:Static ui:Theme.WindowBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,6">
+          <StackPanel Name="GameRows" />
+        </Border>
+        <TextBlock Name="LaterText" Classes="note" Margin="2,10,0,0" Foreground="{x:Static ui:Theme.TextFaint}" />
+
+        <TextBlock Classes="section" Margin="0,24,0,8" Text="STARTUP" />
+        <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
+        <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+          <TextBlock Name="RecentText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
+                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+          <c:ChromeToolButton Name="ClearRecents" Grid.Column="1" Width="84" Height="26" Raised="True" Text="Clear list" />
+        </Grid>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</v:ModalSheet>

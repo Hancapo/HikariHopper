@@ -26,6 +26,9 @@ public sealed class GamePathSettings : ObservableObject
     /// <summary>The configured path of <paramref name="edition"/>, "" when none is set.</summary>
     public string PathFor(string edition) => paths.TryGetValue(edition, out string? path) ? path : "";
 
+    /// <summary>Whether the folder of <paramref name="edition"/> holds that edition's executable.</summary>
+    public bool IsValid(string edition) => GameSettings.IsGameRoot(PathFor(edition), edition);
+
     public bool LegacyPathValid => GameSettings.IsGameRoot(LegacyPath, GameSettings.LegacyEdition);
 
     public bool EnhancedPathValid => GameSettings.IsGameRoot(EnhancedPath, GameSettings.EnhancedEdition);
@@ -51,7 +54,8 @@ public sealed class GamePathSettings : ObservableObject
             PublishPaths();
     }
 
-    private void SetPath(string edition, string value)
+    /// <summary>Sets the folder of <paramref name="edition"/>; "" clears it.</summary>
+    public void SetPath(string edition, string value)
     {
         string normalized = value.Trim().Trim('"');
         if (normalized == paths[edition])
@@ -71,7 +75,8 @@ public sealed class GamePathSettings : ObservableObject
         PublishPaths();
     }
 
-    private async Task Browse(string edition)
+    /// <summary>Asks for the folder of <paramref name="edition"/>.</summary>
+    public async Task Browse(string edition)
     {
         string start = paths[edition];
         if (start.Length == 0 || !Directory.Exists(start))

@@ -108,6 +108,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         lone.Focus(NavigationMethod.Tab);
         ui.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
         Assert.True(settings);
+        // It opens Settings as a modal over the launcher; dismiss it to carry on.
+        SettingsDialog dialog = ui.Find<MenuRow>().Settings!;
+        Assert.True(dialog.IsOpen);
+        dialog.Close();
+        Pump(250);
 
         // A configured edition is a row with its tinted V and its path, and a recent install of the
         // same game joins it under its folder name; the configured one isn't repeated.
@@ -139,6 +144,96 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Tabs.CloseTab(0);
         Pump();
         Assert.False(ui.Find<TabStrip>().IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void SettingsOpensAsAModalOverTheBlurredExplorer()
+    {
+        Explorer ui = OpenExplorer();
+        MenuRow menus = ui.Find<MenuRow>();
+        menus.OpenSettings();
+        Pump(300);
+        SettingsDialog settings = menus.Settings!;
+        Assert.True(settings.IsOpen);
+        Assert.True(ModalOverlay.IsOpen(ui.Window));
+        // It's part of the main window, not a window of its own.
+        Assert.Same(ui.Window, TopLevel.GetTopLevel(settings));
+
+        // The explorer behind it blurs; the title bar stays out of the dim, but its menus are off.
+        Control backdrop = ModalOverlay.BackdropOf(ui.Window)!;
+        Assert.Same(ui.Window.ExplorerScreenHost, backdrop);
+        Assert.Equal(ModalOverlay.BlurRadius, Assert.IsAssignableFrom<IBlurEffect>(backdrop.Effect).Radius, 1);
+        ModalOverlay overlay = settings.FindAncestorOfType<ModalOverlay>()!;
+        Assert.Equal(backdrop.TranslatePoint(default, ui.Window)!.Value.Y, overlay.TranslatePoint(default, ui.Window)!.Value.Y);
+        Assert.False(menus.IsEnabled);
+        Assert.Equal(1, overlay.Opacity, 3);
+
+        // Esc dismisses it and undoes all of that.
+        Key(ui.Window, PhysicalKey.Escape);
+        Pump(300);
+        Assert.False(settings.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(ui.Window));
+        Assert.Equal(0, Assert.IsAssignableFrom<IBlurEffect>(backdrop.Effect).Radius, 1);
+        Assert.True(menus.IsEnabled);
+        Assert.DoesNotContain(overlay, ui.Window.GetVisualDescendants());
+
+        // It opens again as it was left, and About and the shortcuts are sheets too.
+        menus.OpenSettings();
+        Pump(50);
+        Assert.Same(settings, menus.Settings);
+        Assert.True(settings.IsOpen);
+        settings.Close();
+        Pump(250);
+    }
+
+    [AvaloniaFact]
+    public void SettingsEditsTheGamesAndTheStartup()
+    {
+        string legacy = MakeGame("Legacy");
+        HikariHopper.Core.AppSettings.SetStringList(HikariHopper.Core.GameSettings.RecentGameRootsKey, [legacy]);
+        Explorer ui = OpenExplorer(openGame: false);
+        MenuRow menus = ui.Find<MenuRow>();
+        menus.OpenSettings();
+        Pump(200);
+        SettingsDialog settings = menus.Settings!;
+
+        // One row per edition, in the catalogue's order, each with its own executable.
+        Assert.Equal([("Enhanced", "GTA5_Enhanced.exe"), ("Legacy", "GTA5.exe")],
+            settings.Rows.Select(row => (row.Title, row.ExpectedExecutable)));
+        GamePathRow legacyRow = settings.Rows[1];
+        Assert.Equal("Not set", legacyRow.StatusMessage);
+
+        // A folder typed in is saved and checked; the clear mark forgets it.
+        legacyRow.PathField.Text = legacy;
+        legacyRow.PathField.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.Controls.FlatTextField.EditingFinishedEvent));
+        Pump();
+        Assert.Equal(legacy, ui.Tabs.GamePathSettings.LegacyPath);
+        Assert.Equal("✓ GTA5.exe found", legacyRow.StatusMessage);
+        legacyRow.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Pump();
+        Assert.Equal("", ui.Tabs.GamePathSettings.LegacyPath);
+        Assert.Equal("Not set", legacyRow.StatusMessage);
+
+        // Startup: reopening the last game is on until it is turned off, and then nothing reopens.
+        HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.LastGameRootKey, legacy);
+        Assert.True(settings.OpenLastGame.IsChecked);
+        settings.OpenLastGame.IsChecked = false;
+        Assert.False(HikariHopper.Core.GameSettings.OpenLastGameOnStartup);
+        Assert.Equal("", HikariHopper.Core.GameSettings.GameRootToRestore());
+        ui.Bridge.RestoreLastGame();
+        Assert.False(ui.Bridge.HasWorkspace);
+        settings.OpenLastGame.IsChecked = true;
+        Assert.Equal(legacy, HikariHopper.Core.GameSettings.GameRootToRestore());
+
+        // The recents the launcher shows can be cleared.
+        Assert.Equal("1 recent game on the start page", settings.RecentText.Text);
+        settings.ClearRecents.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Pump();
+        Assert.Empty(ui.Tabs.RecentGames);
+        Assert.Equal("No recent games", settings.RecentText.Text);
+        Assert.False(settings.ClearRecents.IsEnabled);
+        settings.Close();
+        Pump(250);
     }
 
     [AvaloniaFact]
