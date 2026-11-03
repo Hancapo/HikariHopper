@@ -123,6 +123,12 @@ public static class Theme
     public const double MenuPadding = 4;       // the frame's inset around its rows
     public const double MenuMinimumWidth = 230;
     public const double MenuWidth = MenuMinimumWidth + 2 * MenuPadding;
+
+    /// <summary>A menu's soft shadow: a wide falloff and a tight contact shade, both cast downwards.</summary>
+    public static readonly BoxShadows MenuShadow = BoxShadows.Parse("0 6 16 0 #8C080812, 0 1 4 0 #66080812");
+
+    /// <summary>The transparent room a menu leaves around itself for its shadow; none above, where it meets its title.</summary>
+    public static readonly Thickness MenuShadowMargin = new(16, 0, 16, 24);
     public const double TabStripHeight = 36;
     public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
     public const double TabWidth = 220;

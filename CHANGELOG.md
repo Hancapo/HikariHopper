@@ -14,6 +14,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Menus hang from the title that opened them as one surface, and every menu casts a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
+
 ### Fixed
 
 - The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
