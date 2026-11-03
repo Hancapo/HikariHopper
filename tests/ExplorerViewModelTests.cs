@@ -510,6 +510,20 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
+    public void TheRootArchivesFileStaysTheSameInsideNestedArchives() => OnUiThread(() =>
+    {
+        string outer = SaveArchive(Path.Combine(Work, "outer.rpf"), ("nested.rpf", Archive("nested.rpf", ("inside/readme.txt", "nested"))));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenArchive(outer);
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
+        bridge.NavigateTree(TreeRow(bridge, "nested.rpf").Path);
+        Assert.Equal("nested.rpf", bridge.ArchiveName);
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
+        bridge.Refresh();
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
+    });
+
+    [AvaloniaFact]
     public void TreeFocusFollowsPathWhenRowsAreInserted() => OnUiThread(() =>
     {
         MakeGame();
