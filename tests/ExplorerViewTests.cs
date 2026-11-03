@@ -804,7 +804,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     public void ACsvFileOpensAsATableAndCanBeReadAsText()
     {
         Explorer ui = OpenExplorer();
-        Write(Path.Combine(Work, "vehicles.csv"), "model,make,price\r\nadder,Truffade,1000000\r\nblista,Dinka,15000\r\n");
+        Write(Path.Combine(Work, "vehicles.csv"), "model,make,price\r\nadder,Truffade,1000000\r\nblista,Dinka,15000\r\n\"two\r\nlines\",x,1\r\n");
         ui.Bridge.Refresh();
         Pump();
         ui.Bridge.ActivateEntry(ui.Bridge.EntriesModel.Select((item, row) => (item, row)).First(pair => pair.item.Name == "vehicles.csv").row);
@@ -813,8 +813,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.True(viewer.ShowingTable);
         Assert.True(viewer.ViewSwitch.IsVisible);
         Assert.Equal(1, viewer.ViewSwitch.SelectedIndex);
-        Assert.Equal("2 rows", viewer.LinesText.Text);
-        Assert.Equal("Row 1 of 2", viewer.CaretText.Text);
+        Assert.Equal("3 rows", viewer.LinesText.Text);
+        Assert.Equal("Row 1 of 3", viewer.CaretText.Text);
 
         // Find marks the cells; the current match's row becomes current.
         viewer.FindField.Text = "dinka";
@@ -829,6 +829,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(1, viewer.MatchCount);
         Assert.Equal(2, viewer.Table.CurrentRow);
         Assert.Equal("1 of 1", viewer.MatchText.Text);
+        // A value with a line break shows on one line, and is found as it shows.
+        viewer.FindField.Text = "two lines";
+        Pump();
+        Assert.Equal(1, viewer.MatchCount);
+        Assert.Equal(3, viewer.Table.CurrentRow);
         viewer.FindField.Text = "dinka";
         Pump();
 
@@ -836,7 +841,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         viewer.ShowTable(false);
         Assert.False(viewer.ShowingTable);
         Assert.Equal(0, viewer.ViewSwitch.SelectedIndex);
-        Assert.Equal("4 lines", viewer.LinesText.Text);
+        Assert.Equal("6 lines", viewer.LinesText.Text);
         Assert.Equal(1, viewer.MatchCount);
         viewer.Close();
         Pump(250);
