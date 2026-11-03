@@ -104,7 +104,7 @@ public partial class NavigationBar : UserControl
         // a home mark that goes back to the root, and the location you are in reads brightest.
         RootSegment.IsVisible = !hasWorkspace || parts.Count > 0;
         if (hasWorkspace)
-            RootSegment.SetHome(Ui.Theme.TextDim, model!.HasGame ? model.GameName : model.ArchiveRootName);
+            RootSegment.SetHome(Ui.Theme.TextDim, model!.HasGame ? ExplorerViewModel.HomeTitle : model.ArchiveRootName);
         else
             RootSegment.Set("Select the GTA V folder", false, Ui.Theme.TextDim);
 
@@ -240,7 +240,7 @@ public sealed class NavigationSegment : Border
         AutomationProperties.SetName(this, text);
     }
 
-    /// <summary>Shows the home mark alone, which goes back to the root named <paramref name="root"/>.</summary>
+    /// <summary>Shows the home mark alone, which goes back to the root called <paramref name="root"/>.</summary>
     public void SetHome(IBrush ink, string root)
     {
         label.Text = "";
@@ -249,7 +249,7 @@ public sealed class NavigationSegment : Border
         home.IsVisible = true;
         home.Stroke = ink;
         Padding = new Thickness(6, 0);
-        AutomationProperties.SetName(this, $"Back to {root}");
+        AutomationProperties.SetName(this, root);
         ThemedToolTip.Set(this, root);
     }
 

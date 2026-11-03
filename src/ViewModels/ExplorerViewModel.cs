@@ -119,12 +119,16 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public string ArchiveRootName => Provider.RootArchiveName;
 
+    /// <summary>What a game's root is called: where its tab starts, and where the path bar's home mark goes.</summary>
+    public const string HomeTitle = "Home";
+
     /// <summary>
-    /// The folder or RPF the tab is in, as a file manager's tab reads; at the root, the game or the RPF.
+    /// The folder or RPF the tab is in, as a file manager's tab reads. At a game's root it is
+    /// <see cref="HomeTitle"/>, since the tab's mark already names the game; at a lone RPF's root, the RPF.
     /// </summary>
     public string TabTitle =>
         NavigationPathSegments is [.., var current] ? current.Label
-        : Provider.HasGame ? Provider.GameName : Provider.HasArchive ? Provider.RootArchiveName : "New tab";
+        : Provider.HasGame ? HomeTitle : Provider.HasArchive ? Provider.RootArchiveName : "New tab";
 
     public bool HasWorkspace => Provider.IsOpen;
 

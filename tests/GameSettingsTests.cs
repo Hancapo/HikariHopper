@@ -181,7 +181,8 @@ public sealed class GameSettingsTests : ExplorerTestBase
         var tabs = new ExplorerTabsViewModel();
         tabs.RestoreLastGame();
         Assert.True(tabs.ActiveBridge.HasGame);
-        Assert.Equal("Enhanced", tabs.ActiveBridge.TabTitle);
+        Assert.Equal(enhanced, tabs.ActiveBridge.GamePath);
+        Assert.Equal("Home", tabs.ActiveBridge.TabTitle);
     });
 
     [AvaloniaFact]

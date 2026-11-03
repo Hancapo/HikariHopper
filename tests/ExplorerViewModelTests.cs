@@ -358,7 +358,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(["mods", "x64a.rpf"], TreeLabels(bridge));
         Assert.Equal(-1, bridge.SelectedIndex);
         Assert.Equal("Loaded GTA V Legacy", bridge.Status);
-        Assert.Equal(name, bridge.TabTitle);
+        Assert.Equal("Home", bridge.TabTitle);
 
         bridge.SelectEntry(0);
         Assert.Equal(0, bridge.SelectedIndex);
@@ -374,7 +374,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.GoUp();
         Assert.Equal(".", bridge.CurrentPath);
         Assert.False(bridge.CanGoUp);
-        Assert.Equal(name, bridge.TabTitle);
+        Assert.Equal("Home", bridge.TabTitle);
 
         bridge.ActivateEntry(RowFor(bridge, "x64a.rpf"));
 
