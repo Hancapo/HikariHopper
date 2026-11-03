@@ -16,13 +16,13 @@
     <v:SplashLivery />
 
     <Canvas>
-      <Border Canvas.Left="46" Canvas.Top="62" Width="18" Height="18" Background="{x:Static ui:Theme.Brass}">
-        <Border Width="8" Height="8" Background="{x:Static ui:Theme.WindowChrome}"
-                HorizontalAlignment="Center" VerticalAlignment="Center" />
-      </Border>
-      <TextBlock Canvas.Left="76" Canvas.Top="52" Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SplashTitleSize}" FontWeight="Bold" />
-      <TextBlock Canvas.Left="46" Canvas.Top="94" Text="RPF EXPLORER" Foreground="{x:Static ui:Theme.TextDim}"
+      <!-- The app's lockup: the icon and the official wordmark. -->
+      <Image Name="AppIcon" Canvas.Left="42" Canvas.Top="50" Width="38" Height="38"
+             Source="avares://HikariHopper/Assets/Branding/icon-256.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
+      <Image Name="Wordmark" Canvas.Left="90" Canvas.Top="50" Height="38"
+             Source="avares://HikariHopper/Assets/Branding/wordmark-on-dark.png" RenderOptions.BitmapInterpolationMode="HighQuality"
+             AutomationProperties.Name="HikariHopper" />
+      <TextBlock Canvas.Left="44" Canvas.Top="100" Text="RPF EXPLORER" Foreground="{x:Static ui:Theme.TextDim}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                  FontWeight="Bold" LetterSpacing="1" />
     </Canvas>

@@ -5,6 +5,7 @@
     <RootNamespace>HikariHopper</RootNamespace>
     <AssemblyName>HikariHopper</AssemblyName>
     <Version>0.0.2</Version>
+    <ApplicationIcon>Assets\Branding\HikariHopper.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -16,7 +17,7 @@
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2057;IL2060;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2077;IL2080;IL2087;IL2090;IL2091;IL2111;IL3000;IL3002;IL3050;IL3051</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <AvaloniaResource Include="Assets/**" Exclude="Assets/Keys/**;Assets/Fonts/Source/**" />
+    <AvaloniaResource Include="Assets/**" Exclude="Assets/Keys/**;Assets/Fonts/Source/**;Assets/Branding/*.svg;Assets/Branding/hikarihopper-*.png" />
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />

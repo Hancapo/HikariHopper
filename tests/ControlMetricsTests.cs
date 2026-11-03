@@ -174,9 +174,18 @@ public sealed class ControlMetricsTests
         Window window = Show(bar, 400, 60);
         Assert.Equal(T.WindowTitleHeight, bar.Bounds.Height);
         Assert.Equal(34, bar.CloseButton.Bounds.Width);
-        Assert.Equal(T.Brass.Color, Pixel(window, 9, 9));                // emblem outline
-        Assert.Equal(T.Brass.Color, Pixel(window, 11, 11));              // 3x3 fill at (2,2)
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 14, 14));
+        // The emblem is the app icon: its small design, 12px here, drawn from a 64px bitmap.
+        Image emblem = bar.FindControl<Image>("Emblem")!;
+        Assert.Equal(new Size(12, 12), emblem.Bounds.Size);
+        Assert.Equal(new PixelSize(64, 64), Assert.IsAssignableFrom<Bitmap>(emblem.Source).PixelSize);
+        Point at = emblem.TranslatePoint(default, window)!.Value;
+        var moonGold = Color.Parse("#F4C26F");
+        bool gold = false;
+        for (int y = 0; y < 12; y++)
+            for (int x = 0; x < 12; x++)
+                gold |= Distance(Pixel(window, (int)at.X + x, (int)at.Y + y), moonGold) < 40;
+        Assert.True(gold, "the emblem shows the gold moon");
+        Assert.Equal(T.ChromeRaised.Color, Pixel(window, (int)at.X + 16, (int)at.Y + 6));
         window.Close();
 
         var about = new AboutWindow();
@@ -187,6 +196,33 @@ public sealed class ControlMetricsTests
         Assert.False(toolBar.MinimizeButton.IsVisible);
         Assert.False(toolBar.MaximizeButton.IsVisible);
         about.Close();
+    });
+
+    private static int Distance(Color a, Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
+
+    [AvaloniaFact]
+    public void EveryWindowCarriesTheAppIcon() => UiThread.Run(() =>
+    {
+        // The taskbar and Alt+Tab icon comes from one style, so every window class gets it.
+        foreach (Window window in new Window[] { new MainWindow(), new AboutWindow(), new SplashScreen() })
+            Assert.NotNull(window.Icon);
+        var about = new AboutWindow();
+        about.Show();
+        Pump();
+        Image icon = about.FindControl<Image>("AppIcon")!;
+        Assert.Equal(new PixelSize(256, 256), Assert.IsAssignableFrom<Bitmap>(icon.Source).PixelSize);
+        Assert.Equal(new Size(40, 40), icon.Bounds.Size);
+        about.Close();
+
+        // The splash wears the lockup: the icon, then the official wordmark at its own proportions.
+        var splash = new SplashScreen();
+        splash.Show();
+        Pump();
+        Image wordmark = splash.FindControl<Image>("Wordmark")!;
+        var bitmap = Assert.IsAssignableFrom<Bitmap>(wordmark.Source);
+        Assert.Equal(38, wordmark.Bounds.Height);
+        Assert.Equal(38.0 * bitmap.PixelSize.Width / bitmap.PixelSize.Height, wordmark.Bounds.Width, 1);
+        splash.Close();
     });
 
     [AvaloniaFact]

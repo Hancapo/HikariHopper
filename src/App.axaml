@@ -7,6 +7,10 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://HikariHopper/Views/Textures/TextureDialogStyles.axaml" />
+    <!-- Every window, whatever its class, shows the app icon in the taskbar and Alt+Tab. -->
+    <Style Selector=":is(Window)">
+      <Setter Property="Icon" Value="/Assets/Branding/HikariHopper.ico" />
+    </Style>
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
