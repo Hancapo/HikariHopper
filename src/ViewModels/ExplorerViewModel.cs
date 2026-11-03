@@ -21,7 +21,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private static readonly string[] WorkspaceProperties =
     [
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
-        nameof(ArchiveRootName), nameof(TabTitle), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
+        nameof(ArchiveRootName), nameof(TabTitle), nameof(ArchiveIsRoot), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
         nameof(InArchive), nameof(GameEdition),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
@@ -128,7 +128,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// </summary>
     public string TabTitle =>
         NavigationPathSegments is [.., var current] ? current.Label
-        : Provider.HasGame ? HomeTitle : Provider.HasArchive ? Provider.RootArchiveName : "New tab";
+        : ArchiveIsRoot ? Provider.RootArchiveName : Provider.HasGame ? HomeTitle : "New tab";
+
+    /// <summary>
+    /// Whether the open RPF is the tab's root: opened on its own, from outside any game the tab has loaded.
+    /// The tree, the tab's title and the home mark then follow the RPF, until it is closed.
+    /// </summary>
+    public bool ArchiveIsRoot => Provider.HasArchive && Provider.ArchiveGamePath.Length == 0;
 
     public bool HasWorkspace => Provider.IsOpen;
 
