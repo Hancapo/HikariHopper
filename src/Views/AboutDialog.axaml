@@ -5,7 +5,7 @@
               xmlns:ui="using:HikariHopper.Ui"
               x:Class="HikariHopper.Views.AboutDialog"
               x:DataType="v:AboutDialog"
-              Width="460" Height="400"
+              WindowShare="0.4,0.55" MinSize="440,380" MaxSize="540,460"
               Heading="ABOUT">
   <!-- Facts in the same key/value grammar the preview panel uses, so it
        reads as part of the tool rather than as a splash. The content is 3px taller than the body;
