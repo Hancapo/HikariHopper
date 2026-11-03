@@ -124,7 +124,7 @@ internal static class DragCountBadge
             },
         };
         // Sub-pixel (ClearType) text needs an opaque background; on a transparent cursor it smears into colour fringes.
-        RenderOptions.SetTextRenderingMode(cursor, TextRenderingMode.Antialias);
+        TextOptions.SetTextRenderingMode(cursor, TextRenderingMode.Antialias);
         return cursor;
     }
 

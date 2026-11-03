@@ -84,7 +84,9 @@ internal static partial class ShellFileDrag
             nint[] children = [.. itemIds.Select(ILFindLastID)];
             if (SHCreateDataObject(parentId, (uint)children.Length, children, 0, DataObjectId, out dataPointer) < 0 || dataPointer == 0)
                 return false;
-            AddMarker(dataPointer, markerFormat);
+            // Unmarked, the explorer's own drop area would take the drag and import what it is dragging out.
+            if (!AddMarker(dataPointer, markerFormat))
+                return false;
 
             var source = new CursorDropSource(cursor, blockedCursor);
             nint unknown = Com.GetOrCreateComInterfaceForObject(source, CreateComInterfaceFlags.None);
@@ -153,22 +155,34 @@ internal static partial class ShellFileDrag
             DestroyIcon(cursor);
     }
 
-    /// <summary>A one-byte value under <paramref name="name"/>, the format Avalonia reads as <c>DataFormat.CreateBytesPlatformFormat(name)</c>.</summary>
-    private static void AddMarker(nint dataPointer, string name)
+    /// <summary>
+    /// A one-byte value under <paramref name="name"/>, the format Avalonia reads as <c>DataFormat.CreateBytesPlatformFormat(name)</c>.
+    /// False when it couldn't be attached.
+    /// </summary>
+    private static bool AddMarker(nint dataPointer, string name)
     {
         ushort format = RegisterClipboardFormatW(name);
+        if (format == 0)
+            return false;
         nint memory = GlobalAlloc(GmemMoveable, 1);
-        if (format == 0 || memory == 0)
-            return;
+        if (memory == 0)
+            return false;
         nint bytes = GlobalLock(memory);
+        if (bytes == 0)
+        {
+            GlobalFree(memory);
+            return false;
+        }
         Marshal.WriteByte(bytes, (byte)'1');
         GlobalUnlock(memory);
         var data = (IShellDataObject)Com.GetOrCreateObjectForComInstance(dataPointer, CreateObjectFlags.None);
         var formatEtc = new FormatEtc { Format = format, Aspect = DvAspectContent, Index = -1, Tymed = TymedHGlobal };
         var medium = new StgMedium { Tymed = TymedHGlobal, Handle = memory };
-        // With release set, the data object owns the memory from here on.
-        if (data.SetData(formatEtc, medium, 1) < 0)
-            GlobalFree(memory);
+        // With release set, the data object owns the memory once it has taken it.
+        if (data.SetData(formatEtc, medium, 1) >= 0)
+            return true;
+        GlobalFree(memory);
+        return false;
     }
 
     [GeneratedComClass]
