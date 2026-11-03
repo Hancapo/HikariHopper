@@ -8,6 +8,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Dragging entries out of the explorer shows how many folders and files are being extracted. ([#23](https://github.com/Hancapo/HikariHopper/pull/23))
+
 ### Changed
 
 ### Fixed
