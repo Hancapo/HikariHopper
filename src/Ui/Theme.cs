@@ -168,7 +168,6 @@ public static class Theme
     // its geometry remains part of the shared design contract.
     public const double SplashWidth = 720;
     public const double SplashHeight = 400;
-    public const double SplashTitleSize = 36;
 
     /// <summary>Equivalent of QML <c>Qt.rgba</c>: channels in 0..1.</summary>
     public static Color RgbaColor(double r, double g, double b, double a) =>

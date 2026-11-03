@@ -13,10 +13,8 @@
        QtColumnLayout shrinks the rows the way Qt's ColumnLayout does. -->
   <c:QtColumnLayout>
     <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
-      <Border Width="26" Height="26" Background="{x:Static ui:Theme.Brass}" VerticalAlignment="Center">
-        <c:ChromeIcon Kind="package" Stroke="{x:Static ui:Theme.WindowChrome}" Thickness="1.8"
-                      Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center" />
-      </Border>
+      <Image Name="AppIcon" Width="40" Height="40" VerticalAlignment="Center"
+             Source="avares://HikariHopper/Assets/Branding/icon-256.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
       <StackPanel Spacing="2" VerticalAlignment="Center">
         <TextBlock Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="16" FontWeight="Bold" />

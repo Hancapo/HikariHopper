@@ -1,4 +1,4 @@
-# HikariHopper
+<h1 align="center"><img src="src/Assets/Branding/hikarihopper-banner.png" alt="HikariHopper" width="640"></h1>
 
 A GTA V RPF Explorer and texture dictionary editor for Windows, built with .NET 10,
 Avalonia and FiveFury.NET.

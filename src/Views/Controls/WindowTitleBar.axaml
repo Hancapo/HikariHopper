@@ -15,11 +15,9 @@
     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
       <Panel Name="DragArea" Grid.Column="0" Background="Transparent">
         <DockPanel Name="TitleRow" Margin="9,0,8,0">
-          <Border Name="Emblem" DockPanel.Dock="Left" Width="12" Height="12" VerticalAlignment="Center"
-                  BorderBrush="{x:Static ui:Theme.Brass}" BorderThickness="1">
-            <Border Name="EmblemMark" Width="3" Height="3" Margin="1,1,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Background="{x:Static ui:Theme.Brass}" />
-          </Border>
+          <!-- The app icon, from its small design (no eye, no far ear) at 64px for high-DPI screens. -->
+          <Image Name="Emblem" DockPanel.Dock="Left" Width="12" Height="12" VerticalAlignment="Center"
+                 Source="avares://HikariHopper/Assets/Branding/emblem.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
           <ContentPresenter Name="LeadingHost" DockPanel.Dock="Left" VerticalAlignment="Stretch"
                             Content="{Binding LeadingContent, RelativeSource={RelativeSource AncestorType=c:WindowTitleBar}}" />
           <TextBlock Name="TitleLabel" Margin="8,0,0,0" Text="{Binding TitleText, RelativeSource={RelativeSource AncestorType=c:WindowTitleBar}}"

@@ -194,14 +194,9 @@ public partial class WindowTitleBar : UserControl
         MinimizeButton.Separated = MaximizeButton.Separated = CloseButton.Separated = Seams;
         TopBevel.IsVisible = BottomSeam.IsVisible = Seams;
         TitleLabel.IsVisible = ShowTitle;
-        // The large emblem: a 1.5px brass outline with 3px corners and a 5px mark, 14px before the menus.
+        // The emblem is the app icon; the explorer's taller row wears it larger, 14px before the menus.
         bool large = EmblemSize >= 16;
         Emblem.Width = Emblem.Height = EmblemSize;
-        Emblem.BorderThickness = new Thickness(large ? 1.5 : 1);
-        Emblem.CornerRadius = new CornerRadius(large ? 3 : 0);
-        EmblemMark.Width = EmblemMark.Height = large ? 5 : 3;
-        EmblemMark.Margin = new Thickness(large ? 2 : 1, large ? 2 : 1, 0, 0);
-        EmblemMark.CornerRadius = new CornerRadius(large ? 1 : 0);
         TitleRow.Margin = new Thickness(large ? 12 : 9, 0, 8, 0);
         LeadingHost.Margin = new Thickness(large ? 14 : 8, 0, 0, 0);
         LeadingHost.IsVisible = LeadingContent is not null;
