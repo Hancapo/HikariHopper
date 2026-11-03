@@ -8,14 +8,17 @@ namespace HikariHopper.Views;
 public partial class AboutDialog : ModalSheet
 {
     public static readonly Uri ProjectPage = new("https://github.com/Hancapo/HikariHopper");
-    public static readonly Uri ChangelogPage = new("https://github.com/Hancapo/HikariHopper/blob/master/CHANGELOG.md");
 
     public AboutDialog()
     {
         AvaloniaXamlLoader.Load(this);
         this.FindControl<ChromeToolButton>("GitHubButton")!.Click += (_, _) => Open(ProjectPage);
-        this.FindControl<ChromeToolButton>("ChangelogButton")!.Click += (_, _) => Open(ChangelogPage);
+        // The changelog opens in the app, over About: Escape comes back here.
+        this.FindControl<ChromeToolButton>("ChangelogButton")!.Click += (_, _) => (Changelog ??= new ChangelogDialog()).Present(this);
     }
+
+    /// <summary>The changelog sheet, once it has been opened.</summary>
+    internal ChangelogDialog? Changelog { get; private set; }
 
     /// <summary>Opens a page in the default browser; tests replace it.</summary>
     internal static Action<TopLevel?, Uri> Launch { get; set; } =
