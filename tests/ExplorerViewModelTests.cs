@@ -476,6 +476,31 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
+    public void ComingBackToTheRootLeavesNoTreeRowFocused() => OnUiThread(() =>
+    {
+        MakeGame();
+        Directory.CreateDirectory(Path.Combine(Work, "mods"));
+        Directory.CreateDirectory(Path.Combine(Work, "zz"));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Assert.Equal(-1, bridge.TreeFocusIndex);
+
+        // In a folder, focus follows it; back at the root, no row is focused, so Enter opens nothing.
+        bridge.Navigate("mods");
+        Assert.Equal("game://mods", bridge.TreeFocusPath);
+        bridge.GoBack();
+        Assert.Equal(".", bridge.CurrentPath);
+        Assert.Equal(-1, bridge.TreeFocusIndex);
+        Assert.Equal("", bridge.TreeFocusPath);
+
+        // A row focused at the root keeps its focus while the tree refreshes.
+        bridge.FocusTreeRow(1);
+        bridge.Refresh();
+        Assert.Equal("game://zz", bridge.TreeFocusPath);
+        Assert.Equal(1, bridge.TreeFocusIndex);
+    });
+
+    [AvaloniaFact]
     public void TreeFocusFollowsPathWhenRowsAreInserted() => OnUiThread(() =>
     {
         MakeGame();
