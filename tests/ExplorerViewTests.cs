@@ -317,8 +317,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     [AvaloniaFact]
     public void HighlightsStopShortOfTheScrollbar()
     {
-        // Enough folders for both the tree and the list to scroll.
+        // Enough folders for both the tree and the list to scroll. The tree highlights the folder you are
+        // in, so go into one with enough folders of its own.
         Explorer ui = OpenExplorer(folders: 40);
+        for (int index = 0; index < 40; index++)
+            Directory.CreateDirectory(Path.Combine(Work, "folder00", $"sub{index:00}"));
+        ui.Bridge.Refresh();
+        Pump();
+        ui.Bridge.Navigate("folder00");
+        Pump();
         Click(ui.Window, Row(0));
         FolderRow selected = ui.Window.GetVisualDescendants().OfType<FolderRow>().Single(row => row.IsSelected);
         int treeRow = (int)selected.TranslatePoint(new Point(0, 13), ui.Window)!.Value.Y;
@@ -440,7 +447,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         FolderPanel panel = ui.Find<FolderPanel>();
         FolderRow row = ui.Window.GetVisualDescendants().OfType<FolderRow>().First(candidate => candidate.Item?.Label == name);
-        Assert.Equal(1, row.Item!.Depth);
+        Assert.Equal(0, row.Item!.Depth); // The tree starts inside the root.
         Assert.True(panel.ScrollbarOverlap > 0);
 
         // The label ends 8px inside the highlight, which stops at the scrollbar, and elides there.
@@ -649,6 +656,39 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheRootIsTheTabNotARowOrACrumb()
+    {
+        Explorer ui = OpenExplorer();
+        NavigationBar navigation = ui.Find<NavigationBar>();
+        string game = Path.GetFileName(Work);
+        string[] Crumbs() => [.. navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>().Select(segment => segment.Label)];
+
+        // At the root: the tab names the game, the tree starts inside it with nothing focused, and the
+        // path bar is empty.
+        Assert.Equal(game, ui.Bridge.TabTitle);
+        Assert.DoesNotContain(ui.Bridge.TreeModel, item => item.Label == game);
+        Assert.All(ui.Bridge.TreeModel, item => Assert.False(item.Selected));
+        Assert.Equal(-1, ui.Bridge.TreeFocusIndex);
+        Assert.False(navigation.RootSegment.IsVisible);
+        Assert.Empty(Crumbs());
+
+        // In a folder: the tab names it, and the path starts with the home mark, which goes back.
+        ui.Bridge.Navigate("folder00");
+        Pump();
+        Assert.Equal("folder00", ui.Bridge.TabTitle);
+        Assert.Equal("folder00", ui.Tabs.Tabs[0].TabTitle);
+        Assert.True(navigation.RootSegment.IsVisible);
+        Assert.Equal("", navigation.RootSegment.Label);
+        Assert.Equal($"Back to {game}", Avalonia.Automation.AutomationProperties.GetName(navigation.RootSegment));
+        Assert.Equal(["folder00"], Crumbs());
+        Point home = navigation.RootSegment.TranslatePoint(new Point(navigation.RootSegment.Bounds.Width / 2, 12), ui.Window)!.Value;
+        Click(ui.Window, home);
+        Assert.Equal(".", ui.Bridge.CurrentPath);
+        Assert.Equal(game, ui.Bridge.TabTitle);
+        Assert.False(navigation.RootSegment.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void WindowShortcutsActAndYieldToTheSearchField()
     {
         Explorer ui = OpenExplorer();
@@ -701,11 +741,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     public void TreeClickFocusesARowAndArrowsMoveTheFocus()
     {
         Explorer ui = OpenExplorer();
-        // Tree rows: game root, folder00, folder01.
-        Click(ui.Window, new Point(120, TreeTop + 26 + 13));
-        Assert.Equal(1, ui.Bridge.TreeFocusIndex);
+        // Tree rows: folder00, folder01; the root itself is not one.
+        Click(ui.Window, new Point(120, TreeTop + 13));
+        Assert.Equal(0, ui.Bridge.TreeFocusIndex);
         Key(ui.Window, PhysicalKey.ArrowDown);
-        Assert.Equal(2, ui.Bridge.TreeFocusIndex);
+        Assert.Equal(1, ui.Bridge.TreeFocusIndex);
         Key(ui.Window, PhysicalKey.Enter);
         Assert.Equal("folder01", ui.Bridge.CurrentPath);
     }

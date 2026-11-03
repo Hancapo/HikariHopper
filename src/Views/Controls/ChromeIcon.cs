@@ -29,6 +29,7 @@ public class ChromeIcon : Control
         ["caretUp"] = "chevron-up",
         ["caretDown"] = "chevron-down",
         ["up"] = "arrow-up",
+        ["home"] = "house",
         ["refresh"] = "rotate-cw",
         ["list"] = "list",
         ["grid"] = "layout-grid",

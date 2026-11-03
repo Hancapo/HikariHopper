@@ -228,7 +228,9 @@ public sealed partial class ExplorerViewModel
         int index = TreeRowForPath(treeFocusPath);
         if (index < 0)
             index = SelectedTreeRow();
-        if (index < 0 && tree.Count > 0)
+        // A focused row that went away hands focus to its neighbour. With nothing focused yet, as at the root
+        // (which has no row), nothing is: the first folder is not where you are.
+        if (index < 0 && tree.Count > 0 && treeFocusPath.Length > 0)
             index = Math.Min(Math.Max(treeFocusIndex, 0), tree.Count - 1);
         UpdateTreeFocus(TreeRowAt(index)?.Path ?? "", index);
     }
@@ -244,25 +246,13 @@ public sealed partial class ExplorerViewModel
 
     private List<TreeRecord> PersistentTreeRows()
     {
+        // The tree starts with what is inside the root, not the root itself: a tab is one game or one RPF,
+        // and the tab already says which.
         var rows = new List<TreeRecord>();
         if (Provider.HasGame)
-        {
-            const string rootKey = "game://.";
-            rows.Add(new TreeRecord(Provider.GameName, rootKey, 0, "root", expandedNodes.Contains(rootKey), true,
-                !Provider.InArchive && currentPath == "."));
-            if (expandedNodes.Contains(rootKey))
-                AppendGameChildren(rows, ".", 1);
-        }
-        if (Provider.HasArchive && Provider.ArchiveGamePath.Length == 0)
-        {
-            const string archiveKey = "archive://.";
-            bool hasChildren = Provider.ArchiveHasTreeChildren("");
-            rows.Add(new TreeRecord(Provider.RootArchiveName, archiveKey, 0, "archive",
-                hasChildren && expandedNodes.Contains(archiveKey), hasChildren,
-                Provider.InArchive && Provider.ArchivePrefix.Length == 0 && currentPath == "."));
-            if (hasChildren && expandedNodes.Contains(archiveKey))
-                AppendArchiveChildren(rows, "", ".", 1);
-        }
+            AppendGameChildren(rows, ".", 0);
+        if (Provider.HasArchive && Provider.ArchiveGamePath.Length == 0 && Provider.ArchiveHasTreeChildren(""))
+            AppendArchiveChildren(rows, "", ".", 0);
         return rows;
     }
 

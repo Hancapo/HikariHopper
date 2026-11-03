@@ -17,6 +17,7 @@ public static class LucideIcons
     public static IReadOnlyDictionary<string, IReadOnlyList<string>> Paths { get; } = new Dictionary<string, IReadOnlyList<string>>
     {
         ["app-window"] = ["M 4.0 4.0 h 16.0 a 2.0 2.0 0 0 1 2.0 2.0 v 12.0 a 2.0 2.0 0 0 1 -2.0 2.0 h -16.0 a 2.0 2.0 0 0 1 -2.0 -2.0 v -12.0 a 2.0 2.0 0 0 1 2.0 -2.0 Z", "M10 4v4", "M2 8h20", "M6 4v4"],
+        ["house"] = ["M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", "M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
         ["arrow-up"] = ["m5 12 7-7 7 7", "M12 19V5"],
         ["audio-waveform"] = ["M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"],
         ["book-image"] = ["m20 13.7-2.1-2.1a2 2 0 0 0-2.8 0L9.7 17", "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20", "M 8.0 8.0 a 2.0 2.0 0 1 0 4.0 0 a 2.0 2.0 0 1 0 -4.0 0"],
