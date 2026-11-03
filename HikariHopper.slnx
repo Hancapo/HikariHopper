@@ -1,4 +1,4 @@
 <Solution>
-  <Project Path="src/HikariHopper/HikariHopper.csproj" />
-  <Project Path="tests/HikariHopper.Tests/HikariHopper.Tests.csproj" />
+  <Project Path="src/HikariHopper.csproj" />
+  <Project Path="tests/HikariHopper.Tests.csproj" />
 </Solution>

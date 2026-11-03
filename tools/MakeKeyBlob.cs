@@ -1,5 +1,5 @@
 #:project ../../../FiveFury.NET/FiveFury/FiveFury.csproj
-// Builds src/HikariHopper/Assets/Keys/keys.bin: the NG decryption and encryption tables,
+// Builds src/Assets/Keys/keys.bin: the NG decryption and encryption tables,
 // deflated and AES-256-ECB encrypted with the game's PC AES key. The blob is useless
 // without the user's own GTA5.exe, from which HikariHopper reads that key at runtime.
 //

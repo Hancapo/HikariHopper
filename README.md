@@ -11,7 +11,7 @@ FiveFury.NET (with its submodules) next to this repository (`..\FiveFury.NET`), 
 
 ```sh
 dotnet build HikariHopper.slnx -c Release
-dotnet run --project src/HikariHopper -c Release
+dotnet run --project src -c Release
 ```
 
 ## Tests
@@ -40,5 +40,5 @@ opens, and zips the result into `artifacts\`.
 
 No encryption keys are included. HikariHopper finds the AES key in your own `GTA5.exe` or
 `GTA5_Enhanced.exe` (cached in `%LOCALAPPDATA%\fivefury\keys.json`) and uses it to unlock the
-bundled, encrypted NG tables in `src/HikariHopper/Assets/Keys/keys.bin`, which are useless
+bundled, encrypted NG tables in `src/Assets/Keys/keys.bin`, which are useless
 without the game. `tools/MakeKeyBlob.cs` regenerates that blob.
