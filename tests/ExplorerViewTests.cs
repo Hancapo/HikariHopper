@@ -823,6 +823,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(2, viewer.Table.CurrentRow);
         Assert.Equal("blista,Dinka,15000", viewer.Copy());
 
+        // The titles are searched too: a match in them leaves the current row where it is.
+        viewer.FindField.Text = "make";
+        Pump();
+        Assert.Equal(1, viewer.MatchCount);
+        Assert.Equal(2, viewer.Table.CurrentRow);
+        Assert.Equal("1 of 1", viewer.MatchText.Text);
+        viewer.FindField.Text = "dinka";
+        Pump();
+
         // As text, the same file by its lines.
         viewer.ShowTable(false);
         Assert.False(viewer.ShowingTable);

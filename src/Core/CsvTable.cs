@@ -26,41 +26,72 @@ public sealed class CsvTable
     /// <summary>The line (from 0) each row starts on; a quoted field can run over several.</summary>
     public int[] LineOfRow { get; }
 
-    /// <summary>The separator <paramref name="line"/> uses: the one of , ; tab it has most of, outside quotes.</summary>
+    /// <summary>
+    /// The separator <paramref name="line"/> uses: the one of , ; tab it has most of, outside quoted fields.
+    /// A quote opens a quoted field only where a field starts, as <see cref="Parse"/> reads it; anywhere
+    /// else (5" for inches) it is just a character.
+    /// </summary>
     public static char SeparatorOf(string line)
     {
         int commas = 0, semicolons = 0, tabs = 0;
-        bool quoted = false;
-        foreach (char current in line)
+        Scan(line, stopAtLineBreak: false, separator =>
         {
-            if (current == '"')
-                quoted = !quoted;
-            else if (!quoted)
-            {
-                if (current == ',')
-                    commas++;
-                else if (current == ';')
-                    semicolons++;
-                else if (current == '\t')
-                    tabs++;
-            }
-        }
+            if (separator == ',')
+                commas++;
+            else if (separator == ';')
+                semicolons++;
+            else
+                tabs++;
+        });
         return tabs > commas && tabs >= semicolons ? '\t' : semicolons > commas ? ';' : ',';
     }
 
-    /// <summary>The first record of <paramref name="text"/>: up to its first line break outside quotes.</summary>
-    private static string FirstRecord(string text)
+    /// <summary>The first record of <paramref name="text"/>: up to its first line break outside a quoted field.</summary>
+    private static string FirstRecord(string text) => text[..Scan(text, stopAtLineBreak: true, _ => { })];
+
+    /// <summary>
+    /// Walks <paramref name="text"/> the way the parser does, telling each separator candidate (, ; tab) met
+    /// outside a quoted field; returns where it stopped.
+    /// </summary>
+    private static int Scan(string text, bool stopAtLineBreak, Action<char> separator)
     {
-        bool quoted = false;
+        bool quoted = false, fieldStart = true;
         for (int index = 0; index < text.Length; index++)
         {
             char current = text[index];
-            if (current == '"')
-                quoted = !quoted;
-            else if (!quoted && current is '\r' or '\n')
-                return text[..index];
+            if (quoted)
+            {
+                if (current == '"')
+                {
+                    if (index + 1 < text.Length && text[index + 1] == '"')
+                        index++;
+                    else
+                        quoted = false;
+                }
+                continue;
+            }
+            if (current == '"' && fieldStart)
+            {
+                quoted = true;
+                fieldStart = false;
+            }
+            else if (current is ',' or ';' or '\t')
+            {
+                separator(current);
+                fieldStart = true;
+            }
+            else if (current is '\r' or '\n')
+            {
+                if (stopAtLineBreak)
+                    return index;
+                fieldStart = true;
+            }
+            else
+            {
+                fieldStart = false;
+            }
         }
-        return text;
+        return text.Length;
     }
 
     /// <summary>Reads <paramref name="text"/>, the whole file, into rows.</summary>

@@ -208,7 +208,8 @@ public partial class TextViewer : UserControl, IModalContent
         currentMatch = -1;
         if (query.Length > 0 && ShowingTable && table is not null)
         {
-            for (int row = 1; row < table.Rows.Count && cellMatches.Count < MaxMatches; row++)
+            // The titles too: they are showing, at the top.
+            for (int row = 0; row < table.Rows.Count && cellMatches.Count < MaxMatches; row++)
                 for (int column = 0; column < table.Rows[row].Length; column++)
                     if (table.Rows[row][column].Contains(query, StringComparison.OrdinalIgnoreCase))
                         cellMatches.Add((row, column));
