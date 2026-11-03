@@ -17,7 +17,6 @@ public class WindowControlButton : Button
     public static readonly StyledProperty<bool> SeparatedProperty =
         AvaloniaProperty.Register<WindowControlButton, bool>(nameof(Separated), true);
 
-    private Border? focusRule;
     private WindowControlGlyph? glyph;
 
     public string Kind
@@ -41,7 +40,6 @@ public class WindowControlButton : Button
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
     {
         base.OnApplyTemplate(e);
-        focusRule = e.NameScope.Find<Border>("PART_FocusRule");
         glyph = e.NameScope.Find<WindowControlGlyph>("PART_Glyph");
         Refresh();
     }
@@ -50,8 +48,23 @@ public class WindowControlButton : Button
     {
         base.OnPropertyChanged(change);
         if (change.Property == IsPointerOverProperty || change.Property == IsPressedProperty
-            || change.Property == IsFocusedProperty || change.Property == IsEffectivelyEnabledProperty)
+            || change.Property == IsEffectivelyEnabledProperty)
             Refresh();
+    }
+
+    /// <summary>Whether focus came from the keyboard (<c>:focus-visible</c>), the only time it shows.</summary>
+    public bool KeyboardFocused => IsFocused && Classes.Contains(":focus-visible");
+
+    protected override void OnGotFocus(FocusChangedEventArgs e)
+    {
+        base.OnGotFocus(e);
+        Refresh();
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        Refresh();
     }
 
     /// <summary>Qt's ToolButton activates on Space only; Enter is left to the window.</summary>
@@ -64,12 +77,11 @@ public class WindowControlButton : Button
 
     private void Refresh()
     {
-        if (focusRule is null || glyph is null)
+        if (glyph is null)
             return;
-        focusRule.IsVisible = IsFocused;
         glyph.Pressed = IsPressed;
         glyph.Ink = !IsEffectivelyEnabled
             ? Ui.Theme.TextFaint
-            : IsPointerOver || IsFocused ? Ui.Theme.Text : Ui.Theme.TextDim;
+            : IsPointerOver || KeyboardFocused ? Ui.Theme.Text : Ui.Theme.TextDim;
     }
 }
