@@ -115,6 +115,22 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         RaiseActiveTabChanged();
     }
 
+    /// <summary>Moves the tab at <paramref name="from"/> to <paramref name="to"/>; the active tab stays active.</summary>
+    public void MoveTab(int from, int to)
+    {
+        if (from < 0 || from >= tabs.Count || to < 0 || to >= tabs.Count || from == to)
+            return;
+        ExplorerViewModel active = ActiveBridge;
+        tabs.Move(from, to);
+        int index = tabs.IndexOf(active);
+        // Only the index changes; the active workspace is the same, so nothing rebinds.
+        if (index != activeIndex)
+        {
+            activeIndex = index;
+            OnPropertyChanged(nameof(ActiveIndex));
+        }
+    }
+
     /// <summary>Closes a tab once its texture document's unsaved changes are resolved.</summary>
     public void CloseTab(int row)
     {

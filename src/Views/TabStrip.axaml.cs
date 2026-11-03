@@ -1,6 +1,8 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
@@ -9,6 +11,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HikariHopper.ViewModels;
@@ -64,8 +67,12 @@ public partial class TabStrip : UserControl
     }
 
     // A tab's spacing and divider depend on its neighbours.
-    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // A tab opened or closed mid-drag (a shortcut) ends the drag where it is.
+        CancelDrag();
         Dispatcher.UIThread.Post(RefreshTabs, DispatcherPriority.Loaded);
+    }
 
     private void PositionActiveTab()
     {
@@ -112,6 +119,134 @@ public partial class TabStrip : UserControl
                 tab.Refresh();
         }
     }
+
+    /// <summary>The tab drawn just left of <paramref name="tab"/>, in the order a drag is showing.</summary>
+    internal TabStripTab? TabBefore(ExplorerViewModel tab)
+    {
+        int index = IndexOf(tab);
+        if (drag is not { Moving: true } moving || index < 0)
+            return TabAt(index - 1);
+        // Where each tab sits while the dragged one hovers over its target slot.
+        var order = Enumerable.Range(0, Tabs!.Tabs.Count).ToList();
+        order.RemoveAt(moving.From);
+        order.Insert(moving.Target, moving.From);
+        int slot = order.IndexOf(index);
+        return slot > 0 ? TabAt(order[slot - 1]) : null;
+    }
+
+    // Dragging a tab: past a few pixels it follows the pointer along the strip, the tabs it passes
+    // slide aside into the slot it left, and on release it eases into its new place.
+    private const double DragThreshold = 5;
+    private static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(170);
+    private TabDrag? drag;
+
+    private sealed class TabDrag(ExplorerViewModel tab, int from, double pressX)
+    {
+        public ExplorerViewModel Tab { get; } = tab;
+        public int From { get; } = from;
+        public double PressX { get; } = pressX;
+        public bool Moving { get; set; }
+        public double Offset { get; set; }
+        public int Target { get; set; } = from;
+    }
+
+    /// <summary>Whether a tab is being dragged along the strip.</summary>
+    internal bool Dragging => drag?.Moving == true;
+
+    internal void PressTab(ExplorerViewModel tab, PointerEventArgs e)
+    {
+        int index = IndexOf(tab);
+        drag = index < 0 ? null : new TabDrag(tab, index, e.GetPosition(TabItems).X);
+    }
+
+    internal void DragTab(PointerEventArgs e)
+    {
+        if (drag is null || Tabs is not { } owner || TabItems.ContainerFromIndex(drag.From) is not { } dragged)
+            return;
+        double moved = e.GetPosition(TabItems).X - drag.PressX;
+        if (!drag.Moving)
+        {
+            if (Math.Abs(moved) < DragThreshold)
+                return;
+            drag.Moving = true;
+            owner.ActivateTab(drag.From);
+        }
+        double width = dragged.Bounds.Width;
+        int count = owner.Tabs.Count;
+        drag.Offset = Math.Clamp(moved, -drag.From * width, (count - 1 - drag.From) * width);
+        Slide(dragged, drag.Offset, animate: false);
+        int target = Math.Clamp(drag.From + (int)Math.Round(drag.Offset / width), 0, count - 1);
+        if (target == drag.Target)
+            return;
+        drag.Target = target;
+        for (int index = 0; index < count; index++)
+        {
+            if (index == drag.From || TabItems.ContainerFromIndex(index) is not { } other)
+                continue;
+            double shift = index > drag.From && index <= target ? -width
+                : index < drag.From && index >= target ? width
+                : 0;
+            Slide(other, shift, animate: true);
+        }
+        RefreshTabs();
+    }
+
+    /// <summary>Ends a press on a tab; true when it was a drag, which then lands in its new place.</summary>
+    internal bool DropTab()
+    {
+        TabDrag? ended = drag;
+        drag = null;
+        if (ended is not { Moving: true })
+            return false;
+        double width = TabItems.ContainerFromIndex(ended.From)?.Bounds.Width ?? Ui.Theme.TabWidth;
+        double residual = ended.Offset - (ended.Target - ended.From) * width;
+        // Every tab is already drawn where it ends up, so the move itself shows nothing new.
+        foreach (Control container in TabItems.GetRealizedContainers())
+            Slide(container, 0, animate: false);
+        Tabs?.MoveTab(ended.From, ended.Target);
+        if (TabItems.ContainerFromIndex(ended.Target) is { } landed)
+        {
+            Slide(landed, residual, animate: false);
+            Slide(landed, 0, animate: true);
+        }
+        RefreshTabs();
+        return true;
+    }
+
+    private void CancelDrag()
+    {
+        if (drag is null)
+            return;
+        drag = null;
+        foreach (Control container in TabItems.GetRealizedContainers())
+            Slide(container, 0, animate: false);
+    }
+
+    /// <summary>Offsets a tab's container along the strip, easing there or jumping.</summary>
+    private static void Slide(Control container, double x, bool animate)
+    {
+        if (!animate)
+            container.Transitions = null;
+        else if (container.Transitions is null)
+        {
+            container.Transitions =
+            [
+                new TransformOperationsTransition
+                {
+                    Property = Visual.RenderTransformProperty,
+                    Duration = SlideDuration,
+                    Easing = new CubicEaseOut(),
+                },
+            ];
+        }
+        TransformOperations.Builder builder = TransformOperations.CreateBuilder(1);
+        builder.AppendTranslate(x, 0);
+        container.RenderTransform = builder.Build();
+    }
+
+    /// <summary>How far a tab's container is offset from its place, for tests.</summary>
+    internal static double SlideOffset(Control container) =>
+        container.RenderTransform is TransformOperations operations ? operations.Value.M31 : 0;
 }
 
 /// <summary>
@@ -185,8 +320,15 @@ public sealed class TabStripTab : Decorator
                 Strip?.CloseTab(tab);
         };
         clickArea.PointerPressed += OnPressed;
+        clickArea.PointerMoved += OnMoved;
         clickArea.PointerReleased += OnReleased;
-        clickArea.PointerCaptureLost += (_, _) => pressed = false;
+        clickArea.PointerCaptureLost += (_, _) =>
+        {
+            // Losing the pointer mid-drag drops the tab where it is.
+            if (pressed)
+                Strip?.DropTab();
+            pressed = false;
+        };
     }
 
     /// <summary>The game edition's mark, shown in place of the glyph on a tab with a game open.</summary>
@@ -257,8 +399,7 @@ public sealed class TabStripTab : Decorator
         bool active = Active;
         bool hovered = IsPointerOver;
         TabStrip? strip = Strip;
-        int index = Tab is null || strip is null ? -1 : strip.IndexOf(Tab);
-        TabStripTab? previous = strip?.TabAt(index - 1);
+        TabStripTab? previous = Tab is null ? null : strip?.TabBefore(Tab);
         divider = !active && !hovered && previous is { Active: false, IsPointerOver: false };
         // The active tab's feet overlap its neighbours, a hovered tab's feet overlap bare ones.
         if (Parent is Control host)
@@ -343,8 +484,16 @@ public sealed class TabStripTab : Decorator
         if (!e.GetCurrentPoint(clickArea).Properties.IsLeftButtonPressed)
             return;
         pressed = true;
+        if (Tab is { } tab)
+            Strip?.PressTab(tab, e);
         e.Pointer.Capture(clickArea);
         e.Handled = true;
+    }
+
+    private void OnMoved(object? sender, PointerEventArgs e)
+    {
+        if (pressed)
+            Strip?.DragTab(e);
     }
 
     private void OnReleased(object? sender, PointerReleasedEventArgs e)
@@ -352,8 +501,9 @@ public sealed class TabStripTab : Decorator
         if (!pressed || e.InitialPressMouseButton != MouseButton.Left)
             return;
         pressed = false;
+        bool dragged = Strip?.DropTab() == true;
         e.Pointer.Capture(null);
-        if (new Rect(clickArea.Bounds.Size).Contains(e.GetPosition(clickArea)) && Tab is { } tab)
+        if (!dragged && new Rect(clickArea.Bounds.Size).Contains(e.GetPosition(clickArea)) && Tab is { } tab)
             Strip?.ActivateTab(tab);
         e.Handled = true;
     }
