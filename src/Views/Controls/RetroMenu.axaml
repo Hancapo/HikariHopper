@@ -9,6 +9,10 @@
          ListView reports no implicit width, so long labels run under their shortcut. -->
     <Setter Property="Width" Value="{x:Static ui:Theme.MenuWidth}" />
     <Setter Property="Padding" Value="{x:Static ui:Theme.MenuInset}" />
+    <!-- Room in the popup for the frame's shadow; the popup places the frame itself, not this margin, at its point. -->
+    <Setter Property="Margin" Value="{x:Static ui:Theme.MenuShadowMargin}" />
+    <!-- ContextMenu clips to its bounds, which would cut the shadow off; the rows clip in their ScrollViewer. -->
+    <Setter Property="ClipToBounds" Value="False" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
     <Setter Property="WindowManagerAddShadowHint" Value="False" />
     <Setter Property="ItemsPanel">
@@ -67,7 +71,7 @@
                  IsLightDismissEnabled="False" WindowManagerAddShadowHint="False">
             <!-- The bridge fills the gap to the parent menu, so the pointer is over the submenu while it crosses. -->
             <Border Name="PART_SubmenuBridge" Background="Transparent">
-              <Panel Width="{x:Static ui:Theme.MenuWidth}">
+              <Panel Name="PART_SubmenuFrame" Width="{x:Static ui:Theme.MenuWidth}">
                 <c:RetroMenuFrame ConnectionWidth="0" />
                 <ScrollViewer Theme="{StaticResource BareScrollViewer}" Margin="{x:Static ui:Theme.MenuInset}"
                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">

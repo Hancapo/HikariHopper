@@ -46,6 +46,7 @@ public class RetroMenuItem : MenuItem
     private TextBlock? shortcut;
     private Control? content;
     private Border? bridge;
+    private Panel? submenuFrame;
     // Avalonia toggles IsChecked just before raising Click, in the same call; this marks that window.
     private bool checkChangedPending;
 
@@ -98,6 +99,12 @@ public class RetroMenuItem : MenuItem
         shortcut = e.NameScope.Find<TextBlock>("PART_Shortcut");
         content = e.NameScope.Find<Control>("PART_Content");
         bridge = e.NameScope.Find<Border>("PART_SubmenuBridge");
+        submenuFrame = e.NameScope.Find<Panel>("PART_SubmenuFrame");
+        if (submenuFrame is not null)
+        {
+            Thickness shadow = Ui.Theme.MenuShadowMargin;
+            submenuFrame.Margin = new Thickness(0, 0, shadow.Left + shadow.Right, shadow.Bottom);
+        }
         if (bridge is not null)
             bridge.Padding = new Thickness(SubmenuGap, 0, 0, 0);
         if (e.NameScope.Find<Popup>("PART_Popup") is { } popup)
@@ -160,6 +167,11 @@ public class RetroMenuItem : MenuItem
         // Moving the padding to the other side keeps the popup's size, so this does not re-measure it.
         if (bridge is not null)
             bridge.Padding = opensRight ? new Thickness(SubmenuGap, 0, 0, 0) : new Thickness(0, 0, SubmenuGap, 0);
+        // The shadow's room goes on the far side and below; on the near side it would fall on this
+        // menu and the transparent margin would take the pointer from its rows.
+        Thickness shadow = Ui.Theme.MenuShadowMargin;
+        if (submenuFrame is not null)
+            submenuFrame.Margin = opensRight ? new Thickness(0, 0, shadow.Left + shadow.Right, shadow.Bottom) : new Thickness(shadow.Left + shadow.Right, 0, 0, shadow.Bottom);
         if (opensRight)
         {
             placement.Anchor = PopupAnchor.TopRight;

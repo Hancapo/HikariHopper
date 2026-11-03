@@ -826,7 +826,20 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Views.Controls.RetroMenu menu = menus.MenuFor(file);
         Assert.True(menu.IsOpen);
         Assert.True(file.MenuOpen);
-        Assert.Equal(new Point(file.TranslatePoint(default, ui.Window)!.Value.X, 40), menu.TranslatePoint(default, ui.Window));
+        // The menu hangs from its title: its frame starts at the title's bottom-left corner and
+        // leaves the title's width open on top.
+        Assert.Equal(file.TranslatePoint(new Point(0, file.Bounds.Height), ui.Window), menu.TranslatePoint(default, ui.Window));
+        Assert.Equal(file.Bounds.Width, menu.ConnectionWidth);
+        // Its shadow falls below it, over the window, with nothing clipping it.
+        Assert.False(menu.ClipToBounds);
+        using (var frame = ui.Window.CaptureRenderedFrame()!)
+        {
+            Point below = menu.TranslatePoint(new Point(menu.Bounds.Width / 2, menu.Bounds.Height + 4), ui.Window)!.Value;
+            Point clear = menu.TranslatePoint(new Point(menu.Bounds.Width / 2, menu.Bounds.Height + 40), ui.Window)!.Value;
+            Color shaded = Pixel(frame, (int)below.X, (int)below.Y);
+            Color plain = Pixel(frame, (int)clear.X, (int)clear.Y);
+            Assert.True(shaded.R + shaded.G + shaded.B < plain.R + plain.G + plain.B, $"{shaded} is no darker than {plain}");
+        }
         menu.Close();
     }
 

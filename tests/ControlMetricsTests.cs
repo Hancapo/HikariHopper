@@ -275,10 +275,18 @@ public sealed class ControlMetricsTests
         // Archivo 12 "File" on Qt's whole-pixel advances: 8 + 3 + 3 + 7 = 20, plus 12px each side.
         Assert.Equal(new Size(44, T.MenuHeight), file.Bounds.Size);
         Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));            // transparent at rest
+        // While its menu is open it is the top of the menu: the menu's surface, outlined on three
+        // sides, rounded on top and open at the bottom, where the menu carries on.
         file.MenuOpen = true;
         Pump();
-        Assert.Equal(T.HoverChrome.Color, Pixel(window, 4, 13));         // lit while its menu is open
-        Assert.NotEqual(T.HoverChrome.Color, Pixel(window, 0, 0));       // rounded corner
+        int bottom = (int)file.Bounds.Height - 1;
+        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 4, 13));
+        Assert.Equal(T.Border.Color, Pixel(window, 0, 13));               // left outline
+        Assert.Equal(T.Border.Color, Pixel(window, 43, 13));              // right outline
+        Assert.Equal(T.Border.Color, Pixel(window, 20, 0));               // top outline
+        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded top corner
+        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 20, bottom));    // open bottom
+        Assert.Equal(T.Border.Color, Pixel(window, 0, bottom));           // square bottom corner
         window.Close();
     });
 

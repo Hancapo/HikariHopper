@@ -85,8 +85,13 @@ public class MenuBarButton : Button
     {
         if (background is null || label is null)
             return;
+        // While its menu is open the title is the top of the menu: the menu's surface, outlined on
+        // three sides and square at the bottom, where the menu carries on.
+        background.CornerRadius = MenuOpen ? new CornerRadius(Ui.Theme.ItemRadius, Ui.Theme.ItemRadius, 0, 0) : Ui.Theme.ItemCorner;
+        background.BorderBrush = Ui.Theme.Border;
+        background.BorderThickness = MenuOpen ? new Thickness(1, 1, 1, 0) : default;
         background.Background = MenuOpen
-            ? Ui.Theme.HoverChrome
+            ? Ui.Theme.ChromeRaised
             : IsPressed ? Ui.Theme.BorderSoft
             : IsPointerOver || KeyboardFocused ? Ui.Theme.HoverChrome
             : Brushes.Transparent;
