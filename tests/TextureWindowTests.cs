@@ -614,34 +614,66 @@ public sealed class TextureWindowTests
         TexturePreviewToolbar toolbar = harness.Window.Preview.Toolbar;
         TexturePreview preview = harness.Window.Preview;
 
-        // Five wells: channels, the grid toggle, the Smooth / Pixels switch, fit / actual size, zoom.
-        Assert.Equal(5, toolbar.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("well")));
+        // Two wells (the grid toggle, zoom) and three switches: the channel, Smooth / Pixels, and Fit / 1:1.
+        Assert.Equal(2, toolbar.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("well")));
+        Assert.Equal(3, toolbar.GetVisualDescendants().OfType<SegmentedSwitch>().Count());
 
-        // The channel letters carry their own colour; the shown channel's segment is raised in full ink.
-        Assert.True(toolbar.RgbaButton.Sunken);
-        Assert.Equal(Ui.Theme.Text, toolbar.RgbaButton.Foreground);
-        Assert.Equal(Avalonia.Media.Color.Parse("#E8837E"), Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.RedButton.Foreground).Color);
-        harness.ViewModel.SetChannel("r");
+        // The channel: the raised segment under the one shown, each letter in its own colour, full strength
+        // when it is shown; a click on another channel shows it.
+        Assert.Equal(0, toolbar.ChannelSwitch.SelectedIndex);
+        Assert.Equal(Ui.Theme.Text, toolbar.ChannelSwitch.InkOf(0));
+        Assert.Equal(Avalonia.Media.Color.Parse("#B8E8837E"), Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.ChannelSwitch.InkOf(1)).Color);
+        double middle = toolbar.ChannelSwitch.Bounds.Height / 2;
+        Point onRed = toolbar.ChannelSwitch.TranslatePoint(new Point(toolbar.ChannelSwitch.SideStart(1) + 8, middle), harness.Window)!.Value;
+        harness.Click(onRed.X, onRed.Y);
         harness.Settle();
-        Assert.True(toolbar.RedButton.Sunken);
-        Assert.Equal(1, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.RedButton.Foreground).Opacity);
+        Assert.Equal("r", harness.ViewModel.Channel);
+        Assert.Equal(1, toolbar.ChannelSwitch.SelectedIndex);
+        Assert.Equal(Avalonia.Media.Color.Parse("#E8837E"), Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.ChannelSwitch.InkOf(1)).Color);
+        harness.ViewModel.SetChannel("a");
+        harness.Settle();
+        Assert.Equal(4, toolbar.ChannelSwitch.SelectedIndex);
 
-        // Smooth / Pixels is one switch in a well of its own, apart from the grid toggle: a click flips
-        // it and its thumb slides to the side in use.
-        Assert.False(toolbar.FilterSwitch.IsVisualAncestorOf(toolbar.CheckerboardButton));
+        // Smooth / Pixels: a click on Pixels moves the raised segment there; a click on the side in use
+        // changes nothing.
         Assert.True(preview.FilteredPreview);
         Assert.True(toolbar.SmoothSelected);
-        Assert.Equal(0, toolbar.FilterThumbOffset, 3);
-        Point onSwitch = toolbar.FilterSwitch.TranslatePoint(new Point(8, 12), harness.Window)!.Value;
-        harness.Click(onSwitch.X, onSwitch.Y);
+        Assert.Equal(0, toolbar.FilterSwitch.SegmentOffset, 3);
+        Point onSmooth = toolbar.FilterSwitch.TranslatePoint(new Point(8, middle), harness.Window)!.Value;
+        Point onPixels = toolbar.FilterSwitch.TranslatePoint(new Point(toolbar.FilterSwitch.Bounds.Width - 8, middle), harness.Window)!.Value;
+        harness.Click(onSmooth.X, onSmooth.Y);
+        harness.Settle();
+        Assert.True(preview.FilteredPreview);
+        harness.Click(onPixels.X, onPixels.Y);
         harness.Settle();
         Assert.False(preview.FilteredPreview);
         Assert.False(toolbar.SmoothSelected);
         ExplorerStateRenders.Pump(250);
-        Assert.Equal(toolbar.FilterThumb.Width, toolbar.FilterThumbOffset, 3);
+        Assert.Equal(toolbar.FilterSwitch.Sides[0].Width, toolbar.FilterSwitch.SegmentOffset, 3);
         toolbar.FilterSwitch.Focus();
         harness.Key(Key.Space);
         Assert.True(preview.FilteredPreview);
+        harness.Key(Key.Right);
+        Assert.False(preview.FilteredPreview);
+        harness.Key(Key.Left);
+        Assert.True(preview.FilteredPreview);
+
+        // Fit / 1:1: on Fit while the texture fits, on 1:1 at actual size, and on neither at any other zoom.
+        Assert.True(preview.FitMode);
+        Assert.Equal(0, toolbar.FitSwitch.SelectedIndex);
+        Point onActual = toolbar.FitSwitch.TranslatePoint(new Point(toolbar.FitSwitch.Bounds.Width - 8, middle), harness.Window)!.Value;
+        harness.Click(onActual.X, onActual.Y);
+        harness.Settle();
+        Assert.False(preview.FitMode);
+        Assert.Equal(1, preview.DisplayScale, 6);
+        Assert.Equal(1, toolbar.FitSwitch.SelectedIndex);
+        preview.Viewport.ZoomBy(2);
+        harness.Settle();
+        Assert.Equal(-1, toolbar.FitSwitch.SelectedIndex);
+        toolbar.FitSwitch.Focus();
+        harness.Key(Key.Space);
+        harness.Settle();
+        Assert.True(preview.FitMode);
 
         // The zoom readout opens the presets, the current zoom checked; picking one zooms exactly there.
         toolbar.OpenZoomPresets();

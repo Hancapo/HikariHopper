@@ -7,7 +7,7 @@
              Background="{x:Static ui:Theme.ChromeBg}">
   <!-- The bar above the texture preview, in the navigation bar's segmented wells: what you see
        (the channels, each letter in its own colour), the transparency grid toggle, the Smooth /
-       Pixels switch, and how big (fit, actual size, and zoom out / the zoom, which opens presets / in). -->
+       Pixels switch, and how big (the Fit / 1:1 switch, and zoom out / the zoom, which opens presets / in). -->
   <UserControl.Styles>
     <Style Selector="Border.well">
       <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
@@ -33,15 +33,14 @@
   <Panel>
     <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
     <StackPanel Margin="12,0,8,0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-      <Border Classes="well">
-        <StackPanel>
-          <c:ChromeToolButton Name="RgbaButton" Width="46" Text="RGBA" AutomationProperties.Name="Show RGBA channels" />
-          <c:ChromeToolButton Name="RedButton" Width="26" Text="R" AutomationProperties.Name="Show the red channel" />
-          <c:ChromeToolButton Name="GreenButton" Width="26" Text="G" AutomationProperties.Name="Show the green channel" />
-          <c:ChromeToolButton Name="BlueButton" Width="26" Text="B" AutomationProperties.Name="Show the blue channel" />
-          <c:ChromeToolButton Name="AlphaButton" Width="26" Text="A" AutomationProperties.Name="Show the alpha channel" />
-        </StackPanel>
-      </Border>
+      <!-- Switches: the channel, each letter in its own colour; the raised segment slides to the one shown. -->
+      <c:SegmentedSwitch Name="ChannelSwitch">
+        <c:SwitchSide Text="RGBA" Width="46" Label="All channels" />
+        <c:SwitchSide Text="R" Width="26" Label="Red channel" Ink="#E8837E" DimInk="#B8E8837E" />
+        <c:SwitchSide Text="G" Width="26" Label="Green channel" Ink="#98D684" DimInk="#B898D684" />
+        <c:SwitchSide Text="B" Width="26" Label="Blue channel" Ink="#7FAEEE" DimInk="#B87FAEEE" />
+        <c:SwitchSide Text="A" Width="26" Label="Alpha channel" Ink="#C6C8DA" DimInk="#B8C6C8DA" />
+      </c:SegmentedSwitch>
       <!-- A toggle of its own: the transparency grid is on or off. -->
       <Border Classes="well">
         <StackPanel>
@@ -49,26 +48,15 @@
                               AutomationProperties.Name="Transparency grid" />
         </StackPanel>
       </Border>
-      <!-- One switch with two sides: a single track, and a thumb that slides to the side in use. -->
-      <Border Name="FilterSwitch" Classes="well" Cursor="Hand" Background="{x:Static ui:Theme.InsetBg}">
-        <Panel Width="56" Height="24">
-          <Border Name="FilterThumb" Width="28" HorizontalAlignment="Left"
-                  CornerRadius="{x:Static ui:Theme.InnerCorner}" Background="{x:Static ui:Theme.ChromeRaised}"
-                  BoxShadow="0 1 0 0 #12FFFBFF inset" />
-          <Grid ColumnDefinitions="*,*" IsHitTestVisible="False">
-            <c:ChromeIcon Name="SmoothIcon" Kind="smooth" Width="14" Height="14" Thickness="1.5"
-                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <c:ChromeIcon Name="PixelsIcon" Grid.Column="1" Kind="pixels" Width="14" Height="14" Thickness="1.5"
-                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Grid>
-        </Panel>
-      </Border>
-      <Border Classes="well">
-        <StackPanel>
-          <c:ChromeToolButton Name="FitButton" Width="38" Text="Fit" AutomationProperties.Name="Fit the texture" />
-          <c:ChromeToolButton Name="ActualSizeButton" Width="34" Text="1:1" AutomationProperties.Name="Actual size" />
-        </StackPanel>
-      </Border>
+      <!-- Smooth or Pixels, and Fit or actual size: switches too. -->
+      <c:SegmentedSwitch Name="FilterSwitch">
+        <c:SwitchSide Icon="smooth" Label="Smooth" />
+        <c:SwitchSide Icon="pixels" Label="Pixels" />
+      </c:SegmentedSwitch>
+      <c:SegmentedSwitch Name="FitSwitch">
+        <c:SwitchSide Text="Fit" Width="38" Label="Fit the texture" ToolTip="Fit to the view  (F)" />
+        <c:SwitchSide Text="1:1" Width="34" Label="Actual size" ToolTip="Actual size  (1)" />
+      </c:SegmentedSwitch>
       <Border Classes="well">
         <StackPanel>
           <c:ChromeToolButton Name="ZoomOutButton" Width="26" IconKind="minus" AutomationProperties.Name="Zoom out" />
