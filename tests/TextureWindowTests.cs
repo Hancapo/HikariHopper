@@ -716,6 +716,20 @@ public sealed class TextureWindowTests
         harness.Click(22, 42);
         Assert.True(harness.Window.MenuRow.FileMenu.IsOpen);
         Assert.True(harness.Window.MenuRow.FileButton.MenuOpen);
+        // Pointing at the other title opens its menu instead, and back again.
+        MenuBarButton edit = harness.Window.MenuRow.EditButton;
+        harness.MouseMove(edit.TranslatePoint(new Point(edit.Bounds.Width / 2, edit.Bounds.Height / 2), harness.Window)!.Value);
+        harness.Settle();
+        Assert.True(harness.Window.MenuRow.EditMenu.IsOpen);
+        Assert.False(harness.Window.MenuRow.FileMenu.IsOpen);
+        Assert.True(edit.MenuOpen);
+        Assert.False(harness.Window.MenuRow.FileButton.MenuOpen);
+        MenuBarButton file = harness.Window.MenuRow.FileButton;
+        harness.MouseMove(file.TranslatePoint(new Point(file.Bounds.Width / 2, file.Bounds.Height / 2), harness.Window)!.Value);
+        harness.Settle();
+        Assert.True(harness.Window.MenuRow.FileMenu.IsOpen);
+        Assert.False(harness.Window.MenuRow.EditMenu.IsOpen);
+        harness.Window.MenuRow.CloseMenus();
         Size size = RetroMenuPlacement.MenuSize(harness.Window.Rail.ContextMenuPopup);
         Assert.Equal(new Size(Ui.Theme.MenuWidth, 8 + 12 * Ui.Theme.MenuItemHeight + 2 * Ui.Theme.MenuSeparatorHeight), size);
     }

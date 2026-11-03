@@ -32,6 +32,8 @@ public partial class MenuRow : UserControl
         Bind(ViewButton, "ViewMenu");
         Bind(GoButton, "GoMenu");
         Bind(HelpButton, "HelpMenu");
+        // While a menu is open, pointing at another title opens that one instead.
+        MenuBarHover.Attach(this, [.. menus.Select(pair => (pair.Key, pair.Value, (Action)(() => Open(pair.Key))))]);
 
         WindowShortcuts.Register(this,
             new WindowShortcut("Ctrl+T", () => Tabs?.NewTab()),
@@ -72,8 +74,12 @@ public partial class MenuRow : UserControl
 
     private void OnMenuButton(object? sender, RoutedEventArgs e)
     {
-        if (sender is not MenuBarButton button)
-            return;
+        if (sender is MenuBarButton button)
+            Open(button);
+    }
+
+    private void Open(MenuBarButton button)
+    {
         // The menu hangs from its title: its frame starts at the title's bottom-left corner and leaves
         // the title's width open on top, so the two read as one surface. The popup is anchored to the
         // window, since a popup anchored to a control ignores a placement rectangle outside it.

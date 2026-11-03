@@ -1104,6 +1104,35 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void PointingAtAnotherTitleWhileAMenuIsOpenOpensThatMenu()
+    {
+        Explorer ui = OpenExplorer();
+        MenuRow menus = ui.Find<MenuRow>();
+        Point CentreOf(Views.Controls.MenuBarButton title) =>
+            title.TranslatePoint(new Point(title.Bounds.Width / 2, title.Bounds.Height / 2), ui.Window)!.Value;
+
+        // With no menu open, pointing at a title only lights it.
+        ui.Window.MouseMove(CentreOf(menus.EditButton));
+        Pump(20);
+        Assert.False(menus.MenuFor(menus.EditButton).IsOpen);
+
+        Click(ui.Window, CentreOf(menus.FileButton));
+        Assert.True(menus.MenuFor(menus.FileButton).IsOpen);
+        // Pointing at another title swaps the open menu for that one, one at a time.
+        foreach (Views.Controls.MenuBarButton title in new[] { menus.EditButton, menus.ViewButton, menus.HelpButton, menus.FileButton })
+        {
+            ui.Window.MouseMove(CentreOf(title));
+            Pump(20);
+            Assert.True(menus.MenuFor(title).IsOpen);
+            Assert.True(title.MenuOpen);
+            Assert.Single(new[] { menus.FileButton, menus.EditButton, menus.ViewButton, menus.GoButton, menus.HelpButton }, other => menus.MenuFor(other).IsOpen);
+        }
+        menus.MenuFor(menus.FileButton).Close();
+        Pump(20);
+        Assert.False(menus.FileButton.MenuOpen);
+    }
+
+    [AvaloniaFact]
     public void StatusBarShowsTheEditionLampAndOnlyTheKeysThatMove()
     {
         Explorer ui = OpenExplorer();

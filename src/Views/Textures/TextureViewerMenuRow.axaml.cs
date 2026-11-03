@@ -40,6 +40,10 @@ public partial class TextureViewerMenuRow : UserControl
         editMenu.Closed += (_, _) => EditButton.MenuOpen = false;
         FileButton.Click += (_, _) => OpenPopup(fileMenu, FileButton);
         EditButton.Click += (_, _) => OpenPopup(editMenu, EditButton);
+        // While a menu is open, pointing at the other title opens that one instead.
+        MenuBarHover.Attach(this,
+            (FileButton, fileMenu, () => OpenPopup(fileMenu, FileButton)),
+            (EditButton, editMenu, () => OpenPopup(editMenu, EditButton)));
         RefreshLabels();
     }
 
