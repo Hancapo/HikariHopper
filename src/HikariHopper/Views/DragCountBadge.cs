@@ -1,17 +1,19 @@
 using System.Runtime.InteropServices;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// A small label that follows the cursor while entries are dragged out of the explorer, saying how many folders and files
-/// are being extracted. Windows runs the drag itself, so this is a borderless window of its own rather than something
-/// drawn under the cursor. It sits below and to the right of the pointer, so it never covers the drop target, and never
-/// takes focus.
+/// A small badge that follows the cursor while entries are dragged out of the explorer: a folder, file or stack icon for
+/// what is being extracted, with the number of items in a circle at its bottom-right. Windows runs the drag itself, so this
+/// is a borderless window of its own rather than something drawn under the cursor. It sits below and to the right of the
+/// pointer, so it never covers the drop target, and never takes focus.
 /// </summary>
 internal sealed class DragCountBadge : Window
 {
@@ -21,7 +23,7 @@ internal sealed class DragCountBadge : Window
 
     private readonly DispatcherTimer follow;
 
-    public DragCountBadge(string text)
+    public DragCountBadge(int folders, int files)
     {
         WindowDecorations = WindowDecorations.None;
         ShowActivated = false;
@@ -31,14 +33,14 @@ internal sealed class DragCountBadge : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
-        Content = Label(text);
+        Content = Badge(folders, files);
         if (OperatingSystem.IsWindows())
             Win32Properties.AddWindowStylesCallback(this, (style, exStyle) =>
                 (style, exStyle | WsExToolWindow | WsExTopmost | WsExNoActivate));
         follow = new DispatcherTimer(TimeSpan.FromMilliseconds(15), DispatcherPriority.Render, (_, _) => Follow());
     }
 
-    /// <summary>"2 folders, 3 files"-style text for what a drag extracts.</summary>
+    /// <summary>"Extracting 2 folders, 3 files": what a drag extracts, as the badge's accessible name.</summary>
     public static string Describe(int folders, int files)
     {
         var parts = new List<string>();
@@ -49,23 +51,66 @@ internal sealed class DragCountBadge : Window
         return $"Extracting {string.Join(", ", parts)}";
     }
 
-    /// <summary>The badge's content: a rounded chrome label.</summary>
-    public static Control Label(string text) => new Border
+    /// <summary>The icon for a drag: a folder or a file when they are all alike, a stack of files when mixed.</summary>
+    public static string IconFor(int folders, int files) => files == 0 ? "folder" : folders == 0 ? "file" : "file-stack";
+
+    /// <summary>The badge's content: the icon on a rounded chrome tile, with the item count in a circle at its bottom-right.</summary>
+    public static Control Badge(int folders, int files)
     {
-        Background = Ui.Theme.ChromeRaised,
-        BorderBrush = Ui.Theme.Border,
-        BorderThickness = new Thickness(1),
-        CornerRadius = Ui.Theme.ItemCorner,
-        Padding = new Thickness(8, 4),
-        Child = new TextBlock
+        var badge = new Panel
         {
-            Text = text,
-            FontFamily = Ui.Theme.UiFont,
-            FontSize = Ui.Theme.FontSize,
-            Foreground = Ui.Theme.Text,
-            VerticalAlignment = VerticalAlignment.Center,
-        },
-    };
+            Width = 44,
+            Height = 42,
+            Children =
+            {
+                new Border
+                {
+                    Width = 36,
+                    Height = 36,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Background = Ui.Theme.ChromeRaised,
+                    BorderBrush = Ui.Theme.Border,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = Ui.Theme.ControlCorner,
+                    Child = new LucideIcon
+                    {
+                        IconName = IconFor(folders, files),
+                        Stroke = Ui.Theme.Text,
+                        Width = 20,
+                        Height = 20,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
+                },
+                // A circle for one or two digits, a pill for more.
+                new Border
+                {
+                    MinWidth = 18,
+                    Height = 18,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Padding = new Thickness(5, 0),
+                    Background = Ui.Theme.Selection,
+                    BorderBrush = Ui.Theme.WindowBg,
+                    BorderThickness = new Thickness(1.5),
+                    CornerRadius = new CornerRadius(9),
+                    Child = new TextBlock
+                    {
+                        Text = (folders + files).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        FontFamily = Ui.Theme.UiFont,
+                        FontSize = Ui.Theme.SmallFontSize,
+                        FontWeight = FontWeight.Bold,
+                        Foreground = Ui.Theme.SelectionText,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
+                },
+            },
+        };
+        AutomationProperties.SetName(badge, Describe(folders, files));
+        return badge;
+    }
 
     /// <summary>Shows the badge by the cursor and keeps it there until it is closed.</summary>
     public void ShowAtCursor()

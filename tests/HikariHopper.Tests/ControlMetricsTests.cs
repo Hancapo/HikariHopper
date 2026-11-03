@@ -102,8 +102,26 @@ public sealed class ControlMetricsTests
     [InlineData(0, 3, "Extracting 3 files")]
     [InlineData(1, 0, "Extracting 1 folder")]
     [InlineData(2, 5, "Extracting 2 folders, 5 files")]
-    public void DragBadgeCountsFoldersAndFiles(int folders, int files, string expected) =>
+    public void DragBadgeNamesFoldersAndFiles(int folders, int files, string expected) =>
         Assert.Equal(expected, DragCountBadge.Describe(folders, files));
+
+    [Theory]
+    [InlineData(2, 0, "folder")]
+    [InlineData(0, 5, "file")]
+    [InlineData(2, 3, "file-stack")]
+    public void DragBadgeIconFollowsWhatIsDragged(int folders, int files, string icon) =>
+        Assert.Equal(icon, DragCountBadge.IconFor(folders, files));
+
+    [AvaloniaFact]
+    public void DragBadgeShowsTheTotalCount() => UiThread.Run(() =>
+    {
+        Control badge = DragCountBadge.Badge(2, 3);
+        Window window = Show(new Panel { Children = { TopLeft(badge) } }, 80, 60);
+        Assert.Equal("5", badge.GetVisualDescendants().OfType<TextBlock>().Single().Text);
+        Assert.Equal("file-stack", badge.GetVisualDescendants().OfType<LucideIcon>().Single().IconName);
+        Assert.Equal("Extracting 2 folders, 3 files", Avalonia.Automation.AutomationProperties.GetName(badge));
+        window.Close();
+    });
 
     [AvaloniaFact]
     public void WindowControlButtonDrawsDividedCellAndPixelMarks() => UiThread.Run(() =>

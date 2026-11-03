@@ -137,7 +137,7 @@ public sealed class EntryPointerArea
         data.Add(DataTransferItem.Create(EntryDragFormat, [(byte)'1']));
         // Headless runs have no desktop to show it on.
         DragCountBadge? badge = Application.Current?.ApplicationLifetime is null ? null
-            : new DragCountBadge(DragCountBadge.Describe(folders, files));
+            : new DragCountBadge(folders, files);
         badge?.ShowAtCursor();
         try
         {
