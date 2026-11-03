@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using HikariHopper.Core;
 
 namespace HikariHopper.Views;
@@ -48,14 +49,35 @@ public sealed class TextLinesView : Control
     private int[] rowStarts = [];
     private int columnsPerRow = int.MaxValue;
     private TextPosition anchor, caret;
+
+    // A drag selects by what the press picked: characters, words (double-click) or lines (triple-click, or
+    // the gutter). The press's own word or line stays selected whichever way the drag goes.
+    private enum DragUnit { Character, Word, Line }
+
     private bool selecting;
+    private DragUnit dragUnit;
+    private TextPosition pressStart, pressEnd;
+    private Point lastPointer;
+    private readonly DispatcherTimer autoScroll;
+    private readonly DispatcherTimer blink;
+    private bool caretShown = true;
+
+    private static readonly Cursor TextCursor = new(StandardCursorType.Ibeam);
+    private static readonly Cursor GutterCursor = new(StandardCursorType.Arrow);
 
     public TextLinesView()
     {
         Focusable = true;
-        Cursor = new Cursor(StandardCursorType.Ibeam);
+        Cursor = TextCursor;
         ClipToBounds = false;
         UpdateMetrics();
+        // Dragging past an edge keeps scrolling, faster the further out the pointer is, until it comes back.
+        autoScroll = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Input, (_, _) => AutoScrollTick());
+        blink = new DispatcherTimer(TimeSpan.FromMilliseconds(530), DispatcherPriority.Background, (_, _) =>
+        {
+            caretShown = !caretShown;
+            InvalidateVisual();
+        });
     }
 
     /// <summary>The caret moved, or the selection changed.</summary>
@@ -132,6 +154,26 @@ public sealed class TextLinesView : Control
 
     public bool HasSelection => anchor != caret;
 
+    /// <summary>Whether a drag selection is under way.</summary>
+    internal bool IsSelecting => selecting;
+
+    /// <summary>How many characters are selected, line breaks counting one each, without building the text.</summary>
+    public long SelectionLength
+    {
+        get
+        {
+            if (document is null || !HasSelection)
+                return 0;
+            (TextPosition start, TextPosition end) = Selection;
+            if (start.Line == end.Line)
+                return end.Column - start.Column;
+            long length = document.Lines[start.Line].Length - start.Column + 1;
+            for (int line = start.Line + 1; line < end.Line; line++)
+                length += document.Lines[line].Length + 1;
+            return length + end.Column;
+        }
+    }
+
     /// <summary>The selected text, lines joined by the file's own line ending.</summary>
     public string SelectedText
     {
@@ -166,10 +208,8 @@ public sealed class TextLinesView : Control
         if (current >= 0 && current < found.Count)
         {
             TextMatch match = found[current];
-            anchor = new TextPosition(match.Line, match.Column);
-            caret = new TextPosition(match.Line, match.Column + match.Length);
+            SetSelection(new TextPosition(match.Line, match.Column), new TextPosition(match.Line, match.Column + match.Length), scroll: false);
             BringIntoView(caret, centre: true);
-            CaretMoved?.Invoke(this, EventArgs.Empty);
         }
         InvalidateVisual();
     }
@@ -178,25 +218,43 @@ public sealed class TextLinesView : Control
     {
         if (document is null)
             return;
-        anchor = default;
         int last = document.Lines.Count - 1;
-        caret = new TextPosition(last, document.Lines[last].Length);
-        InvalidateVisual();
-        CaretMoved?.Invoke(this, EventArgs.Empty);
+        SetSelection(default, new TextPosition(last, document.Lines[last].Length), scroll: false);
     }
 
     /// <summary>Moves the caret (and the selection's anchor, unless <paramref name="extend"/>) to <paramref name="position"/>.</summary>
-    public void MoveCaret(TextPosition position, bool extend = false)
+    public void MoveCaret(TextPosition position, bool extend = false) => SetSelection(extend ? anchor : position, position, scroll: true);
+
+    /// <summary>Selects from <paramref name="from"/> to <paramref name="to"/>, the caret at <paramref name="to"/>.</summary>
+    private void SetSelection(TextPosition from, TextPosition to, bool scroll)
     {
         if (document is null)
             return;
-        int line = Math.Clamp(position.Line, 0, document.Lines.Count - 1);
-        caret = new TextPosition(line, Math.Clamp(position.Column, 0, document.Lines[line].Length));
-        if (!extend)
-            anchor = caret;
-        BringIntoView(caret, centre: false);
+        TextPosition newAnchor = Clamp(from), newCaret = Clamp(to);
+        bool changed = newAnchor != anchor || newCaret != caret;
+        anchor = newAnchor;
+        caret = newCaret;
+        if (scroll)
+            BringIntoView(caret, centre: false);
+        RestartBlink();
         InvalidateVisual();
-        CaretMoved?.Invoke(this, EventArgs.Empty);
+        if (changed)
+            CaretMoved?.Invoke(this, EventArgs.Empty);
+    }
+
+    private TextPosition Clamp(TextPosition position)
+    {
+        int line = Math.Clamp(position.Line, 0, document!.Lines.Count - 1);
+        return new TextPosition(line, Math.Clamp(position.Column, 0, document.Lines[line].Length));
+    }
+
+    /// <summary>The caret shows at once after it moves, then blinks.</summary>
+    private void RestartBlink()
+    {
+        caretShown = true;
+        blink.Stop();
+        if (IsFocused)
+            blink.Start();
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -226,6 +284,9 @@ public sealed class TextLinesView : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
+        // A clear fill over the whole view, so every point of it takes the pointer: without it only the
+        // pixels drawn on (the letters) would, and a click between them would fall through.
+        context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         if (document is null)
             return;
         Vector offset = Scroller?.Offset ?? default;
@@ -233,8 +294,10 @@ public sealed class TextLinesView : Control
         double lineHeight = LineHeight, size = FontSize, gutter = GutterWidth;
         double textLeft = gutter + TextPadding;
         int totalRows = wrap ? rowStarts[^1] : document.Lines.Count;
-        int firstRow = Math.Max(0, (int)Math.Floor((offset.Y - TextPadding) / lineHeight));
-        int lastRow = Math.Min(totalRows - 1, (int)Math.Ceiling((offset.Y + viewport.Height - TextPadding) / lineHeight));
+        // A screen above and below the visible one too: a scroll moves the last frame before this one is drawn,
+        // and it must not uncover blank rows meanwhile.
+        int firstRow = Math.Max(0, (int)Math.Floor((offset.Y - viewport.Height - TextPadding) / lineHeight));
+        int lastRow = Math.Min(totalRows - 1, (int)Math.Ceiling((offset.Y + 2 * viewport.Height - TextPadding) / lineHeight));
         (TextPosition selStart, TextPosition selEnd) = Selection;
         // The type's own line box, centred on the row.
         double textBaseline = Math.Round((lineHeight - TextViewerInk.Text("0", size, Ui.Theme.Text).Height) / 2);
@@ -249,7 +312,7 @@ public sealed class TextLinesView : Control
 
             // The caret's line, across the whole view.
             if (line == caret.Line)
-                context.FillRectangle(Ui.Theme.HoverBg, new Rect(offset.X, top, viewport.Width, lineHeight));
+                context.FillRectangle(Ui.Theme.HoverBg, new Rect(Math.Max(0, offset.X - viewport.Width), top, 3 * viewport.Width, lineHeight));
 
             // The selection, then the matches, under the text.
             if (HasSelection && line >= selStart.Line && line <= selEnd.Line)
@@ -259,7 +322,7 @@ public sealed class TextLinesView : Control
                 a = Math.Max(a, from);
                 b = Math.Min(b, wrap ? to + (to == text.Length ? 1 : 0) : b);
                 if (b > a)
-                    context.FillRectangle(TextViewerInk.SelectionWash, new Rect(textLeft + (a - from) * charWidth, top, (b - a) * charWidth, lineHeight));
+                    context.FillRectangle(TextViewerInk.SelectionWash, new Rect(textLeft + (a - from) * charWidth, top, (b - a) * charWidth, lineHeight), 2);
             }
             for (int index = FirstMatchOn(line); index >= 0 && index < matches.Count && matches[index].Line == line; index++)
             {
@@ -293,13 +356,15 @@ public sealed class TextLinesView : Control
             }
 
             // The caret, while the view has focus.
-            if (IsFocused && line == caret.Line && caret.Column >= from && (caret.Column < to || caret.Column == to && (to == text.Length || !wrap)))
+            if (IsFocused && caretShown && line == caret.Line && caret.Column >= from && (caret.Column < to || caret.Column == to && (to == text.Length || !wrap)))
                 context.FillRectangle(Ui.Theme.Text, new Rect(Math.Round(textLeft + (caret.Column - from) * charWidth), top + 3, 1, lineHeight - 6));
         }
 
         // The gutter, kept at the left edge however far the text has scrolled.
-        context.FillRectangle(Ui.Theme.PanelBg, new Rect(offset.X, offset.Y, gutter, viewport.Height));
-        context.FillRectangle(Ui.Theme.BorderSoft, new Rect(offset.X + gutter - 1, offset.Y, 1, viewport.Height));
+        double gutterTop = Math.Max(0, offset.Y - viewport.Height);
+        double gutterHeight = 3 * viewport.Height;
+        context.FillRectangle(Ui.Theme.PanelBg, new Rect(offset.X, gutterTop, gutter, gutterHeight));
+        context.FillRectangle(Ui.Theme.BorderSoft, new Rect(offset.X + gutter - 1, gutterTop, 1, gutterHeight));
         for (int row = firstRow; row <= lastRow; row++)
         {
             (int line, int chunk) = LineOfRow(row);
@@ -313,54 +378,177 @@ public sealed class TextLinesView : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (document is null)
+            return;
         PointerPointProperties properties = e.GetCurrentPoint(this).Properties;
-        if (!properties.IsLeftButtonPressed || document is null)
+        Point point = e.GetPosition(this);
+        TextPosition at = PositionAt(point);
+        if (properties.IsRightButtonPressed)
+        {
+            // A right-click outside the selection moves the caret there first, so the menu acts where you clicked.
+            (TextPosition start, TextPosition end) = Selection;
+            if (!HasSelection || at < start || at > end)
+                SetSelection(at, at, scroll: false);
+            Focus(NavigationMethod.Pointer);
+            return;
+        }
+        if (!properties.IsLeftButtonPressed)
             return;
         Focus(NavigationMethod.Pointer);
-        TextPosition at = PositionAt(e.GetPosition(this));
-        if (e.ClickCount == 2)
+        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        if (InGutter(point))
         {
-            SelectWord(at);
+            // The line numbers pick whole lines, and a drag down them picks more.
+            dragUnit = DragUnit.Line;
+            (pressStart, pressEnd) = LineAround(at.Line);
+            SetSelection(shift ? anchor : pressStart, pressEnd, scroll: false);
+        }
+        else if (e.ClickCount == 2)
+        {
+            dragUnit = DragUnit.Word;
+            (pressStart, pressEnd) = WordAround(at);
+            SetSelection(pressStart, pressEnd, scroll: false);
         }
         else if (e.ClickCount >= 3)
         {
-            anchor = new TextPosition(at.Line, 0);
-            caret = new TextPosition(at.Line, document.Lines[at.Line].Length);
-            InvalidateVisual();
-            CaretMoved?.Invoke(this, EventArgs.Empty);
+            dragUnit = DragUnit.Line;
+            (pressStart, pressEnd) = LineAround(at.Line);
+            SetSelection(pressStart, pressEnd, scroll: false);
         }
         else
         {
-            MoveCaret(at, extend: e.KeyModifiers.HasFlag(KeyModifiers.Shift));
-            selecting = true;
-            e.Pointer.Capture(this);
+            dragUnit = DragUnit.Character;
+            pressStart = pressEnd = shift ? anchor : at;
+            SetSelection(shift ? anchor : at, at, scroll: false);
         }
+        selecting = true;
+        lastPointer = point;
+        e.Pointer.Capture(this);
         e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        if (selecting)
-            MoveCaret(PositionAt(e.GetPosition(this)), extend: true);
+        Point point = e.GetPosition(this);
+        if (!selecting)
+        {
+            Cursor = InGutter(point) ? GutterCursor : TextCursor;
+            return;
+        }
+        lastPointer = point;
+        ExtendTo(point);
+        if (EdgeDistance(point) != default)
+            autoScroll.Start();
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        selecting = false;
+        if (!selecting)
+            return;
+        EndDrag();
         e.Pointer.Capture(null);
     }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        // Lost to something else (a window switch): the drag is over, whatever the button does next.
+        EndDrag();
+    }
+
+    private void EndDrag()
+    {
+        selecting = false;
+        autoScroll.Stop();
+    }
+
+    /// <summary>Extends the drag's selection to <paramref name="point"/>, by the unit the press picked.</summary>
+    private void ExtendTo(Point point)
+    {
+        TextPosition at = PositionAt(point);
+        switch (dragUnit)
+        {
+            case DragUnit.Word:
+            {
+                (TextPosition start, TextPosition end) = WordAround(at);
+                if (at < pressStart)
+                    SetSelection(pressEnd, start, scroll: false);
+                else
+                    SetSelection(pressStart, end > pressEnd ? end : pressEnd, scroll: false);
+                break;
+            }
+            case DragUnit.Line:
+            {
+                (TextPosition start, TextPosition end) = LineAround(at.Line);
+                if (at.Line < pressStart.Line)
+                    SetSelection(pressEnd, start, scroll: false);
+                else
+                    SetSelection(pressStart, end, scroll: false);
+                break;
+            }
+            default:
+                SetSelection(pressStart, at, scroll: false);
+                break;
+        }
+    }
+
+    /// <summary>How far past the view's edges <paramref name="point"/> is: negative above or left, positive below or right.</summary>
+    private Vector EdgeDistance(Point point)
+    {
+        if (Scroller is null)
+            return default;
+        Vector offset = Scroller.Offset;
+        Size viewport = Scroller.Viewport;
+        double x = point.X - offset.X, y = point.Y - offset.Y;
+        double dy = y < 0 ? y : y > viewport.Height ? y - viewport.Height : 0;
+        double dx = wrap || dragUnit == DragUnit.Line ? 0 : x < GutterWidth ? Math.Min(0, x - GutterWidth) : x > viewport.Width ? x - viewport.Width : 0;
+        return new Vector(dx, dy);
+    }
+
+    private void AutoScrollTick()
+    {
+        if (!selecting || Scroller is null)
+        {
+            autoScroll.Stop();
+            return;
+        }
+        Vector distance = EdgeDistance(lastPointer);
+        if (distance == default)
+        {
+            autoScroll.Stop();
+            return;
+        }
+        // Gentle near the edge, quick further out.
+        static double Speed(double past) => past == 0 ? 0 : Math.Sign(past) * Math.Min(80, 2 + Math.Pow(Math.Abs(past), 1.35) * 0.35);
+        Vector before = Scroller.Offset;
+        Size extent = Scroller.Extent, viewport = Scroller.Viewport;
+        var after = new Vector(
+            Math.Clamp(before.X + Speed(distance.X), 0, Math.Max(0, extent.Width - viewport.Width)),
+            Math.Clamp(before.Y + Speed(distance.Y), 0, Math.Max(0, extent.Height - viewport.Height)));
+        if (after == before)
+            return;
+        Scroller.Offset = after;
+        // The pointer stays put on screen while the text moves under it.
+        lastPointer += after - before;
+        ExtendTo(lastPointer);
+    }
+
+    private bool InGutter(Point point) => point.X - (Scroller?.Offset.X ?? 0) < GutterWidth;
 
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
+        RestartBlink();
         InvalidateVisual();
     }
 
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         base.OnLostFocus(e);
+        blink.Stop();
+        EndDrag();
         InvalidateVisual();
     }
 
@@ -468,19 +656,30 @@ public sealed class TextLinesView : Control
         return new TextPosition(line, Math.Clamp(column, 0, document!.Lines[line].Length));
     }
 
-    private void SelectWord(TextPosition at)
+    /// <summary>The word (or run of spaces, or of symbols) at <paramref name="at"/>.</summary>
+    private (TextPosition Start, TextPosition End) WordAround(TextPosition at)
     {
         string line = document!.Lines[at.Line];
-        int start = at.Column, end = at.Column;
-        while (start > 0 && IsWordChar(line[start - 1]))
+        if (line.Length == 0)
+            return (at, at);
+        int probe = Math.Min(at.Column, line.Length - 1);
+        char kind = line[probe];
+        Func<char, bool> same = IsWordChar(kind) ? IsWordChar
+            : char.IsWhiteSpace(kind) ? char.IsWhiteSpace
+            : value => !IsWordChar(value) && !char.IsWhiteSpace(value);
+        int start = probe, end = probe + 1;
+        while (start > 0 && same(line[start - 1]))
             start--;
-        while (end < line.Length && IsWordChar(line[end]))
+        while (end < line.Length && same(line[end]))
             end++;
-        anchor = at with { Column = start };
-        caret = at with { Column = end };
-        InvalidateVisual();
-        CaretMoved?.Invoke(this, EventArgs.Empty);
+        return (at with { Column = start }, at with { Column = end });
     }
+
+    /// <summary>A whole line with its line break: from its start to the next line's start (or its own end, if last).</summary>
+    private (TextPosition Start, TextPosition End) LineAround(int line) =>
+        line < document!.Lines.Count - 1
+            ? (new TextPosition(line, 0), new TextPosition(line + 1, 0))
+            : (new TextPosition(line, 0), new TextPosition(line, document.Lines[line].Length));
 
     private TextPosition WordStep(TextPosition origin, int direction)
     {

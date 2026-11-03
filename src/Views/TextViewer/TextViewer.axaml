@@ -125,10 +125,10 @@
           </Panel>
 
           <Panel>
-            <ScrollViewer Name="TextScroller" Theme="{StaticResource QuietBothScrollViewer}">
+            <ScrollViewer Name="TextScroller" Theme="{StaticResource QuietBothScrollViewer}" BringIntoViewOnFocusChange="False">
               <v:TextLinesView Name="Lines" />
             </ScrollViewer>
-            <ScrollViewer Name="TableScroller" Theme="{StaticResource QuietBothScrollViewer}" IsVisible="False">
+            <ScrollViewer Name="TableScroller" Theme="{StaticResource QuietBothScrollViewer}" BringIntoViewOnFocusChange="False" IsVisible="False">
               <v:CsvTableView Name="Table" />
             </ScrollViewer>
           </Panel>

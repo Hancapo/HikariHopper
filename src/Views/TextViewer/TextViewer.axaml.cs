@@ -40,6 +40,10 @@ public partial class TextViewer : UserControl, IModalContent
         TitleText.Text = document.Name;
         Lines.Scroller = TextScroller;
         Lines.Document = document;
+        // The wheel glides, as it does in the explorer's lists.
+        SmoothScrolling.Attach(TextScroller);
+        SmoothScrolling.Attach(TableScroller);
+        Lines.ContextMenu = BuildMenu();
         Lines.CaretMoved += (_, _) => RefreshCaret();
         if (document.Format == TextFormat.Csv)
         {
@@ -262,8 +266,22 @@ public partial class TextViewer : UserControl, IModalContent
             return;
         }
         TextPosition caret = Lines.Caret;
-        string selection = Lines.HasSelection ? $"  ({Lines.SelectedText.Length:N0} selected)" : "";
+        string selection = Lines.HasSelection ? $"  ({Lines.SelectionLength:N0} selected)" : "";
         CaretText.Text = $"Ln {caret.Line + 1:N0}, Col {caret.Column + 1:N0}{selection}";
+    }
+
+    /// <summary>Right-click: copy what is selected (or the whole file), or select everything.</summary>
+    private RetroMenu BuildMenu()
+    {
+        var menu = new RetroMenu { Width = 200 + 2 * Ui.Theme.MenuPadding };
+        var copy = new RetroMenuItem { Text = "Copy", ShortcutText = "Ctrl+C", MinWidth = 0 };
+        copy.Triggered += (_, _) => Copy();
+        var selectAll = new RetroMenuItem { Text = "Select all", ShortcutText = "Ctrl+A", MinWidth = 0 };
+        selectAll.Triggered += (_, _) => Lines.SelectAll();
+        menu.Items.Add(copy);
+        menu.Items.Add(selectAll);
+        menu.Opening += (_, _) => copy.Text = Lines.HasSelection ? "Copy" : "Copy the whole file";
+        return menu;
     }
 
     private void FocusBody()
@@ -319,9 +337,18 @@ public partial class TextViewer : UserControl, IModalContent
 
     private void OnWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || ShowingTable)
-            return;
-        SetZoom(zoomStep + (e.Delta.Y > 0 ? 1 : -1));
-        e.Handled = true;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && !ShowingTable)
+        {
+            SetZoom(zoomStep + (e.Delta.Y > 0 ? 1 : -1));
+            e.Handled = true;
+        }
+        else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Delta.Y != 0)
+        {
+            // Shift+wheel goes sideways, through long lines or wide tables.
+            ScrollViewer scroller = ShowingTable ? TableScroller : TextScroller;
+            double maximum = Math.Max(0, scroller.Extent.Width - scroller.Viewport.Width);
+            scroller.Offset = scroller.Offset.WithX(Math.Clamp(scroller.Offset.X - e.Delta.Y * SmoothScrolling.NotchDistance, 0, maximum));
+            e.Handled = true;
+        }
     }
 }

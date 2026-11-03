@@ -134,14 +134,17 @@ public sealed class CsvTableView : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
+        // A clear fill over the whole view, so a click anywhere on it lands, not just on the values.
+        context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         if (table is null || table.Rows.Count == 0)
             return;
         Vector offset = Scroller?.Offset ?? default;
         Size viewport = Scroller?.Viewport ?? Bounds.Size;
         double size = Ui.Theme.FontSize;
         double numberWidth = NumberWidth;
-        int first = Math.Max(1, 1 + (int)Math.Floor(offset.Y / RowHeight));
-        int last = Math.Min(table.Rows.Count - 1, 1 + (int)Math.Ceiling((offset.Y + viewport.Height) / RowHeight));
+        // A screen above and below the visible one too, so a scroll never uncovers blank rows before this is drawn.
+        int first = Math.Max(1, 1 + (int)Math.Floor((offset.Y - viewport.Height) / RowHeight));
+        int last = Math.Min(table.Rows.Count - 1, 1 + (int)Math.Ceiling((offset.Y + 2 * viewport.Height) / RowHeight));
         double textTop = Math.Round((RowHeight - TextViewerInk.Text("0", size, Ui.Theme.Text).Height) / 2);
 
         for (int row = first; row <= last; row++)
@@ -154,14 +157,14 @@ public sealed class CsvTableView : Control
             for (int column = 0; column < widths.Length; column++)
             {
                 string value = column < fields.Length ? fields[column] : "";
-                if (left + widths[column] >= offset.X && left <= offset.X + viewport.Width && value.Length > 0)
+                if (left + widths[column] >= offset.X - viewport.Width && left <= offset.X + 2 * viewport.Width && value.Length > 0)
                     DrawCell(context, row, column, value, left, top, textTop, size);
                 left += widths[column];
             }
         }
 
         // The row numbers stay at the left, the titles at the top.
-        context.FillRectangle(Ui.Theme.PanelBg, new Rect(offset.X, offset.Y + HeaderHeight, numberWidth, viewport.Height));
+        context.FillRectangle(Ui.Theme.PanelBg, new Rect(offset.X, Math.Max(HeaderHeight, offset.Y - viewport.Height), numberWidth, 3 * viewport.Height));
         for (int row = first; row <= last; row++)
         {
             double top = HeaderHeight + (row - 1) * RowHeight;
