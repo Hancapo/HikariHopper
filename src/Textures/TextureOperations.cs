@@ -37,10 +37,18 @@ public static class TextureOperations
             throw new ArgumentException($"Unsupported texture channel: {mode}");
         if (mip < 0 || mip >= texture.MipCount)
             throw new ArgumentException($"Mip level {mip} is outside the stored texture chain");
-        RgbaImage image = TextureProcessing.Decode(texture, mip);
+        return ChannelView(TextureProcessing.Decode(texture, mip), mode);
+    }
+
+    /// <summary>
+    /// <paramref name="image"/> as <paramref name="mode"/> shows it: unchanged for <c>rgba</c>, otherwise that one
+    /// channel as opaque grey. One pass over memory, so a channel needs no new decode.
+    /// </summary>
+    public static RgbaImage ChannelView(RgbaImage image, string mode)
+    {
         if (mode == "rgba")
             return image;
-        int channel = mode switch { "r" => 0, "g" => 1, "b" => 2, _ => 3 };
+        int channel = mode switch { "r" => 0, "g" => 1, "b" => 2, "a" => 3, _ => throw new ArgumentException($"Unsupported texture channel: {mode}") };
         ReadOnlySpan<byte> source = image.Pixels;
         var pixels = new byte[source.Length];
         for (int offset = 0; offset < pixels.Length; offset += 4)

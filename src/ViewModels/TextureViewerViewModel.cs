@@ -65,11 +65,13 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     private Bitmap? previewImage;
     private Texture? previewTexture;
     private int previewRevision;
-    // Every decoded mip of the selected texture in the current channel, so moving between mips shows one at once.
-    private readonly Dictionary<int, Bitmap> mips = [];
-    private readonly HashSet<int> mipsRequested = [];
-    private Texture? mipsTexture;
-    private string mipsChannel = "";
+    // The selected texture's decoded RGBA, per mip, and every view of it made so far (RGBA or one channel, per
+    // mip): moving between mips or channels shows one at once when it is here, and a channel is made from the
+    // RGBA instead of being decoded again.
+    private readonly Dictionary<int, RgbaImage> sources = [];
+    private readonly Dictionary<(string Channel, int Mip), Bitmap> views = [];
+    private readonly HashSet<(string Channel, int Mip)> viewsRequested = [];
+    private Texture? viewsTexture;
     private bool loading, previewLoading, operationBusy, saving, externalWriteBusy;
     private string savingRootPath = "";
     private readonly List<TextureUndoAction> undoStack = [];
@@ -515,24 +517,28 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     {
         int token = generation;
         Func<Texture, string, int, RgbaImage> decode = DecodeImage;
+        // A mip already decoded only needs its channel made, not another decode.
+        RgbaImage? decoded = !thumbnail && ReferenceEquals(texture, viewsTexture) && sources.TryGetValue(mip, out RgbaImage? kept) ? kept : null;
         pool.Start(() =>
         {
             Bitmap bitmap;
+            RgbaImage source;
             try
             {
-                RgbaImage image = decode(texture, mode, mip);
-                bitmap = TextureBitmaps.Create(thumbnail ? TextureBitmaps.Thumbnail(image) : image);
+                source = decoded ?? decode(texture, "rgba", mip);
+                bitmap = TextureBitmaps.Create(thumbnail ? TextureBitmaps.Thumbnail(source) : TextureOperations.ChannelView(source, mode));
             }
             catch (Exception exception)
             {
                 Post(() => ImageFailed(token, row, thumbnail, mode, mip, exception.Message));
                 return;
             }
-            Post(() => ImageLoaded(token, row, texture, thumbnail, prefetch, mode, mip, bitmap));
+            Post(() => ImageLoaded(token, row, texture, thumbnail, prefetch, mode, mip, bitmap, thumbnail ? null : source));
         }, thumbnail ? PriorityThumbnail : prefetch ? PriorityMips : PriorityPreview);
     }
 
-    private void ImageLoaded(int token, int row, Texture texture, bool thumbnail, bool prefetch, string mode, int mip, Bitmap bitmap)
+    private void ImageLoaded(int token, int row, Texture texture, bool thumbnail, bool prefetch, string mode, int mip, Bitmap bitmap,
+        RgbaImage? source)
     {
         if (token != generation)
         {
@@ -547,25 +553,55 @@ public sealed partial class TextureViewerViewModel : ObservableObject
                 bitmap.Dispose();
             return;
         }
-        if (row != selectedIndex || mode != channel || !ReferenceEquals(SelectedRecord()?.Texture, texture))
+        // A view of another channel is kept too: it is one a channel switch can show at once.
+        if (row != selectedIndex || !ReferenceEquals(SelectedRecord()?.Texture, texture))
         {
             bitmap.Dispose();
             return;
         }
-        UseMips(texture, mode);
-        if (!mips.TryAdd(mip, bitmap))
+        UseViews(texture);
+        if (source is not null)
+            sources.TryAdd(mip, source);
+        if (!views.TryAdd((mode, mip), bitmap))
         {
             bitmap.Dispose();
-            bitmap = mips[mip];
+            bitmap = views[(mode, mip)];
         }
-        if (mip == mipLevel && !ReferenceEquals(previewImage, bitmap))
+        if (mode == channel && mip == mipLevel && !ReferenceEquals(previewImage, bitmap))
             ShowMip(row, mode, mip, bitmap);
-        // Once the preview is up, decode the texture's other mips so moving between them is instant.
         if (!prefetch)
+            Prefetch(row, texture, mode, mip);
+    }
+
+    /// <summary>
+    /// Once a view is up, makes the texture's other mips in its channel and its mip in the other channels in the
+    /// background, so moving to any of them is instant.
+    /// </summary>
+    private void Prefetch(int row, Texture texture, string mode, int mip)
+    {
+        for (int level = 0; level < texture.MipCount; level++)
+            Request(mode, level);
+        foreach (string other in TextureOperations.Channels)
+            Request(other, mip);
+
+        void Request(string viewChannel, int viewMip)
         {
-            for (int level = 0; level < texture.MipCount; level++)
-                if (!mips.ContainsKey(level) && mipsRequested.Add(level))
-                    StartImageTask(row, texture, mode, level, thumbnail: false, prefetch: true);
+            if (!views.ContainsKey((viewChannel, viewMip)) && viewsRequested.Add((viewChannel, viewMip)))
+                StartImageTask(row, texture, viewChannel, viewMip, thumbnail: false, prefetch: true);
+        }
+    }
+
+    /// <summary>
+    /// Lets go of the views that are neither in the channel shown nor of the mip shown; the RGBA stays, so any of
+    /// them is quick to make again.
+    /// </summary>
+    private void PruneViews()
+    {
+        foreach ((string Channel, int Mip) key in views.Keys.Where(key => key.Channel != channel && key.Mip != mipLevel).ToList())
+        {
+            if (views.Remove(key, out Bitmap? bitmap) && !ReferenceEquals(bitmap, previewImage))
+                TextureBitmaps.DisposeLater(bitmap);
+            viewsRequested.Remove(key);
         }
     }
 
@@ -581,26 +617,26 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         EmitSelectionChanged();
     }
 
-    /// <summary>The decoded mip for the selected texture and channel, if it is already there.</summary>
-    private Bitmap? DecodedMip(int mip) =>
-        SelectedRecord() is { } record && ReferenceEquals(record.Texture, mipsTexture) && channel == mipsChannel
-            && mips.TryGetValue(mip, out Bitmap? bitmap) ? bitmap : null;
+    /// <summary>The selected texture's view in <paramref name="mode"/> at <paramref name="mip"/>, if it is already made.</summary>
+    private Bitmap? ReadyView(string mode, int mip) =>
+        SelectedRecord() is { } record && ReferenceEquals(record.Texture, viewsTexture)
+            && views.TryGetValue((mode, mip), out Bitmap? bitmap) ? bitmap : null;
 
-    /// <summary>Keeps the decoded mips for <paramref name="texture"/> in <paramref name="mode"/>, releasing any others.</summary>
-    private void UseMips(Texture? texture, string mode)
+    /// <summary>Keeps the decoded mips and views of <paramref name="texture"/>, releasing those of any other.</summary>
+    private void UseViews(Texture? texture)
     {
-        if (ReferenceEquals(texture, mipsTexture) && mode == mipsChannel)
+        if (ReferenceEquals(texture, viewsTexture))
             return;
-        foreach (Bitmap bitmap in mips.Values)
+        foreach (Bitmap bitmap in views.Values)
         {
             // The one on screen is released by SetPreview when it is replaced.
             if (!ReferenceEquals(bitmap, previewImage))
                 TextureBitmaps.DisposeLater(bitmap);
         }
-        mips.Clear();
-        mipsRequested.Clear();
-        mipsTexture = texture;
-        mipsChannel = mode;
+        views.Clear();
+        viewsRequested.Clear();
+        sources.Clear();
+        viewsTexture = texture;
     }
 
     private void ImageFailed(int token, int row, bool thumbnail, string mode, int mip, string message)
@@ -623,7 +659,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         Bitmap? previous = previewImage;
         previewUrl = url;
         previewImage = bitmap;
-        if (previous is not null && !ReferenceEquals(previous, bitmap) && !mips.ContainsValue(previous))
+        if (previous is not null && !ReferenceEquals(previous, bitmap) && !views.ContainsValue(previous))
             TextureBitmaps.DisposeLater(previous);
     }
 
@@ -631,7 +667,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject
     {
         SetPreview("", null);
         previewTexture = null;
-        UseMips(null, "");
+        UseViews(null);
     }
 
     private void SetTextures(IEnumerable<Texture> textures)

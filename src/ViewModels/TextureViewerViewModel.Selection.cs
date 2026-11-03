@@ -64,9 +64,11 @@ public sealed partial class TextureViewerViewModel
         if (normalized == mipLevel)
             return;
         mipLevel = normalized;
-        if (DecodedMip(normalized) is { } decoded)
+        if (ReadyView(channel, normalized) is { } ready)
         {
-            ShowMip(selectedIndex, channel, normalized, decoded);
+            ShowMip(selectedIndex, channel, normalized, ready);
+            PruneViews();
+            Prefetch(selectedIndex, record.Texture, channel, normalized);
             return;
         }
         // Not decoded yet: the current mip stays on screen until this one is.
@@ -83,7 +85,15 @@ public sealed partial class TextureViewerViewModel
         if (!TextureOperations.Channels.Contains(normalized) || normalized == channel)
             return;
         channel = normalized;
-        ClearPreview();
+        if (ReadyView(normalized, mipLevel) is { } ready)
+        {
+            ShowMip(selectedIndex, normalized, mipLevel, ready);
+            PruneViews();
+            if (SelectedRecord() is { } record)
+                Prefetch(selectedIndex, record.Texture, normalized, mipLevel);
+            return;
+        }
+        // Not made yet: the current view stays on screen until this one is, made from the decoded RGBA if it is here.
         previewLoading = SelectedRecord() is not null;
         EmitSelectionChanged();
         EmitStateChanged();
