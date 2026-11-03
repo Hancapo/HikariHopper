@@ -680,15 +680,22 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.True(preview.FitMode);
 
-        // The zoom readout opens the presets, the current zoom checked; picking one zooms exactly there.
+        // The zoom readout opens the presets, centred under it: zooms only, the current one checked, none
+        // while the texture fits at some other zoom. Picking one zooms exactly there.
         toolbar.OpenZoomPresets();
         harness.Settle();
         RetroMenu menu = toolbar.PresetsMenu!;
         Assert.True(menu.IsOpen);
         RetroMenuItem[] items = [.. menu.Items.OfType<RetroMenuItem>()];
-        Assert.Equal(["Fit", "25%", "50%", "100%", "200%", "400%", "800%"], items.Select(item => item.Text));
-        Assert.True(items[0].IsChecked);
-        items[4].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(["25%", "50%", "100%", "200%", "400%", "800%"], items.Select(item => item.Text));
+        Assert.Empty(menu.Items.OfType<RetroMenuSeparator>());
+        Assert.DoesNotContain(items, item => item.IsChecked);
+        RetroMenuFrame frame = menu.GetVisualDescendants().OfType<RetroMenuFrame>().First();
+        PixelPoint frameCentre = frame.PointToScreen(new Point(frame.Bounds.Width / 2, 0));
+        PixelPoint readoutCentre = toolbar.ZoomButton.PointToScreen(new Point(toolbar.ZoomButton.Bounds.Width / 2, toolbar.ZoomButton.Bounds.Height));
+        Assert.InRange(frameCentre.X - readoutCentre.X, -1, 1);
+        Assert.InRange(frameCentre.Y - readoutCentre.Y, 0, 8);
+        items[3].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
         harness.Settle();
         Assert.Equal(2, preview.DisplayScale, 6);
         Assert.False(preview.FitMode);
@@ -697,11 +704,9 @@ public sealed class TextureWindowTests
         harness.Settle();
         toolbar.OpenZoomPresets();
         harness.Settle();
-        Assert.True(items[4].IsChecked);
-        Assert.False(items[0].IsChecked);
-        items[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
-        harness.Settle();
-        Assert.True(preview.FitMode);
+        Assert.True(items[3].IsChecked);
+        Assert.Single(items, item => item.IsChecked);
+        menu.Close();
     }
 
     [AvaloniaFact]

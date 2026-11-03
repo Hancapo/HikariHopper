@@ -45,6 +45,23 @@ public class RetroMenu : ContextMenu
         Open(target);
     }
 
+    /// <summary>
+    /// Opens centred under <paramref name="target"/>, <paramref name="gap"/> below it, as a dropdown hangs
+    /// from the control that opened it. Near a screen edge it slides along rather than flipping to one side.
+    /// </summary>
+    public void OpenUnder(Control target, double gap)
+    {
+        Placement = PlacementMode.AnchorAndGravity;
+        PlacementAnchor = PopupAnchor.Bottom;
+        PlacementGravity = PopupGravity.Bottom;
+        PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX | PopupPositionerConstraintAdjustment.FlipY
+            | PopupPositionerConstraintAdjustment.SlideY;
+        PlacementRect = new Rect(target.Bounds.Size);
+        HorizontalOffset = 0;
+        VerticalOffset = gap;
+        Open(target);
+    }
+
     /// <summary>Opens at the pointer, like QML <c>Menu.popup()</c>.</summary>
     public void Popup(Control target)
     {
