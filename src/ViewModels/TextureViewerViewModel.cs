@@ -562,6 +562,14 @@ public sealed partial class TextureViewerViewModel : ObservableObject
         UseViews(texture);
         if (source is not null)
             sources.TryAdd(mip, source);
+        // A view that finished after a switch away from both its channel and its mip is not kept, as PruneViews
+        // would not keep it; its RGBA is.
+        if (mode != channel && mip != mipLevel)
+        {
+            viewsRequested.Remove((mode, mip));
+            bitmap.Dispose();
+            return;
+        }
         if (!views.TryAdd((mode, mip), bitmap))
         {
             bitmap.Dispose();
