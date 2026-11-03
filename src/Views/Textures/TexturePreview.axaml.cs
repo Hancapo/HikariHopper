@@ -33,9 +33,12 @@ public partial class TexturePreview : UserControl
                 Toolbar.FitMode = Viewport.FitMode;
             else if (e.Property == TextureViewport.ZoomPercentProperty)
                 Toolbar.ZoomPercent = Viewport.ZoomPercent;
+            else if (e.Property == TextureViewport.DisplayScaleProperty)
+                Toolbar.DisplayScale = Viewport.DisplayScale;
         };
         Toolbar.FitMode = Viewport.FitMode;
         Toolbar.ZoomPercent = Viewport.ZoomPercent;
+        Toolbar.DisplayScale = Viewport.DisplayScale;
     }
 
     public bool CheckerboardVisible

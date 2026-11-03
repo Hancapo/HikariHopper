@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -148,6 +150,18 @@ public sealed class SegmentedSwitch : Control
     /// <summary>Applies changes made to the sides themselves (their ink, words or widths).</summary>
     public void RefreshSides() => Rebuild();
 
+    /// <summary>Asks for a side as a click on it does, unless it is already in use: for screen readers.</summary>
+    internal void Pick(int index) => Request(index);
+
+    /// <summary>The panel a side is drawn in, which stands for it to screen readers.</summary>
+    internal Control SideElement(int index) => views[index].Content;
+
+    /// <summary>
+    /// To screen readers it is a list whose items are the sides, one of them selected; selecting another
+    /// asks for it, as a click does.
+    /// </summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new SegmentedSwitchPeer(this);
+
     protected override Size MeasureOverride(Size availableSize)
     {
         well.Measure(availableSize);
@@ -165,6 +179,8 @@ public sealed class SegmentedSwitch : Control
         base.OnPropertyChanged(change);
         if (change.Property == SelectedIndexProperty || change.Property == IsFocusedProperty || change.Property == IsEffectivelyEnabledProperty)
             Refresh();
+        if (change.Property == SelectedIndexProperty && ControlAutomationPeer.FromElement(this) is SegmentedSwitchPeer peer)
+            peer.SelectionMoved(change.GetOldValue<int>(), change.GetNewValue<int>());
     }
 
     protected override void OnGotFocus(FocusChangedEventArgs e)
@@ -253,6 +269,7 @@ public sealed class SegmentedSwitch : Control
     {
         row.Children.Clear();
         views.Clear();
+        (ControlAutomationPeer.FromElement(this) as SegmentedSwitchPeer)?.InvalidateChildren();
         foreach (SwitchSide side in Sides)
         {
             var view = new SideView(side);
@@ -341,5 +358,82 @@ public sealed class SegmentedSwitch : Control
             icon.Stroke = CurrentInk;
             text.Foreground = CurrentInk;
         }
+    }
+}
+
+/// <summary>A <see cref="SegmentedSwitch"/> to screen readers: a list of its sides, one of them selected.</summary>
+internal sealed class SegmentedSwitchPeer(SegmentedSwitch owner) : ControlAutomationPeer(owner), ISelectionProvider
+{
+    private readonly List<SidePeer> sides = [];
+
+    private new SegmentedSwitch Owner => (SegmentedSwitch)base.Owner;
+
+    public bool CanSelectMultiple => false;
+
+    // With no side in use (Fit / 1:1 at some other zoom) nothing is selected.
+    public bool IsSelectionRequired => false;
+
+    public IReadOnlyList<AutomationPeer> GetSelection()
+    {
+        int index = Owner.SelectedIndex;
+        return index >= 0 && index < Sides().Count ? [Sides()[index]] : [];
+    }
+
+    /// <summary>Tells screen readers which side lost the selection and which gained it.</summary>
+    public void SelectionMoved(int from, int to)
+    {
+        IReadOnlyList<SidePeer> all = Sides();
+        if (from >= 0 && from < all.Count)
+            all[from].RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, true, false);
+        if (to >= 0 && to < all.Count)
+            all[to].RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, false, true);
+        RaisePropertyChangedEvent(SelectionPatternIdentifiers.SelectionProperty, null, null);
+    }
+
+    public new void InvalidateChildren()
+    {
+        sides.Clear();
+        base.InvalidateChildren();
+    }
+
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.List;
+
+    protected override IReadOnlyList<AutomationPeer>? GetChildrenCore() => Sides();
+
+    private IReadOnlyList<SidePeer> Sides()
+    {
+        if (sides.Count != Owner.Sides.Count)
+        {
+            sides.Clear();
+            for (int index = 0; index < Owner.Sides.Count; index++)
+                sides.Add(new SidePeer(Owner, this, index));
+        }
+        return sides;
+    }
+
+    /// <summary>One side: a list item, named by its label, selected while it is in use.</summary>
+    internal sealed class SidePeer(SegmentedSwitch owner, SegmentedSwitchPeer list, int index)
+        : ControlAutomationPeer(owner.SideElement(index)), ISelectionItemProvider
+    {
+        public bool IsSelected => owner.SelectedIndex == index;
+
+        public ISelectionProvider? SelectionContainer => list;
+
+        public void Select() => owner.Pick(index);
+
+        public void AddToSelection() => owner.Pick(index);
+
+        public void RemoveFromSelection()
+        {
+            // One side is always the one in use, or none: there is nothing to take away.
+        }
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
+
+        protected override string? GetNameCore() => owner.Sides[index].Label;
+
+        protected override AutomationPeer? GetParentCore() => list;
+
+        protected override bool IsKeyboardFocusableCore() => false;
     }
 }
