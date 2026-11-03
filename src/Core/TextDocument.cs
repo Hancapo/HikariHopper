@@ -263,7 +263,7 @@ public sealed class TextDocument
     private static void AddLine(string text, int start, int length, List<string> lines, Dictionary<int, string> rawLines)
     {
         string shown = ExpandTabs(text, start, length);
-        if (shown.Length != length)
+        if (text.AsSpan(start, length).Contains('\t'))
             rawLines[lines.Count] = text.Substring(start, length);
         lines.Add(shown);
     }

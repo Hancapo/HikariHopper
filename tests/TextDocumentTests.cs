@@ -60,6 +60,10 @@ public sealed class TextDocumentTests
         Assert.Equal("\t<b>\tx</b>", document.RawSlice(1, 0, document.Lines[1].Length));
         Assert.Equal("\t<b>", document.RawSlice(1, 2, 7));
         Assert.Equal("<a>", document.RawSlice(0, 0, 3));
+        // A tab that expands to a single space is kept too.
+        TextDocument single = Load("a.txt", "abc\tx");
+        Assert.Equal("abc x", single.Lines[0]);
+        Assert.Equal("abc\tx", single.RawSlice(0, 0, 5));
     }
 
     [Fact]
@@ -104,6 +108,10 @@ public sealed class TextDocumentTests
         Assert.Contains(("40", TextKind.Number), Kinds(TextFormat.Json, "\"priority\": 40,"));
         Assert.Contains(("true", TextKind.Literal), Kinds(TextFormat.Json, "\"on\": true"));
         Assert.Contains(("\"a \\\"b\\\"\"", TextKind.String), Kinds(TextFormat.Json, "[\"a \\\"b\\\"\"]"));
+        // A line past the limit is left uncoloured, its state carried on.
+        string huge = new('1', TextHighlighter.MaxColouredLength + 1);
+        Assert.Empty(TextHighlighter.Spans(TextFormat.Json, huge, TextHighlighter.Start, out byte next));
+        Assert.Equal(TextHighlighter.Start, next);
     }
 
     [Fact]
@@ -133,5 +141,9 @@ public sealed class TextDocumentTests
         Assert.Equal(["1", "2"], CsvTable.Parse("a;b\n1;2").Rows[1]);
         Assert.Equal('\t', CsvTable.Parse("a\tb\n1\t2").Separator);
         Assert.Equal(';', CsvTable.Parse("a;b\n1;2").Separator);
+        // A header whose quoted field runs over a line break: the separator comes from the whole record.
+        CsvTable multiline = CsvTable.Parse("\"long\nheader\";id\nvalue;1");
+        Assert.Equal(';', multiline.Separator);
+        Assert.Equal(["value", "1"], multiline.Rows[1]);
     }
 }
