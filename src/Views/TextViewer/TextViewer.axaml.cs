@@ -101,6 +101,9 @@ public partial class TextViewer : UserControl, IModalContent
 
     public bool IsOpen => overlay?.IsShown == true;
 
+    /// <summary>The viewer closed.</summary>
+    public event EventHandler? Closed;
+
     /// <summary>Whether the CSV table is showing, rather than the text.</summary>
     public bool ShowingTable => TableScroller.IsVisible;
 
@@ -119,7 +122,11 @@ public partial class TextViewer : UserControl, IModalContent
             return;
         overlay = ModalOverlay.Show(anchor, this);
         if (overlay is not null)
-            overlay.Closed += (_, _) => overlay = null;
+            overlay.Closed += (_, _) =>
+            {
+                overlay = null;
+                Closed?.Invoke(this, EventArgs.Empty);
+            };
         Dispatcher.UIThread.Post(FocusBody, DispatcherPriority.Loaded);
     }
 
@@ -174,7 +181,7 @@ public partial class TextViewer : UserControl, IModalContent
         string text, said;
         if (ShowingTable && Table.CurrentRow > 0)
         {
-            text = Table.CurrentRowText(CsvTable.SeparatorOf(document.Lines[0]));
+            text = Table.CurrentRowText(table!.Separator);
             said = $"Copied row {Table.CurrentRow}";
         }
         else if (!ShowingTable && Lines.HasSelection)

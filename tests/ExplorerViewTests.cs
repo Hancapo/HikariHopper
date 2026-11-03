@@ -796,6 +796,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(250);
         Assert.False(viewer.IsOpen);
         Assert.False(ModalOverlay.IsOpen(ui.Window));
+        // Closed, it is let go of, and the whole file with it.
+        Assert.Null(ui.Session.TextViewer);
     }
 
     [AvaloniaFact]
