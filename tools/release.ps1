@@ -17,7 +17,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$project = Join-Path $PSScriptRoot '..\src\HikariHopper\HikariHopper.csproj'
+$project = Join-Path $PSScriptRoot '..\src\HikariHopper.csproj'
 $version = ([xml](Get-Content $project)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 $name = "HikariHopper-$version-win-x64"
 $build = Join-Path $Output $name
