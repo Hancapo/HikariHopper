@@ -9,7 +9,7 @@ namespace HikariHopper.Views.Controls;
 /// <summary>
 /// Compact content-width top-level menu title (port of <c>MenuBarButton.qml</c>): the label's
 /// width plus the horizontal padding (12px each side by default), <see cref="Theme.MenuHeight"/>
-/// tall, with a rounded highlight. Bind <see cref="MenuOpen"/> to the popup's visibility so the
+/// tall, with a rounded highlight while hovered or focused from the keyboard. Bind <see cref="MenuOpen"/> to the popup's visibility so the
 /// title stays lit while its menu is open.
 /// </summary>
 public class MenuBarButton : Button
@@ -21,7 +21,6 @@ public class MenuBarButton : Button
         AvaloniaProperty.Register<MenuBarButton, bool>(nameof(MenuOpen));
 
     private Border? background;
-    private Border? focusRule;
     private TextBlock? label;
 
     public string Text
@@ -47,7 +46,6 @@ public class MenuBarButton : Button
     {
         base.OnApplyTemplate(e);
         background = e.NameScope.Find<Border>("PART_Background");
-        focusRule = e.NameScope.Find<Border>("PART_FocusRule");
         label = e.NameScope.Find<TextBlock>("PART_Text");
         Refresh();
     }
@@ -56,8 +54,23 @@ public class MenuBarButton : Button
     {
         base.OnPropertyChanged(change);
         if (change.Property == IsPointerOverProperty || change.Property == IsPressedProperty
-            || change.Property == IsFocusedProperty || change.Property == MenuOpenProperty)
+            || change.Property == MenuOpenProperty)
             Refresh();
+    }
+
+    /// <summary>Whether focus came from the keyboard (<c>:focus-visible</c>), the only time it shows.</summary>
+    public bool KeyboardFocused => IsFocused && Classes.Contains(":focus-visible");
+
+    protected override void OnGotFocus(FocusChangedEventArgs e)
+    {
+        base.OnGotFocus(e);
+        Refresh();
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        Refresh();
     }
 
     /// <summary>Qt's ToolButton activates on Space only; Enter is left to the window.</summary>
@@ -70,14 +83,13 @@ public class MenuBarButton : Button
 
     private void Refresh()
     {
-        if (background is null || focusRule is null || label is null)
+        if (background is null || label is null)
             return;
         background.Background = MenuOpen
             ? Ui.Theme.HoverChrome
             : IsPressed ? Ui.Theme.BorderSoft
-            : IsPointerOver ? Ui.Theme.HoverChrome
+            : IsPointerOver || KeyboardFocused ? Ui.Theme.HoverChrome
             : Brushes.Transparent;
-        focusRule.IsVisible = IsFocused && !MenuOpen;
         label.Foreground = Ui.Theme.Text;
     }
 }

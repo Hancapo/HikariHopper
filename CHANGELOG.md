@@ -21,6 +21,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Moving between mips in the texture viewer is instant. ([#21](https://github.com/Hancapo/HikariHopper/pull/21))
 - Opening a texture's context menu no longer makes the preview blink or jump back to the first mip. ([#22](https://github.com/Hancapo/HikariHopper/pull/22))
 - Long folder names in the folder tree are cut off with an ellipsis inside their row instead of running past it. ([#27](https://github.com/Hancapo/HikariHopper/pull/27))
+- A menu title no longer keeps a white line under it after its menu closes. Menu titles and window buttons now show focus only when it comes from the keyboard. ([#29](https://github.com/Hancapo/HikariHopper/pull/29))
 - Release builds no longer contain the folder paths of the machine that built them. ([#18](https://github.com/Hancapo/HikariHopper/pull/18))
 
 ### Removed

@@ -283,6 +283,42 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
+    public void TitleRowButtonsShowFocusOnlyFromTheKeyboard() => UiThread.Run(() =>
+    {
+        var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
+        var close = new WindowControlButton { Kind = "close", HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(60, 0, 0, 0) };
+        Window window = Show(new Panel { Children = { file, close } }, 100, 40, T.ChromeBg);
+
+        // No rule under the title is left in the template.
+        Assert.DoesNotContain(file.GetVisualDescendants().Concat(close.GetVisualDescendants()), visual => visual is Control { Name: "PART_FocusRule" });
+
+        // Focus from a click (a menu that closed again) shows nothing.
+        file.Focus(NavigationMethod.Pointer);
+        Pump();
+        Assert.True(file.IsFocused);
+        Assert.False(file.KeyboardFocused);
+        Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));
+        for (int x = 14; x < 30; x++)
+            Assert.Equal(T.ChromeBg.Color, Pixel(window, x, (int)file.Bounds.Height - 3));
+
+        close.Focus(NavigationMethod.Pointer);
+        Pump();
+        Assert.False(close.KeyboardFocused);
+
+        // From the keyboard, the title lights the way hover does, and goes dark when focus moves on.
+        file.Focus(NavigationMethod.Tab);
+        Pump();
+        Assert.True(file.KeyboardFocused);
+        Assert.Equal(T.HoverChrome.Color, Pixel(window, 4, 13));
+        close.Focus(NavigationMethod.Tab);
+        Pump();
+        Assert.True(close.KeyboardFocused);
+        Assert.False(file.KeyboardFocused);
+        Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));
+        window.Close();
+    });
+
+    [AvaloniaFact]
     public void RetroMenuIsFixedWidthWithRowHeightRows() => UiThread.Run(() =>
     {
         var root = new Panel { Background = T.ChromeBg };
