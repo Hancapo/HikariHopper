@@ -4,41 +4,22 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Threading;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// A small badge that follows the cursor while entries are dragged out of the explorer: a folder, file or stack icon for
-/// what is being extracted, with the number of items in a circle at its bottom-right. Windows runs the drag itself, so this
-/// is a borderless window of its own rather than something drawn under the cursor. It sits below and to the right of the
-/// pointer, so it never covers the drop target, and never takes focus.
+/// The cursor while entries are dragged out of the explorer: a pointer arrow with a badge below and to the right of it, a
+/// folder, file or stack icon for what is being extracted with the number of items in a circle at its bottom-right. It is
+/// the cursor itself, which Windows draws and moves with the mouse (see <see cref="Infrastructure.ShellFileDrag"/>); the
+/// arrow keeps the exact drop point visible.
 /// </summary>
-internal sealed class DragCountBadge : Window
+internal static class DragCountBadge
 {
-    // Below and to the right of the pointer, clear of Windows' own drag cursor.
-    private const double OffsetX = 18, OffsetY = 22;
-    private const int WsExToolWindow = 0x80, WsExTopmost = 0x8, WsExNoActivate = 0x08000000;
-
-    private readonly DispatcherTimer follow;
-
-    public DragCountBadge(int folders, int files)
-    {
-        WindowDecorations = WindowDecorations.None;
-        ShowActivated = false;
-        ShowInTaskbar = false;
-        Topmost = true;
-        CanResize = false;
-        SizeToContent = SizeToContent.WidthAndHeight;
-        Background = Brushes.Transparent;
-        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
-        Content = Badge(folders, files);
-        if (OperatingSystem.IsWindows())
-            Win32Properties.AddWindowStylesCallback(this, (style, exStyle) =>
-                (style, exStyle | WsExToolWindow | WsExTopmost | WsExNoActivate));
-        follow = new DispatcherTimer(TimeSpan.FromMilliseconds(15), DispatcherPriority.Render, (_, _) => Follow());
-    }
+    // Where the badge sits relative to the arrow's tip, the cursor's hot spot.
+    private const double BadgeLeft = 12, BadgeTop = 16;
 
     /// <summary>"Extracting 2 folders, 3 files": what a drag extracts, as the badge's accessible name.</summary>
     public static string Describe(int folders, int files)
@@ -54,8 +35,12 @@ internal sealed class DragCountBadge : Window
     /// <summary>The icon for a drag: a folder or a file when they are all alike, a stack of files when mixed.</summary>
     public static string IconFor(int folders, int files) => files == 0 ? "folder" : folders == 0 ? "file" : "file-stack";
 
-    /// <summary>The badge's content: the icon on a rounded chrome tile, with the item count in a circle at its bottom-right.</summary>
-    public static Control Badge(int folders, int files)
+    /// <summary>
+    /// The badge's content: the icon on a rounded chrome tile, with the item count in a circle at its bottom-right. Where
+    /// nothing can be dropped (<paramref name="blocked"/>) the count turns neutral and the icon dim, the badge staying opaque
+    /// so it reads on any background.
+    /// </summary>
+    public static Control Badge(int folders, int files, bool blocked = false)
     {
         var badge = new Panel
         {
@@ -76,7 +61,7 @@ internal sealed class DragCountBadge : Window
                     Child = new LucideIcon
                     {
                         IconName = IconFor(folders, files),
-                        Stroke = Ui.Theme.Text,
+                        Stroke = blocked ? Ui.Theme.TextDim : Ui.Theme.Text,
                         Width = 20,
                         Height = 20,
                         HorizontalAlignment = HorizontalAlignment.Center,
@@ -91,7 +76,7 @@ internal sealed class DragCountBadge : Window
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Bottom,
                     Padding = new Thickness(5, 0),
-                    Background = Ui.Theme.Selection,
+                    Background = blocked ? Ui.Theme.Border : Ui.Theme.Selection,
                     BorderBrush = Ui.Theme.WindowBg,
                     BorderThickness = new Thickness(1.5),
                     CornerRadius = new CornerRadius(9),
@@ -101,7 +86,7 @@ internal sealed class DragCountBadge : Window
                         FontFamily = Ui.Theme.UiFont,
                         FontSize = Ui.Theme.SmallFontSize,
                         FontWeight = FontWeight.Bold,
-                        Foreground = Ui.Theme.SelectionText,
+                        Foreground = blocked ? Ui.Theme.Text : Ui.Theme.SelectionText,
                         HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center,
                     },
@@ -112,36 +97,68 @@ internal sealed class DragCountBadge : Window
         return badge;
     }
 
-    /// <summary>Shows the badge by the cursor and keeps it there until it is closed.</summary>
-    public void ShowAtCursor()
+    /// <summary>
+    /// The drag cursor's visual: the pointer arrow with its tip at the top-left corner and the badge beside it, in its
+    /// blocked look where nothing can be dropped.
+    /// </summary>
+    public static Control CursorVisual(int folders, int files, bool blocked = false)
     {
-        Follow();
-        Show();
-        follow.Start();
+        Control badge = Badge(folders, files, blocked);
+        Canvas.SetLeft(badge, BadgeLeft);
+        Canvas.SetTop(badge, BadgeTop);
+        var cursor = new Canvas
+        {
+            Width = BadgeLeft + badge.Width,
+            Height = BadgeTop + badge.Height,
+            Children =
+            {
+                badge,
+                new Avalonia.Controls.Shapes.Path
+                {
+                    // The classic pointer, tip at (0.5, 0.5) so its 1px outline lands on whole pixels.
+                    Data = Geometry.Parse("M0.5,0.5 L0.5,16.5 L4.5,12.5 L7.5,18.5 L9.7,17.5 L6.8,11.5 L12,11.5 Z"),
+                    Fill = Brushes.White,
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 1,
+                },
+            },
+        };
+        // Sub-pixel (ClearType) text needs an opaque background; on a transparent cursor it smears into colour fringes.
+        RenderOptions.SetTextRenderingMode(cursor, TextRenderingMode.Antialias);
+        return cursor;
     }
 
-    protected override void OnClosed(EventArgs e)
+    /// <summary>
+    /// <paramref name="visual"/> rendered at <paramref name="scale"/> as top-down, non-premultiplied BGRA pixels, the form
+    /// a Windows cursor takes.
+    /// </summary>
+    public static (byte[] Pixels, int Width, int Height) Render(Control visual, double scale)
     {
-        follow.Stop();
-        base.OnClosed(e);
+        visual.Measure(Size.Infinity);
+        visual.Arrange(new Rect(visual.DesiredSize));
+        int width = Math.Max(1, (int)Math.Ceiling(visual.DesiredSize.Width * scale));
+        int height = Math.Max(1, (int)Math.Ceiling(visual.DesiredSize.Height * scale));
+        using var target = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96 * scale, 96 * scale));
+        target.Render(visual);
+        var pixels = new byte[width * height * 4];
+        GCHandle pin = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        try
+        {
+            target.CopyPixels(new PixelRect(0, 0, width, height), pin.AddrOfPinnedObject(), pixels.Length, width * 4);
+        }
+        finally
+        {
+            pin.Free();
+        }
+        // Skia renders premultiplied alpha; cursors want it straight.
+        for (int index = 0; index < pixels.Length; index += 4)
+        {
+            byte alpha = pixels[index + 3];
+            if (alpha is 0 or 255)
+                continue;
+            for (int channel = 0; channel < 3; channel++)
+                pixels[index + channel] = (byte)Math.Min(255, pixels[index + channel] * 255 / alpha);
+        }
+        return (pixels, width, height);
     }
-
-    private void Follow()
-    {
-        if (!OperatingSystem.IsWindows() || !GetCursorPos(out CursorPoint point))
-            return;
-        double scale = DesktopScaling;
-        Position = new PixelPoint(point.X + (int)Math.Round(OffsetX * scale), point.Y + (int)Math.Round(OffsetY * scale));
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CursorPoint
-    {
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out CursorPoint point);
 }

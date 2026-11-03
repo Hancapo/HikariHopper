@@ -56,8 +56,9 @@ $report = Join-Path $Output 'self-test.txt'
 $arguments = @('--self-test')
 # Backslashes before the closing quote are doubled, or a path ending in \ would escape it.
 if ($GameRoot) { $arguments += '"' + ($GameRoot -replace '(\\+)$', '$1$1') + '"' }
-# Start-Process -Wait, because PowerShell doesn't wait for a GUI exe started with & and would read a stale exit code.
-$test = Start-Process $exe -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $report
+# Start-Process and WaitForExit, because PowerShell doesn't wait for a GUI exe started with & and would read a stale exit code.
+$test = Start-Process $exe -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $report
+if (-not $test.WaitForExit(120000)) { $test.Kill(); $test.WaitForExit(); Get-Content $report | Write-Host; throw 'The self-test did not finish within two minutes' }
 Get-Content $report | Write-Host
 if ($test.ExitCode -ne 0) { throw 'Self-test failed' }
 if (-not (Select-String -Path $report -Pattern '^Self-test passed$' -Quiet)) { throw 'The self-test reported nothing' }
