@@ -22,7 +22,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The channel, Smooth / Pixels, Fit / 1:1 and List / Grid controls are switches: one well whose raised segment slides to the option in use, rounded only at the well's ends and straight where it meets a neighbour. ([#40](https://github.com/Hancapo/HikariHopper/pull/40))
 - The start page is a launcher: the games to open, grouped by game with their edition marks, and a standalone RPF. It no longer shows an empty explorer around them, nor the tab strip while it is the only tab. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
 - Menus hang from the title that opened them as one surface, and every menu casts a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
-- A tab is named after the folder or RPF it is in, like a file manager's tab, and after the game or RPF at the root. The folder tree starts with what is inside the root instead of a row for the root. At the root the path bar is empty, and inside a folder it starts with a home mark that goes back to the root. ([#43](https://github.com/Hancapo/HikariHopper/pull/43))
+- A tab is named after the folder or RPF it is in, like a file manager's tab: Home at a game's root, and the RPF's name at the root of an RPF opened on its own. The folder tree starts with what is inside the root instead of a row for the root. At the root the path bar is empty, and inside a folder it starts with a home mark that goes back to the root. ([#43](https://github.com/Hancapo/HikariHopper/pull/43))
 
 ### Fixed
 

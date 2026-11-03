@@ -663,9 +663,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         string game = Path.GetFileName(Work);
         string[] Crumbs() => [.. navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>().Select(segment => segment.Label)];
 
-        // At the root: the tab names the game, the tree starts inside it with nothing focused, and the
-        // path bar is empty.
-        Assert.Equal(game, ui.Bridge.TabTitle);
+        // At the root: the tab says Home, the tree starts inside it with nothing focused, and the path bar
+        // is empty.
+        Assert.Equal("Home", ui.Bridge.TabTitle);
         Assert.DoesNotContain(ui.Bridge.TreeModel, item => item.Label == game);
         Assert.All(ui.Bridge.TreeModel, item => Assert.False(item.Selected));
         Assert.Equal(-1, ui.Bridge.TreeFocusIndex);
@@ -679,12 +679,12 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("folder00", ui.Tabs.Tabs[0].TabTitle);
         Assert.True(navigation.RootSegment.IsVisible);
         Assert.Equal("", navigation.RootSegment.Label);
-        Assert.Equal($"Back to {game}", Avalonia.Automation.AutomationProperties.GetName(navigation.RootSegment));
+        Assert.Equal("Home", Avalonia.Automation.AutomationProperties.GetName(navigation.RootSegment));
         Assert.Equal(["folder00"], Crumbs());
         Point home = navigation.RootSegment.TranslatePoint(new Point(navigation.RootSegment.Bounds.Width / 2, 12), ui.Window)!.Value;
         Click(ui.Window, home);
         Assert.Equal(".", ui.Bridge.CurrentPath);
-        Assert.Equal(game, ui.Bridge.TabTitle);
+        Assert.Equal("Home", ui.Bridge.TabTitle);
         Assert.False(navigation.RootSegment.IsVisible);
     }
 
