@@ -1,7 +1,12 @@
 using System.ComponentModel;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Automation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
 
@@ -50,17 +55,34 @@ public partial class TexturePreviewToolbar : UserControl
         foreach ((ChromeToolButton button, string value) in channels)
             button.Click += (_, _) => viewModel?.SetChannel(value);
         CheckerboardButton.Click += (_, _) => CheckerboardToggled?.Invoke(this, EventArgs.Empty);
-        // Smooth and Pixels are the two sides of one setting: pressing the other one switches it.
-        SmoothButton.Click += (_, _) =>
+        // Smooth and Pixels are the two sides of one switch: a click anywhere on it flips it.
+        FilterSwitch.PointerPressed += (_, e) =>
         {
-            if (!FilteredPreview)
-                FilteredPreviewToggled?.Invoke(this, EventArgs.Empty);
+            if (e.GetCurrentPoint(FilterSwitch).Properties.IsLeftButtonPressed)
+            {
+                FlipFilter();
+                e.Handled = true;
+            }
         };
-        PixelsButton.Click += (_, _) =>
+        // Keyboard: it takes focus like the buttons beside it, and Space or Enter flips it.
+        FilterSwitch.Focusable = true;
+        FilterSwitch.KeyDown += (_, e) =>
         {
-            if (FilteredPreview)
-                FilteredPreviewToggled?.Invoke(this, EventArgs.Empty);
+            if (e.Key is Key.Space or Key.Enter)
+            {
+                FlipFilter();
+                e.Handled = true;
+            }
         };
+        FilterThumb.Transitions =
+        [
+            new TransformOperationsTransition
+            {
+                Property = RenderTransformProperty,
+                Duration = TimeSpan.FromMilliseconds(140),
+                Easing = new CubicEaseOut(),
+            },
+        ];
         FitButton.Click += (_, _) => FitRequested?.Invoke(this, EventArgs.Empty);
         ActualSizeButton.Click += (_, _) => ActualSizeRequested?.Invoke(this, EventArgs.Empty);
         ZoomOutButton.Click += (_, _) => ZoomOutRequested?.Invoke(this, EventArgs.Empty);
@@ -73,8 +95,7 @@ public partial class TexturePreviewToolbar : UserControl
         ThemedToolTip.Set(BlueButton, "Blue channel");
         ThemedToolTip.Set(AlphaButton, "Alpha channel");
         ThemedToolTip.Set(CheckerboardButton, "Transparency grid");
-        ThemedToolTip.Set(SmoothButton, "Smooth");
-        ThemedToolTip.Set(PixelsButton, "Pixels");
+        ThemedToolTip.Set(FilterSwitch, "Smooth or pixels");
         ThemedToolTip.Set(FitButton, "Fit to the view  (F)");
         ThemedToolTip.Set(ActualSizeButton, "Actual size  (1)");
         ThemedToolTip.Set(ZoomOutButton, "Zoom out");
@@ -98,6 +119,15 @@ public partial class TexturePreviewToolbar : UserControl
 
     /// <summary>A preset zoom was picked: its display scale (1 is actual size).</summary>
     public event EventHandler<double>? ZoomPresetRequested;
+
+    /// <summary>Whether the switch shows its Smooth side; Pixels otherwise.</summary>
+    internal bool SmoothSelected => FilteredPreview;
+
+    /// <summary>How far the switch's thumb sits from its Smooth side.</summary>
+    internal double FilterThumbOffset => FilterThumb.RenderTransform is TransformOperations operations ? operations.Value.M31 : 0;
+
+    /// <summary>Flips the Smooth / Pixels switch, as a click on it does.</summary>
+    internal void FlipFilter() => FilteredPreviewToggled?.Invoke(this, EventArgs.Empty);
 
     /// <summary>The preset menu, once it has been opened.</summary>
     internal RetroMenu? PresetsMenu => presets;
@@ -171,8 +201,13 @@ public partial class TexturePreviewToolbar : UserControl
         if (CheckerboardButton is null)
             return;
         SetSunken(CheckerboardButton, CheckerboardVisible);
-        SetSunken(SmoothButton, FilteredPreview);
-        SetSunken(PixelsButton, !FilteredPreview);
+        // The thumb slides to the side in use, whose glyph is in full ink.
+        TransformOperations.Builder slide = TransformOperations.CreateBuilder(1);
+        slide.AppendTranslate(FilteredPreview ? 0 : FilterThumb.Width, 0);
+        FilterThumb.RenderTransform = slide.Build();
+        SmoothIcon.Stroke = FilteredPreview ? Ui.Theme.Text : Ui.Theme.TextDim;
+        PixelsIcon.Stroke = FilteredPreview ? Ui.Theme.TextDim : Ui.Theme.Text;
+        AutomationProperties.SetName(FilterSwitch, FilteredPreview ? "Preview filtering: smooth" : "Preview filtering: pixels");
         SetSunken(FitButton, FitMode);
         ZoomButton.Text = ZoomPercent;
     }

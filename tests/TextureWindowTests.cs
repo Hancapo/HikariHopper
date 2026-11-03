@@ -614,8 +614,8 @@ public sealed class TextureWindowTests
         TexturePreviewToolbar toolbar = harness.Window.Preview.Toolbar;
         TexturePreview preview = harness.Window.Preview;
 
-        // Four wells: channels, drawing, fit / actual size, zoom.
-        Assert.Equal(4, toolbar.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("well")));
+        // Five wells: channels, the grid toggle, the Smooth / Pixels switch, fit / actual size, zoom.
+        Assert.Equal(5, toolbar.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("well")));
 
         // The channel letters carry their own colour; the shown channel's segment is raised in full ink.
         Assert.True(toolbar.RgbaButton.Sunken);
@@ -626,15 +626,22 @@ public sealed class TextureWindowTests
         Assert.True(toolbar.RedButton.Sunken);
         Assert.Equal(1, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.RedButton.Foreground).Opacity);
 
-        // Smooth and Pixels are one setting; pressing the one already on changes nothing.
+        // Smooth / Pixels is one switch in a well of its own, apart from the grid toggle: a click flips
+        // it and its thumb slides to the side in use.
+        Assert.False(toolbar.FilterSwitch.IsVisualAncestorOf(toolbar.CheckerboardButton));
         Assert.True(preview.FilteredPreview);
-        Assert.True(toolbar.SmoothButton.Sunken);
-        toolbar.SmoothButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        Assert.True(preview.FilteredPreview);
-        toolbar.PixelsButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(toolbar.SmoothSelected);
+        Assert.Equal(0, toolbar.FilterThumbOffset, 3);
+        Point onSwitch = toolbar.FilterSwitch.TranslatePoint(new Point(8, 12), harness.Window)!.Value;
+        harness.Click(onSwitch.X, onSwitch.Y);
+        harness.Settle();
         Assert.False(preview.FilteredPreview);
-        Assert.True(toolbar.PixelsButton.Sunken);
-        Assert.False(toolbar.SmoothButton.Sunken);
+        Assert.False(toolbar.SmoothSelected);
+        ExplorerStateRenders.Pump(250);
+        Assert.Equal(toolbar.FilterThumb.Width, toolbar.FilterThumbOffset, 3);
+        toolbar.FilterSwitch.Focus();
+        harness.Key(Key.Space);
+        Assert.True(preview.FilteredPreview);
 
         // The zoom readout opens the presets, the current zoom checked; picking one zooms exactly there.
         toolbar.OpenZoomPresets();
