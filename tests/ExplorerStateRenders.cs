@@ -96,6 +96,9 @@ public sealed class ExplorerStateRenders
                 case "open_game":
                     bridge.OpenGame(legacy);
                     break;
+                case "open_enhanced":
+                    bridge.OpenGame(EnhancedPath);
+                    break;
                 case "activate":
                     bridge.ActivateEntry(RowOf(bridge, op[1].GetString()!));
                     break;
