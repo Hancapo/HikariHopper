@@ -112,6 +112,14 @@ public sealed class TextDocumentTests
         string huge = new('1', TextHighlighter.MaxColouredLength + 1);
         Assert.Empty(TextHighlighter.Spans(TextFormat.Json, huge, TextHighlighter.Start, out byte next));
         Assert.Equal(TextHighlighter.Start, next);
+        // Uncoloured, a long line is still read for where it leaves off: a comment ending in it ends.
+        string[] xml = ["<!-- start", new string('x', TextHighlighter.MaxColouredLength + 1) + " -->", "<a>"];
+        byte[] states = TextHighlighter.States(TextFormat.Xml, xml);
+        Assert.NotEqual(TextHighlighter.Start, states[1]);
+        Assert.Equal(TextHighlighter.Start, states[2]);
+        Assert.Empty(TextHighlighter.Spans(TextFormat.Xml, xml[1], states[1], out byte after));
+        Assert.Equal(TextHighlighter.Start, after);
+        Assert.Contains(("a", TextKind.Tag), Kinds(TextFormat.Xml, xml[2], states[2]));
     }
 
     [Fact]
@@ -145,5 +153,10 @@ public sealed class TextDocumentTests
         CsvTable multiline = CsvTable.Parse("\"long\nheader\";id\nvalue;1");
         Assert.Equal(';', multiline.Separator);
         Assert.Equal(["value", "1"], multiline.Rows[1]);
+        // A quote in the middle of a field (5" for inches) is just a character, there as in the parser.
+        CsvTable inches = CsvTable.Parse("title\tsize 5\"\nbolt\t6\"\tred,green,blue\n");
+        Assert.Equal('\t', inches.Separator);
+        Assert.Equal(["title", "size 5\""], inches.Rows[0]);
+        Assert.Equal(["bolt", "6\"", "red,green,blue"], inches.Rows[1]);
     }
 }

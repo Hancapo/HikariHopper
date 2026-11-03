@@ -40,11 +40,18 @@ public static class TextHighlighter
         for (int index = 0; index < lines.Count; index++)
         {
             states[index] = state;
-            if (format is TextFormat.Xml or TextFormat.Lua)
-                Spans(format, lines[index], state, out state);
+            state = Advance(format, lines[index], state);
         }
         return states;
     }
+
+    /// <summary>The state <paramref name="line"/> leaves off in, read without keeping any stretches.</summary>
+    public static byte Advance(TextFormat format, string line, byte state) => format switch
+    {
+        TextFormat.Xml => Xml(line, state, null),
+        TextFormat.Lua => Lua(line, state, null),
+        _ => Start,
+    };
 
     /// <summary>The coloured stretches of <paramref name="line"/>, starting in <paramref name="state"/>.</summary>
     /// <summary>
@@ -59,7 +66,8 @@ public static class TextHighlighter
         next = Start;
         if (line.Length > MaxColouredLength)
         {
-            next = state;
+            // Not coloured, but read for where it leaves off: a comment or a tag may end in it.
+            next = Advance(format, line, state);
             return spans;
         }
         switch (format)
@@ -83,7 +91,7 @@ public static class TextHighlighter
         return spans;
     }
 
-    private static byte Xml(string line, byte state, List<TextSpan> spans)
+    private static byte Xml(string line, byte state, List<TextSpan>? spans)
     {
         int index = 0;
         while (index < line.Length)
@@ -92,7 +100,7 @@ public static class TextHighlighter
             {
                 int end = line.IndexOf("-->", index, StringComparison.Ordinal);
                 int stop = end < 0 ? line.Length : end + 3;
-                spans.Add(new TextSpan(index, stop - index, TextKind.Comment));
+                spans?.Add(new TextSpan(index, stop - index, TextKind.Comment));
                 index = stop;
                 if (end >= 0)
                     state = Start;
@@ -102,7 +110,7 @@ public static class TextHighlighter
             {
                 int end = line.IndexOf("]]>", index, StringComparison.Ordinal);
                 int stop = end < 0 ? line.Length : end + 3;
-                spans.Add(new TextSpan(index, stop - index, TextKind.String));
+                spans?.Add(new TextSpan(index, stop - index, TextKind.String));
                 index = stop;
                 if (end >= 0)
                     state = Start;
@@ -131,7 +139,7 @@ public static class TextHighlighter
             }
             if (string.CompareOrdinal(line, index, "<![CDATA[", 0, 9) == 0)
             {
-                spans.Add(new TextSpan(index, 9, TextKind.Punctuation));
+                spans?.Add(new TextSpan(index, 9, TextKind.Punctuation));
                 index += 9;
                 state = XmlCData;
                 continue;
@@ -140,12 +148,12 @@ public static class TextHighlighter
             int open = index + 1;
             if (open < line.Length && line[open] is '/' or '?' or '!')
                 open++;
-            spans.Add(new TextSpan(index, open - index, TextKind.Punctuation));
+            spans?.Add(new TextSpan(index, open - index, TextKind.Punctuation));
             int name = open;
             while (name < line.Length && IsNameChar(line[name]))
                 name++;
             if (name > open)
-                spans.Add(new TextSpan(open, name - open, TextKind.Tag));
+                spans?.Add(new TextSpan(open, name - open, TextKind.Tag));
             index = XmlTagBody(line, name, spans, out bool done);
             state = done ? Start : XmlInTag;
         }
@@ -153,7 +161,7 @@ public static class TextHighlighter
     }
 
     /// <summary>Inside a tag: attributes and their values, up to the closing "&gt;", "/&gt;" or "?&gt;".</summary>
-    private static int XmlTagBody(string line, int index, List<TextSpan> spans, out bool closed)
+    private static int XmlTagBody(string line, int index, List<TextSpan>? spans, out bool closed)
     {
         closed = false;
         while (index < line.Length)
@@ -167,7 +175,7 @@ public static class TextHighlighter
             if (current == '>' || ((current is '/' or '?') && index + 1 < line.Length && line[index + 1] == '>'))
             {
                 int length = current == '>' ? 1 : 2;
-                spans.Add(new TextSpan(index, length, TextKind.Punctuation));
+                spans?.Add(new TextSpan(index, length, TextKind.Punctuation));
                 closed = true;
                 return index + length;
             }
@@ -175,13 +183,13 @@ public static class TextHighlighter
             {
                 int end = line.IndexOf(current, index + 1);
                 int stop = end < 0 ? line.Length : end + 1;
-                spans.Add(new TextSpan(index, stop - index, TextKind.String));
+                spans?.Add(new TextSpan(index, stop - index, TextKind.String));
                 index = stop;
                 continue;
             }
             if (current == '=')
             {
-                spans.Add(new TextSpan(index, 1, TextKind.Punctuation));
+                spans?.Add(new TextSpan(index, 1, TextKind.Punctuation));
                 index++;
                 continue;
             }
@@ -190,28 +198,28 @@ public static class TextHighlighter
                 index++;
             if (index == start)
                 index++;
-            spans.Add(new TextSpan(start, index - start, TextKind.Attribute));
+            spans?.Add(new TextSpan(start, index - start, TextKind.Attribute));
         }
         return index;
     }
 
     /// <summary>Element text: a number reads as one; anything else is plain.</summary>
-    private static void XmlText(string line, int start, int stop, List<TextSpan> spans)
+    private static void XmlText(string line, int start, int stop, List<TextSpan>? spans)
     {
         ReadOnlySpan<char> text = line.AsSpan(start, stop - start);
         ReadOnlySpan<char> trimmed = text.Trim();
         if (trimmed.Length > 0 && IsNumber(trimmed))
         {
             int at = start + text.IndexOf(trimmed);
-            spans.Add(new TextSpan(at, trimmed.Length, TextKind.Number));
+            spans?.Add(new TextSpan(at, trimmed.Length, TextKind.Number));
         }
         else if (trimmed.Length > 0)
         {
-            spans.Add(new TextSpan(start, stop - start, TextKind.Plain));
+            spans?.Add(new TextSpan(start, stop - start, TextKind.Plain));
         }
     }
 
-    private static void Json(string line, List<TextSpan> spans)
+    private static void Json(string line, List<TextSpan>? spans)
     {
         int index = 0;
         while (index < line.Length)
@@ -227,12 +235,12 @@ public static class TextHighlighter
                 int after = stop;
                 while (after < line.Length && char.IsWhiteSpace(line[after]))
                     after++;
-                spans.Add(new TextSpan(index, stop - index, after < line.Length && line[after] == ':' ? TextKind.Key : TextKind.String));
+                spans?.Add(new TextSpan(index, stop - index, after < line.Length && line[after] == ':' ? TextKind.Key : TextKind.String));
                 index = stop;
             }
             else if (current is '{' or '}' or '[' or ']' or ',' or ':')
             {
-                spans.Add(new TextSpan(index, 1, TextKind.Punctuation));
+                spans?.Add(new TextSpan(index, 1, TextKind.Punctuation));
                 index++;
             }
             else if (current == '-' || char.IsAsciiDigit(current))
@@ -240,7 +248,7 @@ public static class TextHighlighter
                 int end = index + 1;
                 while (end < line.Length && (char.IsAsciiDigit(line[end]) || line[end] is '.' or 'e' or 'E' or '+' or '-'))
                     end++;
-                spans.Add(new TextSpan(index, end - index, TextKind.Number));
+                spans?.Add(new TextSpan(index, end - index, TextKind.Number));
                 index = end;
             }
             else if (char.IsAsciiLetter(current))
@@ -249,7 +257,7 @@ public static class TextHighlighter
                 while (end < line.Length && char.IsAsciiLetter(line[end]))
                     end++;
                 string word = line[index..end];
-                spans.Add(new TextSpan(index, end - index, word is "true" or "false" or "null" ? TextKind.Literal : TextKind.Plain));
+                spans?.Add(new TextSpan(index, end - index, word is "true" or "false" or "null" ? TextKind.Literal : TextKind.Plain));
                 index = end;
             }
             else
@@ -259,7 +267,7 @@ public static class TextHighlighter
         }
     }
 
-    private static void Csv(string line, List<TextSpan> spans)
+    private static void Csv(string line, List<TextSpan>? spans)
     {
         char separator = CsvTable.SeparatorOf(line);
         int index = 0;
@@ -282,15 +290,15 @@ public static class TextHighlighter
             if (end > index)
             {
                 ReadOnlySpan<char> field = line.AsSpan(index, end - index).Trim();
-                spans.Add(new TextSpan(index, end - index, quoted ? TextKind.String : IsNumber(field) ? TextKind.Number : TextKind.Plain));
+                spans?.Add(new TextSpan(index, end - index, quoted ? TextKind.String : IsNumber(field) ? TextKind.Number : TextKind.Plain));
             }
             if (end < line.Length)
-                spans.Add(new TextSpan(end, 1, TextKind.Punctuation));
+                spans?.Add(new TextSpan(end, 1, TextKind.Punctuation));
             index = end + 1;
         }
     }
 
-    private static void Ini(string line, List<TextSpan> spans)
+    private static void Ini(string line, List<TextSpan>? spans)
     {
         ReadOnlySpan<char> text = line.AsSpan();
         int first = 0;
@@ -300,22 +308,22 @@ public static class TextHighlighter
             return;
         if (text[first] is ';' or '#')
         {
-            spans.Add(new TextSpan(first, text.Length - first, TextKind.Comment));
+            spans?.Add(new TextSpan(first, text.Length - first, TextKind.Comment));
             return;
         }
         if (text[first] == '[')
         {
-            spans.Add(new TextSpan(first, text.Length - first, TextKind.Tag));
+            spans?.Add(new TextSpan(first, text.Length - first, TextKind.Tag));
             return;
         }
         int equals = line.IndexOfAny(['=', ':'], first);
         if (equals < 0)
         {
-            spans.Add(new TextSpan(first, text.Length - first, TextKind.Plain));
+            spans?.Add(new TextSpan(first, text.Length - first, TextKind.Plain));
             return;
         }
-        spans.Add(new TextSpan(first, equals - first, TextKind.Attribute));
-        spans.Add(new TextSpan(equals, 1, TextKind.Punctuation));
+        spans?.Add(new TextSpan(first, equals - first, TextKind.Attribute));
+        spans?.Add(new TextSpan(equals, 1, TextKind.Punctuation));
         ReadOnlySpan<char> value = text[(equals + 1)..];
         ReadOnlySpan<char> trimmed = value.Trim();
         if (trimmed.Length == 0)
@@ -325,7 +333,7 @@ public static class TextHighlighter
             : trimmed is "true" or "false" or "on" or "off" or "yes" or "no" ? TextKind.Literal
             : trimmed[0] is '"' or '\'' ? TextKind.String
             : TextKind.Plain;
-        spans.Add(new TextSpan(at, trimmed.Length, kind));
+        spans?.Add(new TextSpan(at, trimmed.Length, kind));
     }
 
     private static readonly HashSet<string> LuaWords =
@@ -334,14 +342,14 @@ public static class TextHighlighter
         "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
     ];
 
-    private static byte Lua(string line, byte state, List<TextSpan> spans)
+    private static byte Lua(string line, byte state, List<TextSpan>? spans)
     {
         int index = 0;
         if (state == LuaComment)
         {
             int end = line.IndexOf("]]", StringComparison.Ordinal);
             int stop = end < 0 ? line.Length : end + 2;
-            spans.Add(new TextSpan(0, stop, TextKind.Comment));
+            spans?.Add(new TextSpan(0, stop, TextKind.Comment));
             if (end < 0)
                 return LuaComment;
             index = stop;
@@ -355,13 +363,13 @@ public static class TextHighlighter
                 {
                     int end = line.IndexOf("]]", index + 4, StringComparison.Ordinal);
                     int stop = end < 0 ? line.Length : end + 2;
-                    spans.Add(new TextSpan(index, stop - index, TextKind.Comment));
+                    spans?.Add(new TextSpan(index, stop - index, TextKind.Comment));
                     if (end < 0)
                         return LuaComment;
                     index = stop;
                     continue;
                 }
-                spans.Add(new TextSpan(index, line.Length - index, TextKind.Comment));
+                spans?.Add(new TextSpan(index, line.Length - index, TextKind.Comment));
                 return Start;
             }
             if (current is '"' or '\'')
@@ -370,7 +378,7 @@ public static class TextHighlighter
                 while (end < line.Length && line[end] != current)
                     end += line[end] == '\\' ? 2 : 1;
                 int stop = Math.Min(line.Length, end + 1);
-                spans.Add(new TextSpan(index, stop - index, TextKind.String));
+                spans?.Add(new TextSpan(index, stop - index, TextKind.String));
                 index = stop;
             }
             else if (char.IsAsciiDigit(current))
@@ -378,7 +386,7 @@ public static class TextHighlighter
                 int end = index + 1;
                 while (end < line.Length && (char.IsAsciiLetterOrDigit(line[end]) || line[end] == '.'))
                     end++;
-                spans.Add(new TextSpan(index, end - index, TextKind.Number));
+                spans?.Add(new TextSpan(index, end - index, TextKind.Number));
                 index = end;
             }
             else if (char.IsAsciiLetter(current) || current == '_')
@@ -387,13 +395,13 @@ public static class TextHighlighter
                 while (end < line.Length && (char.IsAsciiLetterOrDigit(line[end]) || line[end] == '_'))
                     end++;
                 string word = line[index..end];
-                spans.Add(new TextSpan(index, end - index, LuaWords.Contains(word) ? TextKind.Literal : TextKind.Plain));
+                spans?.Add(new TextSpan(index, end - index, LuaWords.Contains(word) ? TextKind.Literal : TextKind.Plain));
                 index = end;
             }
             else
             {
                 if (!char.IsWhiteSpace(current))
-                    spans.Add(new TextSpan(index, 1, TextKind.Punctuation));
+                    spans?.Add(new TextSpan(index, 1, TextKind.Punctuation));
                 index++;
             }
         }

@@ -88,7 +88,13 @@ public sealed class CsvTableView : Control
         matches = found;
         currentMatch = index;
         if (index >= 0 && index < found.Count)
-            MoveTo(found[index].Row, found[index].Column);
+        {
+            // A match in the titles leaves the current row alone: the titles are always on screen.
+            if (found[index].Row == 0)
+                RevealColumn(found[index].Column);
+            else
+                MoveTo(found[index].Row, found[index].Column);
+        }
         InvalidateVisual();
     }
 
@@ -121,6 +127,21 @@ public sealed class CsvTableView : Control
         }
         InvalidateVisual();
         CurrentRowChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Scrolls sideways so <paramref name="column"/> is on screen.</summary>
+    private void RevealColumn(int column)
+    {
+        if (Scroller is not { } scroller || column < 0 || column >= widths.Length)
+            return;
+        double left = NumberWidth + widths.Take(column).Sum();
+        double right = left + widths[column];
+        double x = scroller.Offset.X;
+        if (left - NumberWidth < x)
+            x = left - NumberWidth;
+        else if (right > x + scroller.Viewport.Width)
+            x = right - scroller.Viewport.Width;
+        scroller.Offset = scroller.Offset.WithX(Math.Max(0, x));
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -185,8 +206,18 @@ public sealed class CsvTableView : Control
                 if (column > 0)
                     context.FillRectangle(Ui.Theme.Guide, new Rect(headerLeft, offset.Y + (HeaderHeight - 14) / 2, 1, 14));
                 string title = column < titles.Length ? titles[column].ToUpperInvariant() : "";
-                FormattedText text = TextViewerInk.Text(Fit(title, widths[column]), Ui.Theme.SmallFontSize, Ui.Theme.TextDim);
+                string shownTitle = Fit(title, widths[column]);
+                FormattedText text = TextViewerInk.Text(shownTitle, Ui.Theme.SmallFontSize, Ui.Theme.TextDim);
                 text.SetFontWeight(FontWeight.Bold);
+                // A match in a title is marked as in a cell, the current one washed.
+                int at = query.Length > 0 ? shownTitle.IndexOf(query, StringComparison.OrdinalIgnoreCase) : -1;
+                if (at >= 0)
+                {
+                    text.SetForegroundBrush(Ui.Theme.Brass, at, query.Length);
+                    text.SetTextDecorations(TextViewerInk.Underline, at, query.Length);
+                    if (currentMatch >= 0 && currentMatch < matches.Count && matches[currentMatch] == (0, column))
+                        context.FillRectangle(TextViewerInk.MatchWash, new Rect(headerLeft + 4, offset.Y + 3, widths[column] - 8, HeaderHeight - 6), 2);
+                }
                 double textX = numeric[column] ? headerLeft + widths[column] - CellPadding - text.WidthIncludingTrailingWhitespace : headerLeft + CellPadding;
                 context.DrawText(text, new Point(textX, offset.Y + Math.Round((HeaderHeight - text.Height) / 2)));
             }
