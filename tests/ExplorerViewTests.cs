@@ -574,6 +574,82 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void MovingATabKeepsTheActiveTab()
+    {
+        var tabs = new ExplorerTabsViewModel();
+        ExplorerViewModel first = tabs.Tabs[0];
+        tabs.NewTab();
+        tabs.NewTab();
+        ExplorerViewModel active = tabs.ActiveBridge;
+        tabs.MoveTab(0, 2);
+        Assert.Same(first, tabs.Tabs[2]);
+        Assert.Same(active, tabs.ActiveBridge);
+        Assert.Equal(1, tabs.ActiveIndex);
+        tabs.MoveTab(1, 0);
+        Assert.Equal(0, tabs.ActiveIndex);
+        Assert.Same(active, tabs.ActiveBridge);
+        tabs.MoveTab(0, 5);
+        Assert.Same(active, tabs.Tabs[0]);
+    }
+
+    [AvaloniaFact]
+    public void DraggingATabSlidesTheOthersAsideAndDropsItInPlace()
+    {
+        Explorer ui = OpenExplorer();
+        ui.Tabs.NewTab();
+        ui.Tabs.NewTab();
+        ui.Tabs.ActivateTab(1);
+        Pump(100);
+        TabStrip strip = ui.Find<TabStrip>();
+        ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
+        TabStripTab Drawn(ExplorerViewModel tab) =>
+            ui.Window.GetVisualDescendants().OfType<TabStripTab>().Single(candidate => candidate.Tab == tab);
+        double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
+        Point start = Drawn(before[0]).TranslatePoint(new Point(60, 16), ui.Window)!.Value;
+
+        // A press alone, or a few pixels of jitter, is still a click.
+        ui.Window.MouseMove(start);
+        ui.Window.MouseDown(start, MouseButton.Left);
+        ui.Window.MouseMove(start + new Point(3, 0), RawInputModifiers.LeftMouseButton);
+        Assert.False(strip.Dragging);
+
+        // Past the threshold the tab activates and follows the pointer; the tabs it passes slide aside.
+        ui.Window.MouseMove(start + new Point(100, 0), RawInputModifiers.LeftMouseButton);
+        Assert.True(strip.Dragging);
+        Assert.Same(before[0], ui.Tabs.ActiveBridge);
+        Assert.Equal(100, Offset(before[0]), 3);
+        ui.Window.MouseMove(start + new Point(350, 0), RawInputModifiers.LeftMouseButton);
+        Assert.Equal(350, Offset(before[0]), 3);
+        Pump(20);
+        double sliding = Offset(before[1]);
+        Assert.InRange(sliding, -219.9, -0.1);  // on its way, not jumped
+        Pump(300);
+        Assert.Equal(-220, Offset(before[1]), 3);
+        Assert.Equal(-220, Offset(before[2]), 3);
+
+        // It can't leave the strip.
+        ui.Window.MouseMove(start + new Point(900, 0), RawInputModifiers.LeftMouseButton);
+        Assert.Equal(440, Offset(before[0]), 3);
+
+        // Dropped past the last tab's middle, it lands last and eases the rest of the way in.
+        ui.Window.MouseMove(start + new Point(400, 0), RawInputModifiers.LeftMouseButton);
+        ui.Window.MouseUp(start + new Point(400, 0), MouseButton.Left);
+        Assert.False(strip.Dragging);
+        Assert.Equal([before[1], before[2], before[0]], ui.Tabs.Tabs);
+        Assert.Equal(2, ui.Tabs.ActiveIndex);
+        Assert.Same(before[0], ui.Tabs.ActiveBridge);
+        Assert.Equal(0, Offset(before[1]), 3);
+        Assert.Equal(0, Offset(before[2]), 3);
+        Assert.InRange(Offset(before[0]), -40.1, 0);
+        Pump(300);
+        Assert.Equal(0, Offset(before[0]), 3);
+        Assert.Equal(new Point(14 + 440, 42), Drawn(before[0]).TranslatePoint(default, ui.Window)!.Value);
+        // The session still has one texture window per tab.
+        Assert.Equal(3, ui.Session.TextureWindows.Count);
+        Assert.True(ui.Session.TextureWindows.ContainsKey(before[0]));
+    }
+
+    [AvaloniaFact]
     public void GameTabsShowTheirEditionAndTellTheirPath()
     {
         Explorer ui = OpenExplorer();
