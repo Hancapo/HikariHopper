@@ -209,16 +209,18 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Directory.CreateDirectory(Path.Combine(Work, "mods", "nested"));
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
-        TreeItem root = bridge.TreeModel[0];
+        // The tree starts inside the root: at the root nothing in it is selected.
+        TreeItem mods = bridge.TreeModel[0];
+        Assert.Equal("mods", mods.Label);
+        Assert.False(mods.Selected);
         var actions = new List<NotifyCollectionChangedAction>();
         bridge.TreeModel.CollectionChanged += (_, e) => actions.Add(e.Action);
 
         bridge.Navigate("mods");
 
         Assert.Empty(actions);
-        Assert.Same(root, bridge.TreeModel[0]);
-        Assert.False(root.Selected);
-        Assert.True(bridge.TreeModel[1].Selected);
+        Assert.Same(mods, bridge.TreeModel[0]);
+        Assert.True(mods.Selected);
     });
 
     [AvaloniaFact]
@@ -235,12 +237,12 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         bridge.ToggleTreeNode("game://a");
         Assert.Equal([NotifyCollectionChangedAction.Add], actions);
-        Assert.Equal([Path.GetFileName(Work), "a", "child", "b"], TreeLabels(bridge));
-        Assert.Same(sibling, bridge.TreeModel[3]);
+        Assert.Equal(["a", "child", "b"], TreeLabels(bridge));
+        Assert.Same(sibling, bridge.TreeModel[2]);
 
         bridge.ToggleTreeNode("game://a");
         Assert.Equal([NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Remove], actions);
-        Assert.Equal(3, bridge.TreeModel.Count);
+        Assert.Equal(2, bridge.TreeModel.Count);
     });
 
     [AvaloniaFact]
@@ -253,10 +255,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         bridge.NavigateTree("game://mods");
 
-        TreeItem mods = bridge.TreeModel[1];
+        TreeItem mods = bridge.TreeModel[0];
         Assert.True(mods.Selected);
         Assert.False(mods.Expanded);
-        Assert.Equal(2, bridge.TreeModel.Count);
+        Assert.Equal(1, bridge.TreeModel.Count);
     });
 
     [AvaloniaFact]
@@ -267,11 +269,11 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
 
-        bridge.ActivateTreeRow(1);
+        bridge.ActivateTreeRow(0);
 
         Assert.Equal("mods", bridge.CurrentPath);
-        Assert.True(bridge.TreeModel[1].Expanded);
-        Assert.Equal("nested", bridge.TreeModel[2].Label);
+        Assert.True(bridge.TreeModel[0].Expanded);
+        Assert.Equal("nested", bridge.TreeModel[1].Label);
     });
 
     [AvaloniaFact]
@@ -287,7 +289,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("sample.rpf", bridge.ArchiveName);
         Assert.Equal("sample.rpf", bridge.TabTitle);
         Assert.Equal(1, bridge.VisibleCount);
-        Assert.Equal(2, bridge.TreeModel.Count);
+        Assert.Equal(["folder"], TreeLabels(bridge));
         Assert.Equal(-1, bridge.SelectedIndex);
         Assert.Equal("Opened sample.rpf", bridge.Status);
     });
@@ -300,19 +302,19 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(outer);
 
-        Assert.Equal("nested.rpf", bridge.TreeModel[1].Label);
-        string nestedPath = bridge.TreeModel[1].Path;
+        Assert.Equal("nested.rpf", bridge.TreeModel[0].Label);
+        string nestedPath = bridge.TreeModel[0].Path;
         bridge.NavigateTree(nestedPath);
 
         Assert.Equal("nested.rpf", bridge.ArchiveName);
-        Assert.Equal("outer.rpf", bridge.TabTitle);
+        Assert.Equal("nested.rpf", bridge.TabTitle); // The tab names where it is.
         Assert.Equal(1, bridge.VisibleCount);
         Assert.Equal("inside", bridge.EntriesModel[0].Name);
-        Assert.Equal(["outer.rpf", "nested.rpf", "inside"], TreeLabels(bridge));
-        Assert.True(bridge.TreeModel[1].Expanded);
-        Assert.True(bridge.TreeModel[1].Selected);
+        Assert.Equal(["nested.rpf", "inside"], TreeLabels(bridge));
+        Assert.True(bridge.TreeModel[0].Expanded);
+        Assert.True(bridge.TreeModel[0].Selected);
         Assert.Equal(nestedPath, bridge.TreeFocusPath);
-        Assert.Equal(1, bridge.TreeFocusIndex);
+        Assert.Equal(0, bridge.TreeFocusIndex);
         Assert.Equal("Opened nested archive", bridge.Status);
     });
 
@@ -331,7 +333,8 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("netflix-force-4k-main", bridge.CurrentPath);
         Assert.Equal(["new folder", "netflix-force-4k-main.rpf", "netflix-force-4k-main"],
             bridge.NavigationPathSegments.Select(segment => segment.Label));
-        Assert.Equal(["outer.rpf", "new folder", "netflix-force-4k-main.rpf", "netflix-force-4k-main"], TreeLabels(bridge));
+        Assert.Equal(["new folder", "netflix-force-4k-main.rpf", "netflix-force-4k-main"], TreeLabels(bridge));
+        Assert.Equal("netflix-force-4k-main", bridge.TabTitle);
     });
 
     [AvaloniaFact]
@@ -352,13 +355,15 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.False(bridge.HasArchive);
         Assert.Equal(Work, bridge.GamePath);
         Assert.Equal(3, bridge.VisibleCount);
-        Assert.Equal(3, bridge.TreeModel.Count);
+        Assert.Equal(["mods", "x64a.rpf"], TreeLabels(bridge));
         Assert.Equal(-1, bridge.SelectedIndex);
         Assert.Equal("Loaded GTA V Legacy", bridge.Status);
+        Assert.Equal(name, bridge.TabTitle);
 
         bridge.SelectEntry(0);
         Assert.Equal(0, bridge.SelectedIndex);
         bridge.Navigate("mods");
+        Assert.Equal("mods", bridge.TabTitle);
         Assert.Equal(-1, bridge.SelectedIndex);
         Assert.True(bridge.CanGoBack);
         bridge.GoBack();
@@ -369,28 +374,29 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.GoUp();
         Assert.Equal(".", bridge.CurrentPath);
         Assert.False(bridge.CanGoUp);
+        Assert.Equal(name, bridge.TabTitle);
 
         bridge.ActivateEntry(RowFor(bridge, "x64a.rpf"));
 
         Assert.True(bridge.HasArchive);
         Assert.True(bridge.InArchive);
         Assert.Equal("x64a.rpf", bridge.ArchiveName);
-        Assert.Equal(name, bridge.TabTitle);
+        Assert.Equal("x64a.rpf", bridge.TabTitle);
         Assert.Equal(["x64a.rpf"], bridge.ArchiveGamePathParts);
-        Assert.Equal([name, "mods", "x64a.rpf", "common"], TreeLabels(bridge));
+        Assert.Equal(["mods", "x64a.rpf", "common"], TreeLabels(bridge));
 
-        bridge.ToggleTreeNode(bridge.TreeModel[3].Path);
-        Assert.Equal("data", bridge.TreeModel[4].Label);
-        Assert.False(bridge.TreeModel[4].HasChildren);
+        bridge.ToggleTreeNode(bridge.TreeModel[2].Path);
+        Assert.Equal("data", bridge.TreeModel[3].Label);
+        Assert.False(bridge.TreeModel[3].HasChildren);
 
         bridge.ToggleTreeNode("rpf://x64a.rpf");
-        Assert.Equal([name, "mods", "x64a.rpf"], TreeLabels(bridge));
+        Assert.Equal(["mods", "x64a.rpf"], TreeLabels(bridge));
 
         bridge.ToggleTreeNode("game://mods");
-        Assert.Equal("nested", bridge.TreeModel[2].Label);
-        Assert.False(bridge.TreeModel[2].HasChildren);
+        Assert.Equal("nested", bridge.TreeModel[1].Label);
+        Assert.False(bridge.TreeModel[1].HasChildren);
         bridge.ToggleTreeNode("game://mods");
-        Assert.Equal(3, bridge.TreeModel.Count);
+        Assert.Equal(2, bridge.TreeModel.Count);
     });
 
     [AvaloniaFact]
@@ -408,11 +414,11 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         bridge.NavigateTree(TreeRow(bridge, "inner.rpf").Path);
 
-        Assert.Equal([name, "outer.rpf", "branch", "inner.rpf", "final"], TreeLabels(bridge));
+        Assert.Equal(["outer.rpf", "branch", "inner.rpf", "final"], TreeLabels(bridge));
+        Assert.True(bridge.TreeModel[0].Expanded);
         Assert.True(bridge.TreeModel[1].Expanded);
         Assert.True(bridge.TreeModel[2].Expanded);
-        Assert.True(bridge.TreeModel[3].Expanded);
-        Assert.True(bridge.TreeModel[3].Selected);
+        Assert.True(bridge.TreeModel[2].Selected);
         Assert.Equal(["outer.rpf", "branch", "inner.rpf"], bridge.ArchiveGamePathParts);
         Assert.Equal(["outer.rpf", "branch", "inner.rpf"], bridge.NavigationPathSegments.Select(segment => segment.Label));
         Assert.Equal([true, false, true], bridge.NavigationPathSegments.Select(segment => segment.Archive));
@@ -423,7 +429,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("outer.rpf", bridge.ArchiveName);
         Assert.Equal("branch", bridge.CurrentPath);
         Assert.Equal(branchPath, bridge.TreeFocusPath);
-        Assert.Equal([name, "outer.rpf", "branch", "inner.rpf", "final"], TreeLabels(bridge));
+        Assert.Equal(["outer.rpf", "branch", "inner.rpf", "final"], TreeLabels(bridge));
     });
 
     [AvaloniaFact]
@@ -462,7 +468,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         bridge.NavigateTree(deepestPath);
 
-        Assert.Equal([name, "outer.rpf", "branch", "middle.rpf", "next", "deepest.rpf", "final"], TreeLabels(bridge));
+        Assert.Equal(["outer.rpf", "branch", "middle.rpf", "next", "deepest.rpf", "final"], TreeLabels(bridge));
         Assert.Equal(deepestPath, bridge.TreeFocusPath);
         Assert.Equal(["outer.rpf", "branch", "middle.rpf", "next", "deepest.rpf"], bridge.ArchiveGamePathParts);
     });

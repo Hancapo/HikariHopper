@@ -26,7 +26,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =
-        [nameof(PathParts), nameof(ArchiveGamePathParts), nameof(NavigationPathSegments)];
+        [nameof(PathParts), nameof(ArchiveGamePathParts), nameof(NavigationPathSegments), nameof(TabTitle)];
     private static readonly string[] CountsProperties =
         [nameof(TotalCount), nameof(VisibleCount), nameof(CanGoBack), nameof(CanGoForward)];
     private static readonly string[] SelectionProperties =
@@ -119,8 +119,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public string ArchiveRootName => Provider.RootArchiveName;
 
+    /// <summary>
+    /// The folder or RPF the tab is in, as a file manager's tab reads; at the root, the game or the RPF.
+    /// </summary>
     public string TabTitle =>
-        Provider.HasGame ? Provider.GameName : Provider.HasArchive ? Provider.RootArchiveName : "New tab";
+        NavigationPathSegments is [.., var current] ? current.Label
+        : Provider.HasGame ? Provider.GameName : Provider.HasArchive ? Provider.RootArchiveName : "New tab";
 
     public bool HasWorkspace => Provider.IsOpen;
 

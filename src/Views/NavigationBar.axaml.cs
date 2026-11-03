@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -98,13 +99,14 @@ public partial class NavigationBar : UserControl
     {
         ExplorerViewModel? model = Bridge;
         bool hasWorkspace = model?.HasWorkspace == true;
-        bool rootArchive = model is { InArchive: true, HasGame: false };
         IReadOnlyList<PathSegment> parts = model?.NavigationPathSegments ?? [];
-        // The location you are in reads brightest, whether it is the root or the last segment.
-        RootSegment.Set(
-            hasWorkspace ? (model!.HasGame ? model.GameName : model.ArchiveRootName) : "Select the GTA V folder",
-            rootArchive,
-            rootArchive ? Ui.Theme.Accent : hasWorkspace && parts.Count == 0 ? Ui.Theme.Text : Ui.Theme.TextDim);
+        // At the root the bar is empty: the tab already says where you are. Below it, the path starts with
+        // a home mark that goes back to the root, and the location you are in reads brightest.
+        RootSegment.IsVisible = !hasWorkspace || parts.Count > 0;
+        if (hasWorkspace)
+            RootSegment.SetHome(Ui.Theme.TextDim, model!.HasGame ? model.GameName : model.ArchiveRootName);
+        else
+            RootSegment.Set("Select the GTA V folder", false, Ui.Theme.TextDim);
 
         Segments.Children.Clear();
         for (int index = 0; index < parts.Count; index++)
@@ -189,6 +191,15 @@ public sealed class NavigationSegment : Border
         Height = 13,
         VerticalAlignment = VerticalAlignment.Center,
     };
+    private readonly ChromeIcon home = new()
+    {
+        Kind = "home",
+        Width = 14,
+        Height = 14,
+        Thickness = 1.6,
+        IsVisible = false,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
     private readonly TextBlock label = new()
     {
         FontFamily = Ui.Theme.MonoFont,
@@ -210,6 +221,7 @@ public sealed class NavigationSegment : Border
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        row.Children.Add(home);
         row.Children.Add(package);
         row.Children.Add(label);
         Child = row;
@@ -221,7 +233,24 @@ public sealed class NavigationSegment : Border
     {
         label.Text = text;
         label.Foreground = ink;
+        label.IsVisible = true;
         package.IsVisible = archive;
+        home.IsVisible = false;
+        Padding = new Thickness(7, 0);
+        AutomationProperties.SetName(this, text);
+    }
+
+    /// <summary>Shows the home mark alone, which goes back to the root named <paramref name="root"/>.</summary>
+    public void SetHome(IBrush ink, string root)
+    {
+        label.Text = "";
+        label.IsVisible = false;
+        package.IsVisible = false;
+        home.IsVisible = true;
+        home.Stroke = ink;
+        Padding = new Thickness(6, 0);
+        AutomationProperties.SetName(this, $"Back to {root}");
+        ThemedToolTip.Set(this, root);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
