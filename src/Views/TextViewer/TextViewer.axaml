@@ -125,10 +125,10 @@
           </Panel>
 
           <Panel>
-            <ScrollViewer Name="TextScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Name="TextScroller" Theme="{StaticResource QuietBothScrollViewer}">
               <v:TextLinesView Name="Lines" />
             </ScrollViewer>
-            <ScrollViewer Name="TableScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" IsVisible="False">
+            <ScrollViewer Name="TableScroller" Theme="{StaticResource QuietBothScrollViewer}" IsVisible="False">
               <v:CsvTableView Name="Table" />
             </ScrollViewer>
           </Panel>

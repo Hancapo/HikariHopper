@@ -11,7 +11,8 @@ namespace HikariHopper.Views.Controls;
 /// <summary>
 /// The shared vertical scrollbar (port of <c>QuietScrollBar.qml</c>): a fixed 12px gutter with a
 /// rounded 4px idle thumb that widens to 8px while hovered or pressed. It is always on, like Qt's
-/// <c>ScrollBar.AlwaysOn</c>, and draws nothing while the content fits.
+/// <c>ScrollBar.AlwaysOn</c>, and draws nothing while the content fits. Set <see cref="ScrollBar.Orientation"/>
+/// to horizontal for the same bar along the bottom edge.
 /// </summary>
 /// <remarks>
 /// Use it as <c>PART_VerticalScrollBar</c> of a <see cref="ScrollViewer"/> (see the
@@ -74,7 +75,12 @@ public class QuietScrollBar : ScrollBar
     public static double Overlap(ScrollViewer viewer, double inset) =>
         viewer.Extent.Height > viewer.Viewport.Height ? Math.Max(0, Ui.Theme.ScrollbarWidth - inset) : 0;
 
-    private double AvailableLength => Bounds.Height;
+    private bool Horizontal => Orientation == Orientation.Horizontal;
+
+    /// <summary>The bar's length along the direction it scrolls, and its thickness across it.</summary>
+    private double AvailableLength => Horizontal ? Bounds.Width : Bounds.Height;
+
+    private double Thickness => Horizontal ? Bounds.Height : Bounds.Width;
 
     private double MinimumSize => AvailableLength > 0 ? Math.Min(1, Ui.Theme.ScrollbarMinThumbLength / AvailableLength) : 1;
 
@@ -88,9 +94,10 @@ public class QuietScrollBar : ScrollBar
             double bottom = top + size * AvailableLength;
             bool active = IsPointerOver || pressed;
             double width = active ? Ui.Theme.ScrollbarActiveThumbWidth : Ui.Theme.ScrollbarIdleThumbWidth;
-            double left = Math.Floor((Bounds.Width - width) / 2 + 0.5);
+            double left = Math.Floor((Thickness - width) / 2 + 0.5);
             double snappedTop = Math.Floor(top + 0.5);
-            return new Rect(left, snappedTop, width, Math.Max(0, Math.Floor(bottom + 0.5) - snappedTop));
+            double length = Math.Max(0, Math.Floor(bottom + 0.5) - snappedTop);
+            return Horizontal ? new Rect(snappedTop, left, length, width) : new Rect(left, snappedTop, width, length);
         }
     }
 
@@ -104,7 +111,7 @@ public class QuietScrollBar : ScrollBar
     protected override Size MeasureOverride(Size availableSize)
     {
         base.MeasureOverride(availableSize);
-        return new Size(Ui.Theme.ScrollbarWidth, 0);
+        return Horizontal ? new Size(0, Ui.Theme.ScrollbarWidth) : new Size(Ui.Theme.ScrollbarWidth, 0);
     }
 
     public override void Render(DrawingContext context)
@@ -113,7 +120,7 @@ public class QuietScrollBar : ScrollBar
             return;
         IBrush thumb = pressed ? Ui.Theme.TextRow : IsPointerOver ? Ui.Theme.TextDim : Ui.Theme.Border;
         Rect rect = ThumbRect;
-        double radius = rect.Width / 2;
+        double radius = Math.Min(rect.Width, rect.Height) / 2;
         context.DrawRectangle(thumb, null, rect, radius, radius);
     }
 
@@ -121,7 +128,7 @@ public class QuietScrollBar : ScrollBar
     {
         if (!Scrollable || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
-        double point = e.GetPosition(this).Y;
+        double point = Along(e.GetPosition(this));
         grabOffset = PositionAt(point) - Position;
         double grabbed = Math.Max(VisibleSize, LogicalPosition(MinimumSize));
         if (grabOffset < 0 || grabOffset > grabbed)
@@ -136,14 +143,14 @@ public class QuietScrollBar : ScrollBar
     {
         base.OnPointerMoved(e);
         if (pressed)
-            MoveTo(e.GetPosition(this).Y);
+            MoveTo(Along(e.GetPosition(this)));
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         if (!pressed)
             return;
-        MoveTo(e.GetPosition(this).Y);
+        MoveTo(Along(e.GetPosition(this)));
         pressed = false;
         e.Pointer.Capture(null);
         e.Handled = true;
@@ -164,6 +171,9 @@ public class QuietScrollBar : ScrollBar
         double position = Math.Max(0.0, Math.Min(PositionAt(point) - grabOffset, 1.0 - VisibleSize));
         SetCurrentValue(ValueProperty, Math.Clamp(position * (Maximum + ViewportSize), Minimum, Maximum));
     }
+
+    /// <summary>Where <paramref name="point"/> is along the bar.</summary>
+    private double Along(Point point) => Horizontal ? point.X : point.Y;
 
     private double PositionAt(double point) =>
         AvailableLength <= 0 ? 0 : LogicalPosition(point) / AvailableLength;

@@ -6,6 +6,10 @@
        only gives it a transparent surface so the whole 12px gutter is its hit area, as in Qt. -->
   <ControlTheme x:Key="{x:Type c:QuietScrollBar}" TargetType="c:QuietScrollBar">
     <Setter Property="Width" Value="{x:Static ui:Theme.ScrollbarWidth}" />
+    <Style Selector="^:horizontal">
+      <Setter Property="Width" Value="NaN" />
+      <Setter Property="Height" Value="{x:Static ui:Theme.ScrollbarWidth}" />
+    </Style>
     <Setter Property="Template">
       <ControlTemplate>
         <Panel Background="Transparent" />
@@ -42,6 +46,25 @@
                                   Content="{TemplateBinding Content}"
                                   Padding="{TemplateBinding Padding}" />
           <c:QuietScrollBar Name="PART_VerticalScrollBar" HorizontalAlignment="Right" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <!-- Both ways, for content that is wide as well as long (the text viewer): the bars float over the
+       right and bottom edges of the content, the bottom one stopping short of the right one. -->
+  <ControlTheme x:Key="QuietBothScrollViewer" TargetType="ScrollViewer">
+    <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="VerticalScrollBarVisibility" Value="Visible" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <ScrollContentPresenter Name="PART_ContentPresenter"
+                                  Content="{TemplateBinding Content}"
+                                  Padding="{TemplateBinding Padding}" />
+          <c:QuietScrollBar Name="PART_VerticalScrollBar" HorizontalAlignment="Right" />
+          <c:QuietScrollBar Name="PART_HorizontalScrollBar" Orientation="Horizontal" VerticalAlignment="Bottom"
+                            Margin="0,0,12,0" />
         </Panel>
       </ControlTemplate>
     </Setter>
