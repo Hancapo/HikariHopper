@@ -126,7 +126,9 @@ public sealed class CsvTableView : Control
     protected override Size MeasureOverride(Size availableSize)
     {
         double viewport = Scroller?.Viewport.Width is > 0 and var width ? width : 800;
-        return new Size(Math.Max(viewport, NumberWidth + widths.Sum() + 16), HeaderHeight + RecordCount * RowHeight + 8);
+        // Room past the last row and column for the scroll bars, which float over the table.
+        return new Size(Math.Max(viewport, NumberWidth + widths.Sum() + 16 + Ui.Theme.ScrollbarWidth),
+            HeaderHeight + RecordCount * RowHeight + 8 + Ui.Theme.ScrollbarWidth);
     }
 
     public override void Render(DrawingContext context)

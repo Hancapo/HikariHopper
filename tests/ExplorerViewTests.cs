@@ -764,6 +764,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("handling.meta", viewer.TitleText.Text);
         Assert.Equal(["6 lines", "UTF-8", "CRLF", "XML"], new[] { viewer.LinesText.Text, viewer.EncodingText.Text, viewer.EndingText.Text, viewer.FormatText.Text });
         Assert.Equal("Read only", viewer.StatusText.Text);
+        // The app's own quiet scroll bars, both ways: the text can be wider than the view.
+        Views.Controls.QuietScrollBar[] bars = [.. viewer.TextScroller.GetVisualDescendants().OfType<Views.Controls.QuietScrollBar>()];
+        Assert.Equal([Avalonia.Layout.Orientation.Vertical, Avalonia.Layout.Orientation.Horizontal], bars.Select(bar => bar.Orientation));
 
         // Ctrl+F, then typing finds; F3 steps through the matches.
         Key(ui.Window, PhysicalKey.F, RawInputModifiers.Control);

@@ -214,11 +214,13 @@ public sealed class TextLinesView : Control
                 row += Math.Max(1, (document!.Lines[index].Length + columnsPerRow - 1) / columnsPerRow);
             }
             rowStarts[lines] = row;
-            return new Size(viewport, row * LineHeight + 2 * TextPadding);
+            // Room under the last line for the scroll bar, which floats over the content.
+            return new Size(viewport, row * LineHeight + 2 * TextPadding + Ui.Theme.ScrollbarWidth);
         }
         columnsPerRow = int.MaxValue;
         rowStarts = [];
-        return new Size(Math.Max(viewport, GutterWidth + maxColumns * charWidth + 2 * TextPadding + 40), lines * LineHeight + 2 * TextPadding);
+        return new Size(Math.Max(viewport, GutterWidth + maxColumns * charWidth + 2 * TextPadding + 40),
+            lines * LineHeight + 2 * TextPadding + Ui.Theme.ScrollbarWidth);
     }
 
     public override void Render(DrawingContext context)
