@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The start page is a launcher: the games to open, grouped by game with their edition marks, and a standalone RPF. It no longer shows an empty explorer around them, nor the tab strip while it is the only tab. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
 - Menus hang from the title that opened them as one surface, and every menu casts a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
 
 ### Fixed

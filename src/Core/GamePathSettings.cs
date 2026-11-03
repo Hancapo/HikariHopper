@@ -23,6 +23,9 @@ public sealed class GamePathSettings : ObservableObject
 
     public string EnhancedPath => paths[GameSettings.EnhancedEdition];
 
+    /// <summary>The configured path of <paramref name="edition"/>, "" when none is set.</summary>
+    public string PathFor(string edition) => paths.TryGetValue(edition, out string? path) ? path : "";
+
     public bool LegacyPathValid => GameSettings.IsGameRoot(LegacyPath, GameSettings.LegacyEdition);
 
     public bool EnhancedPathValid => GameSettings.IsGameRoot(EnhancedPath, GameSettings.EnhancedEdition);

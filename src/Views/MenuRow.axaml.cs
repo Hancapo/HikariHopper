@@ -116,7 +116,10 @@ public partial class MenuRow : UserControl
 
     private void OnSearch(object? sender, RoutedEventArgs e) => SearchRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnSettings(object? sender, RoutedEventArgs e)
+    private void OnSettings(object? sender, RoutedEventArgs e) => OpenSettings();
+
+    /// <summary>Shows the Settings window, for the menu and the start page's links.</summary>
+    internal void OpenSettings()
     {
         if (Tabs is not { } tabs)
             return;

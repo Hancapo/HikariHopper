@@ -83,6 +83,65 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheLauncherHasNoExplorerChromeAndListsTheGamesToOpen()
+    {
+        Explorer ui = OpenExplorer(openGame: false);
+        ExplorerScreen screen = ui.Find<ExplorerScreen>();
+        StartPage start = Assert.IsType<StartPage>(screen.Page);
+
+        // None of the explorer: no tab strip for a lone launcher, no path bar, search, header or status.
+        Assert.False(screen.StripVisible);
+        Assert.False(ui.Find<TabStrip>().IsVisible);
+        Assert.Empty(ui.Window.GetVisualDescendants().OfType<NavigationBar>());
+        Assert.Empty(ui.Window.GetVisualDescendants().OfType<StatusBar>());
+        Assert.DoesNotContain(start.GetVisualDescendants().OfType<TextBlock>(), text => text.Text is "NAME" or "No installation open");
+        Assert.Equal(StartPage.AppVersion, start.FindControl<TextBlock>("VersionText")!.Text);
+        Assert.Matches(@"^\d+\.\d+\.\d+", StartPage.AppVersion);
+
+        // Nothing set up: GTA V gets one row that leads to Settings.
+        LauncherRow lone = Assert.Single(start.Rows);
+        Assert.Equal((HikariHopper.Core.GameCatalog.GtaV, false), (lone.Entry.Game.Id, lone.Entry.SetUp));
+        Assert.Contains("Settings", string.Concat(lone.Detail.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(run => run.Text)));
+        bool settings = false;
+        start.SettingsRequested += (_, _) => settings = true;
+        start.Focus();
+        lone.Focus(NavigationMethod.Tab);
+        ui.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Assert.True(settings);
+
+        // A configured edition is a row with its tinted V and its path, and a recent install of the
+        // same game joins it under its folder name; the configured one isn't repeated.
+        string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
+        string other = MakeGame("Modded GTA");
+        HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.EnhancedGameRootKey, enhanced);
+        HikariHopper.Core.AppSettings.SetStringList(HikariHopper.Core.GameSettings.RecentGameRootsKey, [enhanced, other]);
+        ui.Tabs.GamePathSettings.Refresh();
+        Pump();
+        LauncherRow[] rows = [.. start.Rows];
+        Assert.Equal([("Enhanced", enhanced), ("Modded GTA", other)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
+        Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
+        Assert.Equal(HikariHopper.Ui.Theme.TextDim, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
+        Assert.Equal(enhanced, rows[0].Detail.Text);
+
+        // Clicking a row opens it, and the explorer and its tab strip come back.
+        Click(ui.Window, rows[1].TranslatePoint(new Point(60, 20), ui.Window)!.Value);
+        Settle(ui.Bridge);
+        Pump();
+        Assert.Equal(Path.GetFullPath(other).TrimEnd(Path.DirectorySeparatorChar), ui.Bridge.GamePath);
+        Assert.IsType<WorkspaceView>(screen.Page);
+        Assert.True(ui.Find<TabStrip>().IsVisible);
+
+        // A second tab shows the launcher under the strip, which stays so the first tab is in reach.
+        ui.Tabs.NewTab();
+        Pump();
+        Assert.IsType<StartPage>(screen.Page);
+        Assert.True(ui.Find<TabStrip>().IsVisible);
+        ui.Tabs.CloseTab(0);
+        Pump();
+        Assert.False(ui.Find<TabStrip>().IsVisible);
+    }
+
+    [AvaloniaFact]
     public void ClosingAWorkspaceReleasesItsViews()
     {
         Explorer ui = OpenExplorer();
