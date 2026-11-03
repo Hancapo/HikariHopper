@@ -71,7 +71,43 @@ public partial class TabStrip : UserControl
     {
         // A tab opened or closed mid-drag (a shortcut) ends the drag where it is.
         CancelDrag();
+        if (e.Action == NotifyCollectionChangedAction.Remove)
+            SlideIntoPlace();
         Dispatcher.UIThread.Post(RefreshTabs, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// After a tab closes, the tabs behind it and the new-tab button glide into their new places the
+    /// way tabs do while one is dragged, instead of jumping there. Their layout has not run yet, so
+    /// where they are drawn now is where each glide starts; it ends at 0 once layout has moved them.
+    /// </summary>
+    private void SlideIntoPlace()
+    {
+        var before = new Dictionary<Control, double>();
+        foreach (Control container in TabItems.GetRealizedContainers())
+        {
+            if (container is ContentPresenter { Child: TabStripTab { Tab: not null } } && container.TranslatePoint(default, this) is { } at)
+                before[container] = at.X;
+        }
+        if (NewTabButton.TranslatePoint(default, this) is { } button)
+            before[NewTabButton] = button.X;
+
+        void OnLayoutUpdated(object? sender, EventArgs e)
+        {
+            TabItems.LayoutUpdated -= OnLayoutUpdated;
+            foreach ((Control control, double from) in before)
+            {
+                if (TopLevel.GetTopLevel(control) is null)
+                    continue;
+                // Measured without whatever glide it is still in, from where it is drawn right now.
+                Slide(control, 0, animate: false);
+                if (control.TranslatePoint(default, this) is not { } now || Math.Abs(from - now.X) < 0.5)
+                    continue;
+                Slide(control, from - now.X, animate: false);
+                Slide(control, 0, animate: true);
+            }
+        }
+        TabItems.LayoutUpdated += OnLayoutUpdated;
     }
 
     private void PositionActiveTab()

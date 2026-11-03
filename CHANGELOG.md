@@ -10,7 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - Dragging entries out of the explorer shows a cursor with an icon for what is being extracted and the number of items. ([#23](https://github.com/Hancapo/HikariHopper/pull/23), [#25](https://github.com/Hancapo/HikariHopper/pull/25))
 - A game tab shows which edition it has open with a V, grey for Legacy and green for Enhanced, and hovering a tab shows its path. ([#26](https://github.com/Hancapo/HikariHopper/pull/26))
-- Tabs can be dragged along the tab strip to reorder them. ([#31](https://github.com/Hancapo/HikariHopper/pull/31))
+- Tabs can be dragged along the tab strip to reorder them, and when a tab closes the ones after it glide into place. ([#31](https://github.com/Hancapo/HikariHopper/pull/31), [#32](https://github.com/Hancapo/HikariHopper/pull/32))
 
 ### Changed
 
