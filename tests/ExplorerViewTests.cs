@@ -789,7 +789,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(0, ui.Tabs.ActiveIndex);
         Click(ui.Window, tabs[1].TranslatePoint(new Point(tabs[1].Bounds.Width - 14, 12), ui.Window)!.Value);
         Assert.Single(ui.Tabs.Tabs);
-        Assert.Single(ui.Session.TextureWindows);
+        Assert.Single(ui.Session.TextureEditors);
     }
 
     [AvaloniaFact]
@@ -864,8 +864,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(0, Offset(before[0]), 3);
         Assert.Equal(new Point(14 + 440, 42), Drawn(before[0]).TranslatePoint(default, ui.Window)!.Value);
         // The session still has one texture window per tab.
-        Assert.Equal(3, ui.Session.TextureWindows.Count);
-        Assert.True(ui.Session.TextureWindows.ContainsKey(before[0]));
+        Assert.Equal(3, ui.Session.TextureEditors.Count);
+        Assert.True(ui.Session.TextureEditors.ContainsKey(before[0]));
     }
 
     [AvaloniaFact]

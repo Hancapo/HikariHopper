@@ -17,7 +17,7 @@ namespace HikariHopper.Views;
 /// <see cref="TextureContextMenu"/> at the pointer, as does a right click on empty space. Up/Down
 /// (with modifiers), Home/End, Ctrl+A, the Menu key and Shift+F10 work while the list has focus.
 /// The current row is scrolled into view whenever it changes. Commands that need a dialog are
-/// raised as events for <see cref="TextureDictionaryWindow"/>.
+/// raised as events for <see cref="TextureEditor"/>.
 /// </remarks>
 public partial class TextureRail : UserControl
 {

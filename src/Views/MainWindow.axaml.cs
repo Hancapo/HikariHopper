@@ -13,8 +13,7 @@ namespace HikariHopper.Views;
 /// (an x:Name field: set its <see cref="ContentControl.Content"/>) and its menu bar into
 /// <c>TitleBar.LeadingContent</c>. Set <see cref="Window.Title"/>
 /// with <see cref="TitleFor"/> (QML: <c>tabs.activeBridge.hasWorkspace ? "HikariHopper — %1" : …</c>).
-/// One <c>TextureDictionaryWindow</c> per tab (QML <c>Instantiator</c>) is owned by the texture
-/// viewer port and should be created as an owned window of this one.
+/// Each tab's texture editor is a modal over this window's content (see <see cref="TextureEditor"/>).
 /// </remarks>
 public partial class MainWindow : Window
 {

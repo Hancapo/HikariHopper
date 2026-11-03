@@ -8,11 +8,11 @@ namespace HikariHopper;
 /// <summary>
 /// The startup session (Python: the <c>ExplorerTabs</c> handed to <c>main.qml</c>): builds the
 /// <see cref="ExplorerScreen"/> into the main window, keeps the window title on the active tab and
-/// keeps one <see cref="TextureDictionaryWindow"/> per tab (main.qml's <c>Instantiator</c>).
+/// keeps one <see cref="TextureEditor"/> per tab (main.qml's <c>Instantiator</c>), shown as a modal over the window.
 /// </summary>
 public sealed class ExplorerSession : IStartupSession
 {
-    private readonly Dictionary<ExplorerViewModel, TextureDictionaryWindow> textureWindows = [];
+    private readonly Dictionary<ExplorerViewModel, TextureEditor> textureEditors = [];
     private MainWindow? window;
     private ExplorerViewModel? titleBridge;
 
@@ -28,8 +28,8 @@ public sealed class ExplorerSession : IStartupSession
 
     public string GameName => Tabs.ActiveBridge.GameName;
 
-    /// <summary>The texture window of each open tab.</summary>
-    public IReadOnlyDictionary<ExplorerViewModel, TextureDictionaryWindow> TextureWindows => textureWindows;
+    /// <summary>The texture editor of each open tab.</summary>
+    public IReadOnlyDictionary<ExplorerViewModel, TextureEditor> TextureEditors => textureEditors;
 
     public void RestoreLastGame() => Tabs.RestoreLastGame();
 
@@ -42,7 +42,7 @@ public sealed class ExplorerSession : IStartupSession
         Tabs.PropertyChanged += OnTabsPropertyChanged;
         Tabs.Tabs.CollectionChanged += OnTabsChanged;
         foreach (ExplorerViewModel tab in Tabs.Tabs)
-            AddTextureWindow(tab);
+            AddTextureEditor(tab);
         TrackTitle();
     }
 
@@ -75,18 +75,18 @@ public sealed class ExplorerSession : IStartupSession
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        foreach (ExplorerViewModel tab in textureWindows.Keys.Where(tab => !Tabs.Tabs.Contains(tab)).ToList())
+        foreach (ExplorerViewModel tab in textureEditors.Keys.Where(tab => !Tabs.Tabs.Contains(tab)).ToList())
         {
-            textureWindows.Remove(tab, out TextureDictionaryWindow? textureWindow);
-            textureWindow?.Destroy();
+            textureEditors.Remove(tab, out TextureEditor? editor);
+            editor?.Destroy();
         }
         foreach (ExplorerViewModel tab in Tabs.Tabs)
-            AddTextureWindow(tab);
+            AddTextureEditor(tab);
     }
 
-    private void AddTextureWindow(ExplorerViewModel tab)
+    private void AddTextureEditor(ExplorerViewModel tab)
     {
-        if (!textureWindows.ContainsKey(tab))
-            textureWindows[tab] = new TextureDictionaryWindow(tab.TextureViewer) { OwnerWindow = window };
+        if (!textureEditors.ContainsKey(tab))
+            textureEditors[tab] = new TextureEditor(tab.TextureViewer) { Anchor = window?.ExplorerScreenHost };
     }
 }

@@ -17,7 +17,7 @@ namespace HikariHopper.Views;
 /// <see cref="MinSize"/> and <see cref="MaxSize"/>, and never closer than 24px to its edges. It can't
 /// be moved; it stays centred.
 /// </remarks>
-public class ModalSheet : ContentControl
+public class ModalSheet : ContentControl, IModalContent
 {
     public static readonly StyledProperty<string> HeadingProperty =
         AvaloniaProperty.Register<ModalSheet, string>(nameof(Heading), "");
@@ -103,6 +103,8 @@ public class ModalSheet : ContentControl
     }
 
     public void Close() => overlay?.Close();
+
+    void IModalContent.RequestClose() => Close();
 
     /// <summary>Called each time the sheet is shown, to refresh what it displays.</summary>
     protected virtual void OnPresented()

@@ -13,6 +13,16 @@ using Avalonia.VisualTree;
 namespace HikariHopper.Views;
 
 /// <summary>
+/// Content of a <see cref="ModalOverlay"/> that decides for itself how it closes, so Escape can ask
+/// it first (a document with unsaved changes, say) instead of the overlay simply going away.
+/// </summary>
+public interface IModalContent
+{
+    /// <summary>Asked when Escape is pressed over the modal.</summary>
+    void RequestClose();
+}
+
+/// <summary>
 /// An in-window modal: the dialog sits centred over a dim that swallows pointer input, takes keyboard
 /// focus while open, closes on Escape and gives focus back to whatever had it before.
 /// </summary>
@@ -27,6 +37,13 @@ public sealed class ModalOverlay : Panel
     /// <summary>Marks the part of a window a modal blurs and covers; without one it covers the whole window.</summary>
     public static readonly AttachedProperty<bool> IsBackdropProperty =
         AvaloniaProperty.RegisterAttached<ModalOverlay, Control, bool>("IsBackdrop");
+
+    /// <summary>
+    /// Makes a dialog fill the window, <see cref="Inset"/> clear of each edge, instead of keeping its
+    /// own size: for a whole tool such as the texture editor.
+    /// </summary>
+    public static readonly AttachedProperty<bool> FillsWindowProperty =
+        AvaloniaProperty.RegisterAttached<ModalOverlay, Control, bool>("FillsWindow");
 
     /// <summary>How soft the content behind a modal gets.</summary>
     public const double BlurRadius = 14;
@@ -73,6 +90,10 @@ public sealed class ModalOverlay : Panel
 
     /// <summary>The dialog this overlay shows.</summary>
     public Control Dialog => dialog;
+
+    public static bool GetFillsWindow(Control control) => control.GetValue(FillsWindowProperty);
+
+    public static void SetFillsWindow(Control control, bool value) => control.SetValue(FillsWindowProperty, value);
 
     public static bool GetIsBackdrop(Control control) => control.GetValue(IsBackdropProperty);
 
@@ -213,6 +234,8 @@ public sealed class ModalOverlay : Panel
     {
         double roomWidth = Math.Max(0, window.Width - 2 * Inset);
         double roomHeight = Math.Max(0, window.Height - 2 * Inset);
+        if (GetFillsWindow(dialog))
+            return new Size(roomWidth, roomHeight);
         if (dialog is ModalSheet sheet)
         {
             double width = Math.Clamp(window.Width * sheet.WindowShare.Width, sheet.MinSize.Width, sheet.MaxSize.Width);
@@ -226,7 +249,7 @@ public sealed class ModalOverlay : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        if (dialog is ModalSheet && !double.IsInfinity(availableSize.Width) && !double.IsInfinity(availableSize.Height))
+        if ((dialog is ModalSheet || GetFillsWindow(dialog)) && !double.IsInfinity(availableSize.Width) && !double.IsInfinity(availableSize.Height))
             dialog.Measure(SizeFor(dialog, availableSize));
         else
             dialog.Measure(Size.Infinity);
@@ -268,7 +291,10 @@ public sealed class ModalOverlay : Panel
             return;
         if (e.Key != Key.Escape)
             return;
-        Close();
+        if (dialog is IModalContent content)
+            content.RequestClose();
+        else
+            Close();
         e.Handled = true;
     }
 }
