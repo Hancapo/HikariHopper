@@ -196,6 +196,20 @@ public sealed class TextureWindowTests
         Assert.True(harness.Window.Rail.ContextMenuPopup.IsOpen);
         Assert.Same(shown, harness.ViewModel.PreviewImage);
         Assert.Equal(1, harness.ViewModel.MipLevel);
+        harness.Key(Key.Escape);
+        harness.Settle();
+
+        // An edit that replaces the texture in that row is a different texture: it reloads, back at the first mip.
+        Assert.True(harness.ViewModel.ResizeSelected(64, 64, "point", 4, true));
+        harness.Settle();
+        Assert.NotSame(shown, harness.ViewModel.PreviewImage);
+        Assert.NotNull(harness.ViewModel.PreviewImage);
+        Assert.Equal(0, harness.ViewModel.MipLevel);
+        // Right-clicking the replacement keeps it, as it does any texture on screen.
+        Avalonia.Media.Imaging.Bitmap? replaced = harness.ViewModel.PreviewImage;
+        harness.Click(Row(row).X, Row(row).Y, MouseButton.Right);
+        harness.Settle();
+        Assert.Same(replaced, harness.ViewModel.PreviewImage);
     }
 
     [AvaloniaFact]
