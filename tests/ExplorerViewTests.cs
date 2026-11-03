@@ -213,6 +213,27 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void LongTreeLabelsElideInsideTheirHighlight()
+    {
+        Explorer ui = OpenExplorer(folders: 40);
+        const string name = "a folder whose name is far too long for the tree";
+        Directory.CreateDirectory(Path.Combine(Work, name));
+        ui.Bridge.Refresh();
+        Pump();
+        ui.Bridge.FocusTreePath(name);
+        Pump();
+        FolderPanel panel = ui.Find<FolderPanel>();
+        FolderRow row = ui.Window.GetVisualDescendants().OfType<FolderRow>().First(candidate => candidate.Item?.Label == name);
+        Assert.Equal(1, row.Item!.Depth);
+        Assert.True(panel.ScrollbarOverlap > 0);
+
+        // The label ends 8px inside the highlight, which stops at the scrollbar, and elides there.
+        double highlightRight = row.Bounds.Width - panel.ScrollbarOverlap;
+        Assert.Equal(highlightRight - 8, row.Label.Bounds.Right, 3);
+        Assert.True(row.Label.TextLayout.TextLines[0].HasCollapsed);
+    }
+
+    [AvaloniaFact]
     public void BackToBackDoubleClicksOpenNestedFolders()
     {
         // Avalonia keeps counting presses (3, 4, …) while they stay close in time and place; like
