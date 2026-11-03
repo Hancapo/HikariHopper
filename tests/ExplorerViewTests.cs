@@ -218,6 +218,34 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void AboutsChangelogOpensOverItAndEscapeComesBack()
+    {
+        Explorer ui = OpenExplorer();
+        MenuRow menus = ui.Find<MenuRow>();
+        var about = new AboutDialog();
+        about.Present(menus);
+        Pump(250);
+        about.FindControl<Views.Controls.ChromeToolButton>("ChangelogButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Pump(250);
+        ChangelogDialog changelog = about.Changelog!;
+        Assert.True(changelog.IsOpen);
+        Assert.True(about.IsOpen);
+        Assert.Equal("CHANGELOG", changelog.Heading);
+        // Every version in the file, its groups and entries shown.
+        Assert.Contains(changelog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "0.0.2");
+        Assert.Contains(changelog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "FIXED");
+
+        // Escape closes the changelog and leaves About up.
+        Key(ui.Window, PhysicalKey.Escape);
+        Pump(250);
+        Assert.False(changelog.IsOpen);
+        Assert.True(about.IsOpen);
+        Key(ui.Window, PhysicalKey.Escape);
+        Pump(250);
+        Assert.False(about.IsOpen);
+    }
+
+    [AvaloniaFact]
     public void TabNavigationStaysInsideTheOpenModal()
     {
         Explorer ui = OpenExplorer();

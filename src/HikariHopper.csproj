@@ -18,6 +18,8 @@
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/**" Exclude="Assets/Keys/**;Assets/Fonts/Source/**;Assets/Branding/*.svg;Assets/Branding/hikarihopper-*.png" />
+    <!-- The repo's changelog, for About's changelog sheet: the same file, so the app always shows its own. -->
+    <AvaloniaResource Include="../CHANGELOG.md" Link="Assets/CHANGELOG.md" />
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />

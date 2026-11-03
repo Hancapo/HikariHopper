@@ -18,7 +18,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
-- About is redone: the logo, the version, and links to GitHub and the changelog. ([#51](https://github.com/Hancapo/HikariHopper/pull/51))
+- About is redone around the logo, with a link to GitHub, and the changelog can be read in the app. ([#51](https://github.com/Hancapo/HikariHopper/pull/51))
 - Settings, About, Keyboard shortcuts and the texture editor open inside the main window instead of as separate windows. Settings lists each game's installations with a clear status. ([#35](https://github.com/Hancapo/HikariHopper/pull/35), [#36](https://github.com/Hancapo/HikariHopper/pull/36))
 - The texture preview's toolbar is regrouped, with each channel letter in its own colour, and its zoom readout offers presets from 25% to 800%. ([#38](https://github.com/Hancapo/HikariHopper/pull/38))
 - Option groups (channels, Smooth / Pixels, Fit / 1:1, List / Grid) are switches. ([#40](https://github.com/Hancapo/HikariHopper/pull/40))
