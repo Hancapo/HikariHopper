@@ -99,8 +99,11 @@ public sealed class RpfProvider
 
     public string GamePath => gameRoot ?? "";
 
-    /// <summary>The file of the open root archive, or "" with none.</summary>
-    public string ArchivePath => archivePath;
+    /// <summary>
+    /// The file of the open root archive, or "" with none: the same however deep in nested archives you go,
+    /// and across a reload.
+    /// </summary>
+    public string ArchivePath => RootArchive()?.SourcePath ?? "";
 
     public string ArchiveName => archive?.Name ?? "";
 
