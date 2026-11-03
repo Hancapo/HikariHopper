@@ -48,6 +48,8 @@ public sealed class ModalOverlay : Panel
         previousFocus = host.FocusManager?.GetFocusedElement();
         Background = Ui.Theme.ModalDim;
         Focusable = true;
+        // Tab and Shift+Tab wrap around inside the modal instead of reaching the window behind it.
+        AddHandler(KeyDownEvent, OnTabKey, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         dialog.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;  // it fills the slot SizeFor gives it
         dialog.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
         Children.Add(dialog);
@@ -143,6 +145,27 @@ public sealed class ModalOverlay : Panel
         if (previousFocus is InputElement element && TopLevel.GetTopLevel(element) == host)
             element.Focus();
         Closed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Moves focus to the dialog's next (or, with Shift, previous) tab stop, wrapping at either end, so
+    /// keyboard focus never leaves the modal for the window behind it.
+    /// </summary>
+    private void OnTabKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Tab || (e.KeyModifiers & ~KeyModifiers.Shift) != KeyModifiers.None)
+            return;
+        List<InputElement> stops = [.. dialog.GetVisualDescendants().OfType<InputElement>()
+            .Where(element => element.Focusable && element.IsTabStop && element.IsEffectivelyEnabled && element.IsEffectivelyVisible)];
+        e.Handled = true;
+        if (stops.Count == 0)
+            return;
+        bool back = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        int current = host.FocusManager?.GetFocusedElement() is InputElement focused ? stops.IndexOf(focused) : -1;
+        int next = current < 0
+            ? (back ? stops.Count - 1 : 0)
+            : (current + (back ? -1 : 1) + stops.Count) % stops.Count;
+        stops[next].Focus(NavigationMethod.Tab);
     }
 
     /// <summary>Leaves the window and lets go of the dialog, so it can be shown again.</summary>

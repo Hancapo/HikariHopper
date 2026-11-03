@@ -200,6 +200,37 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TabNavigationStaysInsideTheOpenModal()
+    {
+        Explorer ui = OpenExplorer();
+        MenuRow menus = ui.Find<MenuRow>();
+        menus.OpenSettings();
+        Pump(250);
+        SettingsDialog settings = menus.Settings!;
+        ModalOverlay overlay = settings.FindAncestorOfType<ModalOverlay>()!;
+        bool Inside() => ui.Window.FocusManager!.GetFocusedElement() is Visual focused
+            && (focused == overlay || overlay.IsVisualAncestorOf(focused));
+
+        // Forwards past the last control and backwards past the first, focus never reaches the explorer.
+        var seen = new HashSet<object>();
+        for (int i = 0; i < 40; i++)
+        {
+            Key(ui.Window, PhysicalKey.Tab);
+            Assert.True(Inside(), $"Tab {i} left the modal");
+            seen.Add(ui.Window.FocusManager!.GetFocusedElement()!);
+        }
+        for (int i = 0; i < 40; i++)
+        {
+            Key(ui.Window, PhysicalKey.Tab, RawInputModifiers.Shift);
+            Assert.True(Inside(), $"Shift+Tab {i} left the modal");
+        }
+        // And it does move between the sheet's controls rather than sticking on one.
+        Assert.True(seen.Count > 3);
+        settings.Close();
+        Pump(250);
+    }
+
+    [AvaloniaFact]
     public void SettingsEditsTheGamesAndTheStartup()
     {
         string legacy = MakeGame("Legacy");
