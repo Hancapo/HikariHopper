@@ -33,6 +33,8 @@ public class ChromeIcon : Control
         ["list"] = "list",
         ["grid"] = "layout-grid",
         ["checkerboard"] = "grid-3x3",
+        ["smooth"] = "filter-smooth",
+        ["pixels"] = "filter-pixels",
         ["check"] = "check",
         ["panel"] = "panel-right",
         ["close"] = "x",

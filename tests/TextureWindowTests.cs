@@ -608,6 +608,59 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ThePreviewToolbarGroupsItsControlsAndOffersZoomPresets()
+    {
+        TextureWindowHarness harness = Opened(Solid("square", 100, 100));
+        TexturePreviewToolbar toolbar = harness.Window.Preview.Toolbar;
+        TexturePreview preview = harness.Window.Preview;
+
+        // Four wells: channels, drawing, fit / actual size, zoom.
+        Assert.Equal(4, toolbar.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("well")));
+
+        // The channel letters carry their own colour; the shown channel's segment is raised in full ink.
+        Assert.True(toolbar.RgbaButton.Sunken);
+        Assert.Equal(Ui.Theme.Text, toolbar.RgbaButton.Foreground);
+        Assert.Equal(Avalonia.Media.Color.Parse("#E8837E"), Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.RedButton.Foreground).Color);
+        harness.ViewModel.SetChannel("r");
+        harness.Settle();
+        Assert.True(toolbar.RedButton.Sunken);
+        Assert.Equal(1, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(toolbar.RedButton.Foreground).Opacity);
+
+        // Smooth and Pixels are one setting; pressing the one already on changes nothing.
+        Assert.True(preview.FilteredPreview);
+        Assert.True(toolbar.SmoothButton.Sunken);
+        toolbar.SmoothButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(preview.FilteredPreview);
+        toolbar.PixelsButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.False(preview.FilteredPreview);
+        Assert.True(toolbar.PixelsButton.Sunken);
+        Assert.False(toolbar.SmoothButton.Sunken);
+
+        // The zoom readout opens the presets, the current zoom checked; picking one zooms exactly there.
+        toolbar.OpenZoomPresets();
+        harness.Settle();
+        RetroMenu menu = toolbar.PresetsMenu!;
+        Assert.True(menu.IsOpen);
+        RetroMenuItem[] items = [.. menu.Items.OfType<RetroMenuItem>()];
+        Assert.Equal(["Fit", "25%", "50%", "100%", "200%", "400%", "800%"], items.Select(item => item.Text));
+        Assert.True(items[0].IsChecked);
+        items[4].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        harness.Settle();
+        Assert.Equal(2, preview.DisplayScale, 6);
+        Assert.False(preview.FitMode);
+        Assert.Equal("200%", toolbar.ZoomButton.Text);
+        menu.Close();
+        harness.Settle();
+        toolbar.OpenZoomPresets();
+        harness.Settle();
+        Assert.True(items[4].IsChecked);
+        Assert.False(items[0].IsChecked);
+        items[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        harness.Settle();
+        Assert.True(preview.FitMode);
+    }
+
+    [AvaloniaFact]
     public void MenusOpenUnderTheirTitlesAndStayInsideTheWindow()
     {
         TextureWindowHarness harness = Opened();

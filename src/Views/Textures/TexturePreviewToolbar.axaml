@@ -5,50 +5,72 @@
              x:Class="HikariHopper.Views.TexturePreviewToolbar"
              Height="{x:Static ui:Theme.TextureToolbarHeight}"
              Background="{x:Static ui:Theme.ChromeBg}">
-  <!-- Port of TexturePreviewToolbar.qml: right-aligned channel segments, the transparency grid
-       and filtering toggles, then fit / 1:1 / zoom out / zoom readout / zoom in, 3px apart. -->
+  <!-- The bar above the texture preview, in the navigation bar's segmented wells: what you see
+       (the channels, each letter in its own colour), how it is drawn (transparency grid; smooth or
+       pixels), and how big (fit, actual size, and zoom out / the zoom, which opens presets / in). -->
   <UserControl.Styles>
-    <Style Selector="c|ChromeToolButton">
-      <Setter Property="Height" Value="26" />
+    <Style Selector="Border.well">
+      <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
+      <Setter Property="Padding" Value="2" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Border.separator">
-      <Setter Property="Width" Value="1" />
-      <Setter Property="Height" Value="20" />
+    <Style Selector="Border.well > StackPanel">
+      <Setter Property="Orientation" Value="Horizontal" />
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector="c|ChromeToolButton">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinWidth" Value="26" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Background" Value="{x:Static ui:Theme.Border}" />
+      <Setter Property="Bordered" Value="False" />
+      <Setter Property="InWell" Value="True" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
+      <Setter Property="IconSize" Value="14" />
+      <Setter Property="IconThickness" Value="1.5" />
     </Style>
   </UserControl.Styles>
   <Panel>
     <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-    <StackPanel Margin="12,0,6,0" Orientation="Horizontal" Spacing="3" HorizontalAlignment="Right">
-      <TextBlock Width="58" VerticalAlignment="Center" TextAlignment="Center" Text="CHANNEL"
-                 Foreground="{x:Static ui:Theme.TextFaint}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
-      <c:ChromeToolButton Name="RgbaButton" Width="46" Text="RGBA" AutomationProperties.Name="Show RGBA channel" />
-      <c:ChromeToolButton Name="RedButton" Width="27" Text="R" AutomationProperties.Name="Show R channel" />
-      <c:ChromeToolButton Name="GreenButton" Width="27" Text="G" AutomationProperties.Name="Show G channel" />
-      <c:ChromeToolButton Name="BlueButton" Width="27" Text="B" AutomationProperties.Name="Show B channel" />
-      <c:ChromeToolButton Name="AlphaButton" Width="27" Text="A" AutomationProperties.Name="Show A channel" />
-      <Border Classes="separator" />
-      <c:ChromeToolButton Name="CheckerboardButton" Width="30" IconKind="checkerboard"
-                          AutomationProperties.Name="Toggle transparency grid" />
-      <c:ChromeToolButton Name="FilteredButton" Width="58" Text="Filtered"
-                          AutomationProperties.Name="Toggle filtered texture preview" />
-      <Border Classes="separator" />
-      <c:ChromeToolButton Name="FitButton" Width="44" Text="Fit" />
-      <c:ChromeToolButton Name="ActualSizeButton" Width="36" Text="1:1" Raised="True"
-                          AutomationProperties.Name="Actual size" />
-      <c:ChromeToolButton Name="ZoomOutButton" Width="27" IconKind="minus" Raised="True"
-                          AutomationProperties.Name="Zoom out" />
-      <Border Width="54" Height="26" VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
-              BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
-        <TextBlock Name="ZoomText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Foreground="{x:Static ui:Theme.TextDim}"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+    <StackPanel Margin="12,0,8,0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Border Classes="well">
+        <StackPanel>
+          <c:ChromeToolButton Name="RgbaButton" Width="46" Text="RGBA" AutomationProperties.Name="Show RGBA channels" />
+          <c:ChromeToolButton Name="RedButton" Width="26" Text="R" AutomationProperties.Name="Show the red channel" />
+          <c:ChromeToolButton Name="GreenButton" Width="26" Text="G" AutomationProperties.Name="Show the green channel" />
+          <c:ChromeToolButton Name="BlueButton" Width="26" Text="B" AutomationProperties.Name="Show the blue channel" />
+          <c:ChromeToolButton Name="AlphaButton" Width="26" Text="A" AutomationProperties.Name="Show the alpha channel" />
+        </StackPanel>
       </Border>
-      <c:ChromeToolButton Name="ZoomInButton" Width="27" IconKind="plus" Raised="True"
-                          AutomationProperties.Name="Zoom in" />
+      <Border Classes="well">
+        <StackPanel>
+          <c:ChromeToolButton Name="CheckerboardButton" Width="28" IconKind="checkerboard"
+                              AutomationProperties.Name="Transparency grid" />
+          <c:ChromeToolButton Name="SmoothButton" Width="28" IconKind="smooth"
+                              AutomationProperties.Name="Smooth: filter the preview" />
+          <c:ChromeToolButton Name="PixelsButton" Width="28" IconKind="pixels"
+                              AutomationProperties.Name="Pixels: show the texels as they are" />
+        </StackPanel>
+      </Border>
+      <Border Classes="well">
+        <StackPanel>
+          <c:ChromeToolButton Name="FitButton" Width="38" Text="Fit" AutomationProperties.Name="Fit the texture" />
+          <c:ChromeToolButton Name="ActualSizeButton" Width="34" Text="1:1" AutomationProperties.Name="Actual size" />
+        </StackPanel>
+      </Border>
+      <Border Classes="well">
+        <StackPanel>
+          <c:ChromeToolButton Name="ZoomOutButton" Width="26" IconKind="minus" AutomationProperties.Name="Zoom out" />
+          <Panel>
+            <c:ChromeToolButton Name="ZoomButton" Width="68" Padding="0,0,10,0"
+                                AutomationProperties.Name="Zoom presets" />
+            <c:LucideIcon IconName="chevron-down" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
+                          HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                          Stroke="{x:Static ui:Theme.TextDim}" />
+          </Panel>
+          <c:ChromeToolButton Name="ZoomInButton" Width="26" IconKind="plus" AutomationProperties.Name="Zoom in" />
+        </StackPanel>
+      </Border>
     </StackPanel>
   </Panel>
 </UserControl>

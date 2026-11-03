@@ -24,6 +24,7 @@ public partial class TexturePreview : UserControl
         Toolbar.ActualSizeRequested += (_, _) => ShowActualSize();
         Toolbar.ZoomInRequested += (_, _) => ZoomBy(1.25);
         Toolbar.ZoomOutRequested += (_, _) => ZoomBy(0.8);
+        Toolbar.ZoomPresetRequested += (_, scale) => Viewport.ZoomTo(scale);
         Toolbar.CheckerboardToggled += (_, _) => CheckerboardVisible = !CheckerboardVisible;
         Toolbar.FilteredPreviewToggled += (_, _) => FilteredPreview = !FilteredPreview;
         Viewport.PropertyChanged += (_, e) =>
