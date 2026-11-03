@@ -498,6 +498,15 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.Refresh();
         Assert.Equal("game://zz", bridge.TreeFocusPath);
         Assert.Equal(1, bridge.TreeFocusIndex);
+
+        // Another game opened in the tab is somewhere new: its root has no row focused either, even where
+        // it has a folder of the same name.
+        string other = Path.Combine(Work, "zz");
+        File.WriteAllText(Path.Combine(other, "GTA5.exe"), "");
+        Directory.CreateDirectory(Path.Combine(other, "zz"));
+        bridge.OpenGame(other);
+        Assert.Equal(".", bridge.CurrentPath);
+        Assert.Equal(-1, bridge.TreeFocusIndex);
     });
 
     [AvaloniaFact]
