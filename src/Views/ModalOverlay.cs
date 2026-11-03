@@ -49,7 +49,9 @@ public sealed class ModalOverlay : Panel
         Background = Ui.Theme.ModalDim;
         Focusable = true;
         // Tab and Shift+Tab wrap around inside the modal instead of reaching the window behind it.
-        AddHandler(KeyDownEvent, OnTabKey, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        // Bubbling, so a dialog inside the modal with a tab order of its own handles Tab first; this
+        // still runs before the window's own navigation, which would leave the modal.
+        AddHandler(KeyDownEvent, OnTabKey, Avalonia.Interactivity.RoutingStrategies.Bubble);
         dialog.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;  // it fills the slot SizeFor gives it
         dialog.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
         Children.Add(dialog);
