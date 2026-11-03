@@ -136,6 +136,13 @@ public partial class TextureViewport : UserControl
 
     public void ZoomBy(double factor) => ZoomAt(factor, Bounds.Width / 2, Bounds.Height / 2);
 
+    /// <summary>Shows the texture at <paramref name="scale"/> (1 is actual size), around the middle of the view.</summary>
+    public void ZoomTo(double scale)
+    {
+        if (scale > 0)
+            ZoomBy(scale / DisplayScale);
+    }
+
     public void ZoomAt(double factor, double focusX, double focusY)
     {
         if (viewModel is null || viewModel.SelectedIndex < 0)

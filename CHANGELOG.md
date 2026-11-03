@@ -17,6 +17,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Changed
 
 - Settings, About, Keyboard shortcuts and the texture editor open inside the main window, over the blurred explorer, instead of as separate windows, and size themselves with it. Settings lists each game's installations with their edition marks and a clear status, and the empty future-game rows are gone. ([#35](https://github.com/Hancapo/HikariHopper/pull/35), [#36](https://github.com/Hancapo/HikariHopper/pull/36))
+- The texture preview's toolbar groups its controls: the channels, with each letter in its own colour; the transparency grid and Smooth or Pixels; and the zoom, whose readout opens preset zooms from 25% to 800%. ([#38](https://github.com/Hancapo/HikariHopper/pull/38))
 - The start page is a launcher: the games to open, grouped by game with their edition marks, and a standalone RPF. It no longer shows an empty explorer around them, nor the tab strip while it is the only tab. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
 - Menus hang from the title that opened them as one surface, and every menu casts a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
 
