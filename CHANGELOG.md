@@ -27,6 +27,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
 - The mip slider moves to wherever it is pressed, not only when its handle is dragged. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
 - Moving between mips in the texture viewer is instant. ([#21](https://github.com/Hancapo/HikariHopper/pull/21))
+- Switching between RGBA and the R, G, B and A channels in the texture viewer is instant, and the preview no longer goes blank while a channel is made. ([#39](https://github.com/Hancapo/HikariHopper/pull/39))
 - Opening a texture's context menu no longer makes the preview blink or jump back to the first mip. ([#22](https://github.com/Hancapo/HikariHopper/pull/22))
 - Long folder names in the folder tree are cut off with an ellipsis inside their row instead of running past it. ([#27](https://github.com/Hancapo/HikariHopper/pull/27))
 - A menu title no longer keeps a white line under it after its menu closes. Menu titles and window buttons now show focus only when it comes from the keyboard. ([#29](https://github.com/Hancapo/HikariHopper/pull/29))

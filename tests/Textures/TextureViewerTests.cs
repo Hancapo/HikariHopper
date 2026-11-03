@@ -52,13 +52,36 @@ public sealed class TextureViewerTests
         });
         Assert.Equal([0, 0, 255, 255], FirstPixel(preview)); // Premultiplied BGRA red.
         viewer.SetChannel("G");
-        Assert.Equal("", viewer.PreviewUrl);
-        Assert.True(viewer.PreviewLoading);
         Settle(viewer);
         Assert.Equal("g", viewer.Channel);
         Assert.Contains("/preview/0/g/0/", viewer.PreviewUrl);
         viewer.SetChannel("rgb");
         Assert.Equal("g", viewer.Channel);
+    });
+
+    [AvaloniaFact]
+    public Task SwitchingChannelsShowsTheViewAtOnceWithoutDecodingAgain() => Headless.Run(() =>
+    {
+        TextureViewerViewModel viewer = Opened("textures.ytd", Bytes(Dictionary("paint", "detail")));
+        Settle(viewer); // The other channels of the mip on screen are made in the background.
+        int decodes = 0;
+        viewer.DecodeImage = (texture, mode, mip) =>
+        {
+            Interlocked.Increment(ref decodes);
+            return TextureOperations.DecodeImage(texture, mode, mip);
+        };
+        foreach (string channel in new[] { "r", "g", "b", "a", "rgba" })
+        {
+            viewer.SetChannel(channel);
+            Assert.False(viewer.PreviewLoading);
+            Assert.Contains($"/preview/0/{channel}/0/", viewer.PreviewUrl);
+        }
+        viewer.SetChannel("g");
+        Assert.Equal([0, 0, 0, 255], FirstPixel(Assert.IsAssignableFrom<Bitmap>(viewer.PreviewImage))); // Red has no green.
+        viewer.SetChannel("r");
+        Assert.Equal([255, 255, 255, 255], FirstPixel(Assert.IsAssignableFrom<Bitmap>(viewer.PreviewImage)));
+        Settle(viewer);
+        Assert.Equal(0, decodes); // Every view came from the RGBA decoded once.
     });
 
     [AvaloniaFact]
