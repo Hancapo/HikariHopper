@@ -671,6 +671,46 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ClosingATabGlidesTheRestIntoPlace()
+    {
+        Explorer ui = OpenExplorer();
+        ui.Tabs.NewTab();
+        ui.Tabs.NewTab();
+        Pump(100);
+        TabStrip strip = ui.Find<TabStrip>();
+        ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
+        TabStripTab Drawn(ExplorerViewModel tab) =>
+            ui.Window.GetVisualDescendants().OfType<TabStripTab>().Single(candidate => candidate.Tab == tab);
+        double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
+        Control plus = strip.FindControl<Control>("NewTabButton")!;
+        double plusLeft = plus.TranslatePoint(default, ui.Window)!.Value.X;
+
+        // Closing the first tab: the others start where they were drawn and glide one tab left.
+        TabStripTab first = Drawn(before[0]);
+        Click(ui.Window, first.TranslatePoint(new Point(first.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Assert.Equal([before[1], before[2]], ui.Tabs.Tabs);
+        Pump(20);
+        Assert.InRange(Offset(before[1]), 0.1, 219.9);
+        Assert.InRange(Offset(before[2]), 0.1, 219.9);
+        Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
+        Pump(300);
+        Assert.Equal(0, Offset(before[1]), 3);
+        Assert.Equal(0, Offset(before[2]), 3);
+        Assert.Equal(0, TabStrip.SlideOffset(plus), 3);
+        Assert.Equal(new Point(14, 42), Drawn(before[1]).TranslatePoint(default, ui.Window)!.Value);
+        Assert.Equal(plusLeft - 220, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
+
+        // Closing the last one moves nothing but the button.
+        TabStripTab last = Drawn(before[2]);
+        Click(ui.Window, last.TranslatePoint(new Point(last.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump(20);
+        Assert.Equal(0, Offset(before[1]), 3);
+        Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
+        Pump(300);
+        Assert.Equal(plusLeft - 440, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
+    }
+
+    [AvaloniaFact]
     public void GameTabsShowTheirEditionAndTellTheirPath()
     {
         Explorer ui = OpenExplorer();
