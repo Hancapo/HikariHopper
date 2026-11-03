@@ -173,7 +173,8 @@ public partial class TabStrip : UserControl
     // Dragging a tab: past a few pixels it follows the pointer along the strip, the tabs it passes
     // slide aside into the slot it left, and on release it eases into its new place.
     private const double DragThreshold = 5;
-    private static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(170);
+    /// <summary>How long a tab takes to slide into place; tests lengthen it to catch a slide midway.</summary>
+    internal static TimeSpan SlideDuration { get; set; } = TimeSpan.FromMilliseconds(170);
     private TabDrag? drag;
 
     private sealed class TabDrag(ExplorerViewModel tab, int from, double pressX)

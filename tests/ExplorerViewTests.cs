@@ -51,6 +51,24 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
     private static void Pump(int milliseconds = 30) => ExplorerStateRenders.Pump(milliseconds);
 
+    /// <summary>
+    /// Slows the tabs' slides down for a test, so one caught "midway" a few milliseconds in is still
+    /// midway on a busy machine; dispose to restore the app's own speed.
+    /// </summary>
+    private static IDisposable SlowSlides()
+    {
+        TimeSpan original = TabStrip.SlideDuration;
+        TabStrip.SlideDuration = TimeSpan.FromMilliseconds(SlowSlideMilliseconds);
+        return new Restore(() => TabStrip.SlideDuration = original);
+    }
+
+    private const int SlowSlideMilliseconds = 600;
+
+    private sealed class Restore(Action restore) : IDisposable
+    {
+        public void Dispose() => restore();
+    }
+
     private static Point Row(int index, double x = 400) => new(x, FirstRowTop + index * 26 + 13);
 
     private static void Click(Window window, Point point, MouseButton button = MouseButton.Left, RawInputModifiers modifiers = RawInputModifiers.None)
@@ -825,6 +843,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             ui.Window.GetVisualDescendants().OfType<TabStripTab>().Single(candidate => candidate.Tab == tab);
         double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
         Point start = Drawn(before[0]).TranslatePoint(new Point(60, 16), ui.Window)!.Value;
+        using IDisposable slow = SlowSlides();
 
         // A press alone, or a few pixels of jitter, is still a click.
         ui.Window.MouseMove(start);
@@ -842,7 +861,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         double sliding = Offset(before[1]);
         Assert.InRange(sliding, -219.9, -0.1);  // on its way, not jumped
-        Pump(300);
+        Pump(SlowSlideMilliseconds + 200);
         Assert.Equal(-220, Offset(before[1]), 3);
         Assert.Equal(-220, Offset(before[2]), 3);
 
@@ -860,7 +879,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(0, Offset(before[1]), 3);
         Assert.Equal(0, Offset(before[2]), 3);
         Assert.InRange(Offset(before[0]), -40.1, 0);
-        Pump(300);
+        Pump(SlowSlideMilliseconds + 200);
         Assert.Equal(0, Offset(before[0]), 3);
         Assert.Equal(new Point(14 + 440, 42), Drawn(before[0]).TranslatePoint(default, ui.Window)!.Value);
         // The session still has one texture window per tab.
@@ -884,6 +903,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
         Control plus = strip.FindControl<Control>("NewTabButton")!;
         double plusLeft = plus.TranslatePoint(default, ui.Window)!.Value.X;
+        using IDisposable slow = SlowSlides();
 
         // Closing the first tab: the others start where they were drawn and glide one tab left.
         TabStripTab first = Drawn(before[0]);
@@ -893,7 +913,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.InRange(Offset(before[1]), 0.1, 219.9);
         Assert.InRange(Offset(before[2]), 0.1, 219.9);
         Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
-        Pump(300);
+        Pump(SlowSlideMilliseconds + 200);
         Assert.Equal(0, Offset(before[1]), 3);
         Assert.Equal(0, Offset(before[2]), 3);
         Assert.Equal(0, TabStrip.SlideOffset(plus), 3);
@@ -906,7 +926,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         Assert.Equal(0, Offset(before[1]), 3);
         Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
-        Pump(300);
+        Pump(SlowSlideMilliseconds + 200);
         Assert.Equal(plusLeft - 440, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
     }
 
