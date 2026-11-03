@@ -214,20 +214,19 @@ public sealed class ControlMetricsTests
         Assert.Equal("FiveFury · Avalonia · Archivo, Space Mono, Inter", about.FooterText);
         Assert.Equal(26, about.FindControl<Image>("Wordmark")!.Bounds.Height);
 
-        // The buttons open the project and its changelog in the browser.
+        // GitHub opens the project in the browser.
         var opened = new List<Uri>();
         Action<TopLevel?, Uri> previous = AboutDialog.Launch;
         AboutDialog.Launch = (_, uri) => opened.Add(uri);
         try
         {
-            foreach (string name in new[] { "GitHubButton", "ChangelogButton" })
-                about.FindControl<ChromeToolButton>(name)!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            about.FindControl<ChromeToolButton>("GitHubButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         }
         finally
         {
             AboutDialog.Launch = previous;
         }
-        Assert.Equal([AboutDialog.ProjectPage, AboutDialog.ChangelogPage], opened);
+        Assert.Equal([AboutDialog.ProjectPage], opened);
         Assert.Equal("https://github.com/Hancapo/HikariHopper", AboutDialog.ProjectPage.ToString());
         window.Close();
     });
