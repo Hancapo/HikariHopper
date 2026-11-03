@@ -591,8 +591,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(HikariHopper.Ui.Theme.TextDim, tabs[0].EditionMark.Fill);
         Assert.True(tabs[1].EditionMark.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, tabs[1].EditionMark.Fill);
-        Assert.Equal($"Enhanced\nGTA V Enhanced\n{enhanced}", tabs[1].TipText);
-        Assert.Equal($"{Path.GetFileName(Work)}\nGTA V Legacy\n{Work.TrimEnd(Path.DirectorySeparatorChar)}", tabs[0].TipText);
+        // The tooltip is just the path.
+        Assert.Equal(enhanced, tabs[1].TipText);
+        Assert.Equal(Work.TrimEnd(Path.DirectorySeparatorChar), tabs[0].TipText);
 
         // A new tab keeps its folder and has nothing to tell.
         Assert.False(tabs[2].EditionMark.IsVisible);

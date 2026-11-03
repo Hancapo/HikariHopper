@@ -198,7 +198,7 @@ public sealed class TabStripTab : Decorator
     /// <summary>Where the tooltip shows: the tab left of its close mark.</summary>
     internal Control TipHost => clickArea;
 
-    /// <summary>The tooltip's text: the full name, then the edition and the path where there are any.</summary>
+    /// <summary>The tooltip's text: the game's or archive's path, "" on a new tab.</summary>
     internal string TipText => tip.Text ?? "";
 
     public ExplorerViewModel? Tab
@@ -268,7 +268,7 @@ public sealed class TabStripTab : Decorator
         edition.Enhanced = Tab?.GameEdition == "GTA V Enhanced";
         glyph.IsVisible = !game;
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
-        RefreshTip(text);
+        RefreshTip();
         title.Text = text;
         title.Foreground = active || hovered ? Ui.Theme.Text : Ui.Theme.TextDim;
         title.FontWeight = active ? FontWeight.Bold : FontWeight.Normal;
@@ -281,14 +281,10 @@ public sealed class TabStripTab : Decorator
         InvalidateVisual();
     }
 
-    private void RefreshTip(string text)
+    private void RefreshTip()
     {
         ExplorerViewModel? tab = Tab;
-        string[] lines = tab is null ? []
-            : tab.HasGame ? [text, tab.GameEdition, tab.GamePath]
-            : tab.HasArchive ? [text, tab.ArchivePath]
-            : [];
-        tip.Text = string.Join('\n', lines.Where(line => line.Length > 0).Distinct());
+        tip.Text = tab is null ? "" : tab.HasGame ? tab.GamePath : tab.HasArchive ? tab.ArchivePath : "";
         // Built on the first tab that has something to say, the tooltip stays and follows the text.
         if (tip.Text.Length > 0 && ToolTip.GetTip(clickArea) is null)
         {
