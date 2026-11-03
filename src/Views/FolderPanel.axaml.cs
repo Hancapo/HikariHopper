@@ -226,7 +226,7 @@ public sealed class FolderRow : Panel
         toggle.Focusable = HasChildren;
         toggle.IsTabStop = HasChildren;
         AutomationProperties.SetName(toggle, item is null ? "" : item.Expanded ? $"Collapse {item.Label}" : $"Expand {item.Label}");
-        InvalidateArrange();
+        InvalidateMeasure();
         Children[0].InvalidateVisual();
     }
 
@@ -258,10 +258,18 @@ public sealed class FolderRow : Panel
 
     private void OnItemChanged(object? sender, PropertyChangedEventArgs e) => Refresh();
 
+    private double LabelLeft => RowLeft + 43;
+
+    /// <summary>The row's highlight ends where the scrollbar starts covering it.</summary>
+    private double HighlightWidth(double width) => Math.Max(0, width - (panel?.ScrollbarOverlap ?? 0));
+
+    /// <summary>The label ends 8px inside the highlight, eliding there at any depth.</summary>
+    private double LabelWidth(double width) => Math.Max(0, HighlightWidth(width) - LabelLeft - 8);
+
     protected override Size MeasureOverride(Size availableSize)
     {
         glyph.Measure(availableSize);
-        label.Measure(new Size(Math.Max(0, (double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width) - 51), Ui.Theme.RowHeight));
+        label.Measure(new Size(LabelWidth(double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width), Ui.Theme.RowHeight));
         toggle.Measure(availableSize);
         return new Size(0, Ui.Theme.RowHeight);
     }
@@ -270,18 +278,19 @@ public sealed class FolderRow : Panel
     {
         double left = RowLeft;
         glyph.Arrange(new Rect(left + 21, Math.Floor((finalSize.Height - 16) / 2), 16, 16));
-        // Text { x: 43 (in the Row); width: Math.max(0, folderDelegate.width - x - 8) }: the width
-        // ignores the depth indent, so deep labels run to the list's clip instead of eliding early.
-        label.Arrange(new Rect(left + 43, 0, Math.Max(0, finalSize.Width - 51), finalSize.Height));
+        label.Arrange(new Rect(LabelLeft, 0, LabelWidth(finalSize.Width), finalSize.Height));
         toggle.Arrange(ToggleRect);
         Children[0].Arrange(new Rect(finalSize));
         return finalSize;
     }
 
+    /// <summary>The label, for tests.</summary>
+    internal TextBlock Label => label;
+
     private void Draw(DrawingContext context)
     {
         var bounds = new Rect(Bounds.Size);
-        var highlight = new Rect(0, 0, Math.Max(0, bounds.Width - (panel?.ScrollbarOverlap ?? 0)), bounds.Height);
+        var highlight = new Rect(0, 0, HighlightWidth(bounds.Width), bounds.Height);
         bool selected = IsSelected;
         bool focused = IsFocusedRow;
         IBrush? fill = selected ? Ui.Theme.SelectionWash
