@@ -104,7 +104,7 @@ public partial class NavigationBar : UserControl
         // a home mark that goes back to the root, and the location you are in reads brightest.
         RootSegment.IsVisible = !hasWorkspace || parts.Count > 0;
         if (hasWorkspace)
-            RootSegment.SetHome(Ui.Theme.TextDim, model!.HasGame ? ExplorerViewModel.HomeTitle : model.ArchiveRootName);
+            RootSegment.SetHome(Ui.Theme.TextDim, model!.ArchiveIsRoot || !model.HasGame ? model.ArchiveRootName : ExplorerViewModel.HomeTitle);
         else
             RootSegment.Set("Select the GTA V folder", false, Ui.Theme.TextDim);
 
@@ -158,10 +158,11 @@ public partial class NavigationBar : UserControl
     {
         if (Bridge is not { } model)
             return;
-        if (model.HasGame && model.InArchive)
-            model.ShowGame();
-        else if (model.InArchive)
+        // Back to the tab's root: an RPF opened on its own, or else the game.
+        if (model.ArchiveIsRoot)
             model.NavigateTree("archive://.");
+        else if (model.HasGame && model.InArchive)
+            model.ShowGame();
         else
             model.Navigate(".");
     }

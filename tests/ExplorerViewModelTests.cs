@@ -400,6 +400,49 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
+    public void AnRpfOpenedFromOutsideTheGameIsTheTabsRootUntilItCloses() => OnUiThread(() =>
+    {
+        MakeGame();
+        Directory.CreateDirectory(Path.Combine(Work, "mods"));
+        string elsewhere = Path.Combine(Path.GetTempPath(), $"hh-external-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(elsewhere);
+        try
+        {
+            string external = SaveArchive(Path.Combine(elsewhere, "addon.rpf"), ("stream/readme.txt", "addon"));
+            var bridge = new ExplorerViewModel();
+            bridge.OpenGame(Work);
+            Assert.Equal(["mods"], TreeLabels(bridge));
+
+            // The RPF is the root now: the tree holds only its folders, not the game's mixed in, and the
+            // tab names it.
+            bridge.OpenArchive(external);
+            Assert.True(bridge.HasGame);
+            Assert.True(bridge.ArchiveIsRoot);
+            Assert.Equal(["stream"], TreeLabels(bridge));
+            Assert.Equal("addon.rpf", bridge.TabTitle);
+            Assert.Empty(bridge.NavigationPathSegments);
+
+            // Inside it, then back to its root, which is the RPF, not the game.
+            bridge.ActivateEntry(RowFor(bridge, "stream"));
+            Assert.Equal("stream", bridge.TabTitle);
+            bridge.NavigateTree("archive://.");
+            Assert.True(bridge.InArchive);
+            Assert.Equal("addon.rpf", bridge.TabTitle);
+
+            // Closing it gives the tab back to the game.
+            bridge.CloseArchive();
+            Assert.False(bridge.ArchiveIsRoot);
+            Assert.Equal(["mods"], TreeLabels(bridge));
+            Assert.Equal("Home", bridge.TabTitle);
+            bridge.CloseWorkspace();
+        }
+        finally
+        {
+            Directory.Delete(elsewhere, recursive: true);
+        }
+    });
+
+    [AvaloniaFact]
     public void NestedArchiveKeepsCompleteGameTreeRoute() => OnUiThread(() =>
     {
         MakeGame();

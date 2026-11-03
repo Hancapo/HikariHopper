@@ -247,12 +247,17 @@ public sealed partial class ExplorerViewModel
     private List<TreeRecord> PersistentTreeRows()
     {
         // The tree starts with what is inside the root, not the root itself: a tab is one game or one RPF,
-        // and the tab already says which.
+        // and the tab already says which. An RPF opened from outside the game is the root while it is open.
         var rows = new List<TreeRecord>();
-        if (Provider.HasGame)
+        if (ArchiveIsRoot)
+        {
+            if (Provider.ArchiveHasTreeChildren(""))
+                AppendArchiveChildren(rows, "", ".", 0);
+        }
+        else if (Provider.HasGame)
+        {
             AppendGameChildren(rows, ".", 0);
-        if (Provider.HasArchive && Provider.ArchiveGamePath.Length == 0 && Provider.ArchiveHasTreeChildren(""))
-            AppendArchiveChildren(rows, "", ".", 0);
+        }
         return rows;
     }
 
