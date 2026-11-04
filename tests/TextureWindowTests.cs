@@ -605,6 +605,9 @@ public sealed class TextureWindowTests
         harness.DragEnter(point.X, point.Y, MemoryStorageFile.Create("from_browser.png", png));
         Assert.True(harness.Window.DropArea.OverlayVisible);
         harness.Drop(point.X, point.Y, MemoryStorageFile.Create("from_browser.png", png));
+        // The copy runs off the UI thread; the import starts once it is done.
+        Assert.True(harness.Window.DropArea.StagingCopy!.Wait(TimeSpan.FromSeconds(10)));
+        TextureWindowHarness.Pump();
         harness.Settle();
         Assert.Contains("from_browser", harness.ViewModel.Dictionary!.Names);
         Assert.Equal((8, 4), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
