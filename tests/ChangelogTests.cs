@@ -1,3 +1,4 @@
+using Avalonia.Headless.XUnit;
 using HikariHopper.Core;
 
 namespace HikariHopper.Tests;
@@ -48,7 +49,8 @@ public sealed class ChangelogTests
         Assert.Equal(["First release."], Assert.Single(releases[1].Groups).Entries);
     }
 
-    [Fact]
+    // Avalonia's asset loader needs the app platform, which a plain [Fact] only has if another test started it.
+    [AvaloniaFact]
     public void TheAppCarriesTheRepositorysOwnChangelog()
     {
         // The file built into the app is the repo's CHANGELOG.md, read the same way.
