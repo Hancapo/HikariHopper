@@ -15,7 +15,7 @@ namespace HikariHopper.Views;
 /// sends the same <c>WM_SYSCOMMAND SC_MOVE|HTCAPTION</c> as Qt's <c>startSystemMove()</c>), and
 /// Avalonia maximizes a captionless window to the monitor's working area exactly as Qt did, so
 /// a maximized window needs no extra insets. Where DWM cannot round the window (Windows 10, the
-/// headless platform) it keeps square corners and <see cref="WindowPiping"/> paints the piping.
+/// headless platform) it keeps square corners; no border is drawn either way.
 /// </remarks>
 public static class QtFramelessWindow
 {
@@ -31,6 +31,8 @@ public static class QtFramelessWindow
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaBorderColor = 34;
     private const int DwmwcpRound = 2;
+    // DWMWA_COLOR_NONE: no border at all, where Windows would draw one in the accent colour.
+    private const int DwmColorNone = unchecked((int)0xFFFFFFFE);
 
     /// <summary>Drops the platform decoration and installs the Qt window style.</summary>
     public static void Apply(Window window)
@@ -46,26 +48,25 @@ public static class QtFramelessWindow
         });
         window.Opened += (_, _) =>
         {
-            if (window.TryGetPlatformHandle()?.Handle is { } handle && handle != 0 && RoundCorners(handle))
-                WindowPiping.SetNativeBorder(window, true);
+            if (window.TryGetPlatformHandle()?.Handle is { } handle && handle != 0)
+                RoundCorners(handle);
         };
     }
 
     /// <summary>
-    /// Asks DWM for rounded corners and a <see cref="Ui.Theme.BorderAccent"/> border; false where the
-    /// attributes are not supported (before Windows 11 build 22000).
+    /// Asks DWM for rounded corners and no border; false where the attributes are not supported (before
+    /// Windows 11 build 22000).
     /// </summary>
     public static bool RoundCorners(nint handle)
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
             return false;
         int corner = DwmwcpRound;
-        Avalonia.Media.Color blue = Ui.Theme.BorderAccent.Color;
-        int colorRef = blue.R | blue.G << 8 | blue.B << 16;
+        int none = DwmColorNone;
         try
         {
             return DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref corner, sizeof(int)) >= 0
-                && DwmSetWindowAttribute(handle, DwmwaBorderColor, ref colorRef, sizeof(int)) >= 0;
+                && DwmSetWindowAttribute(handle, DwmwaBorderColor, ref none, sizeof(int)) >= 0;
         }
         catch (DllNotFoundException)
         {

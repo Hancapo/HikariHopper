@@ -43,6 +43,5 @@
       </Panel>
     </Border>
 
-    <c:WindowPiping />
   </Panel>
 </Window>
