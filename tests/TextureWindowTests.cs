@@ -731,7 +731,32 @@ public sealed class TextureWindowTests
         Assert.False(harness.Window.MenuRow.EditMenu.IsOpen);
         harness.Window.MenuRow.CloseMenus();
         Size size = RetroMenuPlacement.MenuSize(harness.Window.Rail.ContextMenuPopup);
-        Assert.Equal(new Size(Ui.Theme.MenuWidth, 8 + 12 * Ui.Theme.MenuItemHeight + 2 * Ui.Theme.MenuSeparatorHeight), size);
+        Assert.Equal(new Size(Ui.Theme.MenuWidth, 8 + 9 * Ui.Theme.MenuItemHeight + 2 * Ui.Theme.MenuSeparatorHeight), size);
+    }
+
+    [AvaloniaFact]
+    public void TheTextureMenuGroupsItsActionsWithResizeAndFormatOpeningTheirOptions()
+    {
+        TextureWindowHarness harness = Opened(Solid("square", 100, 100));
+        TextureContextMenu menu = harness.Window.Rail.ContextMenuPopup;
+        string[] Labels(ItemsControl items) => [.. items.Items.Select(item => item is RetroMenuItem entry ? entry.Text : "—")];
+
+        // The clipboard and replacing, then editing, then the texture's own actions; every row has an icon.
+        Assert.Equal(["Copy image", "Paste…", "Replace from image…", "—", "Resize", "Mipmaps…", "Format", "—", "Extract DDS…", "Rename…", "Remove"],
+            Labels(menu));
+        Assert.All(menu.Items.OfType<RetroMenuItem>(), item => Assert.NotEqual("", item.IconName));
+        Assert.Equal(["To a size…", "To power of 2…"], Labels(menu.ResizeMenu));
+        Assert.Equal(["Change format…", "Optimize compression"], Labels(menu.FormatMenu));
+        Assert.DoesNotContain(Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(menu).OfType<RetroMenuItem>(), item => item.Text.Contains("alpha", StringComparison.OrdinalIgnoreCase));
+
+        // The options inside the submenus still open their dialogs.
+        var asked = new List<string>();
+        menu.ResizeRequested += (_, _) => asked.Add("resize");
+        menu.PowerOfTwoRequested += (_, _) => asked.Add("pow2");
+        menu.FormatRequested += (_, _) => asked.Add("format");
+        foreach (RetroMenuItem item in new[] { menu.ResizeItem, menu.PowerOfTwoItem, menu.FormatItem })
+            item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(["resize", "pow2", "format"], asked);
     }
 
     [AvaloniaFact]

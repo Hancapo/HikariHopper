@@ -19,7 +19,6 @@ public partial class TextureContextMenu : RetroMenu
         MipmapsItem.Triggered += (_, _) => MipmapsRequested?.Invoke(this, EventArgs.Empty);
         FormatItem.Triggered += (_, _) => FormatRequested?.Invoke(this, EventArgs.Empty);
         OptimizeItem.Triggered += (_, _) => ViewModel?.OptimizeSelectedCompression();
-        AlphaItem.Triggered += (_, _) => AlphaRepairRequested?.Invoke(this, EventArgs.Empty);
         CopyItem.Triggered += (_, _) => ViewModel?.CopySelectedImage();
         PasteItem.Triggered += (_, _) => _ = ViewModel?.RequestPasteImage();
         ExtractItem.Triggered += (_, _) => _ = ViewModel?.ExtractSelected();
@@ -34,8 +33,6 @@ public partial class TextureContextMenu : RetroMenu
     public event EventHandler? MipmapsRequested;
 
     public event EventHandler? FormatRequested;
-
-    public event EventHandler? AlphaRepairRequested;
 
     public event EventHandler? RenameRequested;
 

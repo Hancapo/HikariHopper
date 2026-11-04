@@ -103,7 +103,6 @@ public sealed class RenderTextureScenarios
                         "pow2" => TextureTool.PowerOfTwo,
                         "mipmaps" => TextureTool.Mipmaps,
                         "format" => TextureTool.Format,
-                        "alpha" => TextureTool.AlphaRepair,
                         "rename" => TextureTool.Rename,
                         _ => TextureTool.Remove,
                     });

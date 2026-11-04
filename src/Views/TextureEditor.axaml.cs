@@ -16,7 +16,6 @@ public enum TextureTool
     PowerOfTwo,
     Mipmaps,
     Format,
-    AlphaRepair,
     Rename,
     Remove,
 }
@@ -84,7 +83,6 @@ public partial class TextureEditor : UserControl, IModalContent
         Rail.PowerOfTwoRequested += (_, _) => OpenToolDialog(TextureTool.PowerOfTwo);
         Rail.MipmapsRequested += (_, _) => OpenToolDialog(TextureTool.Mipmaps);
         Rail.FormatRequested += (_, _) => OpenToolDialog(TextureTool.Format);
-        Rail.AlphaRepairRequested += (_, _) => OpenToolDialog(TextureTool.AlphaRepair);
         Rail.RenameRequested += (_, _) => OpenToolDialog(TextureTool.Rename);
         Rail.RemoveRequested += (_, _) => OpenToolDialog(TextureTool.Remove);
         AddHandler(KeyDownEvent, ShortcutKeyDown, RoutingStrategies.Tunnel);
@@ -176,7 +174,6 @@ public partial class TextureEditor : UserControl, IModalContent
             TextureTool.PowerOfTwo => new TextureResizeDialog { PowerOfTwo = true },
             TextureTool.Mipmaps => new TextureMipmapsDialog(),
             TextureTool.Format => new TextureFormatDialog(),
-            TextureTool.AlphaRepair => new TextureAlphaRepairDialog(),
             TextureTool.Rename => new TextureRenameDialog(),
             TextureTool.Remove => new TextureRemoveDialog(),
             _ => throw new ArgumentOutOfRangeException(nameof(tool)),

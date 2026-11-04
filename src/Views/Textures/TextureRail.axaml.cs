@@ -48,7 +48,6 @@ public partial class TextureRail : UserControl
         contextMenu.PowerOfTwoRequested += (_, _) => PowerOfTwoRequested?.Invoke(this, EventArgs.Empty);
         contextMenu.MipmapsRequested += (_, _) => MipmapsRequested?.Invoke(this, EventArgs.Empty);
         contextMenu.FormatRequested += (_, _) => FormatRequested?.Invoke(this, EventArgs.Empty);
-        contextMenu.AlphaRepairRequested += (_, _) => AlphaRepairRequested?.Invoke(this, EventArgs.Empty);
         contextMenu.RenameRequested += (_, _) => RenameRequested?.Invoke(this, EventArgs.Empty);
         contextMenu.RemoveRequested += (_, _) => RemoveRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -61,7 +60,6 @@ public partial class TextureRail : UserControl
 
     public event EventHandler? FormatRequested;
 
-    public event EventHandler? AlphaRepairRequested;
 
     public event EventHandler? RenameRequested;
 
