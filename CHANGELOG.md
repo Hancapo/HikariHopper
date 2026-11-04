@@ -8,12 +8,16 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Import images… in the texture editor's File menu (Ctrl+I) adds images as new textures named after their files. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
+
 ### Changed
 
 - The window no longer has a blue border. ([#55](https://github.com/Hancapo/HikariHopper/pull/55))
 - The texture context menu is regrouped with icons, and Resize and Format open their options. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
 
 ### Fixed
+
+- Images dragged into the texture editor from a browser or out of a zip are imported. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
 
 ### Removed
 

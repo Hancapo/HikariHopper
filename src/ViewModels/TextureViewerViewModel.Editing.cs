@@ -96,6 +96,19 @@ public sealed partial class TextureViewerViewModel
             TextureOperations.ReplaceFromImage(source, path, texture.Width, texture.Height, generate, stop));
     }
 
+    /// <summary>Asks for image files and imports them as new textures named after the files, as dropping them does.</summary>
+    public async Task<bool> ImportImagesFromFiles()
+    {
+        if (!CanImportImages)
+            return false;
+        IReadOnlyList<string> paths = await Dialogs.PickOpenFilesAsync("Import images", [TextureImport.ImageFileFilter],
+            allowMultiple: true);
+        return paths.Count > 0 && ImportDroppedImages(paths);
+    }
+
+    /// <summary>Reports dropped images that could not be read, before anything was imported.</summary>
+    public void ReportImageImportFailure(string reason) => SetStatus($"Could not import images: {reason}");
+
     /// <summary>Whether every path is a local image file the open document can import.</summary>
     public bool CanAcceptImageDrop(IReadOnlyList<string> paths)
     {
@@ -150,7 +163,7 @@ public sealed partial class TextureViewerViewModel
             return false;
         if (pending.Generation != generation || pending.Revision != revision || !CanImportImages)
         {
-            SetStatus("The document changed; drop the images again");
+            SetStatus("The document changed; import the images again");
             return false;
         }
         return StartImageImport(pending.Paths);

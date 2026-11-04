@@ -307,6 +307,9 @@ public partial class TextureEditor : UserControl, IModalContent
             case (Key.V, ctrl) when viewModel.CanPasteImage && !anyDialog:
                 _ = viewModel.RequestPasteImage();
                 return true;
+            case (Key.I, ctrl) when viewModel.CanImportImages && !anyDialog:
+                _ = viewModel.ImportImagesFromFiles();
+                return true;
             case (Key.S, ctrl) when viewModel.HasDocument && !viewModel.OperationBusy && viewModel.CanSaveSource:
                 viewModel.SaveYtd();
                 return true;
