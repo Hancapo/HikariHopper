@@ -1389,14 +1389,17 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ThePaintedPipingStepsAsideForTheNativeBorder()
+    public void TheWindowHasNoBlueBorder()
     {
         Explorer ui = OpenExplorer();
-        Views.Controls.WindowPiping piping = ui.Find<Views.Controls.WindowPiping>();
-        // Headless there is no DWM, so the square fallback piping is painted.
-        Assert.True(piping.IsVisible);
-        Views.Controls.WindowPiping.SetNativeBorder(ui.Window, true);
-        Assert.False(piping.IsVisible);
+        using var frame = ui.Window.CaptureRenderedFrame()!;
+        // No piping is painted along the window's edges: what is there is the window's own chrome.
+        Color accent = HikariHopper.Ui.Theme.BorderAccent.Color;
+        foreach ((int x, int y) in new[] { (0, 400), ((int)ui.Window.Width - 1, 400), (680, (int)ui.Window.Height - 1) })
+        {
+            Color edge = Pixel(frame, x, y);
+            Assert.NotEqual((accent.R, accent.G, accent.B), (edge.R, edge.G, edge.B));
+        }
     }
 
     private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)

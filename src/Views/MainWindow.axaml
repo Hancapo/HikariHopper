@@ -25,10 +25,6 @@
       <ContentControl Name="ExplorerScreenHost" x:FieldModifier="public" v:ModalOverlay.IsBackdrop="True" />
     </DockPanel>
 
-    <!-- Blue piping around the whole window, the way the reference uniform runs its trim along
-         every edge. On Windows 11 the window manager draws it along the rounded corners instead. -->
-    <c:WindowPiping />
-
     <c:WindowResizeFrame />
   </Panel>
 </Window>

@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The window no longer has a blue border. ([#55](https://github.com/Hancapo/HikariHopper/pull/55))
+
 ### Fixed
 
 ### Removed
