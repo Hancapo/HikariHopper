@@ -97,11 +97,6 @@ public static class TextureOperations
         return Adopt(TextureProcessing.Encode(TextureProcessing.Decode(texture), options, texture.Name), texture);
     }
 
-    /// <summary>Port of <c>_repair_alpha_edges</c> (TexFury <c>repair_alpha_edges(radius)</c>, quality 1); a clean texture
-    /// is returned unchanged.</summary>
-    public static Texture RepairAlphaEdges(Texture texture, int radius) =>
-        TextureProcessing.RepairAlphaEdges(texture, radius, 1).Texture;
-
     /// <summary>Port of <c>_resize_to_power_of_two</c>; textures already at the rounded size are returned unchanged.</summary>
     public static Texture ResizeToPowerOfTwo(Texture texture, string mode, ImageFilter filter, int minMipSize, bool generateMipmaps)
     {

@@ -354,27 +354,6 @@ public sealed class TextureViewerTests
         Assert.Equal("Extracted 5 textures", viewer.Status);
     });
 
-    [AvaloniaFact]
-    public Task AlphaRepairChecksEachSelectedTexture() => Headless.Run(() =>
-    {
-        TextureViewerViewModel viewer = FiveTextures();
-        var checkedNames = new List<string>();
-        viewer.RepairAlphaEdges = (texture, radius) =>
-        {
-            lock (checkedNames)
-                checkedNames.Add(texture.Name!);
-            Assert.Equal(2, radius);
-            return TextureOperations.RepairAlphaEdges(texture, radius);
-        };
-        viewer.SelectTexture(1);
-        viewer.SelectTexture(3, KeyModifiers.Control);
-        Assert.True(viewer.RepairSelectedAlphaEdges(2));
-        Settle(viewer);
-        Assert.Equal(["texture_1", "texture_3"], checkedNames);
-        Assert.False(viewer.Modified); // Clean textures are a no-op, with no unnecessary undo entry.
-        Assert.Equal("No changes were needed", viewer.Status);
-    });
-
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]

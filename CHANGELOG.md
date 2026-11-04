@@ -11,10 +11,13 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Changed
 
 - The window no longer has a blue border. ([#55](https://github.com/Hancapo/HikariHopper/pull/55))
+- The texture context menu is regrouped with icons, and Resize and Format open their options. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
 
 ### Fixed
 
 ### Removed
+
+- Repair alpha edges, from the texture editor. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
 
 ## [0.0.3] - 2026-11-03
 

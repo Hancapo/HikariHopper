@@ -12,16 +12,12 @@ public sealed partial class TextureViewerViewModel
         ["Resizing"] = "Resize texture",
         ["Recalculating mipmaps for"] = "Recalculate mipmaps",
         ["Changing format for"] = "Change texture format",
-        ["Repairing alpha edges for"] = "Repair alpha edges",
         ["Replacing"] = "Replace texture",
         ["Optimizing compression for"] = "Optimize compression",
     };
 
     /// <summary>DXT optimization transform (Python <c>optimize_texture_compression</c>); replaceable by tests.</summary>
     internal Func<Texture, Texture> OptimizeCompression { get; set; } = TextureCompression.Optimize;
-
-    /// <summary>Alpha edge repair transform (Python <c>_repair_alpha_edges</c>); replaceable by tests.</summary>
-    internal Func<Texture, int, Texture> RepairAlphaEdges { get; set; } = TextureOperations.RepairAlphaEdges;
 
     /// <summary>Clipboard image conversion (Python <c>texture_from_clipboard_image</c>); replaceable by tests.</summary>
     internal Func<RgbaImage, string, Texture> TextureFromClipboardImage { get; set; } = TextureImport.TextureFromClipboardImage;
@@ -81,13 +77,6 @@ public sealed partial class TextureViewerViewModel
         float clamped = (float)Math.Max(0.0, Math.Min(1.0, quality));
         return StartTransform("Changing format for", texture => TextureOperations.ChangeFormat(texture,
             TextureFormatNames.FromEditable(normalized, texture.Format), clamped, filter, minMipSize));
-    }
-
-    public bool RepairSelectedAlphaEdges(int radius)
-    {
-        int clamped = Math.Max(1, Math.Min(32, radius));
-        Func<Texture, int, Texture> repair = RepairAlphaEdges;
-        return StartTransform("Repairing alpha edges for", texture => repair(texture, clamped));
     }
 
     /// <summary>Asks for an image and replaces the single selected texture with it, keeping its size, format and mips.</summary>
