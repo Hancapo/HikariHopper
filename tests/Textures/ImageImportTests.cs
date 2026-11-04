@@ -33,6 +33,49 @@ public sealed class ImageImportTests
         Assert.Equal(3, viewer.TextureCount);
     });
 
+    [AvaloniaFact]
+    public Task CopyingDroppedImagesHoldsTheDocumentUntilTheImport() => Headless.Run(() =>
+    {
+        using var folder = new TempFolder();
+        string source = ImageFile(folder.File("source.png"));
+        string staged = folder.File("from_browser.png");
+        using var release = new ManualResetEventSlim();
+        var dialogs = new FakeDialogs();
+        dialogs.OpenFiles.Add(ImageFile(folder.File("picked.png")));
+        TextureViewerViewModel viewer = Loaded(Dictionary("existing"), dialogs: dialogs);
+        Assert.True(viewer.ImportDroppedImagesAfterCopy([staged], () =>
+        {
+            release.Wait(TimeSpan.FromSeconds(10));
+            File.Copy(source, staged);
+        }));
+
+        // While the files are copied, nothing else may change or import into the document.
+        Assert.True(viewer.OperationBusy);
+        Assert.Equal("Copying dropped images…", viewer.Status);
+        Assert.False(viewer.CanImportImages);
+        Assert.False(viewer.ImportImagesFromFiles().GetAwaiter().GetResult());
+        viewer.RequestClose();
+        Assert.True(viewer.HasDocument);
+        Assert.Equal("Wait for the texture operation to finish", viewer.Status);
+
+        release.Set();
+        Settle(viewer);
+        Assert.Equal(["existing", "from_browser"], Names(viewer).Order());
+        Assert.Empty(dialogs.Titles);
+    });
+
+    [AvaloniaFact]
+    public Task AFailedCopyImportsNothingAndSaysWhy() => Headless.Run(() =>
+    {
+        TextureViewerViewModel viewer = Loaded(Dictionary("existing"));
+        Assert.True(viewer.ImportDroppedImagesAfterCopy([Path.Combine(Path.GetTempPath(), "gone.png")],
+            () => throw new IOException("The source went away")));
+        Settle(viewer);
+        Assert.False(viewer.OperationBusy);
+        Assert.Equal(["existing"], Names(viewer));
+        Assert.Equal("Could not import images: The source went away", viewer.Status);
+    });
+
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]

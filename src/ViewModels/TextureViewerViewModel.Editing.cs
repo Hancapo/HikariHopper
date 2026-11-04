@@ -153,6 +153,47 @@ public sealed partial class TextureViewerViewModel
         return StartImageImport(resolved);
     }
 
+    /// <summary>
+    /// Imports dropped images of which some only exist in the drag: <paramref name="copy"/> writes them to
+    /// <paramref name="paths"/> on the work pool, with the document held busy as during the import itself, and
+    /// the import follows once it is done, into the same document only.
+    /// </summary>
+    public bool ImportDroppedImagesAfterCopy(IReadOnlyList<string> paths, Action copy)
+    {
+        if (!CanAcceptImageDrop(paths))
+            return false;
+        operationBusy = true;
+        SetStatus("Copying dropped images…");
+        EmitStateChanged();
+        int token = generation;
+        pool.Start(() =>
+        {
+            string? error = null;
+            try
+            {
+                copy();
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+            }
+            Post(() => DroppedImagesCopied(token, paths, error));
+        }, PriorityTransform);
+        return true;
+    }
+
+    private void DroppedImagesCopied(int token, IReadOnlyList<string> paths, string? error)
+    {
+        operationBusy = false;
+        EmitStateChanged();
+        if (error is not null)
+            ReportImageImportFailure(error);
+        else if (token != generation)
+            SetStatus("The document changed; import the images again");
+        else
+            ImportDroppedImages(paths);
+    }
+
     /// <summary>Answers <see cref="ImageImportConfirmationRequested"/>.</summary>
     public bool ConfirmImageImport(bool accepted)
     {
