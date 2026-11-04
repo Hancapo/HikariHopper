@@ -596,6 +596,47 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ImagesThatArentOnDiskAreCopiedInAndImported()
+    {
+        using var folder = new TempFolder();
+        byte[] png = File.ReadAllBytes(TextureTestKit.ImageFile(folder.File("source.png")));
+        TextureWindowHarness harness = Opened();
+        var point = new Point(ViewportLeft + 300, ViewportTop + 200);
+        harness.DragEnter(point.X, point.Y, MemoryStorageFile.Create("from_browser.png", png));
+        Assert.True(harness.Window.DropArea.OverlayVisible);
+        harness.Drop(point.X, point.Y, MemoryStorageFile.Create("from_browser.png", png));
+        harness.Settle();
+        Assert.Contains("from_browser", harness.ViewModel.Dictionary!.Names);
+        Assert.Equal((8, 4), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
+
+        // Something that isn't an image is still refused.
+        harness.DragEnter(point.X, point.Y, MemoryStorageFile.Create("notes.txt", [1, 2, 3]));
+        Assert.False(harness.Window.DropArea.OverlayVisible);
+    }
+
+    [AvaloniaFact]
+    public void TheFileMenuAndCtrlIImportImages()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        var dialogs = (FakeDialogs)harness.ViewModel.Dialogs;
+        RetroMenuItem import = harness.Window.MenuRow.FileMenu.Items.OfType<RetroMenuItem>().Single(item => item.Text == "Import images…");
+        Assert.Equal("Ctrl+I", import.ShortcutText);
+        Assert.True(import.IsEnabled);
+        dialogs.OpenFiles.Add(TextureTestKit.ImageFile(folder.File("from_menu.png")));
+        import.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        harness.Settle();
+        Assert.Contains("from_menu", harness.ViewModel.Dictionary!.Names);
+
+        dialogs.OpenFiles.Clear();
+        dialogs.OpenFiles.Add(TextureTestKit.ImageFile(folder.File("from_keys.png")));
+        harness.Key(Key.I, RawInputModifiers.Control);
+        harness.Settle();
+        Assert.Contains("from_keys", harness.ViewModel.Dictionary!.Names);
+        Assert.Equal(["Import images", "Import images"], dialogs.Titles);
+    }
+
+    [AvaloniaFact]
     public void DropAreaRefusesNonImagesAndOpenDialogs()
     {
         using var folder = new TempFolder();

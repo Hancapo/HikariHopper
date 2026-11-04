@@ -8,7 +8,7 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The texture window's menu bar (port of <c>TextureViewerMenuRow.qml</c>): File (save, save as,
-/// extract all, close) and Edit (undo, remove duplicates, paste). The keyboard shortcuts shown in
+/// import images, extract all, close) and Edit (undo, remove duplicates, paste). The keyboard shortcuts shown in
 /// the menus are handled by <see cref="TextureEditor"/>.
 /// </summary>
 public partial class TextureViewerMenuRow : UserControl
@@ -31,8 +31,9 @@ public partial class TextureViewerMenuRow : UserControl
         saveAsItem = (RetroMenuItem)fileMenu.Items[1]!;
         saveItem.Triggered += (_, _) => viewModel?.SaveYtd();
         saveAsItem.Triggered += (_, _) => _ = viewModel?.SaveYtdAs();
-        ((RetroMenuItem)fileMenu.Items[3]!).Triggered += (_, _) => _ = viewModel?.ExtractAll();
-        ((RetroMenuItem)fileMenu.Items[5]!).Triggered += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
+        ((RetroMenuItem)fileMenu.Items[3]!).Triggered += (_, _) => _ = viewModel?.ImportImagesFromFiles();
+        ((RetroMenuItem)fileMenu.Items[4]!).Triggered += (_, _) => _ = viewModel?.ExtractAll();
+        ((RetroMenuItem)fileMenu.Items[6]!).Triggered += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
         fileMenu.Opened += (_, _) => FileButton.MenuOpen = true;
         fileMenu.Closed += (_, _) => FileButton.MenuOpen = false;

@@ -22,6 +22,7 @@
       <c:RetroMenuItem ShortcutText="Ctrl+S" IsEnabled="{Binding CanSave}" />
       <c:RetroMenuItem ShortcutText="Ctrl+Shift+S" IsEnabled="{Binding CanSaveAs}" />
       <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Import images…" ShortcutText="Ctrl+I" IsEnabled="{Binding CanImportImages}" />
       <c:RetroMenuItem Text="Extract all textures…" IsEnabled="{Binding CanExtractAll}" />
       <c:RetroMenuSeparator />
       <c:RetroMenuItem Text="Close" ShortcutText="Ctrl+W" />

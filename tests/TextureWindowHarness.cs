@@ -107,24 +107,31 @@ internal sealed class TextureWindowHarness
         Pump();
     }
 
-    public void DragEnter(double x, double y, params string[] paths)
+    public void DragEnter(double x, double y, params string[] paths) => DragEnter(x, y, [.. paths.Select(File)]);
+
+    public void DragEnter(double x, double y, params IStorageItem[] items)
     {
-        var data = new DataTransfer();
-        foreach (string path in paths)
-            data.Add(DataTransferItem.CreateFile(File(path)));
-        Host.DragDrop(ToHost(new Point(x, y)), RawDragEventType.DragEnter, data, DragDropEffects.Copy, RawInputModifiers.None);
+        Host.DragDrop(ToHost(new Point(x, y)), RawDragEventType.DragEnter, Data(items), DragDropEffects.Copy, RawInputModifiers.None);
         Pump();
     }
 
-    public void Drop(double x, double y, params string[] paths)
+    public void Drop(double x, double y, params string[] paths) => Drop(x, y, [.. paths.Select(File)]);
+
+    public void Drop(double x, double y, params IStorageItem[] items)
     {
-        var data = new DataTransfer();
-        foreach (string path in paths)
-            data.Add(DataTransferItem.CreateFile(File(path)));
+        DataTransfer data = Data(items);
         Point at = ToHost(new Point(x, y));
         Host.DragDrop(at, RawDragEventType.DragEnter, data, DragDropEffects.Copy, RawInputModifiers.None);
         Host.DragDrop(at, RawDragEventType.Drop, data, DragDropEffects.Copy, RawInputModifiers.None);
         Pump();
+    }
+
+    private static DataTransfer Data(IStorageItem[] items)
+    {
+        var data = new DataTransfer();
+        foreach (IStorageItem item in items)
+            data.Add(DataTransferItem.CreateFile(item));
+        return data;
     }
 
     private IStorageItem File(string path) =>

@@ -12,8 +12,9 @@ namespace HikariHopper.Views;
 /// <remarks>
 /// A drag of file URLs is accepted (copy) when <see cref="TextureViewerViewModel.CanAcceptImageDrop"/>
 /// agrees, and then shows the selection-wash overlay with "DROP IMAGES TO IMPORT"; dropping hands
-/// the paths to <see cref="TextureViewerViewModel.ImportDroppedImages"/>. Nothing is accepted while
-/// <see cref="DropEnabled"/> is false. <see cref="Body"/> is the content the area covers.
+/// the paths to <see cref="TextureViewerViewModel.ImportDroppedImages"/>. Files that aren't on disk (an image
+/// dragged out of a browser or a zip) are copied into a temporary folder first and imported from there.
+/// Nothing is accepted while <see cref="DropEnabled"/> is false. <see cref="Body"/> is the content the area covers.
 /// </remarks>
 public partial class TextureImageDropArea : UserControl
 {
@@ -25,6 +26,7 @@ public partial class TextureImageDropArea : UserControl
 
     private bool containsDrag;
     private bool acceptableDrag;
+    private DragStaging? staging;
 
     public TextureImageDropArea()
     {
@@ -60,13 +62,46 @@ public partial class TextureImageDropArea : UserControl
             Host.Content = Body;
     }
 
-    /// <summary>The dropped items as local paths (or URIs for items without one), or null without file URLs.</summary>
-    private static IReadOnlyList<string>? DroppedPaths(DragEventArgs e)
+    /// <summary>The dropped items, or null without any.</summary>
+    private static IStorageItem[]? DroppedItems(DragEventArgs e) => e.DataTransfer.TryGetFiles() is { Length: > 0 } items ? items : null;
+
+    /// <summary>
+    /// The paths the drop would import: local paths as they are, and for files without one (whose contents
+    /// <see cref="Stage"/> copies), a path under <paramref name="folder"/> with the file's name. Items that are
+    /// neither keep their URI, which the view model refuses.
+    /// </summary>
+    private static string[] PathsOf(IStorageItem[] items, string folder) =>
+        [.. items.Select((item, index) => item.TryGetLocalPath()
+            ?? (item is IStorageFile ? Path.Combine(folder, index.ToString(), StagedName(item.Name)) : item.Path.ToString()))];
+
+    private static string StagedName(string name)
     {
-        IStorageItem[]? items = e.DataTransfer.TryGetFiles();
-        if (items is null || items.Length == 0)
-            return null;
-        return [.. items.Select(item => item.TryGetLocalPath() ?? item.Path.ToString())];
+        string file = Path.GetFileName(name.Replace('/', '\\'));
+        foreach (char invalid in Path.GetInvalidFileNameChars())
+            file = file.Replace(invalid, '_');
+        return file.Length > 0 ? file : "image";
+    }
+
+    /// <summary>Copies the dropped files that aren't on disk into a new temporary folder (replacing the last one)
+    /// and returns the paths to import.</summary>
+    private string[] Stage(IStorageItem[] items)
+    {
+        if (items.All(item => item.TryGetLocalPath() is not null))
+            return PathsOf(items, "");
+        staging?.Cleanup();
+        staging = new DragStaging();
+        string[] paths = PathsOf(items, staging.Name);
+        for (int index = 0; index < items.Length; index++)
+        {
+            if (items[index].TryGetLocalPath() is not null || items[index] is not IStorageFile file)
+                continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(paths[index])!);
+            // The drag's data is only readable until the drop returns, so the copy happens now.
+            using Stream source = file.OpenReadAsync().GetAwaiter().GetResult();
+            using FileStream target = File.Create(paths[index]);
+            source.CopyTo(target);
+        }
+        return paths;
     }
 
     private void OnDragEnter(object? sender, DragEventArgs e)
@@ -77,12 +112,12 @@ public partial class TextureImageDropArea : UserControl
             OnDragOver(sender, e);
             return;
         }
-        if (!DropEnabled || DroppedPaths(e) is not { } paths)
+        if (!DropEnabled || DroppedItems(e) is not { } items)
         {
             e.DragEffects = DragDropEffects.None;
             return;
         }
-        acceptableDrag = ViewModel?.CanAcceptImageDrop(paths) ?? false;
+        acceptableDrag = ViewModel?.CanAcceptImageDrop(PathsOf(items, Path.GetTempPath())) ?? false;
         containsDrag = acceptableDrag;
         e.DragEffects = acceptableDrag ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
@@ -112,10 +147,21 @@ public partial class TextureImageDropArea : UserControl
         acceptableDrag = false;
         Refresh();
         e.Handled = true;
-        if (wasContained && DropEnabled && DroppedPaths(e) is { } paths && ViewModel?.ImportDroppedImages(paths) == true)
+        e.DragEffects = DragDropEffects.None;
+        if (!wasContained || !DropEnabled || DroppedItems(e) is not { } items || ViewModel is not { } viewModel)
+            return;
+        string[] paths;
+        try
+        {
+            paths = Stage(items);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            viewModel.ReportImageImportFailure(exception.Message);
+            return;
+        }
+        if (viewModel.ImportDroppedImages(paths))
             e.DragEffects = DragDropEffects.Copy;
-        else
-            e.DragEffects = DragDropEffects.None;
     }
 
     private bool IsPointerInside(DragEventArgs e) => new Rect(Bounds.Size).Contains(e.GetPosition(this));

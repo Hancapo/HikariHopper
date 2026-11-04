@@ -13,6 +13,26 @@ namespace HikariHopper.Tests.Textures;
 /// <summary>Port of test_texture_image_drop.py (view-model side).</summary>
 public sealed class ImageImportTests
 {
+    [AvaloniaFact]
+    public Task ImportImagesAsksForFilesAndImportsThemAsOneBatch() => Headless.Run(async () =>
+    {
+        using var folder = new TempFolder();
+        var dialogs = new FakeDialogs();
+        dialogs.OpenFiles.Add(ImageFile(folder.File("paint.png"), 7, 5));
+        dialogs.OpenFiles.Add(ImageFile(folder.File("detail.bmp")));
+        TextureViewerViewModel viewer = Loaded(Dictionary("existing"), dialogs: dialogs);
+        Assert.True(await viewer.ImportImagesFromFiles());
+        Settle(viewer);
+        Assert.Equal(["detail", "existing", "paint"], Names(viewer).Order());
+        Assert.Equal(["Import images"], dialogs.Titles);
+        Assert.Equal("Import textures", viewer.UndoLabel);
+
+        // Cancelling the picker imports nothing.
+        dialogs.OpenFiles.Clear();
+        Assert.False(await viewer.ImportImagesFromFiles());
+        Assert.Equal(3, viewer.TextureCount);
+    });
+
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
