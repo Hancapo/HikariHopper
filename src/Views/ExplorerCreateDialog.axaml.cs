@@ -63,6 +63,7 @@ public partial class ExplorerCreateDialog : UserControl
         "empty-rpf" => "NEW EMPTY RPF",
         "folder-rpf" => "RPF FROM FOLDER",
         "zip-rpf" => "RPF FROM ZIP",
+        "rename" => "RENAME",
         _ => "NEW ENTRY",
     };
 
@@ -74,6 +75,7 @@ public partial class ExplorerCreateDialog : UserControl
         creationKind = kind;
         sourcePath = source;
         HeadingText.Text = Heading;
+        ConfirmButton.Text = kind == "rename" ? "Rename" : "Create";
         NameField.Text = suggestedName;
         UpdateNameValidation();
         RefreshSource();
@@ -86,13 +88,29 @@ public partial class ExplorerCreateDialog : UserControl
             bridge.PropertyChanged -= OnBridgePropertyChanged;
             Closed?.Invoke(this, EventArgs.Empty);
         };
-        // onOpened (once the popup is laid out): nameField.forceActiveFocus(); nameField.selectAll()
-        NameField.SelectAll();
+        // onOpened (once the popup is laid out): nameField.forceActiveFocus(); nameField.selectAll(). A rename picks
+        // the name without its extension, as Windows Explorer does.
+        SelectName();
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             NameField.Focus(NavigationMethod.Pointer);
-            NameField.SelectAll();
+            SelectName();
         }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void SelectName()
+    {
+        string text = NameField.Text ?? "";
+        int dot = creationKind == "rename" ? text.LastIndexOf('.') : -1;
+        if (dot > 0)
+        {
+            NameField.SelectionStart = 0;
+            NameField.SelectionEnd = dot;
+        }
+        else
+        {
+            NameField.SelectAll();
+        }
     }
 
     /// <summary>QML <c>reject()</c> / <c>accept()</c>.</summary>
@@ -106,7 +124,7 @@ public partial class ExplorerCreateDialog : UserControl
 
     private void UpdateNameValidation()
     {
-        nameError = bridge.CreationNameError(NameField.Text ?? "", NameKind);
+        nameError = creationKind == "rename" ? bridge.RenameNameError(NameField.Text ?? "") : bridge.CreationNameError(NameField.Text ?? "", NameKind);
         NameErrorText.Text = nameError;
         NameErrorText.IsVisible = nameError.Length > 0;
         NameField.Invalid = nameError.Length > 0;
@@ -140,6 +158,7 @@ public partial class ExplorerCreateDialog : UserControl
             "empty-rpf" => bridge.CreateEmptyRpf(name),
             "folder-rpf" => bridge.CreateRpfFromFolder(name, sourcePath),
             "zip-rpf" => bridge.CreateRpfFromZip(name, sourcePath),
+            "rename" => bridge.RenameSelected(name),
             _ => false,
         };
         if (started)

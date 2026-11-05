@@ -66,6 +66,54 @@ public static class EntryOperations
         return normalized;
     }
 
+    /// <summary>
+    /// Renames the file or folder <paramref name="name"/> in <paramref name="target"/> to <paramref name="newName"/>, on
+    /// disk or in an RPF. Only a change of case may keep a name another entry there has. Returns the new name.
+    /// </summary>
+    public static string RenameAt(EntryCreationTarget target, string name, string newName)
+    {
+        if (!target.InArchive)
+        {
+            if (target.Directory is null)
+                throw new ArgumentException("No writable explorer location is open");
+            string source = Path.Combine(target.Directory, name);
+            string destination = Path.Combine(target.Directory, newName);
+            if (!Path.Exists(source))
+                throw new FileNotFoundException($"Not found: {name}", source);
+            bool caseOnly = string.Equals(name, newName, StringComparison.OrdinalIgnoreCase);
+            if (!caseOnly)
+                EntryNames.EnsureEntryNameAvailable(newName,
+                    new DirectoryInfo(target.Directory).EnumerateFileSystemInfos().Select(item => item.Name));
+            if (Directory.Exists(source))
+            {
+                // A folder can't be moved onto itself in another case; it goes through a free name on the way.
+                if (caseOnly)
+                {
+                    string step = Path.Combine(target.Directory, $"{newName}.renaming-{Guid.NewGuid():N}");
+                    Directory.Move(source, step);
+                    source = step;
+                }
+                Directory.Move(source, destination);
+            }
+            else
+            {
+                File.Move(source, destination);
+            }
+            return newName;
+        }
+        SaveTargetArchive(target, archive =>
+        {
+            RpfDirectoryEntry directory = DirectoryAt(archive, target.InternalDirectory)
+                ?? throw new ArgumentException($"Could not find archive folder: {target.InternalDirectory}");
+            RpfEntry entry = directory.Children.FirstOrDefault(child => string.Equals(child.Name, name, StringComparison.Ordinal))
+                ?? throw new ArgumentException($"Not found: {name}");
+            EntryNames.EnsureEntryNameAvailable(newName,
+                directory.Children.Where(child => !ReferenceEquals(child, entry)).Select(child => child.Name));
+            entry.Name = newName;
+        });
+        return newName;
+    }
+
     /// <summary>Imports dropped files and folders; a name already at the target is an error.</summary>
     public static IReadOnlyList<string> ImportFilesAt(EntryCreationTarget target, IEnumerable<string> sources) =>
         ImportAt(target, sources, freeNames: false);

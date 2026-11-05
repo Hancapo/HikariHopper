@@ -12,6 +12,7 @@
   <c:RetroMenuItem Name="CopyItem" Text="Copy" ShortcutText="Ctrl+C" IconName="copy" Triggered="OnCopy" />
   <c:RetroMenuItem Name="CopyNameItem" Text="Copy name" IconName="file" Triggered="OnCopyName" />
   <c:RetroMenuItem Name="CopyPathItem" Text="Copy path" ShortcutText="Ctrl+Shift+C" IconName="link" Triggered="OnCopyPath" />
+  <c:RetroMenuItem Name="RenameItem" Text="Rename…" ShortcutText="F2" IconName="pencil" Triggered="OnRename" />
   <c:RetroMenuSeparator Name="ExtractSeparator" />
   <c:RetroMenuItem Name="ExtractItem" Text="Extract…" IconName="download" Triggered="OnExtract" />
   <c:RetroMenuItem Name="ExtractContentItem" Text="Extract all content…" IconName="package-open" Triggered="OnExtractContent" />
