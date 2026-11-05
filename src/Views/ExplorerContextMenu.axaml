@@ -5,17 +5,16 @@
              xmlns:c="using:HikariHopper.Views.Controls"
              x:Class="HikariHopper.Views.ExplorerContextMenu"
              x:DataType="vm:ExplorerViewModel">
-  <!-- Port of ExplorerContextMenu.qml. Its DataContext is the tab's view model. -->
-  <c:RetroMenuItem Text="Open" ShortcutText="Enter" IconName="external-link" Triggered="OnOpen">
-    <c:RetroMenuItem.IsEnabled>
-      <MultiBinding Converter="{x:Static BoolConverters.And}">
-        <Binding Path="SelectionCount" Converter="{x:Static ObjectConverters.Equal}" ConverterParameter="{x:Static v:ExplorerContextMenu.One}" />
-        <Binding Path="!EntryOperationBusy" />
-      </MultiBinding>
-    </c:RetroMenuItem.IsEnabled>
-  </c:RetroMenuItem>
+  <!-- Its DataContext is the tab's view model. Two menus in one, picked by Refresh when it opens: an item's
+       (a folder, an archive or a file; or several) when something is selected, and the folder's own when
+       nothing is, after a right-click on empty space. -->
+  <c:RetroMenuItem Name="OpenItem" Text="Open" ShortcutText="Enter" IconName="external-link" Triggered="OnOpen" />
+  <c:RetroMenuItem Name="CopyNameItem" Text="Copy name" ShortcutText="Ctrl+C" IconName="copy" Triggered="OnCopyName" />
+  <c:RetroMenuItem Name="CopyPathItem" Text="Copy path" ShortcutText="Ctrl+Shift+C" IconName="link" Triggered="OnCopyPath" />
+  <c:RetroMenuSeparator Name="DeleteSeparator" />
+  <c:RetroMenuItem Name="DeleteMenuItem" Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete" />
 
-  <c:RetroMenuItem Name="NewEntryMenu" Text="New" IconName="plus" IsEnabled="{Binding !EntryOperationBusy}">
+  <c:RetroMenuItem Name="NewEntryMenu" Text="New" IconName="plus">
     <c:RetroMenuItem Text="Folder" IconName="folder" Triggered="OnNewFolder" />
     <c:RetroMenuItem Name="CreateYtdMenuItem" Text="Texture dictionary" IconName="image" Triggered="OnNewYtd" />
     <c:RetroMenuSection Name="RpfArchiveSection" Text="RPF ARCHIVE" />
@@ -23,20 +22,6 @@
     <c:RetroMenuItem Name="CreateRpfFromFolderMenuItem" Text="From folder…" IconName="folder-input" Triggered="OnNewRpfFromFolder" />
     <c:RetroMenuItem Name="CreateRpfFromZipMenuItem" Text="From ZIP…" IconName="file-archive" Triggered="OnNewRpfFromZip" />
   </c:RetroMenuItem>
-
-  <c:RetroMenuSeparator />
-
-  <c:RetroMenuItem Text="Paste" ShortcutText="Ctrl+V" IconName="clipboard" IsEnabled="False" />
-  <c:RetroMenuItem Name="DeleteMenuItem" Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete">
-    <c:RetroMenuItem.IsEnabled>
-      <MultiBinding Converter="{x:Static BoolConverters.And}">
-        <Binding Path="SelectionDeletable" />
-        <Binding Path="!EntryOperationBusy" />
-      </MultiBinding>
-    </c:RetroMenuItem.IsEnabled>
-  </c:RetroMenuItem>
-
-  <c:RetroMenuSeparator />
-
-  <c:RetroMenuItem Text="Refresh" ShortcutText="F5" IconName="rotate-cw" IsEnabled="{Binding !EntryOperationBusy}" Triggered="OnRefresh" />
+  <c:RetroMenuSeparator Name="RefreshSeparator" />
+  <c:RetroMenuItem Name="RefreshItem" Text="Refresh" ShortcutText="F5" IconName="rotate-cw" Triggered="OnRefresh" />
 </c:RetroMenu>

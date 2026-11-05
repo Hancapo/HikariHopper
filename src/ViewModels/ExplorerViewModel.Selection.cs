@@ -261,6 +261,18 @@ public sealed partial class ExplorerViewModel
         dragStaging = null;
     }
 
+    /// <summary>Whether the one selected item is something <see cref="ActivateEntry"/> opens.</summary>
+    public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry);
+
+    /// <summary>What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD/YDR texture dictionaries, text files and images.</summary>
+    internal static bool Opens(EntryRecord entry) =>
+        entry.IsDirectory
+        || entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)
+        || entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase)
+        || entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase)
+        || TextDocument.IsTextName(entry.Name)
+        || Textures.TextureImport.IsImagePath(entry.Name);
+
     /// <summary>Enter/double-click: opens folders, RPFs, YTD/YDR texture dictionaries, text files and images.</summary>
     public void ActivateEntry(int row)
     {

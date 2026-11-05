@@ -120,6 +120,7 @@ public partial class WorkspaceView : UserControl
     public void OpenContextMenu(Control source, Point point)
     {
         Point mapped = source.TranslatePoint(point, this) ?? point;
+        contextMenu.Refresh();
         contextMenu.Open(this, mapped.X, mapped.Y);
     }
 
