@@ -246,6 +246,24 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheChangelogScrollsWithTheWheelAnywhereOverIt()
+    {
+        Explorer ui = OpenExplorer();
+        var changelog = new ChangelogDialog();
+        changelog.Present(ui.Find<MenuRow>());
+        Pump(300);
+        ScrollViewer scroller = changelog.GetVisualDescendants().OfType<ScrollViewer>().Single();
+        // Between the text and the scroll bar, where no text is: still part of the list.
+        Point gap = scroller.TranslatePoint(new Point(scroller.Bounds.Width - 12 - 4, scroller.Bounds.Height / 2), ui.Window)!.Value;
+        Assert.Empty(ui.Window.GetVisualsAt(gap).OfType<TextBlock>());
+        ui.Window.MouseWheel(gap, new Vector(0, -1));
+        Pump(900);
+        Assert.Equal(SmoothScrolling.NotchDistance, scroller.Offset.Y, 1);
+        changelog.Close();
+        Pump(250);
+    }
+
+    [AvaloniaFact]
     public void TabNavigationStaysInsideTheOpenModal()
     {
         Explorer ui = OpenExplorer();

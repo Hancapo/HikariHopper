@@ -29,14 +29,15 @@ public sealed class ChangelogDialog : ModalSheet
         WindowShare = new Size(0.45, 0.8);
         MinSize = new Size(460, 420);
         MaxSize = new Size(620, 760);
-        var list = new StackPanel { Margin = new Thickness(0, 0, 14, 8) };
+        var list = new StackPanel();
         for (int index = 0; index < releases.Count; index++)
             list.Children.Add(Release(releases[index], first: index == 0));
         var scroller = new ScrollViewer
         {
             Theme = Application.Current?.FindResource("QuietScrollViewer") as ControlTheme,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Content = list,
+            // A background, so the wheel scrolls over the gaps between and beside the text too, not only over it.
+            Content = new Border { Background = Brushes.Transparent, Padding = new Thickness(0, 0, 14, 8), Child = list },
         };
         SmoothScrolling.Attach(scroller);
         Content = scroller;

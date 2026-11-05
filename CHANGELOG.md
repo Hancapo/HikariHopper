@@ -18,6 +18,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - Images dragged into the texture editor from a browser or out of a zip are imported. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
+- The changelog scrolls with the mouse wheel anywhere over it, not only over its text. ([#60](https://github.com/Hancapo/HikariHopper/pull/60))
 
 ### Removed
 
