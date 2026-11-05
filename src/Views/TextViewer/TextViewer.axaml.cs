@@ -38,6 +38,7 @@ public partial class TextViewer : UserControl, IModalContent
         this.document = document;
         InitializeComponent();
         TitleText.Text = document.Name;
+        TitleGlyph.FileKind = RpfProvider.FileKind(document.Name);
         Lines.Scroller = TextScroller;
         Lines.Document = document;
         // The wheel glides, as it does in the explorer's lists.

@@ -460,6 +460,8 @@ public sealed class ControlMetricsTests
         Assert.Equal(("puzzle", "code"), FileGlyph.Resolve("file", "Application Extension"));
         Assert.Equal(("book-image", "asset"), FileGlyph.Resolve("file", "Texture Dictionary"));
         Assert.Equal(("file", "data"), FileGlyph.Resolve("file", "Something new"));
+        Assert.Equal(("image", "asset"), FileGlyph.Resolve("file", "DDS Texture"));
+        Assert.Equal(("image", "asset"), FileGlyph.Resolve("file", "PNG Image"));
         Assert.Same(T.InkCode, FileGlyph.TintFor("code", false));
         Assert.Same(T.SelectionText, FileGlyph.TintFor("code", true));
     }
