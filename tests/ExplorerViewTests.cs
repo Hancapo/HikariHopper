@@ -683,18 +683,18 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // An item: what you can do with it, and nothing about making something new.
         ui.Bridge.SelectEntry(Row("folder00"));
-        Assert.Equal(["Open", "Copy name", "Copy path", "Delete"], Shown());
+        Assert.Equal(["Open", "Copy name", "Copy path", "Extract…", "Delete"], Shown());
         Assert.False(menu.ForFolder);
         ui.Bridge.SelectEntry(Row("file000.txt"));
-        Assert.Equal(["Open", "Copy name", "Copy path", "Delete"], Shown());
+        Assert.Equal(["Open", "Copy name", "Copy path", "Extract…", "Delete"], Shown());
         // A file the app can't open: Open is there but off.
         ui.Bridge.SelectEntry(Row("tool.exe"));
-        Assert.Equal(["(Open)", "Copy name", "Copy path", "Delete"], Shown());
+        Assert.Equal(["(Open)", "Copy name", "Copy path", "Extract…", "Delete"], Shown());
 
         // Several items: no Open, and copying and deleting say how many.
         ui.Bridge.SelectEntry(Row("file000.txt"));
         ui.Bridge.SelectEntry(Row("file001.txt"), KeyModifiers.Control);
-        Assert.Equal(["Copy names", "Copy paths", "Delete 2 items"], Shown());
+        Assert.Equal(["Copy names", "Copy paths", "Extract…", "Delete 2 items"], Shown());
 
         // Empty space: the folder's own menu.
         ui.Bridge.ClearEntrySelection();
