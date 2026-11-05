@@ -3,7 +3,11 @@ using System.Text.RegularExpressions;
 namespace HikariHopper.Core;
 
 /// <summary>One version's changes: its name ("0.0.2", or "Unreleased"), its date, and its groups.</summary>
-public sealed record ChangelogRelease(string Version, string Date, IReadOnlyList<ChangelogGroup> Groups);
+public sealed record ChangelogRelease(string Version, string Date, IReadOnlyList<ChangelogGroup> Groups)
+{
+    /// <summary>The changes since the last release, not yet in one.</summary>
+    public bool IsUnreleased => Version.Equals("Unreleased", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>A group of changes ("Added", "Fixed"…) and its entries, as plain text.</summary>
 public sealed record ChangelogGroup(string Name, IReadOnlyList<string> Entries);

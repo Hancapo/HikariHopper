@@ -17,6 +17,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The texture context menu is regrouped with icons, and Resize and Format open their options. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
 - The texture editor's and the text viewer's headers show the file's icon and name, the way the explorer lists it. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
 - Image and text files have their own icons and types in the explorer, such as PNG Image and DDS Texture. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
+- The changelog in the app lists only released versions; test builds also show the changes not released yet. ([#64](https://github.com/Hancapo/HikariHopper/pull/64))
 
 ### Fixed
 

@@ -18,7 +18,7 @@ public sealed class ChangelogDialog : ModalSheet
 {
     private static readonly Uri Source = new("avares://HikariHopper/Assets/CHANGELOG.md");
 
-    public ChangelogDialog() : this(Load())
+    public ChangelogDialog() : this(ForBuild(Load(), Infrastructure.BuildInfo.IsRelease))
     {
     }
 
@@ -45,6 +45,13 @@ public sealed class ChangelogDialog : ModalSheet
 
     /// <summary>The versions shown, newest first.</summary>
     public IReadOnlyList<ChangelogRelease> Releases { get; }
+
+    /// <summary>
+    /// What a build shows: a release build only the versions released, a dev build the Unreleased changes too,
+    /// so whoever tests it can see what is new.
+    /// </summary>
+    public static IReadOnlyList<ChangelogRelease> ForBuild(IReadOnlyList<ChangelogRelease> releases, bool release) =>
+        release ? [.. releases.Where(entry => !entry.IsUnreleased)] : releases;
 
     /// <summary>The changelog built into the app; empty if it is missing.</summary>
     public static IReadOnlyList<ChangelogRelease> Load()

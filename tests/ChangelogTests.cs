@@ -49,6 +49,18 @@ public sealed class ChangelogTests
         Assert.Equal(["First release."], Assert.Single(releases[1].Groups).Entries);
     }
 
+    [Fact]
+    public void OnlyADevBuildShowsTheUnreleasedChanges()
+    {
+        IReadOnlyList<ChangelogRelease> all = Changelog.Parse(
+            "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Something new.\n\n## [0.0.3] - 2026-11-03\n\n### Fixed\n\n- Something old.\n");
+        Assert.Equal(["Unreleased", "0.0.3"], all.Select(entry => entry.Version));
+        Assert.Equal(["0.0.3"], Views.ChangelogDialog.ForBuild(all, release: true).Select(entry => entry.Version));
+        Assert.Equal(["Unreleased", "0.0.3"], Views.ChangelogDialog.ForBuild(all, release: false).Select(entry => entry.Version));
+        // The test build isn't a release build, so it would show them.
+        Assert.False(Infrastructure.BuildInfo.IsRelease);
+    }
+
     // Avalonia's asset loader needs the app platform, which a plain [Fact] only has if another test started it.
     [AvaloniaFact]
     public void TheAppCarriesTheRepositorysOwnChangelog()
