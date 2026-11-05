@@ -28,6 +28,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The explorer's context menu fits what you right-click: an item gets Open, Copy name, Copy path and Delete, and empty space gets New and Refresh. ([#67](https://github.com/Hancapo/HikariHopper/pull/67))
 - Ctrl+C copies the selected files; Copy name has no shortcut, and folders can be dropped onto the explorer too. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 - The window title and splash screen read Modding Toolkit, and the start-up and empty-state messages refer to your game. ([#72](https://github.com/Hancapo/HikariHopper/pull/72))
+- A new app icon: a railway conductor's cap on a brass tile. ([#73](https://github.com/Hancapo/HikariHopper/pull/73))
 
 ### Fixed
 
