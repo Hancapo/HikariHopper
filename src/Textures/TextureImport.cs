@@ -83,7 +83,8 @@ public static class TextureImport
     {
         var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         SKCodecResult result = codec.GetPixels(info, out byte[] pixels);
-        if (result is not (SKCodecResult.Success or SKCodecResult.IncompleteInput))
+        // A cut-short file is an error too, not the part of the image that decoded.
+        if (result != SKCodecResult.Success)
             throw new InvalidDataException($"Could not decode WebP image: {result}");
         return new RgbaImage(info.Width, info.Height, pixels);
     }
