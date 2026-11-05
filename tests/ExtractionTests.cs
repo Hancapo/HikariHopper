@@ -65,6 +65,40 @@ public sealed class ExtractionTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task AFolderWithADotIsNumberedAfterItsWholeName()
+    {
+        MakeGame();
+        string path = SaveArchive(Path.Combine(Work, "mods.rpf"), ("data.v1/a.txt", "a"));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenArchive(path);
+        bridge.SelectEntry(Row(bridge, "data.v1"));
+        string output = Output("dotted");
+        // A file already has the folder's name there.
+        Write(Path.Combine(output, "data.v1"), "file");
+        Dialogs.Folders.Enqueue(output);
+
+        Assert.True(await bridge.ExtractSelection());
+        Settle(bridge);
+        Assert.Equal("a", File.ReadAllText(Path.Combine(output, "data.v1 (2)", "a.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task ExtractingIntoTheFolderShownListsWhatWasWritten()
+    {
+        MakeGame();
+        SaveArchive(Path.Combine(Work, "mods.rpf"), ("readme.txt", "hello"));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.SelectEntry(Row(bridge, "mods.rpf"));
+        Dialogs.Folders.Enqueue(Work);
+
+        Assert.True(await bridge.ExtractArchiveContent());
+        Settle(bridge);
+        Assert.Contains("mods", bridge.EntriesModel.Select(item => item.Name));
+    }
+
+    [AvaloniaFact]
     public async Task ExtractingAllContentOfAnRpfMakesAFolderNamedAfterIt()
     {
         MakeGame();

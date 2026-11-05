@@ -348,7 +348,7 @@ public sealed class RpfProvider
         var written = new List<string>();
         foreach (EntryRecord entry in entries)
         {
-            string target = FreeChild(root, SafeExportChild(root, entry.Name));
+            string target = FreeChild(root, SafeExportChild(root, entry.Name), entry.IsDirectory);
             if (InArchive)
                 ExportArchiveEntry(entry, target);
             else
@@ -369,7 +369,7 @@ public sealed class RpfProvider
             throw new ArgumentException($"{entry.Name} is not an RPF archive");
         string root = Path.GetFullPath(destination);
         Directory.CreateDirectory(root);
-        string target = FreeChild(root, Path.Combine(root, Path.GetFileNameWithoutExtension(entry.Name)));
+        string target = FreeChild(root, Path.Combine(root, Path.GetFileNameWithoutExtension(entry.Name)), folder: true);
         if (InArchive)
         {
             if (entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
@@ -397,15 +397,19 @@ public sealed class RpfProvider
             ExportArchiveEntry(child, SafeExportChild(target, child.Name));
     }
 
-    /// <summary><paramref name="path"/>, or "name (2)", "name (3)"… beside it when something is already there.</summary>
-    private static string FreeChild(string parent, string path)
+    /// <summary>
+    /// <paramref name="path"/>, or "name (2)", "name (3)"… beside it when something is already there. A folder is
+    /// numbered after its whole name, a file before its extension.
+    /// </summary>
+    private static string FreeChild(string parent, string path, bool folder)
     {
         if (!Path.Exists(path))
             return path;
         string name = Path.GetFileName(path);
-        bool folderLike = Directory.Exists(path);
-        string stem = folderLike ? name : Path.GetFileNameWithoutExtension(name);
-        string extension = folderLike ? "" : Path.GetExtension(name);
+        string stem = folder ? name : Path.GetFileNameWithoutExtension(name);
+        string extension = folder ? "" : Path.GetExtension(name);
+        if (stem.Length == 0)
+            (stem, extension) = (name, "");
         for (int number = 2; ; number++)
         {
             string candidate = Path.Combine(parent, $"{stem} ({number}){extension}");
@@ -419,6 +423,8 @@ public sealed class RpfProvider
     {
         if (File.Exists(source))
         {
+            if (EntryOperations.IsLinkedPath(source))
+                throw new ArgumentException("Extraction through linked files or folders is not supported");
             File.Copy(source, target);
             return;
         }
@@ -430,7 +436,7 @@ public sealed class RpfProvider
             throw new ArgumentException("Extraction through linked files or folders is not supported");
         Directory.CreateDirectory(to);
         foreach (string file in Directory.EnumerateFiles(from))
-            File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+            CopyLoose(file, Path.Combine(to, Path.GetFileName(file)));
         foreach (string folder in Directory.EnumerateDirectories(from))
             CopyLoose(folder, Path.Combine(to, Path.GetFileName(folder)));
     }

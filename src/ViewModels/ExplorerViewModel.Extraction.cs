@@ -40,6 +40,26 @@ public sealed partial class ExplorerViewModel
             result => $"Extracted {archive.Name} to {result}");
     }
 
+    /// <summary>Lists the folder shown again when the extraction went into it, so what was written appears.</summary>
+    private void ShowExtracted(string folder)
+    {
+        if (Provider.InArchive)
+            return;
+        try
+        {
+            if (Provider.CreationTarget(currentPath).Directory is { } shown
+                && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(shown)),
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase))
+            {
+                ClearSelection();
+                RefreshEntries();
+            }
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+        }
+    }
+
     private string StartFolder() => lastExtractFolder.Length > 0 && Directory.Exists(lastExtractFolder) ? lastExtractFolder : Provider.GamePath;
 
     /// <summary>Runs an extraction on the operation queue: it only reads here, but nothing may change while it does.</summary>
@@ -56,6 +76,7 @@ public sealed partial class ExplorerViewModel
         {
             SetStatus(done(result));
             FinishEntryOperation();
+            ShowExtracted(folder);
         }, message =>
         {
             SetStatus($"Could not extract: {message}");
