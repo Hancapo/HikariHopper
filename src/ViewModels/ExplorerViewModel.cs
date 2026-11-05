@@ -305,7 +305,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
             },
             "size" => (left, right) =>
             {
-                int size = left.Size.CompareTo(right.Size);
+                // By the size shown, so the order matches the column.
+                int size = left.ShownSize.CompareTo(right.ShownSize);
                 return size != 0 ? size : ByName(left, right);
             },
             _ => ByName,

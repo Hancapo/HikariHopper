@@ -295,6 +295,44 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
+    public void ArchivedFilesShowWhatTheyTakeAndWhetherTheyAreCompressed() => OnUiThread(() =>
+    {
+        string text = string.Concat(Enumerable.Repeat("the same line again and again\n", 400));
+        var archive = new FiveFury.Rpf.RpfArchive("sizes.rpf");
+        archive.AddBinary("deflated.txt", Bytes(text), FiveFury.Rpf.RpfBinaryCompression.Deflate);
+        archive.AddBinary("plain.txt", Bytes(text));
+        archive.AddResource("textures.ytd", Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("paint", "detail")));
+        string path = Path.Combine(Work, "sizes.rpf");
+        archive.Save(path);
+        var bridge = new ExplorerViewModel();
+        bridge.OpenArchive(path);
+        EntryItem Row(string name) => bridge.EntriesModel.Single(item => item.Name == name);
+
+        // A compressed file shows the bytes it takes in the archive; its whole size is kept for reading it.
+        EntryItem deflated = Row("deflated.txt");
+        Assert.Equal("Text Document (Compressed)", deflated.TypeText);
+        Assert.Equal(text.Length, deflated.Size);
+        Assert.True(deflated.Record.StoredSize < text.Length / 10);
+        Assert.Equal(Formatting.FormatSize(deflated.Record.StoredSize), deflated.SizeText);
+
+        EntryItem plain = Row("plain.txt");
+        Assert.Equal("Text Document (Uncompressed)", plain.TypeText);
+        Assert.Equal(Formatting.FormatSize(text.Length), plain.SizeText);
+
+        // A resource is always kept deflated; its padded in-memory size isn't what's shown.
+        EntryItem ytd = Row("textures.ytd");
+        Assert.Equal("Texture Dictionary (Compressed)", ytd.TypeText);
+        Assert.True(ytd.Record.StoredSize < ytd.Size);
+        Assert.Equal(Formatting.FormatSize(ytd.Record.StoredSize), ytd.SizeText);
+        Assert.Equal("Texture Dictionary", ytd.Kind);
+
+        // Sorted by size, by the size shown.
+        bridge.SortEntries("size");
+        Assert.Equal(bridge.EntriesModel.OrderBy(item => item.Record.ShownSize).Select(item => item.Name),
+            bridge.EntriesModel.Select(item => item.Name));
+    });
+
+    [AvaloniaFact]
     public void NestedArchiveOpensFromFolderTree() => OnUiThread(() =>
     {
         string outer = SaveArchive(Path.Combine(Work, "outer.rpf"),

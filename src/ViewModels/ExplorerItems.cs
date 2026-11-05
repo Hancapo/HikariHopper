@@ -32,14 +32,23 @@ public sealed class EntryItem : ObservableObject
 
     public long Size => Record.Size;
 
-    public string SizeLabel => Formatting.FormatSize(Record.Size);
+    /// <summary>What the file takes: in an archive that compresses it, its compressed size.</summary>
+    public string SizeLabel => Formatting.FormatSize(Record.ShownSize);
 
     public int ChildCount => Record.Children;
 
     public bool IsDirectory => Record.IsDirectory;
 
-    /// <summary>The TYPE column: a folder is recognisable by its glyph, so it shows no type.</summary>
-    public string TypeText => IsDirectory ? "" : Kind;
+    /// <summary>
+    /// The TYPE column: a folder is recognisable by its glyph, so it shows no type. A file in an archive says
+    /// whether it is kept compressed, which is what its size is.
+    /// </summary>
+    public string TypeText => IsDirectory ? "" : Record.Storage switch
+    {
+        EntryStorage.Compressed => $"{Kind} (Compressed)",
+        EntryStorage.Uncompressed => $"{Kind} (Uncompressed)",
+        _ => Kind,
+    };
 
     /// <summary>The SIZE column: a file's size, or how many items a folder holds ("Empty" for none).</summary>
     public string SizeText => !IsDirectory ? SizeLabel

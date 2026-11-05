@@ -565,7 +565,10 @@ public sealed class RpfProvider
         }
         var file = (RpfFileEntry)item;
         long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
-        return new EntryRecord(item.Name, native.FullPath, FileKind(item.Name), size, 0, native);
+        // A resource (YTD, YDR and the rest) is kept deflated; a binary file only when its entry says so.
+        bool compressed = file is RpfResourceFileEntry or RpfBinaryFileEntry { Compression: not RpfBinaryCompression.None };
+        return new EntryRecord(item.Name, native.FullPath, FileKind(item.Name), size, 0, native,
+            Storage: compressed ? EntryStorage.Compressed : EntryStorage.Uncompressed, StoredSize: file.StoredSize);
     }
 
     private void ExportArchiveEntry(EntryRecord entry, string destination)
