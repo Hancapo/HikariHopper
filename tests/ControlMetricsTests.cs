@@ -179,12 +179,12 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Size(12, 12), emblem.Bounds.Size);
         Assert.Equal(new PixelSize(64, 64), Assert.IsAssignableFrom<Bitmap>(emblem.Source).PixelSize);
         Point at = emblem.TranslatePoint(default, window)!.Value;
-        var moonGold = Color.Parse("#F4C26F");
+        var brass = Color.Parse("#F4C26F");
         bool gold = false;
         for (int y = 0; y < 12; y++)
             for (int x = 0; x < 12; x++)
-                gold |= Distance(Pixel(window, (int)at.X + x, (int)at.Y + y), moonGold) < 40;
-        Assert.True(gold, "the emblem shows the gold moon");
+                gold |= Distance(Pixel(window, (int)at.X + x, (int)at.Y + y), brass) < 40;
+        Assert.True(gold, "the emblem shows its brass tile");
         Assert.Equal(T.ChromeRaised.Color, Pixel(window, (int)at.X + 16, (int)at.Y + 6));
         window.Close();
     });
