@@ -63,11 +63,12 @@
           <c:ChromeToolButton DockPanel.Dock="Right" Width="26" Height="24" Bordered="False" IconKind="refresh" IconSize="14" IconThickness="1.5"
                               CornerRadius="{x:Static ui:Theme.InnerCorner}"
                               IsEnabled="{Binding HasWorkspace}" AutomationProperties.Name="Refresh" Click="OnRefresh" />
-          <StackPanel Orientation="Horizontal" Spacing="2">
+          <DockPanel>
             <!-- Root segment: the game, or a standalone archive. -->
-            <v:NavigationSegment Name="RootSegment" />
-            <StackPanel Name="Segments" Orientation="Horizontal" Spacing="2" />
-          </StackPanel>
+            <v:NavigationSegment Name="RootSegment" DockPanel.Dock="Left" Margin="0,0,2,0" />
+            <!-- The path, in the room left: leading segments fold into the overflow mark when it doesn't fit. -->
+            <v:PathCrumbPanel Name="Segments" HorizontalAlignment="Left" />
+          </DockPanel>
         </DockPanel>
       </Border>
 

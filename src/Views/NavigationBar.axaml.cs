@@ -50,6 +50,12 @@ public partial class NavigationBar : UserControl
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
+    /// <summary>The "…" mark the leading segments fold into when the path doesn't fit.</summary>
+    internal NavigationSegment? OverflowSegment { get; private set; }
+
+    /// <summary>The menu of folded segments, while it is open.</summary>
+    internal RetroMenu? OverflowMenu { get; private set; }
+
     /// <summary>QML <c>focusSearch()</c>: focus the search field and select its text.</summary>
     public void FocusSearch()
     {
@@ -109,6 +115,12 @@ public partial class NavigationBar : UserControl
             RootSegment.Set("Select the GTA V folder", false, Ui.Theme.TextDim);
 
         Segments.Children.Clear();
+        // The overflow mark: the leading segments that don't fit, as a menu.
+        var overflow = OverflowSegment = new NavigationSegment();
+        overflow.Set("…", false, Ui.Theme.TextDim);
+        AutomationProperties.SetName(overflow, "Earlier folders");
+        PointerClick.Attach(overflow, _ => OpenOverflow(overflow));
+        Segments.Children.Add(Row(overflow));
         for (int index = 0; index < parts.Count; index++)
         {
             PathSegment part = parts[index];
@@ -117,19 +129,44 @@ public partial class NavigationBar : UserControl
             segment.Set(part.Label, part.Archive,
                 part.Archive ? Ui.Theme.Accent : last ? Ui.Theme.Text : Ui.Theme.TextDim);
             PointerClick.Attach(segment, _ => Bridge?.NavigateTree(part.Target));
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-            row.Children.Add(new ChromeIcon
-            {
-                Kind = "chevron",
-                Stroke = Ui.Theme.TextFaint,
-                Thickness = 2,
-                Width = 12,
-                Height = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-            row.Children.Add(segment);
-            Segments.Children.Add(row);
+            Segments.Children.Add(Row(segment));
         }
+    }
+
+    /// <summary>A segment after its chevron. The row clips, so a segment folded away shows nothing.</summary>
+    private static DockPanel Row(NavigationSegment segment)
+    {
+        var row = new DockPanel { ClipToBounds = true };
+        row.Children.Add(new ChromeIcon
+        {
+            Kind = "chevron",
+            Stroke = Ui.Theme.TextFaint,
+            Thickness = 2,
+            Width = 12,
+            Height = 12,
+            Margin = new Thickness(0, 0, 2, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            [DockPanel.DockProperty] = Dock.Left,
+        });
+        row.Children.Add(segment);
+        return row;
+    }
+
+    /// <summary>The folded segments, outermost first, to go to one of them.</summary>
+    private void OpenOverflow(Control anchor)
+    {
+        if (Bridge is not { } model || Segments.HiddenCount == 0)
+            return;
+        var menu = new RetroMenu();
+        foreach (PathSegment part in model.NavigationPathSegments.Take(Segments.HiddenCount))
+        {
+            var item = new RetroMenuItem { Text = part.Label, IconName = part.Archive ? "package" : "folder" };
+            item.Triggered += (_, _) => Bridge?.NavigateTree(part.Target);
+            menu.Items.Add(item);
+        }
+        OverflowMenu = menu;
+        menu.Closed += (_, _) => OverflowMenu = null;
+        menu.OpenUnder(anchor, 4);
     }
 
     private void RefreshViewMode()
@@ -206,6 +243,7 @@ public sealed class NavigationSegment : Border
         FontFamily = Ui.Theme.MonoFont,
         FontSize = Ui.Theme.FontSize,
         VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis,
     };
 
     public NavigationSegment()
@@ -215,13 +253,11 @@ public sealed class NavigationSegment : Border
         VerticalAlignment = VerticalAlignment.Center;
         Background = Brushes.Transparent;
         Padding = new Thickness(7, 0);
-        var row = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        // A dock, not a stack, so a narrower width reaches the label and trims it.
+        var row = new DockPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(home, Dock.Left);
+        DockPanel.SetDock(package, Dock.Left);
+        package.Margin = new Thickness(0, 0, 6, 0);
         row.Children.Add(home);
         row.Children.Add(package);
         row.Children.Add(label);

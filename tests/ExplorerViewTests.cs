@@ -766,7 +766,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         NavigationBar navigation = ui.Find<NavigationBar>();
         string game = Path.GetFileName(Work);
-        string[] Crumbs() => [.. navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>().Select(segment => segment.Label)];
+        string[] Crumbs() => [.. navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>()
+            .Where(segment => segment != navigation.OverflowSegment).Select(segment => segment.Label)];
 
         // At the root: the tab says Home, the tree starts inside it with nothing focused, and the path bar
         // is empty.
@@ -791,6 +792,66 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(".", ui.Bridge.CurrentPath);
         Assert.Equal("Home", ui.Bridge.TabTitle);
         Assert.False(navigation.RootSegment.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void ALongPathFoldsItsLeadingFoldersAndStaysClearOfTheRefreshButton()
+    {
+        Explorer ui = OpenExplorer(width: 900);
+        string[] path = ["x64", "levels", "gta5", "interiors", "dlc_int_01_m23_1", "stream", "props_and_their_textures"];
+        Directory.CreateDirectory(Path.Combine([Work, .. path]));
+        ui.Bridge.Navigate(string.Join('/', path));
+        Pump();
+        NavigationBar navigation = ui.Find<NavigationBar>();
+        Views.Controls.ChromeToolButton refresh = navigation.AddressBar.GetVisualDescendants()
+            .OfType<Views.Controls.ChromeToolButton>().Single();
+        double Right(Control control) => control.TranslatePoint(new Point(control.Bounds.Width, 0), navigation)!.Value.X;
+        double Left(Control control) => control.TranslatePoint(default, navigation)!.Value.X;
+
+        int hidden = navigation.Segments.HiddenCount;
+        Assert.InRange(hidden, 1, path.Length - 1);
+        NavigationSegment[] crumbs = [.. navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>()
+            .Where(segment => segment != navigation.OverflowSegment)];
+        // The current folder shows whole, and everything shown ends before the refresh button.
+        NavigationSegment current = crumbs[^1];
+        Assert.Equal("props_and_their_textures", current.Label);
+        Assert.Equal(current.DesiredSize.Width, current.Bounds.Width, 1);
+        Assert.True(Right(current) <= Left(refresh), $"{Right(current)} runs past {Left(refresh)}");
+        Assert.True(navigation.OverflowSegment!.Bounds.Width > 0);
+        Assert.All(crumbs.Take(hidden), segment => Assert.Equal(0, segment.Bounds.Width));
+
+        // The "…" mark lists the folded folders, outermost first, and goes to the one picked.
+        Point mark = navigation.OverflowSegment.TranslatePoint(new Point(navigation.OverflowSegment.Bounds.Width / 2, 12), ui.Window)!.Value;
+        Click(ui.Window, mark);
+        Views.Controls.RetroMenu menu = Assert.IsType<Views.Controls.RetroMenu>(navigation.OverflowMenu);
+        Assert.Equal(path.Take(hidden), menu.Items.OfType<Views.Controls.RetroMenuItem>().Select(item => item.Text));
+        menu.Items.OfType<Views.Controls.RetroMenuItem>().ElementAt(1).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Pump();
+        Assert.Equal("x64/levels", ui.Bridge.CurrentPath.Replace('\\', '/'));
+    }
+
+    [AvaloniaFact]
+    public void ACurrentFolderTooLongForTheBarIsCutShort()
+    {
+        Explorer ui = OpenExplorer(width: 760);
+        string name = "a_folder_whose_name_is_far_too_long_to_fit_in_the_address_bar_at_this_width";
+        Directory.CreateDirectory(Path.Combine(Work, "x64", name));
+        ui.Bridge.Navigate($"x64/{name}");
+        Pump();
+        NavigationBar navigation = ui.Find<NavigationBar>();
+        Views.Controls.ChromeToolButton refresh = navigation.AddressBar.GetVisualDescendants()
+            .OfType<Views.Controls.ChromeToolButton>().Single();
+        NavigationSegment current = navigation.Segments.GetVisualDescendants().OfType<NavigationSegment>().Last();
+        Assert.Equal(name, current.Label);
+        double right = current.TranslatePoint(new Point(current.Bounds.Width, 0), navigation)!.Value.X;
+        Assert.True(right <= refresh.TranslatePoint(default, navigation)!.Value.X);
+        Assert.True(current.Bounds.Width > 40);
+        // Shorter than the whole name would be, and trimmed with an ellipsis.
+        var whole = new NavigationSegment();
+        whole.Set(name, false, Ui.Theme.Text);
+        whole.Measure(Size.Infinity);
+        Assert.True(current.Bounds.Width < whole.DesiredSize.Width - 100, $"{current.Bounds.Width} vs {whole.DesiredSize.Width}");
+        Assert.Equal(TextTrimming.CharacterEllipsis, current.GetVisualDescendants().OfType<TextBlock>().Single().TextTrimming);
     }
 
     [AvaloniaFact]

@@ -32,6 +32,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The changelog scrolls with the mouse wheel anywhere over it, not only over its text. ([#60](https://github.com/Hancapo/HikariHopper/pull/60))
 - Scrolling through big text files in the text viewer is smooth, without stutter. ([#61](https://github.com/Hancapo/HikariHopper/pull/61))
 - Renaming a texture in the texture editor keeps its thumbnail. ([#65](https://github.com/Hancapo/HikariHopper/pull/65))
+- A long path no longer runs under the refresh button: its leading folders fold into a … menu, and a name too long to fit is cut short. ([#74](https://github.com/Hancapo/HikariHopper/pull/74))
 
 ### Removed
 
