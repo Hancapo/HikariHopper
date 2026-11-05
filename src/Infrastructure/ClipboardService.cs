@@ -131,9 +131,17 @@ public sealed class AvaloniaClipboardService : IClipboardService
 
     public async Task<IReadOnlyList<string>> GetFilesAsync()
     {
-        if (Clipboard() is not { } clipboard || await clipboard.TryGetFilesAsync() is not { } items)
+        try
+        {
+            if (Clipboard() is not { } clipboard || await clipboard.TryGetFilesAsync() is not { } items)
+                return [];
+            return [.. items.Select(item => item.TryGetLocalPath()).OfType<string>()];
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+        {
+            // Another program has the clipboard open.
             return [];
-        return [.. items.Select(item => item.TryGetLocalPath()).OfType<string>()];
+        }
     }
 
     public async Task<bool> SetFilesAsync(IReadOnlyList<string> paths)
@@ -151,7 +159,15 @@ public sealed class AvaloniaClipboardService : IClipboardService
         }
         if (items.Count == 0)
             return false;
-        await clipboard.SetFilesAsync(items);
+        try
+        {
+            await clipboard.SetFilesAsync(items);
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+        {
+            // Another program has the clipboard open.
+            return false;
+        }
         Refresh();
         return true;
     }

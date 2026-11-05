@@ -110,7 +110,7 @@ public static class EntryOperations
             var destinations = new List<(string Source, string Destination)>();
             foreach (var (source, name) in resolved)
             {
-                string final = Claim(name, taken, freeNames);
+                string final = Claim(name, Directory.Exists(source), taken, freeNames);
                 destinations.Add((source, Path.Combine(target.Directory, final)));
             }
             var created = new List<string>();
@@ -149,7 +149,7 @@ public static class EntryOperations
             RpfDirectoryEntry directory = DirectoryAt(archive, target.InternalDirectory)
                 ?? throw new ArgumentException($"Could not find archive folder: {target.InternalDirectory}");
             var existing = directory.Children.Select(child => child.Name).ToList();
-            var finals = resolved.Select(item => (item.Source, Name: Claim(item.Name, existing, freeNames))).ToList();
+            var finals = resolved.Select(item => (item.Source, Name: Claim(item.Name, Directory.Exists(item.Source), existing, freeNames))).ToList();
             // File-backed: FiveFury reads each source while the archive is written right after.
             foreach (var (source, name) in finals)
                 AddToArchive(archive, EntryNames.ArchiveChildPath(target.InternalDirectory, name), source);
@@ -160,14 +160,18 @@ public static class EntryOperations
 
     /// <summary>
     /// The name an import takes beside <paramref name="taken"/>: <paramref name="name"/> itself, or with
-    /// <paramref name="freeNames"/> the first free "name (2)", "name (3)"…; then taken too.
+    /// <paramref name="freeNames"/> the first free "name (2)", "name (3)"…; then taken too. A folder, or a file with
+    /// nothing before its dot, is numbered after its whole name, any other file before its extension.
     /// </summary>
-    private static string Claim(string name, List<string> taken, bool freeNames)
+    private static string Claim(string name, bool folder, List<string> taken, bool freeNames)
     {
         string final = name;
         if (freeNames)
         {
-            string stem = Path.GetFileNameWithoutExtension(name), extension = Path.GetExtension(name);
+            string stem = folder ? name : Path.GetFileNameWithoutExtension(name);
+            string extension = folder ? "" : Path.GetExtension(name);
+            if (stem.Length == 0)
+                (stem, extension) = (name, "");
             for (int number = 2; taken.Contains(final, StringComparer.OrdinalIgnoreCase); number++)
                 final = $"{stem} ({number}){extension}";
         }
