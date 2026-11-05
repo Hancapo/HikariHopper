@@ -41,4 +41,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="HikariHopper.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- tools/release.ps1 sets HikariHopperRelease=true; every other build (debug runs, local publishes) is a dev build. -->
+    <AssemblyMetadata Include="HikariHopperRelease" Value="$(HikariHopperRelease)" />
+  </ItemGroup>
 </Project>

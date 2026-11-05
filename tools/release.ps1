@@ -29,7 +29,8 @@ $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Install
 if (Test-Path (Join-Path $installer 'vswhere.exe')) { $env:PATH = "$installer;$env:PATH" }
 
 Write-Host "Publishing $name (Native AOT)..."
-$log = & dotnet publish $project -c Release -r win-x64 -p:PublishReferencesDocumentationFiles=false -o $build 2>&1
+# Marked as a release build, which hides the changelog's Unreleased notes; any other build is a dev build that shows them.
+$log = & dotnet publish $project -c Release -r win-x64 -p:PublishReferencesDocumentationFiles=false -p:HikariHopperRelease=true -o $build 2>&1
 if ($LASTEXITCODE -ne 0) { $log | Write-Host; throw 'Publish failed' }
 $warnings = $log | Select-String 'warning IL\d+' | Sort-Object -Unique
 if ($warnings) { $warnings | Write-Host; throw 'The AOT compiler reported warnings; any of them can fail at runtime' }
