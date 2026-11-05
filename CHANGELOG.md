@@ -18,6 +18,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The texture editor's and the text viewer's headers show the file's icon and name, the way the explorer lists it. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
 - Image and text files have their own icons and types in the explorer, such as PNG Image and DDS Texture. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
 - The changelog in the app lists only released versions; test builds also show the changes not released yet. ([#64](https://github.com/Hancapo/HikariHopper/pull/64))
+- Files inside an archive show the size they take in it, and their type says whether they are compressed. ([#66](https://github.com/Hancapo/HikariHopper/pull/66))
 
 ### Fixed
 
