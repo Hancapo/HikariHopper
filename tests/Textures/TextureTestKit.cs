@@ -154,6 +154,12 @@ internal sealed class FakeClipboard : IClipboardService
         Changed?.Invoke(this, EventArgs.Empty);
         return Task.FromResult(true);
     }
+
+    public bool HasFiles => false;
+
+    public Task<IReadOnlyList<string>> GetFilesAsync() => Task.FromResult<IReadOnlyList<string>>([]);
+
+    public Task<bool> SetFilesAsync(IReadOnlyList<string> paths) => Task.FromResult(false);
 }
 
 /// <summary>Scripted file pickers that record their titles.</summary>

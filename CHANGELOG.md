@@ -11,6 +11,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Import images… in the texture editor's File menu (Ctrl+I) adds images as new textures named after their files. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
 - An image viewer: double-click a DDS, PNG, JPEG, BMP, TGA or WebP file to view it over the explorer, with its channels, zoom and, for a DDS, its mips. ([#62](https://github.com/Hancapo/HikariHopper/pull/62))
 - Extract… copies the selected files and folders to a folder you pick, and Extract all content… writes an RPF's whole content into a folder named after it. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
+- Copy (Ctrl+C) and Paste (Ctrl+V) work with files and folders, in and out of RPFs and to and from Windows Explorer; a pasted name already there gets a number. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 
 ### Changed
 
@@ -21,6 +22,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The changelog in the app lists only released versions; test builds also show the changes not released yet. ([#64](https://github.com/Hancapo/HikariHopper/pull/64))
 - Files inside an archive show the size they take in it, and compressed ones say so in their type. ([#66](https://github.com/Hancapo/HikariHopper/pull/66))
 - The explorer's context menu fits what you right-click: an item gets Open, Copy name, Copy path and Delete, and empty space gets New and Refresh. ([#67](https://github.com/Hancapo/HikariHopper/pull/67))
+- Ctrl+C copies the selected files; Copy name has no shortcut, and folders can be dropped onto the explorer too. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 
 ### Fixed
 

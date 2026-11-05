@@ -23,8 +23,13 @@ public sealed partial class ExplorerViewModel
         if (string.IsNullOrEmpty(folder))
             return false;
         string noun = selection.Count == 1 ? selection[0].Name : $"{selection.Count} items";
-        return StartExtraction(folder, $"Extracting {noun}…", () => Provider.ExtractEntries(selection, folder),
-            _ => $"Extracted {noun} to {folder}");
+        lastExtractFolder = folder;
+        return StartReadOperation($"Extracting {noun}…", () => Provider.ExtractEntries(selection, folder),
+            _ =>
+            {
+                SetStatus($"Extracted {noun} to {folder}");
+                ShowExtracted(folder);
+            }, "extract");
     }
 
     /// <summary>Extract all content…: asks for a folder and writes the selected RPF's content into a folder named after it there.</summary>
@@ -36,8 +41,13 @@ public sealed partial class ExplorerViewModel
         string? folder = await AppServices.Dialogs.PickFolderAsync($"Extract the content of {archive.Name} to", StartFolder());
         if (string.IsNullOrEmpty(folder))
             return false;
-        return StartExtraction(folder, $"Extracting {archive.Name}…", () => Provider.ExtractArchiveContents(archive, folder),
-            result => $"Extracted {archive.Name} to {result}");
+        lastExtractFolder = folder;
+        return StartReadOperation($"Extracting {archive.Name}…", () => Provider.ExtractArchiveContents(archive, folder),
+            result =>
+            {
+                SetStatus($"Extracted {archive.Name} to {result}");
+                ShowExtracted(folder);
+            }, "extract");
     }
 
     /// <summary>Lists the folder shown again when the extraction went into it, so what was written appears.</summary>
@@ -62,24 +72,25 @@ public sealed partial class ExplorerViewModel
 
     private string StartFolder() => lastExtractFolder.Length > 0 && Directory.Exists(lastExtractFolder) ? lastExtractFolder : Provider.GamePath;
 
-    /// <summary>Runs an extraction on the operation queue: it only reads here, but nothing may change while it does.</summary>
-    private bool StartExtraction(string folder, string progress, Func<object?> work, Func<object?, string> done)
+    /// <summary>
+    /// Runs work that only reads here (extracting, copying out of an archive) on the operation queue; nothing may change
+    /// while it does. <paramref name="verb"/> names it in a failure.
+    /// </summary>
+    private bool StartReadOperation(string progress, Func<object?> work, Action<object?> done, string verb)
     {
         if (EntryOperationBusy)
             return false;
-        lastExtractFolder = folder;
         entryOperationBusy = true;
         TextureViewer.SetExternalWriteBusy(true);
         RaiseEntryOperationStateChanged();
         SetStatus(progress);
         Enqueue(work, result =>
         {
-            SetStatus(done(result));
             FinishEntryOperation();
-            ShowExtracted(folder);
+            done(result);
         }, message =>
         {
-            SetStatus($"Could not extract: {message}");
+            SetStatus($"Could not {verb}: {message}");
             FinishEntryOperation();
         });
         return true;

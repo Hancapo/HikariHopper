@@ -260,6 +260,21 @@ public abstract class ExplorerTestBase : IDisposable
         public Task<FiveFury.Textures.RgbaImage?> GetImageAsync() => Task.FromResult<FiveFury.Textures.RgbaImage?>(null);
 
         public Task<bool> SetImageAsync(FiveFury.Textures.RgbaImage image) => Task.FromResult(false);
+
+        /// <summary>The files on the clipboard, as a copy here or in Windows Explorer leaves them.</summary>
+        public List<string> Files { get; } = [];
+
+        public bool HasFiles => Files.Count > 0;
+
+        public Task<IReadOnlyList<string>> GetFilesAsync() => Task.FromResult<IReadOnlyList<string>>([.. Files]);
+
+        public Task<bool> SetFilesAsync(IReadOnlyList<string> paths)
+        {
+            Files.Clear();
+            Files.AddRange(paths);
+            Text = null;
+            return Task.FromResult(true);
+        }
     }
 
     protected sealed class FakeDialogs : IFileDialogs

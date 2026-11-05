@@ -16,8 +16,8 @@ public static class FileDrops
         {
             string local = LocalPath(value) ?? throw new ArgumentException("Only local files can be imported");
             string path = Resolve(local);
-            if (!File.Exists(path))
-                throw new ArgumentException($"Only files can be imported: {Path.GetFileName(path)}");
+            if (!File.Exists(path) && !Directory.Exists(path))
+                throw new ArgumentException($"Not found: {Path.GetFileName(path)}");
             paths.Add(path);
         }
         if (paths.Count == 0)
