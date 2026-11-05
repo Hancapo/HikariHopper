@@ -60,6 +60,11 @@ public partial class ExplorerContextMenu : RetroMenu
         OpenItem.IsVisible = count == 1;
         OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
         CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
+        // Extracting: any selection, and an RPF's whole content.
+        ExtractSeparator.IsVisible = ExtractItem.IsVisible = !ForFolder;
+        ExtractItem.IsEnabled = !busy;
+        ExtractContentItem.IsVisible = bridge?.CanExtractArchiveContent == true;
+        ExtractContentItem.IsEnabled = !busy;
         CopyNameItem.Text = count > 1 ? "Copy names" : "Copy name";
         CopyPathItem.Text = count > 1 ? "Copy paths" : "Copy path";
         DeleteMenuItem.Text = count > 1 ? $"Delete {count} items" : "Delete";
@@ -110,6 +115,18 @@ public partial class ExplorerContextMenu : RetroMenu
             if (source.Path.Length > 0)
                 RequestCreation("zip-rpf", source.SuggestedName, source.Path);
         });
+    }
+
+    private void OnExtract(object? sender, RoutedEventArgs e)
+    {
+        ExplorerViewModel? bridge = Bridge;
+        Dispatcher.UIThread.Post(() => _ = bridge?.ExtractSelection());
+    }
+
+    private void OnExtractContent(object? sender, RoutedEventArgs e)
+    {
+        ExplorerViewModel? bridge = Bridge;
+        Dispatcher.UIThread.Post(() => _ = bridge?.ExtractArchiveContent());
     }
 
     private void OnCopyName(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedName();

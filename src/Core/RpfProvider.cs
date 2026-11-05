@@ -336,6 +336,105 @@ public sealed class RpfProvider
         return exported;
     }
 
+    /// <summary>
+    /// Copies <paramref name="entries"/> into <paramref name="destination"/> as files and folders: archived ones out of
+    /// the archive (standalone, as a drag gives them), loose ones from the game folder. A name already there gets a
+    /// " (2)" suffix rather than being overwritten. Returns what was written, in order.
+    /// </summary>
+    public List<string> ExtractEntries(IReadOnlyList<EntryRecord> entries, string destination)
+    {
+        string root = Path.GetFullPath(destination);
+        Directory.CreateDirectory(root);
+        var written = new List<string>();
+        foreach (EntryRecord entry in entries)
+        {
+            string target = FreeChild(root, SafeExportChild(root, entry.Name));
+            if (InArchive)
+                ExportArchiveEntry(entry, target);
+            else
+                CopyLoose(GameEntryPath(entry), target);
+            written.Add(target);
+        }
+        return written;
+    }
+
+    /// <summary>
+    /// Writes everything in the RPF <paramref name="entry"/> (loose, or nested in the open archive) into a new folder
+    /// named after it in <paramref name="destination"/>, keeping its folders; nested RPFs inside stay files.
+    /// Returns the folder.
+    /// </summary>
+    public string ExtractArchiveContents(EntryRecord entry, string destination)
+    {
+        if (entry.IsDirectory || !entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"{entry.Name} is not an RPF archive");
+        string root = Path.GetFullPath(destination);
+        Directory.CreateDirectory(root);
+        string target = FreeChild(root, Path.Combine(root, Path.GetFileNameWithoutExtension(entry.Name)));
+        if (InArchive)
+        {
+            if (entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
+                throw new ArgumentException($"Archive entry is unavailable: {entry.Name}");
+            ArchiveNode nested;
+            try
+            { nested = item.Node.OpenNested(binary); }
+            catch (InvalidDataException)
+            { throw new ArgumentException($"FiveFury could not decode {entry.Name} as a nested RPF archive"); }
+            ExportArchiveContents(nested, target);
+            return target;
+        }
+        ArchiveNode opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+        try
+        { ExportArchiveContents(opened, target); }
+        finally
+        { opened.Close(); }
+        return target;
+    }
+
+    private void ExportArchiveContents(ArchiveNode node, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (EntryRecord child in ArchiveRecords(node, "."))
+            ExportArchiveEntry(child, SafeExportChild(target, child.Name));
+    }
+
+    /// <summary><paramref name="path"/>, or "name (2)", "name (3)"… beside it when something is already there.</summary>
+    private static string FreeChild(string parent, string path)
+    {
+        if (!Path.Exists(path))
+            return path;
+        string name = Path.GetFileName(path);
+        bool folderLike = Directory.Exists(path);
+        string stem = folderLike ? name : Path.GetFileNameWithoutExtension(name);
+        string extension = folderLike ? "" : Path.GetExtension(name);
+        for (int number = 2; ; number++)
+        {
+            string candidate = Path.Combine(parent, $"{stem} ({number}){extension}");
+            if (!Path.Exists(candidate))
+                return candidate;
+        }
+    }
+
+    /// <summary>Copies a loose file, or a folder and everything in it, to <paramref name="target"/>.</summary>
+    private static void CopyLoose(string source, string target)
+    {
+        if (File.Exists(source))
+        {
+            File.Copy(source, target);
+            return;
+        }
+        string from = Path.TrimEndingDirectorySeparator(Path.GetFullPath(source));
+        string to = Path.GetFullPath(target);
+        if (to.StartsWith(from + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Cannot extract {Path.GetFileName(from)} into itself");
+        if (EntryOperations.IsLinkedPath(from))
+            throw new ArgumentException("Extraction through linked files or folders is not supported");
+        Directory.CreateDirectory(to);
+        foreach (string file in Directory.EnumerateFiles(from))
+            File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+        foreach (string folder in Directory.EnumerateDirectories(from))
+            CopyLoose(folder, Path.Combine(to, Path.GetFileName(folder)));
+    }
+
     /// <summary>Reads one loose or archived file as a standalone byte stream.</summary>
     public byte[] ReadEntryBytes(EntryRecord entry)
     {

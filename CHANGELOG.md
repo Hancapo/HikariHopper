@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - Import images… in the texture editor's File menu (Ctrl+I) adds images as new textures named after their files. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
 - An image viewer: double-click a DDS, PNG, JPEG, BMP, TGA or WebP file to view it over the explorer, with its channels, zoom and, for a DDS, its mips. ([#62](https://github.com/Hancapo/HikariHopper/pull/62))
+- Extract… copies the selected files and folders to a folder you pick, and Extract all content… writes an RPF's whole content into a folder named after it. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
 
 ### Changed
 
