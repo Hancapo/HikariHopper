@@ -261,7 +261,7 @@ public sealed partial class ExplorerViewModel
         dragStaging = null;
     }
 
-    /// <summary>Enter/double-click: opens folders, RPFs and YTD/YDR texture dictionaries.</summary>
+    /// <summary>Enter/double-click: opens folders, RPFs, YTD/YDR texture dictionaries, text files and images.</summary>
     public void ActivateEntry(int row)
     {
         if (EntryOperationBusy)
@@ -283,6 +283,11 @@ public sealed partial class ExplorerViewModel
         if (TextDocument.IsTextName(entry.Name))
         {
             OpenTextFile(entry);
+            return;
+        }
+        if (Textures.TextureImport.IsImagePath(entry.Name))
+        {
+            OpenImageFile(entry);
             return;
         }
         if (!entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
@@ -314,6 +319,28 @@ public sealed partial class ExplorerViewModel
             return;
         }
         TextFileOpened?.Invoke(this, TextDocument.Load(entry.Name, data));
+        SetStatus($"Opened {entry.Name}");
+    }
+
+    /// <summary>Reads an image file and hands it to the image viewer, which decodes it; unless it is too big.</summary>
+    private void OpenImageFile(EntryRecord entry)
+    {
+        if (entry.Size > ImageViewerViewModel.MaxSize)
+        {
+            SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(entry.Size)})");
+            return;
+        }
+        byte[] data;
+        try
+        {
+            data = Provider.ReadEntryBytes(entry);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open {entry.Name}: {error.Message}");
+            return;
+        }
+        ImageFileOpened?.Invoke(this, new ImageViewerViewModel(entry.Name, data));
         SetStatus($"Opened {entry.Name}");
     }
 

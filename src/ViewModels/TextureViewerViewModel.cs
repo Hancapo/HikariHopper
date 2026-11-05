@@ -13,7 +13,7 @@ namespace HikariHopper.ViewModels;
 /// <summary>Port of <c>texture_viewer.py::TextureViewerBridge</c>: the YTD/YDR texture editor of one explorer tab.</summary>
 /// <remarks>Background work runs on a two-thread priority queue; results return to the UI thread and are discarded when
 /// the generation counter changed meanwhile. All state is touched on the UI thread only.</remarks>
-public sealed partial class TextureViewerViewModel : ObservableObject
+public sealed partial class TextureViewerViewModel : ObservableObject, ITexturePreviewSource
 {
     private const int UndoLimit = 24;
     private const int PriorityThumbnail = 0, PriorityMips = 1, PriorityPreview = 2, PriorityTransform = 3, PrioritySave = 4;

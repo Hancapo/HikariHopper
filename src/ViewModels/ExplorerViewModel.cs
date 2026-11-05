@@ -75,6 +75,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>A text file was opened from the list, for the text viewer to show.</summary>
     public event EventHandler<TextDocument>? TextFileOpened;
 
+    /// <summary>An image file was opened for viewing; the image viewer shows it.</summary>
+    public event EventHandler<ImageViewerViewModel>? ImageFileOpened;
+
     /// <summary>
     /// Files changed at a location (an <see cref="EntryCreationTarget"/> or <see cref="EntryDeletionTarget"/>),
     /// so peer tabs refresh.

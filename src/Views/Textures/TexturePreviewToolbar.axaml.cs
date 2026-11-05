@@ -36,7 +36,7 @@ public partial class TexturePreviewToolbar : UserControl
     /// <summary>The channels, in the order of the channel switch's sides.</summary>
     internal static string[] ChannelOrder { get; } = ["rgba", "r", "g", "b", "a"];
 
-    private TextureViewerViewModel? viewModel;
+    private ITexturePreviewSource? viewModel;
     private RetroMenu? presets;
 
     public TexturePreviewToolbar()
@@ -133,7 +133,7 @@ public partial class TexturePreviewToolbar : UserControl
         base.OnDataContextChanged(e);
         if (viewModel is not null)
             viewModel.PropertyChanged -= ViewModelChanged;
-        viewModel = DataContext as TextureViewerViewModel;
+        viewModel = DataContext as ITexturePreviewSource;
         if (viewModel is not null)
             viewModel.PropertyChanged += ViewModelChanged;
         RefreshChannels();
