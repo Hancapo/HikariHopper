@@ -72,6 +72,12 @@
         </DockPanel>
       </Border>
 
+      <!-- The address as text, in the address bar's place while it is edited: a click on the bar's empty part,
+           Ctrl+L or Alt+D. Enter goes to what was typed or pasted; Esc, or clicking away, puts the path back. -->
+      <c:FlatTextField Name="AddressField" Grid.Column="1" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" IsVisible="False"
+                       AutomationProperties.Name="Address" />
+
       <c:FlatTextField Name="SearchField" Grid.Column="2" Width="232" Height="{x:Static ui:Theme.ToolbarControlHeight}"
                        VerticalAlignment="Center" FontSize="{x:Static ui:Theme.FontSize}"
                        IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"

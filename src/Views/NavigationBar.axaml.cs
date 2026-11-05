@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
 using PathSegment = HikariHopper.ViewModels.PathSegment;
@@ -40,9 +41,16 @@ public partial class NavigationBar : UserControl
         SearchField.KeyDown += OnSearchKeyDown;
         RefreshSearchField();
 
+        // The address as text: a click on the bar's empty part edits it, a right-click offers copying and pasting.
+        AddressBar.AddHandler(PointerPressedEvent, OnAddressBarPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddressField.KeyDown += OnAddressKeyDown;
+        AddressField.LostFocus += (_, _) => EndAddressEdit();
+
         WindowShortcuts.Register(this,
             new WindowShortcut("Ctrl+F", () => Bridge?.HasWorkspace == true, FocusSearch),
             new WindowShortcut("F3", () => Bridge?.HasWorkspace == true, FocusSearch),
+            new WindowShortcut("Ctrl+L", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
+            new WindowShortcut("Alt+D", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
             new WindowShortcut("Alt+Left", () => Bridge?.GoBack()),
             new WindowShortcut("Alt+Right", () => Bridge?.GoForward()),
             new WindowShortcut("Back", () => Bridge?.GoUp()));
@@ -205,6 +213,98 @@ public partial class NavigationBar : UserControl
             model.ShowGame();
         else
             model.Navigate(".");
+    }
+
+    /// <summary>Whether the address is shown as text being edited.</summary>
+    internal bool EditingAddress => AddressField.IsVisible;
+
+    /// <summary>The address bar's menu, while it is open.</summary>
+    internal RetroMenu? AddressMenu { get; private set; }
+
+    /// <summary>Shows the address as text, all of it selected, to copy, or to type or paste another over.</summary>
+    public void BeginAddressEdit()
+    {
+        if (Bridge is not { HasWorkspace: true } model)
+            return;
+        AddressField.Text = model.AddressText;
+        AddressField.Invalid = false;
+        AddressBar.IsVisible = false;
+        AddressField.IsVisible = true;
+        AddressField.Focus(NavigationMethod.Pointer);
+        AddressField.SelectAll();
+    }
+
+    private void EndAddressEdit()
+    {
+        if (!AddressField.IsVisible)
+            return;
+        AddressField.IsVisible = false;
+        AddressBar.IsVisible = true;
+    }
+
+    private void OnAddressKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            EndAddressEdit();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Enter or Key.Return)
+        {
+            e.Handled = true;
+            // A path that can't be gone to stays, marked, for fixing; the status bar says why.
+            if (Bridge?.GoToAddress(AddressField.Text ?? "") == true)
+                EndAddressEdit();
+            else
+                AddressField.Invalid = true;
+        }
+        else
+        {
+            AddressField.Invalid = false;
+        }
+    }
+
+    private void OnAddressBarPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Segments and the refresh button keep their own clicks; the rest of the bar is for the address.
+        if (e.Source is Visual source && source.GetSelfAndVisualAncestors()
+                .Any(visual => visual is NavigationSegment or ChromeToolButton))
+            return;
+        PointerPointProperties point = e.GetCurrentPoint(AddressBar).Properties;
+        if (point.IsLeftButtonPressed)
+        {
+            e.Handled = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(BeginAddressEdit);
+        }
+        else if (point.IsRightButtonPressed)
+        {
+            e.Handled = true;
+            OpenAddressMenu(e.GetPosition(AddressBar));
+        }
+    }
+
+    /// <summary>Copy address, Edit address, and Paste and go.</summary>
+    private void OpenAddressMenu(Point at)
+    {
+        if (Bridge is not { HasWorkspace: true })
+            return;
+        var menu = new RetroMenu();
+        var copy = new RetroMenuItem { Text = "Copy address", IconName = "copy" };
+        copy.Triggered += (_, _) => Bridge?.CopyAddress();
+        var change = new RetroMenuItem { Text = "Edit address", IconName = "pencil", ShortcutText = "Ctrl+L" };
+        change.Triggered += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(BeginAddressEdit);
+        var paste = new RetroMenuItem { Text = "Paste and go", IconName = "clipboard" };
+        paste.Triggered += async (_, _) =>
+        {
+            if (await Infrastructure.AppServices.Clipboard.GetTextAsync() is { } text && text.Trim().Length > 0)
+                Bridge?.GoToAddress(text.Split('\n')[0]);
+        };
+        menu.Items.Add(copy);
+        menu.Items.Add(change);
+        menu.Items.Add(paste);
+        AddressMenu = menu;
+        menu.Closed += (_, _) => AddressMenu = null;
+        menu.Open(AddressBar, at.X, at.Y);
     }
 
     private void OnBack(object? sender, RoutedEventArgs e) => Bridge?.GoBack();

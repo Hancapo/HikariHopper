@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Copy (Ctrl+C) and Paste (Ctrl+V) work with files and folders, in and out of RPFs and to and from Windows Explorer; a pasted name already there gets a number. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 - Rename… (F2) renames a file or folder, on disk or inside an RPF. ([#70](https://github.com/Hancapo/HikariHopper/pull/70))
 - Properties (Alt+Enter) shows where a file or folder is and its size, the contents of a texture dictionary, and an RPF's encryption and file count. ([#71](https://github.com/Hancapo/HikariHopper/pull/71))
+- The address bar can be copied and pasted: click its empty part or press Ctrl+L to edit the path, and type or paste a folder, an RPF or a path inside one to go there; right-click it for Copy address and Paste and go. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
 
 ### Changed
 
@@ -33,6 +34,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Scrolling through big text files in the text viewer is smooth, without stutter. ([#61](https://github.com/Hancapo/HikariHopper/pull/61))
 - Renaming a texture in the texture editor keeps its thumbnail. ([#65](https://github.com/Hancapo/HikariHopper/pull/65))
 - A long path no longer runs under the refresh button: its leading folders fold into a … menu, and a name too long to fit is cut short. ([#74](https://github.com/Hancapo/HikariHopper/pull/74))
+- Copy path inside a nested RPF gives the path from the archive's file on disk. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
 
 ### Removed
 
