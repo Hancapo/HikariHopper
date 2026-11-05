@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using FiveFury.Textures;
 
@@ -31,6 +32,15 @@ public interface IClipboardService
 
     /// <summary>Replaces the clipboard contents with <paramref name="image"/>. Returns false when no clipboard is available.</summary>
     Task<bool> SetImageAsync(RgbaImage image);
+
+    /// <summary>Whether the clipboard holds files, as Windows Explorer's copy puts them there.</summary>
+    bool HasFiles { get; }
+
+    /// <summary>The local paths of the files and folders on the clipboard; empty when it holds none.</summary>
+    Task<IReadOnlyList<string>> GetFilesAsync();
+
+    /// <summary>Puts files and folders on the clipboard, for a paste here or in Windows Explorer. False when it can't.</summary>
+    Task<bool> SetFilesAsync(IReadOnlyList<string> paths);
 }
 
 /// <summary>The clipboard of the application's active (or main) window through Avalonia's <see cref="IClipboard"/>.</summary>
@@ -40,7 +50,7 @@ public interface IClipboardService
 /// read from the <c>PNG</c> format first, which keeps exact straight alpha, then from Avalonia's bitmap conversion.</remarks>
 public sealed class AvaloniaClipboardService : IClipboardService
 {
-    private const uint CfBitmap = 2, CfDib = 8, CfDibV5 = 17;
+    private const uint CfBitmap = 2, CfDib = 8, CfHDrop = 15, CfDibV5 = 17;
     private static readonly DataFormat<byte[]> PngFormat = DataFormat.CreateBytesPlatformFormat("PNG");
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
     private EventHandler? changed;
@@ -117,12 +127,42 @@ public sealed class AvaloniaClipboardService : IClipboardService
         return true;
     }
 
-    private static IClipboard? Clipboard()
+    public bool HasFiles => OperatingSystem.IsWindows() && IsClipboardFormatAvailable(CfHDrop);
+
+    public async Task<IReadOnlyList<string>> GetFilesAsync()
+    {
+        if (Clipboard() is not { } clipboard || await clipboard.TryGetFilesAsync() is not { } items)
+            return [];
+        return [.. items.Select(item => item.TryGetLocalPath()).OfType<string>()];
+    }
+
+    public async Task<bool> SetFilesAsync(IReadOnlyList<string> paths)
+    {
+        if (Window() is not { Clipboard: { } clipboard } window)
+            return false;
+        var items = new List<IStorageItem>();
+        foreach (string path in paths)
+        {
+            IStorageItem? item = Directory.Exists(path)
+                ? await window.StorageProvider.TryGetFolderFromPathAsync(path)
+                : await window.StorageProvider.TryGetFileFromPathAsync(path);
+            if (item is not null)
+                items.Add(item);
+        }
+        if (items.Count == 0)
+            return false;
+        await clipboard.SetFilesAsync(items);
+        Refresh();
+        return true;
+    }
+
+    private static Window? Window()
     {
         var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-        Window? window = lifetime?.Windows.FirstOrDefault(window => window.IsActive) ?? lifetime?.MainWindow;
-        return window?.Clipboard;
+        return lifetime?.Windows.FirstOrDefault(window => window.IsActive) ?? lifetime?.MainWindow;
     }
+
+    private static IClipboard? Clipboard() => Window()?.Clipboard;
 
     private void StartPolling()
     {

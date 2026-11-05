@@ -59,7 +59,8 @@ public partial class ExplorerContextMenu : RetroMenu
         // An item's: opening one the app can open, copying, deleting.
         OpenItem.IsVisible = count == 1;
         OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
-        CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
+        CopyItem.IsVisible = CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
+        CopyItem.IsEnabled = !busy;
         // Extracting: any selection, and an RPF's whole content.
         ExtractSeparator.IsVisible = ExtractItem.IsVisible = !ForFolder;
         ExtractItem.IsEnabled = !busy;
@@ -71,7 +72,8 @@ public partial class ExplorerContextMenu : RetroMenu
         DeleteMenuItem.IsEnabled = !busy && bridge?.SelectionDeletable == true;
 
         // The folder's: making something new in it, and reading it again.
-        NewEntryMenu.IsVisible = RefreshSeparator.IsVisible = RefreshItem.IsVisible = ForFolder;
+        NewEntryMenu.IsVisible = PasteItem.IsVisible = RefreshSeparator.IsVisible = RefreshItem.IsVisible = ForFolder;
+        PasteItem.IsEnabled = bridge?.CanPaste == true;
         NewEntryMenu.IsEnabled = RefreshItem.IsEnabled = !busy;
     }
 
@@ -127,6 +129,14 @@ public partial class ExplorerContextMenu : RetroMenu
     {
         ExplorerViewModel? bridge = Bridge;
         Dispatcher.UIThread.Post(() => _ = bridge?.ExtractArchiveContent());
+    }
+
+    private void OnCopy(object? sender, RoutedEventArgs e) => _ = Bridge?.CopySelection();
+
+    private void OnPaste(object? sender, RoutedEventArgs e)
+    {
+        ExplorerViewModel? bridge = Bridge;
+        Dispatcher.UIThread.Post(() => _ = bridge?.Paste());
     }
 
     private void OnCopyName(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedName();

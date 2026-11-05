@@ -336,13 +336,11 @@ public sealed class EntryCreationTests : ExplorerTestBase
     });
 
     [AvaloniaFact]
-    public void RejectsDroppedDirectoriesAndNonLocalItems() => OnUiThread(() =>
+    public void RejectsNonLocalDrops() => OnUiThread(() =>
     {
+        // A dropped folder is imported now (CopyPasteTests); what isn't a local file or folder still isn't.
         ExplorerViewModel bridge = OpenBareGame();
-        Directory.CreateDirectory(Path.Combine(Work, "folder"));
 
-        Assert.False(bridge.ImportDroppedFiles([Path.Combine(Work, "folder")]));
-        Assert.Equal("Could not import files: Only files can be imported: folder", bridge.Status);
         Assert.False(bridge.ImportDroppedFiles([null]));
         Assert.Equal("Could not import files: Only local files can be imported", bridge.Status);
         Assert.False(bridge.ImportDroppedFiles(["https://example.com/file.txt"]));

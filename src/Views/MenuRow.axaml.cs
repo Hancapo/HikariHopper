@@ -40,7 +40,8 @@ public partial class MenuRow : UserControl
             new WindowShortcut("Ctrl+O", () => Tabs is { } tabs && ConfiguredGameAvailable(tabs), () => Bridge?.OpenConfiguredGame("")),
             new WindowShortcut("Ctrl+Shift+O", () => _ = Bridge?.OpenArchiveDialog()),
             new WindowShortcut("Ctrl+W", () => Tabs?.CloseActiveTab()),
-            new WindowShortcut("Ctrl+C", () => Bridge?.HasSelection == true, () => Bridge?.CopySelectedName()),
+            new WindowShortcut("Ctrl+C", () => Bridge?.HasSelection == true, () => _ = Bridge?.CopySelection()),
+            new WindowShortcut("Ctrl+V", () => Bridge?.HasWorkspace == true, () => _ = Bridge?.Paste()),
             new WindowShortcut("Ctrl+Shift+C", () => Bridge?.HasSelection == true, () => Bridge?.CopySelectedPath()));
     }
 
@@ -106,6 +107,10 @@ public partial class MenuRow : UserControl
         if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.Shutdown();
     }
+
+    private void OnCopy(object? sender, RoutedEventArgs e) => _ = Bridge?.CopySelection();
+
+    private void OnPaste(object? sender, RoutedEventArgs e) => _ = Bridge?.Paste();
 
     private void OnCopyName(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedName();
 

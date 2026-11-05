@@ -37,7 +37,10 @@
     </c:RetroMenu>
 
     <c:RetroMenu x:Key="EditMenu" x:DataType="vm:ExplorerTabsViewModel">
-      <c:RetroMenuItem Text="Copy name" ShortcutText="Ctrl+C" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopyName" />
+      <c:RetroMenuItem Text="Copy" ShortcutText="Ctrl+C" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopy" />
+      <c:RetroMenuItem Text="Paste" ShortcutText="Ctrl+V" IsEnabled="{Binding ActiveBridge.HasWorkspace}" Triggered="OnPaste" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="Copy name" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopyName" />
       <c:RetroMenuItem Text="Copy path" ShortcutText="Ctrl+Shift+C" IsEnabled="{Binding ActiveBridge.HasSelection}" Triggered="OnCopyPath" />
       <c:RetroMenuItem Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete">
         <c:RetroMenuItem.IsEnabled>

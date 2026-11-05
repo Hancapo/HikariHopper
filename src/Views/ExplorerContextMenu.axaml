@@ -9,7 +9,8 @@
        (a folder, an archive or a file; or several) when something is selected, and the folder's own when
        nothing is, after a right-click on empty space. -->
   <c:RetroMenuItem Name="OpenItem" Text="Open" ShortcutText="Enter" IconName="external-link" Triggered="OnOpen" />
-  <c:RetroMenuItem Name="CopyNameItem" Text="Copy name" ShortcutText="Ctrl+C" IconName="copy" Triggered="OnCopyName" />
+  <c:RetroMenuItem Name="CopyItem" Text="Copy" ShortcutText="Ctrl+C" IconName="copy" Triggered="OnCopy" />
+  <c:RetroMenuItem Name="CopyNameItem" Text="Copy name" IconName="file" Triggered="OnCopyName" />
   <c:RetroMenuItem Name="CopyPathItem" Text="Copy path" ShortcutText="Ctrl+Shift+C" IconName="link" Triggered="OnCopyPath" />
   <c:RetroMenuSeparator Name="ExtractSeparator" />
   <c:RetroMenuItem Name="ExtractItem" Text="Extract…" IconName="download" Triggered="OnExtract" />
@@ -25,6 +26,7 @@
     <c:RetroMenuItem Name="CreateRpfFromFolderMenuItem" Text="From folder…" IconName="folder-input" Triggered="OnNewRpfFromFolder" />
     <c:RetroMenuItem Name="CreateRpfFromZipMenuItem" Text="From ZIP…" IconName="file-archive" Triggered="OnNewRpfFromZip" />
   </c:RetroMenuItem>
+  <c:RetroMenuItem Name="PasteItem" Text="Paste" ShortcutText="Ctrl+V" IconName="clipboard" Triggered="OnPaste" />
   <c:RetroMenuSeparator Name="RefreshSeparator" />
   <c:RetroMenuItem Name="RefreshItem" Text="Refresh" ShortcutText="F5" IconName="rotate-cw" Triggered="OnRefresh" />
 </c:RetroMenu>

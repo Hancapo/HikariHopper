@@ -66,73 +66,164 @@ public static class EntryOperations
         return normalized;
     }
 
-    public static IReadOnlyList<string> ImportFilesAt(EntryCreationTarget target, IEnumerable<string> sources)
+    /// <summary>Imports dropped files and folders; a name already at the target is an error.</summary>
+    public static IReadOnlyList<string> ImportFilesAt(EntryCreationTarget target, IEnumerable<string> sources) =>
+        ImportAt(target, sources, freeNames: false);
+
+    /// <summary>
+    /// Copies files and folders (with everything in them) into <paramref name="target"/>, a folder on disk or in an
+    /// RPF. With <paramref name="freeNames"/>, as a paste, a name already there becomes "name (2)" and so on;
+    /// otherwise, as a drop, it is an error. Returns the names written.
+    /// </summary>
+    public static IReadOnlyList<string> ImportAt(EntryCreationTarget target, IEnumerable<string> sources, bool freeNames)
     {
         var resolved = new List<(string Source, string Name)>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string value in sources)
         {
-            string source = Path.GetFullPath(value);
-            if (!File.Exists(source))
-            {
-                if (Directory.Exists(source))
-                    throw new ArgumentException($"Only files can be imported: {Path.GetFileName(source)}");
+            string source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(value));
+            if (!File.Exists(source) && !Directory.Exists(source))
                 throw new FileNotFoundException($"File not found: {source}", source);
-            }
+            if (Directory.Exists(source) && IsLinkedPath(source))
+                throw new ArgumentException("Importing linked folders is not supported");
             string name = EntryNames.NormalizeEntryName(Path.GetFileName(source));
-            if (!names.Add(name))
+            if (!names.Add(name) && !freeNames)
                 throw new ArgumentException($"More than one dropped file is named {name}");
             resolved.Add((source, name));
         }
         if (resolved.Count == 0)
             throw new ArgumentException("Drop one or more files to import");
+        if (target.Directory is { } into && !target.InArchive)
+        {
+            string destination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(into));
+            if (resolved.Any(item => Directory.Exists(item.Source)
+                    && (string.Equals(destination, item.Source, StringComparison.OrdinalIgnoreCase)
+                        || destination.StartsWith(item.Source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))))
+                throw new ArgumentException("A folder cannot be copied into itself");
+        }
 
         if (!target.InArchive)
         {
-            var destinations = resolved.Select(item => (item.Source, Destination: LooseDestination(target, item.Name))).ToList();
+            if (target.Directory is null)
+                throw new ArgumentException("No writable explorer location is open");
+            var taken = new List<string>(new DirectoryInfo(target.Directory).EnumerateFileSystemInfos().Select(item => item.Name));
+            var destinations = new List<(string Source, string Destination)>();
+            foreach (var (source, name) in resolved)
+            {
+                string final = Claim(name, taken, freeNames);
+                destinations.Add((source, Path.Combine(target.Directory, final)));
+            }
             var created = new List<string>();
             try
             {
                 foreach (var (source, destination) in destinations)
-                {
-                    using (FileStream input = File.OpenRead(source))
-                    using (var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024))
-                    {
-                        created.Add(destination);
-                        input.CopyTo(output, 1024 * 1024);
-                    }
-                    CopyStat(source, destination);
-                }
+                    CopyLoose(source, destination, created);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                foreach (string destination in created)
+                // Undone deepest first: what a folder held goes before the folder.
+                for (int index = created.Count - 1; index >= 0; index--)
                 {
                     try
-                    { File.Delete(destination); }
+                    {
+                        if (Directory.Exists(created[index]))
+                            Directory.Delete(created[index]);
+                        else
+                            File.Delete(created[index]);
+                    }
                     catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
                 }
                 throw;
             }
-            return resolved.Select(item => item.Name).ToArray();
+            return destinations.Select(item => Path.GetFileName(item.Destination)).ToArray();
         }
 
         string archivePath = Path.GetFullPath(target.ArchivePath!);
-        if (resolved.Any(item => string.Equals(item.Source, archivePath, StringComparison.OrdinalIgnoreCase)))
+        if (resolved.Any(item => string.Equals(item.Source, archivePath, StringComparison.OrdinalIgnoreCase)
+                || archivePath.StartsWith(item.Source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("An RPF cannot be imported into itself");
 
+        var written = new List<string>();
         SaveTargetArchive(target, archive =>
         {
             RpfDirectoryEntry directory = DirectoryAt(archive, target.InternalDirectory)
                 ?? throw new ArgumentException($"Could not find archive folder: {target.InternalDirectory}");
             var existing = directory.Children.Select(child => child.Name).ToList();
-            foreach (var (_, name) in resolved)
-                EntryNames.EnsureEntryNameAvailable(name, existing);
+            var finals = resolved.Select(item => (item.Source, Name: Claim(item.Name, existing, freeNames))).ToList();
             // File-backed: FiveFury reads each source while the archive is written right after.
-            foreach (var (source, name) in resolved)
-                archive.AddFile(EntryNames.ArchiveChildPath(target.InternalDirectory, name), source);
+            foreach (var (source, name) in finals)
+                AddToArchive(archive, EntryNames.ArchiveChildPath(target.InternalDirectory, name), source);
+            written.AddRange(finals.Select(item => item.Name));
         });
-        return resolved.Select(item => item.Name).ToArray();
+        return written;
+    }
+
+    /// <summary>
+    /// The name an import takes beside <paramref name="taken"/>: <paramref name="name"/> itself, or with
+    /// <paramref name="freeNames"/> the first free "name (2)", "name (3)"…; then taken too.
+    /// </summary>
+    private static string Claim(string name, List<string> taken, bool freeNames)
+    {
+        string final = name;
+        if (freeNames)
+        {
+            string stem = Path.GetFileNameWithoutExtension(name), extension = Path.GetExtension(name);
+            for (int number = 2; taken.Contains(final, StringComparer.OrdinalIgnoreCase); number++)
+                final = $"{stem} ({number}){extension}";
+        }
+        else
+        {
+            EntryNames.EnsureEntryNameAvailable(name, taken);
+        }
+        taken.Add(final);
+        return final;
+    }
+
+    /// <summary>Copies a file, or a folder and everything in it, recording each thing it makes in <paramref name="created"/>.</summary>
+    private static void CopyLoose(string source, string destination, List<string> created)
+    {
+        if (File.Exists(source))
+        {
+            using (FileStream input = File.OpenRead(source))
+            using (var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024))
+            {
+                created.Add(destination);
+                input.CopyTo(output, 1024 * 1024);
+            }
+            CopyStat(source, destination);
+            return;
+        }
+        if (Directory.Exists(destination))
+            throw new IOException($"{Path.GetFileName(destination)} already exists");
+        Directory.CreateDirectory(destination);
+        created.Add(destination);
+        foreach (string file in Directory.EnumerateFiles(source))
+            CopyLoose(file, Path.Combine(destination, Path.GetFileName(file)), created);
+        foreach (string folder in Directory.EnumerateDirectories(source))
+        {
+            if (IsLinkedPath(folder))
+                continue;
+            CopyLoose(folder, Path.Combine(destination, Path.GetFileName(folder)), created);
+        }
+    }
+
+    /// <summary>Adds a file at <paramref name="path"/> in the archive, or a folder there with everything in it.</summary>
+    private static void AddToArchive(RpfArchive archive, string path, string source)
+    {
+        if (File.Exists(source))
+        {
+            archive.AddFile(path, source);
+            return;
+        }
+        archive.AddDirectory(path);
+        foreach (string file in Directory.EnumerateFiles(source))
+            archive.AddFile(EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(file))), file);
+        foreach (string folder in Directory.EnumerateDirectories(source))
+        {
+            if (IsLinkedPath(folder))
+                continue;
+            AddToArchive(archive, EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(folder))), folder);
+        }
     }
 
     public static int DeleteArchiveFilesAt(EntryDeletionTarget target)
