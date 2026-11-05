@@ -166,6 +166,9 @@ public sealed class TextViewerInputTests
         (MainWindow window, TextViewer viewer) = Open(2000);
         TextLinesView view = viewer.Lines;
         ScrollViewer scroller = viewer.TextScroller;
+        // Focus elsewhere, so the caret's blink can't draw the view again between two frames.
+        viewer.FindField.Focus();
+        ExplorerStateRenders.Pump(50);
         Frame(window);
 
         // A few lines down: what was drawn moves, nothing is drawn again, and it looks as a fresh drawing would.
