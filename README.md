@@ -5,7 +5,7 @@ edit, extract and repack what is inside them, such as texture dictionaries.
 
 Supported games: Grand Theft Auto V, Legacy and Enhanced.
 
-Built with .NET 10, Avalonia and FiveFury.NET.
+Built with .NET 10 and Avalonia.
 
 ## Building
 
