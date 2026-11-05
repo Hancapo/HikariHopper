@@ -43,6 +43,9 @@ public partial class ExplorerContextMenu : RetroMenu
     /// <summary>QML <c>createRequested</c>, raised after the menu has closed.</summary>
     public event EventHandler<CreateRequest>? CreateRequested;
 
+    /// <summary>Asks for the selected item's Properties sheet, after the menu has closed.</summary>
+    public event EventHandler? PropertiesRequested;
+
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
     /// <summary>Whether it is the folder's own menu (nothing selected) rather than an item's.</summary>
@@ -72,6 +75,8 @@ public partial class ExplorerContextMenu : RetroMenu
         CopyPathItem.Text = count > 1 ? "Copy paths" : "Copy path";
         DeleteMenuItem.Text = count > 1 ? $"Delete {count} items" : "Delete";
         DeleteMenuItem.IsEnabled = !busy && bridge?.SelectionDeletable == true;
+        PropertiesSeparator.IsVisible = PropertiesItem.IsVisible = count == 1;
+        PropertiesItem.IsEnabled = bridge?.CanShowProperties == true;
 
         // The folder's: making something new in it, and reading it again.
         NewEntryMenu.IsVisible = PasteItem.IsVisible = RefreshSeparator.IsVisible = RefreshItem.IsVisible = ForFolder;
@@ -159,4 +164,7 @@ public partial class ExplorerContextMenu : RetroMenu
     }
 
     private void OnRefresh(object? sender, RoutedEventArgs e) => Bridge?.Refresh();
+
+    private void OnProperties(object? sender, RoutedEventArgs e) =>
+        Dispatcher.UIThread.Post(() => PropertiesRequested?.Invoke(this, EventArgs.Empty));
 }

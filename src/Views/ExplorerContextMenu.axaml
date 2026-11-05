@@ -18,6 +18,8 @@
   <c:RetroMenuItem Name="ExtractContentItem" Text="Extract all content…" IconName="package-open" Triggered="OnExtractContent" />
   <c:RetroMenuSeparator Name="DeleteSeparator" />
   <c:RetroMenuItem Name="DeleteMenuItem" Text="Delete" ShortcutText="Del" IconName="trash-2" Triggered="OnDelete" />
+  <c:RetroMenuSeparator Name="PropertiesSeparator" />
+  <c:RetroMenuItem Name="PropertiesItem" Text="Properties" ShortcutText="Alt+Enter" IconName="info" Triggered="OnProperties" />
 
   <c:RetroMenuItem Name="NewEntryMenu" Text="New" IconName="plus">
     <c:RetroMenuItem Text="Folder" IconName="folder" Triggered="OnNewFolder" />

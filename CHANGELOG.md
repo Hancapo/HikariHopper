@@ -13,6 +13,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Extract… copies the selected files and folders to a folder you pick, and Extract all content… writes an RPF's whole content into a folder named after it. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
 - Copy (Ctrl+C) and Paste (Ctrl+V) work with files and folders, in and out of RPFs and to and from Windows Explorer; a pasted name already there gets a number. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 - Rename… (F2) renames a file or folder, on disk or inside an RPF. ([#70](https://github.com/Hancapo/HikariHopper/pull/70))
+- Properties (Alt+Enter) shows where a file or folder is and its size, the contents of a texture dictionary, and an RPF's encryption and file count. ([#71](https://github.com/Hancapo/HikariHopper/pull/71))
 
 ### Changed
 
