@@ -24,6 +24,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Images dragged into the texture editor from a browser or out of a zip are imported. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
 - The changelog scrolls with the mouse wheel anywhere over it, not only over its text. ([#60](https://github.com/Hancapo/HikariHopper/pull/60))
 - Scrolling through big text files in the text viewer is smooth, without stutter. ([#61](https://github.com/Hancapo/HikariHopper/pull/61))
+- Renaming a texture in the texture editor keeps its thumbnail. ([#65](https://github.com/Hancapo/HikariHopper/pull/65))
 
 ### Removed
 
