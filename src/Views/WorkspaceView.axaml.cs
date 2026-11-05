@@ -19,6 +19,7 @@ public partial class WorkspaceView : UserControl
     private ExplorerViewModel? bridge;
     private ExplorerCreateDialog? createDialog;
     private DeleteEntriesDialog? deleteDialog;
+    private PropertiesDialog? propertiesDialog;
     private GridLength folderWidth = new(FolderPanel.PreferredWidth);
 
     public WorkspaceView()
@@ -31,6 +32,11 @@ public partial class WorkspaceView : UserControl
         WindowShortcuts.Register(this, new WindowShortcut("F2",
             () => Bridge?.CanRenameSelection == true && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
             () => OpenCreateDialog("rename", Bridge!.RenameSource, "")));
+        // Alt+Enter shows the one selected item's properties, as in Windows Explorer.
+        contextMenu.PropertiesRequested += (_, _) => _ = OpenPropertiesDialog();
+        WindowShortcuts.Register(this, new WindowShortcut("Alt+Enter",
+            () => Bridge?.CanShowProperties == true && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
+            () => _ = OpenPropertiesDialog()));
     }
 
     /// <summary>The current entries view (table or grid).</summary>
@@ -41,6 +47,8 @@ public partial class WorkspaceView : UserControl
     internal ExplorerCreateDialog? CreateDialog => createDialog;
 
     internal DeleteEntriesDialog? DeleteDialog => deleteDialog;
+
+    internal PropertiesDialog? PropertiesSheet => propertiesDialog;
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
@@ -143,6 +151,25 @@ public partial class WorkspaceView : UserControl
         });
         dialog.Begin(this, kind, suggestedName, sourcePath);
     }
+
+    /// <summary>Reads the selected item's properties, then shows them in a sheet.</summary>
+    public async Task OpenPropertiesDialog()
+    {
+        if (Bridge is not { } model || propertiesDialog is not null)
+            return;
+        if (await model.ReadSelectionProperties() is not { } properties || propertiesDialog is not null || !IsAttachedToVisualTree())
+            return;
+        var dialog = new PropertiesDialog(properties);
+        propertiesDialog = dialog;
+        dialog.Closed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (propertiesDialog == dialog)
+                propertiesDialog = null;
+        });
+        dialog.Present(this);
+    }
+
+    private bool IsAttachedToVisualTree() => TopLevel.GetTopLevel(this) is not null;
 
     private void OnDeleteConfirmationRequested(object? sender, EventArgs e) => OpenDeleteDialog();
 

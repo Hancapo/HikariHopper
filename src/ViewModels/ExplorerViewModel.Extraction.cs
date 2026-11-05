@@ -76,7 +76,7 @@ public sealed partial class ExplorerViewModel
     /// Runs work that only reads here (extracting, copying out of an archive) on the operation queue; nothing may change
     /// while it does. <paramref name="verb"/> names it in a failure.
     /// </summary>
-    private bool StartReadOperation(string progress, Func<object?> work, Action<object?> done, string verb)
+    private bool StartReadOperation(string progress, Func<object?> work, Action<object?> done, string verb, Action? failed = null)
     {
         if (EntryOperationBusy)
             return false;
@@ -92,6 +92,7 @@ public sealed partial class ExplorerViewModel
         {
             SetStatus($"Could not {verb}: {message}");
             FinishEntryOperation();
+            failed?.Invoke();
         });
         return true;
     }

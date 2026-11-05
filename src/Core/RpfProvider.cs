@@ -1,6 +1,7 @@
 using FiveFury;
 using FiveFury.Assets;
 using FiveFury.Cryptography;
+using FiveFury.Resources;
 using FiveFury.Rpf;
 
 namespace HikariHopper.Core;
@@ -439,6 +440,144 @@ public sealed class RpfProvider
             CopyLoose(file, Path.Combine(to, Path.GetFileName(file)));
         foreach (string folder in Directory.EnumerateDirectories(from))
             CopyLoose(folder, Path.Combine(to, Path.GetFileName(folder)));
+    }
+
+    /// <summary>
+    /// What the Properties sheet shows about <paramref name="entry"/>: where it is, its size (in the archive and
+    /// unpacked, for a compressed one), and for a resource its format and contents, for an RPF its encryption and
+    /// files. Reads the file for some of it, so it runs off the UI thread.
+    /// </summary>
+    public EntryProperties DescribeEntry(EntryRecord entry)
+    {
+        var sections = new List<PropertySection>();
+        var location = new List<(string, string)>();
+        if (InArchive)
+        {
+            location.Add(("Archive", archiveGamePath.Length > 0 ? archiveGamePath : archivePath));
+            location.Add(("Path", entry.Path));
+        }
+        else
+        {
+            string folder = Path.GetDirectoryName(entry.Path.Replace('/', Path.DirectorySeparatorChar)) ?? "";
+            location.Add(("Folder", folder is "" or "." ? "Game folder" : folder));
+            location.Add(("Full path", GameEntryCandidate(entry)));
+        }
+        sections.Add(new PropertySection("LOCATION", location));
+
+        if (entry.IsDirectory)
+        {
+            sections.Add(new PropertySection("CONTENTS", [("Items", entry.Children == 1 ? "1 item" : $"{entry.Children} items")]));
+            return new EntryProperties(entry.Name, "Folder", "folder", sections);
+        }
+
+        ResourceHeader? header = ResourceHeaderOf(entry);
+        var size = new List<(string, string)>();
+        // A resource (YTD, YDR and the rest) is kept deflated in an archive; a binary file only when its entry says so.
+        if (entry.ArchiveItem?.Entry is RpfFileEntry stored
+            and (RpfResourceFileEntry or RpfBinaryFileEntry { Compression: not RpfBinaryCompression.None }))
+        {
+            size.Add(("In the archive", $"{Formatting.FormatSize(stored.StoredSize)} · compressed"));
+            size.Add(("Unpacked", Formatting.FormatSize(entry.Size)));
+        }
+        else
+        {
+            size.Add(("Size", Formatting.FormatSize(entry.Size)));
+            // A resource on disk is kept compressed too.
+            if (!InArchive && header is { } loose && loose.TotalSize > 0)
+                size.Add(("Unpacked", Formatting.FormatSize(loose.TotalSize)));
+        }
+        sections.Add(new PropertySection("SIZE", size));
+
+        if (header is { } resource)
+        {
+            var rows = new List<(string, string)> { ("Format", $"RSC7 · version {resource.Version}") };
+            if (GameEdition.Length > 0)
+                rows.Add(("Game", GameEdition));
+            if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) && TextureCount(entry) is { } textures)
+                rows.Add(("Contents", textures == 1 ? "1 texture" : $"{textures} textures"));
+            sections.Add(new PropertySection("RESOURCE", rows));
+        }
+
+        if (entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) && DescribeArchive(entry) is { } archiveRows)
+            sections.Add(new PropertySection("ARCHIVE", archiveRows));
+        string glyph = entry.Kind.Contains("Package", StringComparison.Ordinal) ? "archive" : "file";
+        return new EntryProperties(entry.Name, entry.Kind, glyph, sections);
+    }
+
+    private ResourceHeader? ResourceHeaderOf(EntryRecord entry)
+    {
+        if (InArchive)
+            return entry.ArchiveItem?.Entry is RpfResourceFileEntry resource ? resource.Header : null;
+        try
+        {
+            using FileStream stream = File.OpenRead(GameEntryPath(entry));
+            Span<byte> start = stackalloc byte[ResourceHeader.ByteSize];
+            if (stream.ReadAtLeast(start, start.Length, throwOnEndOfStream: false) < start.Length
+                || BitConverter.ToUInt32(start) != ResourceHeader.Magic)
+                return null;
+            return ResourceHeader.Read(start);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    private int? TextureCount(EntryRecord entry)
+    {
+        try
+        {
+            return Textures.YtdSaving.Read(ReadEntryBytes(entry)).Textures.Length;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
+            or InvalidDataException or NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private List<(string, string)>? DescribeArchive(EntryRecord entry)
+    {
+        ArchiveNode? opened = null;
+        try
+        {
+            ArchiveNode node;
+            if (InArchive)
+            {
+                if (entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
+                    return null;
+                node = item.Node.OpenNested(binary);
+            }
+            else
+            {
+                node = opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+            }
+            RpfEntry[] entries = [.. node.Archive.EnumerateEntries().Where(item => !ReferenceEquals(item, node.Archive.Root))];
+            int files = entries.Count(item => item is RpfFileEntry);
+            int folders = entries.Length - files;
+            string encryption = node.Archive.Encryption switch
+            {
+                RpfEncryption.None => "None",
+                RpfEncryption.Open => "Open",
+                RpfEncryption.Aes or RpfEncryption.Ps3Aes => "AES",
+                RpfEncryption.Ng => "NG",
+                var other => other.ToString(),
+            };
+            return
+            [
+                ("Encryption", encryption),
+                ("Contains", $"{(files == 1 ? "1 file" : $"{files} files")} in {(folders == 1 ? "1 folder" : $"{folders} folders")}"),
+            ];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
+            or InvalidDataException or NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
+        finally
+        {
+            opened?.Close();
+        }
     }
 
     /// <summary>Reads one loose or archived file as a standalone byte stream.</summary>
