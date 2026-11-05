@@ -9,7 +9,10 @@ namespace HikariHopper.Views;
 /// <summary>A creation the context menu asked for: QML <c>createRequested(kind, suggestedName, sourcePath)</c>.</summary>
 public sealed record CreateRequest(string Kind, string SuggestedName, string SourcePath);
 
-/// <summary>The entry/background context menu (port of <c>ExplorerContextMenu.qml</c>); its DataContext is the tab's view model.</summary>
+/// <summary>
+/// The explorer's context menu; its DataContext is the tab's view model. <see cref="Refresh"/> makes it an item's
+/// menu (open, copy, delete) when something is selected, or the folder's (new, refresh) when nothing is.
+/// </summary>
 public partial class ExplorerContextMenu : RetroMenu
 {
     /// <summary>The boxed 1 compared against <c>selectionCount</c>.</summary>
@@ -41,6 +44,31 @@ public partial class ExplorerContextMenu : RetroMenu
     public event EventHandler<CreateRequest>? CreateRequested;
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
+
+    /// <summary>Whether it is the folder's own menu (nothing selected) rather than an item's.</summary>
+    public bool ForFolder { get; private set; }
+
+    /// <summary>Shows what applies to what was right-clicked; called as it opens.</summary>
+    public void Refresh()
+    {
+        ExplorerViewModel? bridge = Bridge;
+        int count = bridge?.SelectionCount ?? 0;
+        bool busy = bridge?.EntryOperationBusy ?? true;
+        ForFolder = count == 0;
+
+        // An item's: opening one the app can open, copying, deleting.
+        OpenItem.IsVisible = count == 1;
+        OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
+        CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
+        CopyNameItem.Text = count > 1 ? "Copy names" : "Copy name";
+        CopyPathItem.Text = count > 1 ? "Copy paths" : "Copy path";
+        DeleteMenuItem.Text = count > 1 ? $"Delete {count} items" : "Delete";
+        DeleteMenuItem.IsEnabled = !busy && bridge?.SelectionDeletable == true;
+
+        // The folder's: making something new in it, and reading it again.
+        NewEntryMenu.IsVisible = RefreshSeparator.IsVisible = RefreshItem.IsVisible = ForFolder;
+        NewEntryMenu.IsEnabled = RefreshItem.IsEnabled = !busy;
+    }
 
     /// <summary><c>Qt.callLater(createRequested(...))</c>.</summary>
     private void RequestCreation(string kind, string suggestedName, string sourcePath) =>
@@ -83,6 +111,10 @@ public partial class ExplorerContextMenu : RetroMenu
                 RequestCreation("zip-rpf", source.SuggestedName, source.Path);
         });
     }
+
+    private void OnCopyName(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedName();
+
+    private void OnCopyPath(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedPath();
 
     private void OnDelete(object? sender, RoutedEventArgs e)
     {

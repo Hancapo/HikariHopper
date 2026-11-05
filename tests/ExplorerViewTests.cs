@@ -669,6 +669,49 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheContextMenuFitsWhatWasRightClicked()
+    {
+        Write(Path.Combine(Work, "tool.exe"), "MZ");
+        Explorer ui = OpenExplorer();
+        ExplorerContextMenu menu = ui.Find<WorkspaceView>().EntryContextMenu;
+        int Row(string name) => Enumerable.Range(0, ui.Bridge.EntriesModel.Count).Single(row => ui.Bridge.EntriesModel[row].Name == name);
+        string[] Shown()
+        {
+            menu.Refresh();
+            return [.. menu.Items.OfType<Views.Controls.RetroMenuItem>().Where(item => item.IsVisible).Select(item => item.IsEnabled ? item.Text : $"({item.Text})")];
+        }
+
+        // An item: what you can do with it, and nothing about making something new.
+        ui.Bridge.SelectEntry(Row("folder00"));
+        Assert.Equal(["Open", "Copy name", "Copy path", "Delete"], Shown());
+        Assert.False(menu.ForFolder);
+        ui.Bridge.SelectEntry(Row("file000.txt"));
+        Assert.Equal(["Open", "Copy name", "Copy path", "Delete"], Shown());
+        // A file the app can't open: Open is there but off.
+        ui.Bridge.SelectEntry(Row("tool.exe"));
+        Assert.Equal(["(Open)", "Copy name", "Copy path", "Delete"], Shown());
+
+        // Several items: no Open, and copying and deleting say how many.
+        ui.Bridge.SelectEntry(Row("file000.txt"));
+        ui.Bridge.SelectEntry(Row("file001.txt"), KeyModifiers.Control);
+        Assert.Equal(["Copy names", "Copy paths", "Delete 2 items"], Shown());
+
+        // Empty space: the folder's own menu.
+        ui.Bridge.ClearEntrySelection();
+        Assert.Equal(["New", "Refresh"], Shown());
+        Assert.True(menu.ForFolder);
+
+        // A right-click on empty space opens that one.
+        ui.Bridge.SelectEntry(1);
+        Click(ui.Window, new Point(1300, 700), MouseButton.Right);
+        Assert.True(menu.IsOpen);
+        Assert.True(menu.ForFolder);
+        Assert.True(menu.NewEntryMenu.IsVisible);
+        Assert.False(menu.DeleteMenuItem.IsVisible);
+        menu.Close();
+    }
+
+    [AvaloniaFact]
     public void DeleteKeyAsksForConfirmationAndEscapeCancels()
     {
         Explorer ui = OpenExplorer();
