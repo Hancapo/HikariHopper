@@ -530,7 +530,15 @@ public sealed class RpfProvider
     {
         if (GameFileKindLabels.TryGetValue(GameFileTypes.Classify(name), out string? label))
             return label;
-        return GeneralFileKindLabels.GetValueOrDefault(Path.GetExtension(name), "File");
+        string extension = Path.GetExtension(name);
+        if (GeneralFileKindLabels.TryGetValue(extension, out label))
+            return label;
+        // What the image and text viewers open, named so the list shows what they are.
+        if (Textures.TextureImport.IsImagePath(name))
+            return extension.Equals(".dds", StringComparison.OrdinalIgnoreCase) ? "DDS Texture"
+                : extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ? "JPEG Image"
+                : $"{extension[1..].ToUpperInvariant()} Image";
+        return TextDocument.IsTextName(name) ? "Text Document" : "File";
     }
 
     private static List<EntryRecord> ArchiveRecords(ArchiveNode node, string directoryPath)

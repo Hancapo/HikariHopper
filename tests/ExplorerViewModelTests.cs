@@ -848,5 +848,14 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("Drawable", RpfProvider.FileKind("model.ydr"));
         Assert.Equal("Texture Dictionary", RpfProvider.FileKind("textures.ytd"));
         Assert.Equal("RPF Package", RpfProvider.FileKind("american_rel.rpf"));
+        // What the image and text viewers open is named too, not left a plain file.
+        Assert.Equal("DDS Texture", RpfProvider.FileKind("paint.dds"));
+        Assert.Equal("PNG Image", RpfProvider.FileKind("photo.png"));
+        Assert.Equal("JPEG Image", RpfProvider.FileKind("photo.jpg"));
+        Assert.Equal("JPEG Image", RpfProvider.FileKind("photo.JPEG"));
+        Assert.Equal("WEBP Image", RpfProvider.FileKind("photo.webp"));
+        Assert.Equal("Text Document", RpfProvider.FileKind("settings.ini"));
+        Assert.Equal("Vehicle Definitions", RpfProvider.FileKind("vehicles.meta"));
+        Assert.Equal("File", RpfProvider.FileKind("unknown.bin"));
     });
 }

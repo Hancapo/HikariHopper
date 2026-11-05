@@ -65,6 +65,7 @@ public class FileGlyph : Control
         ["XML Document"] = ("file-code", "data"),
         ["JSON Document"] = ("file-code", "data"),
         ["Text Document"] = ("file-text", "data"),
+        ["DDS Texture"] = ("image", "asset"),
         ["Data File"] = ("file", "data"),
         ["File"] = ("file", "data"),
     };
@@ -109,7 +110,10 @@ public class FileGlyph : Control
             return ("folder", "folder");
         if (kind is "archive" or "package")
             return ("package", "container");
-        return ByFileKind.TryGetValue(fileKind, out var hit) ? hit : ("file", "data");
+        if (ByFileKind.TryGetValue(fileKind, out var hit))
+            return hit;
+        // PNG Image, JPEG Image and the rest.
+        return fileKind.EndsWith(" Image", StringComparison.Ordinal) ? ("image", "asset") : ("file", "data");
     }
 
     public static IBrush TintFor(string family, bool selected)

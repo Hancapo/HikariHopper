@@ -95,7 +95,7 @@ public partial class TextureEditor : UserControl, IModalContent
     /// <summary>What the editor shows over: a control in the main window. The main window's content when null.</summary>
     public Control? Anchor { get; set; }
 
-    /// <summary>The document it shows, its state and kind: "name * — Texture Dictionary".</summary>
+    /// <summary>The document it shows and whether it has unsaved changes: "name *". Its kind is the icon beside it.</summary>
     public string Title { get; private set; } = "";
 
     /// <summary>Whether the editor is showing.</summary>
@@ -268,10 +268,11 @@ public partial class TextureEditor : UserControl, IModalContent
     private void RefreshTitle()
     {
         Title = viewModel.SourceName.Length == 0
-            ? "Texture Dictionary"
-            : $"{viewModel.SourceName}{(viewModel.Modified && !viewModel.Saving ? " *" : "")} — "
-              + (viewModel.IsDrawable ? "Embedded Textures" : "Texture Dictionary");
+            ? ""
+            : $"{viewModel.SourceName}{(viewModel.Modified && !viewModel.Saving ? " *" : "")}";
         TitleText.Text = Title;
+        // The icon the explorer gives the file: a texture dictionary, or the drawable whose textures these are.
+        TitleGlyph.FileKind = viewModel.IsDrawable ? "Drawable" : "Texture Dictionary";
     }
 
     private void RefreshDropEnabled() =>

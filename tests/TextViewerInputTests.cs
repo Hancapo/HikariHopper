@@ -36,6 +36,19 @@ public sealed class TextViewerInputTests
     }
 
     [AvaloniaFact]
+    public void TheHeaderNamesTheFileBesideTheExplorersIconForIt()
+    {
+        (MainWindow window, TextViewer viewer) = Open(10);
+        Assert.Equal("notes.txt", viewer.TitleText.Text);
+        Assert.Equal(("file-text", "data"), viewer.TitleGlyph.Resolved);
+        window.Close();
+        var meta = new TextViewer(TextDocument.Load("vehicles.meta", Encoding.UTF8.GetBytes("<Item />")));
+        Assert.Equal("vehicles.meta", meta.TitleText.Text);
+        // FiveFury knows this one: the vehicles' definitions, as its row in the explorer shows.
+        Assert.Equal(("car-front", "data"), meta.TitleGlyph.Resolved);
+    }
+
+    [AvaloniaFact]
     public void DraggingPastTheBottomKeepsScrollingAndSelecting()
     {
         (MainWindow window, TextViewer viewer) = Open();

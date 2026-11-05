@@ -42,14 +42,16 @@ public sealed class TextureWindowTests
         Assert.Same(harness.Host, TopLevel.GetTopLevel(editor));
         Assert.Equal(new Size(TextureWindowHarness.EditorWidth, TextureWindowHarness.EditorHeight), editor.Bounds.Size);
         Assert.Equal(ModalOverlay.BlurRadius, Assert.IsAssignableFrom<IBlurEffect>(harness.Backdrop.Effect).Radius, 1);
-        // Its header names the document, its state and its kind.
-        Assert.Equal("test.ytd — Texture Dictionary", editor.Title);
+        // Its header names the document and its state, beside the icon the explorer gives the file.
+        Assert.Equal("test.ytd", editor.Title);
         Assert.Equal(editor.Title, editor.TitleText.Text);
+        Assert.Equal(("book-image", "asset"), editor.TitleGlyph.Resolved);
         Assert.True(harness.ViewModel.RenameSelected("renamed"));
         harness.Settle();
-        Assert.Equal("test.ytd * — Texture Dictionary", editor.Title);
+        Assert.Equal("test.ytd *", editor.Title);
         harness.ViewModel.SetSourceForTesting("model.ydr", "");
-        Assert.Equal("model.ydr * — Embedded Textures", editor.Title);
+        Assert.Equal("model.ydr *", editor.Title);
+        Assert.Equal(("box", "asset"), editor.TitleGlyph.Resolved);
     }
 
     [AvaloniaFact]
