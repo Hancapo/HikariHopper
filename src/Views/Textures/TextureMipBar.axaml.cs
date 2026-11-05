@@ -11,7 +11,7 @@ namespace HikariHopper.Views;
 /// </summary>
 public partial class TextureMipBar : UserControl
 {
-    private TextureViewerViewModel? viewModel;
+    private ITexturePreviewSource? viewModel;
 
     public TextureMipBar()
     {
@@ -26,7 +26,7 @@ public partial class TextureMipBar : UserControl
         base.OnDataContextChanged(e);
         if (viewModel is not null)
             viewModel.PropertyChanged -= ViewModelChanged;
-        viewModel = DataContext as TextureViewerViewModel;
+        viewModel = DataContext as ITexturePreviewSource;
         if (viewModel is not null)
             viewModel.PropertyChanged += ViewModelChanged;
         Refresh();

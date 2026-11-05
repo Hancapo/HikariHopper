@@ -36,7 +36,7 @@ public partial class TextureViewport : UserControl
     public static readonly StyledProperty<bool> FilteredPreviewProperty =
         AvaloniaProperty.Register<TextureViewport, bool>(nameof(FilteredPreview), true);
 
-    private TextureViewerViewModel? viewModel;
+    private ITexturePreviewSource? viewModel;
     private bool fitMode = true;
     private bool publishedFitMode = true;
     private double manualScale = 1;
@@ -175,7 +175,7 @@ public partial class TextureViewport : UserControl
         base.OnDataContextChanged(e);
         if (viewModel is not null)
             viewModel.PropertyChanged -= ViewModelChanged;
-        viewModel = DataContext as TextureViewerViewModel;
+        viewModel = DataContext as ITexturePreviewSource;
         if (viewModel is not null)
             viewModel.PropertyChanged += ViewModelChanged;
         selectedIndexMirror = viewModel?.SelectedIndex ?? -1;

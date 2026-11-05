@@ -33,6 +33,7 @@ public class ChromeIcon : Control
         ["copy"] = "copy",
         ["table"] = "table",
         ["text"] = "file-text",
+        ["image"] = "image",
         ["home"] = "house",
         ["refresh"] = "rotate-cw",
         ["list"] = "list",

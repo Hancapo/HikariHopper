@@ -34,6 +34,9 @@ public sealed class ExplorerSession : IStartupSession
     /// <summary>The text viewer last opened, while it is showing.</summary>
     public TextViewer? TextViewer { get; private set; }
 
+    /// <summary>The image viewer while one is open.</summary>
+    public ImageViewer? ImageViewer { get; private set; }
+
     public void RestoreLastGame() => Tabs.RestoreLastGame();
 
     public void Attach(MainWindow mainWindow)
@@ -83,6 +86,7 @@ public sealed class ExplorerSession : IStartupSession
             textureEditors.Remove(tab, out TextureEditor? editor);
             editor?.Destroy();
             tab.TextFileOpened -= OnTextFileOpened;
+            tab.ImageFileOpened -= OnImageFileOpened;
         }
         foreach (ExplorerViewModel tab in Tabs.Tabs)
             AddTextureEditor(tab);
@@ -94,6 +98,21 @@ public sealed class ExplorerSession : IStartupSession
             return;
         textureEditors[tab] = new TextureEditor(tab.TextureViewer) { Anchor = window?.ExplorerScreenHost };
         tab.TextFileOpened += OnTextFileOpened;
+        tab.ImageFileOpened += OnImageFileOpened;
+    }
+
+    private void OnImageFileOpened(object? sender, ImageViewerViewModel image)
+    {
+        ImageViewer?.Close();
+        var viewer = new ImageViewer(image) { Anchor = window?.ExplorerScreenHost };
+        ImageViewer = viewer;
+        // Let go of it once closed: it holds the decoded image.
+        viewer.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(ImageViewer, viewer))
+                ImageViewer = null;
+        };
+        viewer.Present();
     }
 
     private void OnTextFileOpened(object? sender, Core.TextDocument document)

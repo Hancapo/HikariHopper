@@ -65,6 +65,22 @@ public static class TextureImport
         if (!string.Equals(Path.GetExtension(path), ".webp", StringComparison.OrdinalIgnoreCase))
             return RgbaImage.Read(path);
         using SKCodec codec = SKCodec.Create(path) ?? throw new InvalidDataException("Unsupported or corrupt WebP image");
+        return ReadWebP(codec);
+    }
+
+    /// <summary><see cref="ReadImageFile"/> for an image already in memory, such as an entry in an archive;
+    /// <paramref name="name"/> says which kind it is.</summary>
+    public static RgbaImage ReadImageBytes(byte[] data, string name)
+    {
+        if (!string.Equals(Path.GetExtension(name), ".webp", StringComparison.OrdinalIgnoreCase))
+            return RgbaImage.Read(data);
+        using SKData encoded = SKData.CreateCopy(data);
+        using SKCodec codec = SKCodec.Create(encoded) ?? throw new InvalidDataException("Unsupported or corrupt WebP image");
+        return ReadWebP(codec);
+    }
+
+    private static RgbaImage ReadWebP(SKCodec codec)
+    {
         var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         SKCodecResult result = codec.GetPixels(info, out byte[] pixels);
         if (result is not (SKCodecResult.Success or SKCodecResult.IncompleteInput))
