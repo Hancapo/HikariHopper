@@ -460,7 +460,8 @@ public sealed class RpfProvider
         {
             string folder = Path.GetDirectoryName(entry.Path.Replace('/', Path.DirectorySeparatorChar)) ?? "";
             location.Add(("Folder", folder is "" or "." ? "Game folder" : folder));
-            location.Add(("Full path", GameEntryCandidate(entry)));
+            // Throws when it has gone since it was listed: the read fails, rather than show what it was.
+            location.Add(("Full path", GameEntryPath(entry)));
         }
         sections.Add(new PropertySection("LOCATION", location));
 

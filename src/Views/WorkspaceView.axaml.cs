@@ -157,7 +157,8 @@ public partial class WorkspaceView : UserControl
     {
         if (Bridge is not { } model || propertiesDialog is not null)
             return;
-        if (await model.ReadSelectionProperties() is not { } properties || propertiesDialog is not null || !IsAttachedToVisualTree())
+        if (await model.ReadSelectionProperties() is not { } properties || propertiesDialog is not null
+            || TopLevel.GetTopLevel(this) is not { } host || ModalOverlay.IsOpen(host))
             return;
         var dialog = new PropertiesDialog(properties);
         propertiesDialog = dialog;
@@ -168,8 +169,6 @@ public partial class WorkspaceView : UserControl
         });
         dialog.Present(this);
     }
-
-    private bool IsAttachedToVisualTree() => TopLevel.GetTopLevel(this) is not null;
 
     private void OnDeleteConfirmationRequested(object? sender, EventArgs e) => OpenDeleteDialog();
 
