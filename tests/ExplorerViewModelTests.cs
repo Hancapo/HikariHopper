@@ -316,7 +316,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(Formatting.FormatSize(deflated.Record.StoredSize), deflated.SizeText);
 
         EntryItem plain = Row("plain.txt");
-        Assert.Equal("Text Document (Uncompressed)", plain.TypeText);
+        Assert.Equal("Text Document", plain.TypeText);
         Assert.Equal(Formatting.FormatSize(text.Length), plain.SizeText);
 
         // A resource is always kept deflated; its padded in-memory size isn't what's shown.
