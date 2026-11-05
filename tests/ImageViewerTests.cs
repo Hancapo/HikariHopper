@@ -80,7 +80,7 @@ public sealed class ImageViewerTests : ExplorerTestBase
         Assert.Equal(2, image.MipLevel);
         Assert.Equal((16, 8), (image.PreviewWidth, image.PreviewHeight));
         Assert.Equal((16, 8), (image.PreviewImage!.PixelSize.Width, image.PreviewImage.PixelSize.Height));
-        Assert.Equal("Previewing paint.dds · mip 2", image.Status);
+        Assert.Equal("", image.Status);
         image.Dispose();
     }
 

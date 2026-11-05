@@ -198,7 +198,8 @@ public sealed class ImageViewerViewModel : ObservableObject, ITexturePreviewSour
         previewImage = bitmap;
         loading = false;
         error = "";
-        status = MipCount > 1 ? $"Previewing {Name} · mip {mipLevel}" : $"Previewing {Name}";
+        // The image is up: nothing to say until something is decoding or goes wrong.
+        status = "";
         RaiseAll();
     }
 
