@@ -29,6 +29,7 @@ public partial class ImageViewer : UserControl, IModalContent
         this.image = image;
         InitializeComponent();
         TitleText.Text = image.Name;
+        TitleGlyph.FileKind = RpfProvider.FileKind(image.Name);
         Preview.DataContext = image;
         CloseMark.Click += (_, _) => Close();
         image.PropertyChanged += OnImageChanged;

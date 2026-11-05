@@ -137,6 +137,9 @@ public sealed class ImageViewerTests : ExplorerTestBase
         Assert.Same(viewer.Image, viewer.Preview.DataContext);
         Assert.Equal("40 × 20", viewer.DimensionsText.Text);
         Assert.Equal("PNG", viewer.FormatText.Text);
+        // The header has the explorer's icon for the file beside its name.
+        Assert.Equal("photo.png", viewer.TitleText.Text);
+        Assert.Equal(("image", "asset"), viewer.TitleGlyph.Resolved);
         Assert.False(viewer.Preview.MipBar.IsVisible);
 
         // Escape closes it and the session lets it go.
