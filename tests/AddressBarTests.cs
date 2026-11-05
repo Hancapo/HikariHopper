@@ -32,20 +32,41 @@ public sealed class AddressBarTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void TheAddressIsTheFolderOnDiskOrTheArchiveAndThePathInsideIt()
+    public void TheAddressIsRelativeToTheGameAndRunsThroughArchives()
     {
         ExplorerViewModel bridge = Game();
-        Assert.Equal(Work, bridge.AddressText);
+        Assert.Equal("", bridge.AddressText);
         bridge.Navigate("x64/levels");
-        Assert.Equal(Path.Combine(Work, "x64", "levels"), bridge.AddressText);
+        Assert.Equal(@"x64\levels", bridge.AddressText);
 
         Assert.True(bridge.GoToAddress(Path.Combine(Work, "mods", "mods.rpf", "inner.rpf", "deep")));
-        Assert.Equal(Path.Combine(Work, "mods", "mods.rpf", "inner.rpf", "deep"), bridge.AddressText);
+        Assert.Equal(@"mods\mods.rpf\inner.rpf\deep", bridge.AddressText);
         Assert.Equal(["b.txt"], Names(bridge));
 
         bridge.CopyAddress();
-        Assert.Equal(Path.Combine(Work, "mods", "mods.rpf", "inner.rpf", "deep"), Clipboard.Text);
+        Assert.Equal(@"mods\mods.rpf\inner.rpf\deep", Clipboard.Text);
         Assert.Equal("Copied address", bridge.Status);
+
+        // What it copies goes back to the same place.
+        bridge.Navigate(".");
+        Assert.True(bridge.GoToAddress(Clipboard.Text!));
+        Assert.Equal(["b.txt"], Names(bridge));
+    }
+
+    [AvaloniaFact]
+    public void AnRpfFromOutsideTheGameStartsItsOwnAddress()
+    {
+        MakeGame();
+        string outside = Directory.CreateDirectory(Path.GetFullPath(Path.Combine(Work, "..", "downloads"))).FullName;
+        string addon = SaveArchive(Path.Combine(outside, "addon.rpf"), ("stream/readme.txt", "addon"));
+        var bridge = new ExplorerViewModel();
+        bridge.OpenArchive(addon);
+        Assert.True(bridge.GoToAddress(@"addon.rpf\stream"));
+        Assert.Equal(@"addon.rpf\stream", bridge.AddressText);
+        Assert.Equal(["readme.txt"], Names(bridge));
+        Assert.True(bridge.GoToAddress("addon.rpf"));
+        Assert.Equal("addon.rpf", bridge.AddressText);
+        Assert.False(bridge.GoToAddress(@"other.rpf\stream"));
     }
 
     [AvaloniaFact]
@@ -133,7 +154,7 @@ public sealed class AddressBarTests : ExplorerTestBase
         ExplorerStateRenders.Pump(100);
         Key(window, Avalonia.Input.Key.L, RawInputModifiers.Control, PhysicalKey.L);
         Assert.True(navigation.EditingAddress);
-        Assert.Equal(Path.Combine(Work, "x64"), navigation.AddressField.Text);
+        Assert.Equal("x64", navigation.AddressField.Text);
         Assert.Equal((0, navigation.AddressField.Text!.Length), (navigation.AddressField.SelectionStart, navigation.AddressField.SelectionEnd));
 
         // A path that isn't there stays to be fixed, marked.
@@ -173,7 +194,7 @@ public sealed class AddressBarTests : ExplorerTestBase
         RetroMenuItem[] items = [.. menu.Items.OfType<RetroMenuItem>()];
         Assert.Equal(["Copy address", "Edit address", "Paste and go"], items.Select(item => item.Text));
         items[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
-        Assert.Equal(Path.Combine(Work, "x64"), Clipboard.Text);
+        Assert.Equal("x64", Clipboard.Text);
         menu.Close();
 
         // Paste and go: a path from the clipboard.
@@ -193,7 +214,7 @@ public sealed class AddressBarTests : ExplorerTestBase
         window.MouseUp(empty, MouseButton.Left, RawInputModifiers.None);
         ExplorerStateRenders.Pump(200);
         Assert.True(navigation.EditingAddress);
-        Assert.Equal(Path.Combine(Work, "x64", "levels"), navigation.AddressField.Text);
+        Assert.Equal(@"x64\levels", navigation.AddressField.Text);
         window.Close();
     }
 }

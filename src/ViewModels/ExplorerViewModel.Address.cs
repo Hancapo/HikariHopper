@@ -4,15 +4,16 @@ using HikariHopper.Infrastructure;
 namespace HikariHopper.ViewModels;
 
 /// <summary>
-/// The address bar as text: where you are, written as a path, and going to a path typed or pasted into it. A path
-/// can run through RPFs as if they were folders (<c>…\dlc.rpf\stream</c>), use Copy path's <c>archive.rpf::inner</c>
-/// form, or be relative to the game folder.
+/// The address bar as text: where you are, written as a path relative to the game folder, and going to a path typed
+/// or pasted into it. A path runs through RPFs as if they were folders (<c>x64\…\dlc.rpf\stream</c>); a full path
+/// and Copy path's <c>archive.rpf::inner</c> form work too.
 /// </summary>
 public sealed partial class ExplorerViewModel
 {
     /// <summary>
-    /// Where you are, as one path: a folder on disk, or the archive's file followed by the folders inside it,
-    /// through any nested RPFs. Empty with nothing open.
+    /// Where you are, as one path relative to the game folder: the folder, or the RPF followed by the folders inside
+    /// it, through any nested RPFs. An RPF from outside the game starts the path itself. Empty at the game's root,
+    /// and with nothing open.
     /// </summary>
     public string AddressText
     {
@@ -22,10 +23,9 @@ public sealed partial class ExplorerViewModel
                 return "";
             string local = currentPath == "." ? "" : currentPath;
             if (!Provider.InArchive)
-                return local.Length == 0 ? Path.TrimEndingDirectorySeparator(Provider.GamePath) : GameChildPath(local);
-            string inner = string.Join('/', new[] { Provider.ArchivePrefix, local }.Where(part => part.Length > 0));
-            string archive = Provider.ArchivePath;
-            return inner.Length == 0 ? archive : $"{archive}\\{inner.Replace('/', '\\')}";
+                return local.Replace('/', '\\');
+            string archive = Provider.ArchiveGamePath.Length > 0 ? Provider.ArchiveGamePath : Path.GetFileName(Provider.ArchivePath);
+            return string.Join('\\', new[] { archive, Provider.ArchivePrefix, local }.Where(part => part.Length > 0)).Replace('/', '\\');
         }
     }
 
@@ -54,16 +54,28 @@ public sealed partial class ExplorerViewModel
         try
         {
             string path = typed.Replace("::", "\\").Replace('/', '\\');
-            if (!Path.IsPathRooted(path))
+            if (Path.IsPathRooted(path))
             {
-                if (!HasGame)
+                full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            }
+            else
+            {
+                // Relative: to the game folder, or, for an RPF opened from outside it, a path that starts with its name.
+                var bases = new List<string>();
+                if (HasGame)
+                    bases.Add(Provider.GamePath);
+                string first = path.Split('\\', 2)[0];
+                if (Provider.InArchive && Provider.ArchiveGamePath.Length == 0
+                    && string.Equals(first, Path.GetFileName(Provider.ArchivePath), StringComparison.OrdinalIgnoreCase))
+                    bases.Add(Path.GetDirectoryName(Provider.ArchivePath)!);
+                if (bases.Count == 0)
                 {
-                    SetStatus("Type a full path, or open a game for paths inside it");
+                    SetStatus($"Type a path inside the game, or a full path: {typed}");
                     return false;
                 }
-                path = Path.Combine(Provider.GamePath, path);
+                string[] candidates = [.. bases.Select(folder => Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(folder, path))))];
+                full = candidates.FirstOrDefault(Reachable) ?? candidates[0];
             }
-            full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         }
         catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -150,4 +162,17 @@ public sealed partial class ExplorerViewModel
     }
 
     private static bool IsArchiveFile(string path) => path.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether <paramref name="full"/> is a folder or file on disk, or lies inside an RPF that is.</summary>
+    private static bool Reachable(string full)
+    {
+        for (string? step = full; step is not null; step = Path.GetDirectoryName(step))
+        {
+            if (Directory.Exists(step))
+                return step == full;
+            if (File.Exists(step))
+                return step == full || IsArchiveFile(step);
+        }
+        return false;
+    }
 }
