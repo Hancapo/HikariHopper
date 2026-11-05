@@ -81,19 +81,30 @@ public static class EntryOperations
             if (!Path.Exists(source))
                 throw new FileNotFoundException($"Not found: {name}", source);
             bool caseOnly = string.Equals(name, newName, StringComparison.OrdinalIgnoreCase);
-            if (!caseOnly)
-                EntryNames.EnsureEntryNameAvailable(newName,
-                    new DirectoryInfo(target.Directory).EnumerateFileSystemInfos().Select(item => item.Name));
+            // Every other entry, so a case-only rename is checked too: a case-sensitive folder can hold "pack" and "Pack".
+            EntryNames.EnsureEntryNameAvailable(newName,
+                new DirectoryInfo(target.Directory).EnumerateFileSystemInfos()
+                    .Select(item => item.Name).Where(other => !string.Equals(other, name, StringComparison.Ordinal)));
             if (Directory.Exists(source))
             {
-                // A folder can't be moved onto itself in another case; it goes through a free name on the way.
-                if (caseOnly)
+                if (!caseOnly)
                 {
-                    string step = Path.Combine(target.Directory, $"{newName}.renaming-{Guid.NewGuid():N}");
-                    Directory.Move(source, step);
-                    source = step;
+                    Directory.Move(source, destination);
+                    return newName;
                 }
-                Directory.Move(source, destination);
+                // A folder can't be moved onto itself in another case; it goes through a free name on the way, and
+                // back to its own name if the last move fails.
+                string step = Path.Combine(target.Directory, $"{newName}.renaming-{Guid.NewGuid():N}");
+                Directory.Move(source, step);
+                try
+                {
+                    Directory.Move(step, destination);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    Directory.Move(step, source);
+                    throw;
+                }
             }
             else
             {
