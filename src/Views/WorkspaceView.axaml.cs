@@ -27,6 +27,10 @@ public partial class WorkspaceView : UserControl
         Split.ColumnDefinitions[0].MinWidth = FolderPanel.MinimumWidth;
         DropArea.Attach(EntriesArea);
         contextMenu.CreateRequested += (_, request) => OpenCreateDialog(request.Kind, request.SuggestedName, request.SourcePath);
+        // F2 renames the one selected item, unless a text field is being typed in.
+        WindowShortcuts.Register(this, new WindowShortcut("F2",
+            () => Bridge?.CanRenameSelection == true && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
+            () => OpenCreateDialog("rename", Bridge!.RenameSource, "")));
     }
 
     /// <summary>The current entries view (table or grid).</summary>

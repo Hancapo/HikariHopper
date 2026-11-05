@@ -61,6 +61,8 @@ public partial class ExplorerContextMenu : RetroMenu
         OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
         CopyItem.IsVisible = CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
         CopyItem.IsEnabled = !busy;
+        RenameItem.IsVisible = count == 1;
+        RenameItem.IsEnabled = bridge?.CanRenameSelection == true;
         // Extracting: any selection, and an RPF's whole content.
         ExtractSeparator.IsVisible = ExtractItem.IsVisible = !ForFolder;
         ExtractItem.IsEnabled = !busy;
@@ -132,6 +134,13 @@ public partial class ExplorerContextMenu : RetroMenu
     }
 
     private void OnCopy(object? sender, RoutedEventArgs e) => _ = Bridge?.CopySelection();
+
+    /// <summary>Asks for the rename dialog once the menu has closed.</summary>
+    private void OnRename(object? sender, RoutedEventArgs e)
+    {
+        if (Bridge is { CanRenameSelection: true } bridge)
+            RequestCreation("rename", bridge.RenameSource, "");
+    }
 
     private void OnPaste(object? sender, RoutedEventArgs e)
     {
