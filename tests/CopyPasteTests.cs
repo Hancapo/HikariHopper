@@ -84,6 +84,26 @@ public sealed class CopyPasteTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ADottedFolderAndADotfileAreNumberedAfterTheirWholeNames()
+    {
+        MakeGame();
+        string outside = Outside("dotted");
+        Write(Path.Combine(outside, "v1.2", "a.txt"), "a");
+        Write(Path.Combine(outside, ".htaccess"), "h");
+        Write(Path.Combine(Work, "v1.2", "keep.txt"), "k");
+        Write(Path.Combine(Work, ".htaccess"), "x");
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        Clipboard.Files.AddRange([Path.Combine(outside, "v1.2"), Path.Combine(outside, ".htaccess")]);
+
+        Assert.True(await bridge.Paste());
+        Settle(bridge);
+        Assert.Equal("a", File.ReadAllText(Path.Combine(Work, "v1.2 (2)", "a.txt")));
+        Assert.Equal("h", File.ReadAllText(Path.Combine(Work, ".htaccess (2)")));
+    }
+
+    [AvaloniaFact]
     public async Task PastingIntoAnArchiveAddsTheFilesAndFolders()
     {
         MakeGame();
