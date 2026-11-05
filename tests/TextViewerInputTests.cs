@@ -138,6 +138,49 @@ public sealed class TextViewerInputTests
         window.Close();
     }
 
+    private static byte[] Frame(MainWindow window)
+    {
+        using var frame = window.CaptureRenderedFrame()!;
+        using var buffer = frame.Lock();
+        var pixels = new byte[buffer.RowBytes * buffer.Size.Height];
+        System.Runtime.InteropServices.Marshal.Copy(buffer.Address, pixels, 0, pixels.Length);
+        return pixels;
+    }
+
+    [AvaloniaFact]
+    public void AScrollMovesTheLastDrawingAndRedrawsOnlyNearItsEdge()
+    {
+        (MainWindow window, TextViewer viewer) = Open(2000);
+        TextLinesView view = viewer.Lines;
+        ScrollViewer scroller = viewer.TextScroller;
+        Frame(window);
+
+        // A few lines down: what was drawn moves, nothing is drawn again, and it looks as a fresh drawing would.
+        int renders = view.Renders;
+        scroller.Offset = new Vector(0, 3 * view.LineHeight + 7);
+        byte[] moved = Frame(window);
+        Assert.Equal(renders, view.Renders);
+        view.InvalidateVisual();
+        byte[] fresh = Frame(window);
+        Assert.Equal(renders + 1, view.Renders);
+        Assert.Equal(fresh, moved);
+
+        // Most of a screen further, near the edge of what was drawn: a new drawing.
+        scroller.Offset = new Vector(0, scroller.Offset.Y + scroller.Viewport.Height * 0.8);
+        Frame(window);
+        Assert.Equal(renders + 2, view.Renders);
+
+        // Sideways, the gutter has to follow, so it always draws again.
+        view.Document = TextDocument.Load("wide.txt", Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(new string('w', 400) + "\r\n", 50))));
+        ExplorerStateRenders.Pump(100);
+        Frame(window);
+        renders = view.Renders;
+        scroller.Offset = new Vector(40, scroller.Offset.Y);
+        Frame(window);
+        Assert.Equal(renders + 1, view.Renders);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void TheWheelGlidesAndAClickBackInTheTextDoesNotJump()
     {

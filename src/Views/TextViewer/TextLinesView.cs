@@ -39,6 +39,9 @@ public sealed class TextLinesView : Control
     private TextDocument? document;
     private byte[] states = [];
     private readonly Dictionary<int, List<TextSpan>> spans = [];
+    // Each drawn row's shaped, coloured text, by line and the columns drawn: a redraw then only shapes the rows
+    // new to it. Cleared whenever what a row looks like can change (the text, the type's size, the matches).
+    private readonly Dictionary<(int Line, int From, int To), FormattedText> shaped = [];
     private IReadOnlyList<TextMatch> matches = [];
     private int currentMatch = -1;
     private bool wrap;
@@ -49,6 +52,9 @@ public sealed class TextLinesView : Control
     private int[] rowStarts = [];
     private int columnsPerRow = int.MaxValue;
     private TextPosition anchor, caret;
+    // The stretch of the view the last render drew, a screen above and below the visible one: a vertical
+    // scroll that stays well inside it only moves that drawing, and needs no new one.
+    private double drawnTop = double.NaN, drawnBottom = double.NaN;
 
     // A drag selects by what the press picked: characters, words (double-click) or lines (triple-click, or
     // the gutter). The press's own word or line stays selected whichever way the drag goes.
@@ -104,6 +110,7 @@ public sealed class TextLinesView : Control
         {
             document = value;
             spans.Clear();
+            shaped.Clear();
             states = value is null ? [] : TextHighlighter.States(value.Format, value.Lines);
             maxColumns = value is null || value.Lines.Count == 0 ? 0 : value.Lines.Max(line => line.Length);
             anchor = caret = default;
@@ -137,6 +144,7 @@ public sealed class TextLinesView : Control
             if (Math.Abs(zoom - value) < 1e-9)
                 return;
             zoom = value;
+            shaped.Clear();
             UpdateMetrics();
             InvalidateMeasure();
             InvalidateVisual();
@@ -206,6 +214,7 @@ public sealed class TextLinesView : Control
     {
         matches = found;
         currentMatch = current;
+        shaped.Clear();
         if (current >= 0 && current < found.Count)
         {
             TextMatch match = found[current];
@@ -299,6 +308,9 @@ public sealed class TextLinesView : Control
         // and it must not uncover blank rows meanwhile.
         int firstRow = Math.Max(0, (int)Math.Floor((offset.Y - viewport.Height - TextPadding) / lineHeight));
         int lastRow = Math.Min(totalRows - 1, (int)Math.Ceiling((offset.Y + 2 * viewport.Height - TextPadding) / lineHeight));
+        Renders++;
+        drawnTop = offset.Y - viewport.Height;
+        drawnBottom = offset.Y + 2 * viewport.Height;
         (TextPosition selStart, TextPosition selEnd) = Selection;
         // The type's own line box, centred on the row.
         double textBaseline = Math.Round((lineHeight - TextViewerInk.Text("0", size, Ui.Theme.Text).Height) / 2);
@@ -341,27 +353,7 @@ public sealed class TextLinesView : Control
             }
 
             if (to > from)
-            {
-                FormattedText formatted = TextViewerInk.Text(text[from..to], size, Ui.Theme.TextRow);
-                List<TextSpan> lineSpans = SpansOf(line);
-                for (int index = FirstSpanEndingAfter(lineSpans, from); index < lineSpans.Count && lineSpans[index].Start < to; index++)
-                {
-                    TextSpan span = lineSpans[index];
-                    int a = Math.Max(span.Start, from), b = Math.Min(span.Start + span.Length, to);
-                    if (b > a)
-                        formatted.SetForegroundBrush(TextViewerInk.Of(span.Kind), a - from, b - a);
-                }
-                for (int index = FirstMatchOn(line); index >= 0 && index < matches.Count && matches[index].Line == line; index++)
-                {
-                    TextMatch match = matches[index];
-                    int a = Math.Max(match.Column, from), b = Math.Min(match.Column + match.Length, to);
-                    if (b <= a)
-                        continue;
-                    formatted.SetForegroundBrush(Ui.Theme.Brass, a - from, b - a);
-                    formatted.SetTextDecorations(TextViewerInk.Underline, a - from, b - a);
-                }
-                context.DrawText(formatted, new Point(lineLeft, top + textBaseline));
-            }
+                context.DrawText(Shaped(line, from, to, size), new Point(lineLeft, top + textBaseline));
 
             // The caret, while the view has focus.
             if (IsFocused && caretShown && line == caret.Line && caret.Column >= from && (caret.Column < to || caret.Column == to && (to == text.Length || !wrap)))
@@ -601,10 +593,60 @@ public sealed class TextLinesView : Control
     {
         if (wrap && e.ViewportDelta.X != 0)
             InvalidateMeasure();
-        InvalidateVisual();
+        // Redrawing every row of three screens on each step of a smooth scroll costs more than a frame in a big
+        // file, so the scroll stutters. A vertical scroll moves the last drawing instead, and a new one is made
+        // only once the visible screen comes within half a screen of what was drawn. The gutter is drawn at
+        // the horizontal offset, so a sideways scroll, and a new size, always redraw.
+        if (e.OffsetDelta.X != 0 || e.ViewportDelta != default || e.ExtentDelta != default || NeedsRedraw())
+            InvalidateVisual();
+    }
+
+    /// <summary>How many times the view has drawn its text, for tests.</summary>
+    internal int Renders { get; private set; }
+
+    /// <summary>Whether the visible screen is near the edge of the stretch the last render drew.</summary>
+    internal bool NeedsRedraw()
+    {
+        if (Scroller is not { } scroller || double.IsNaN(drawnTop))
+            return true;
+        double top = scroller.Offset.Y, height = scroller.Viewport.Height;
+        // Past the start or the end of the text there is nothing more to draw, however close the screen gets.
+        bool nearTop = drawnTop > 0 && top - height / 2 < drawnTop;
+        bool nearBottom = drawnBottom < scroller.Extent.Height && top + height * 1.5 > drawnBottom;
+        return nearTop || nearBottom;
     }
 
     private void UpdateMetrics() => charWidth = TextViewerInk.CharWidth(FontSize);
+
+    /// <summary>Columns <paramref name="from"/> to <paramref name="to"/> of a line, shaped in its colours and with its matches marked.</summary>
+    private FormattedText Shaped(int line, int from, int to, double size)
+    {
+        if (shaped.TryGetValue((line, from, to), out FormattedText? cached))
+            return cached;
+        if (shaped.Count > 2048)
+            shaped.Clear();
+        string text = document!.Lines[line];
+        FormattedText formatted = TextViewerInk.Text(text[from..to], size, Ui.Theme.TextRow);
+        List<TextSpan> lineSpans = SpansOf(line);
+        for (int index = FirstSpanEndingAfter(lineSpans, from); index < lineSpans.Count && lineSpans[index].Start < to; index++)
+        {
+            TextSpan span = lineSpans[index];
+            int a = Math.Max(span.Start, from), b = Math.Min(span.Start + span.Length, to);
+            if (b > a)
+                formatted.SetForegroundBrush(TextViewerInk.Of(span.Kind), a - from, b - a);
+        }
+        for (int index = FirstMatchOn(line); index >= 0 && index < matches.Count && matches[index].Line == line; index++)
+        {
+            TextMatch match = matches[index];
+            int a = Math.Max(match.Column, from), b = Math.Min(match.Column + match.Length, to);
+            if (b <= a)
+                continue;
+            formatted.SetForegroundBrush(Ui.Theme.Brass, a - from, b - a);
+            formatted.SetTextDecorations(TextViewerInk.Underline, a - from, b - a);
+        }
+        shaped[(line, from, to)] = formatted;
+        return formatted;
+    }
 
     private List<TextSpan> SpansOf(int line)
     {

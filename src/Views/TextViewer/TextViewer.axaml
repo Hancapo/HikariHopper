@@ -126,7 +126,11 @@
 
           <Panel>
             <ScrollViewer Name="TextScroller" Theme="{StaticResource QuietBothScrollViewer}" BringIntoViewOnFocusChange="False">
-              <v:TextLinesView Name="Lines" />
+              <!-- The panel is what a scroll moves, so the text view keeps its place in it and its drawing is
+                   reused: it redraws only near the edge of what it drew (TextLinesView.NeedsRedraw). -->
+              <Panel>
+                <v:TextLinesView Name="Lines" />
+              </Panel>
             </ScrollViewer>
             <ScrollViewer Name="TableScroller" Theme="{StaticResource QuietBothScrollViewer}" BringIntoViewOnFocusChange="False" IsVisible="False">
               <v:CsvTableView Name="Table" />
