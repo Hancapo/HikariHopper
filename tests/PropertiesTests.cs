@@ -123,6 +123,38 @@ public sealed class PropertiesTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void AFileGoneSinceItWasListedReportsTheFailedRead()
+    {
+        MakeGame();
+        Write(Path.Combine(Work, "notes.txt"), "n");
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        File.Delete(Path.Combine(Work, "notes.txt"));
+        Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
+        Settle(bridge);
+        Assert.Null(reading.Result);
+        Assert.StartsWith("Could not read the properties", bridge.Status);
+    }
+
+    [AvaloniaFact]
+    public void ChangingTheSelectionDuringTheReadDropsTheResult()
+    {
+        MakeGame();
+        Write(Path.Combine(Work, "a.txt"), "a");
+        Write(Path.Combine(Work, "b.txt"), "b");
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.SelectEntry(Row(bridge, "a.txt"));
+        Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
+        bridge.SelectEntry(Row(bridge, "b.txt"));
+        Settle(bridge);
+        Assert.Null(reading.Result);
+    }
+
+    [AvaloniaFact]
     public void OnlyOneItemHasProperties()
     {
         MakeGame();

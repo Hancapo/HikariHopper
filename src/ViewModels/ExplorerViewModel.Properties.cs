@@ -22,7 +22,9 @@ public sealed partial class ExplorerViewModel
         bool started = StartReadOperation($"Reading {entry.Name}…", () => Provider.DescribeEntry(entry), described =>
         {
             SetStatus(before);
-            result.TrySetResult((EntryProperties?)described);
+            // Selected something else meanwhile: these are no longer the selection's.
+            bool still = SelectedEntries() is [var current] && current.Equals(entry);
+            result.TrySetResult(still ? (EntryProperties?)described : null);
         }, "read the properties", () => result.TrySetResult(null));
         return started ? result.Task : Task.FromResult<EntryProperties?>(null);
     }
