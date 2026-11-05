@@ -41,5 +41,5 @@ public partial class MainWindow : Window
 
     /// <summary>The window title for the active tab, exactly as main.qml computed it.</summary>
     public static string TitleFor(bool hasWorkspace, string tabTitle) =>
-        hasWorkspace ? $"HikariHopper — {tabTitle}" : "HikariHopper — RPF Explorer";
+        hasWorkspace ? $"HikariHopper — {tabTitle}" : "HikariHopper — Modding Toolkit";
 }

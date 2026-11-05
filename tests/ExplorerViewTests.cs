@@ -91,7 +91,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     {
         Explorer ui = OpenExplorer(openGame: false);
         Assert.IsType<StartPage>(ui.Find<ExplorerScreen>().Page);
-        Assert.Equal("HikariHopper — RPF Explorer", ui.Window.Title);
+        Assert.Equal("HikariHopper — Modding Toolkit", ui.Window.Title);
 
         ui.Bridge.OpenGame(Work);
         Pump();

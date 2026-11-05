@@ -236,7 +236,7 @@ public partial class EntryTable : UserControl
             OpenGameButton.IsVisible = false;
             return;
         }
-        EmptyText.Text = hasWorkspace ? "This folder is empty" : "Configure a GTA V installation to begin";
+        EmptyText.Text = hasWorkspace ? "This folder is empty" : "Add a game in Settings to begin";
         OpenGameButton.IsVisible = !hasWorkspace;
     }
 

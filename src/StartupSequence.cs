@@ -104,8 +104,8 @@ public sealed class StartupSequence
         }
         string savedGame = GameSettings.GameRootToRestore();
         string message = savedGame.Length > 0 && Directory.Exists(savedGame)
-            ? "Loading FiveFury runtime and GTA V keys…"
-            : "Checking saved GTA V installation…";
+            ? "Loading FiveFury runtime and game keys…"
+            : "Checking saved game installations…";
         SetPhase(message, "GAME");
         Next(RestoreWorkspace);
     }
@@ -113,7 +113,7 @@ public sealed class StartupSequence
     private void RestoreWorkspace()
     {
         session!.RestoreLastGame();
-        string message = session.HasWorkspace ? $"Loaded {session.GameName}" : "No saved GTA V installation";
+        string message = session.HasWorkspace ? $"Loaded {session.GameName}" : "No saved game installation";
         SetPhase(message, "GAME");
         Next(PrepareInterface);
     }

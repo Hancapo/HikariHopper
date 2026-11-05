@@ -11,7 +11,7 @@
         FontFamily="{x:Static ui:Theme.UiFont}"
         FontSize="{x:Static ui:Theme.FontSize}"
         Foreground="{x:Static ui:Theme.Text}"
-        Title="HikariHopper — RPF Explorer">
+        Title="HikariHopper — Modding Toolkit">
   <!-- Port of main.qml: the frameless window. It owns the title bar and the blue piping; the
        explorer puts its menus into the title row (the tab names the document, so no title text). -->
   <Panel>

@@ -402,7 +402,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return;
-        SetStatus("Loading GTA V keys…");
+        SetStatus("Loading game keys…");
         try
         {
             Provider.ApplyLoadedGame(GameLoader(path));

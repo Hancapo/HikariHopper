@@ -188,7 +188,7 @@ public sealed class RpfProvider
     public WorkspaceInfo ShowGame()
     {
         if (gameRoot is null)
-            throw new ArgumentException("No GTA V installation is loaded");
+            throw new ArgumentException("No game is loaded");
         inArchive = false;
         return Info;
     }
@@ -843,7 +843,7 @@ public sealed class RpfProvider
     private string GameEntryCandidate(EntryRecord entry)
     {
         if (gameRoot is null)
-            throw new ArgumentException("No GTA V installation is loaded");
+            throw new ArgumentException("No game is loaded");
         string root = Path.GetFullPath(gameRoot);
         string candidate = Path.GetFullPath(Path.Combine(root, entry.Path));
         if (!IsWithin(root, candidate))
