@@ -127,9 +127,10 @@ public sealed class ImageViewerViewModel : ObservableObject, ITexturePreviewSour
             opened = true;
             await ShowAsync();
         }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
+        catch (Exception exception)
         {
-            error = $"Could not open {name}: {exception.Message}";
+            // Out of memory too: a small file can hold an image too big to decode, and the viewer must say so.
+            error = $"Could not open {name}: {Reason(exception)}";
             status = error;
             loading = false;
             RaiseAll();
@@ -171,11 +172,11 @@ public sealed class ImageViewerViewModel : ObservableObject, ITexturePreviewSour
                     return ((Bitmap)TextureBitmaps.Create(TextureOperations.ChannelView(image, key.Channel)), image);
                 });
             }
-            catch (Exception exception) when (exception is not OutOfMemoryException)
+            catch (Exception exception)
             {
                 if (token != request || disposed)
                     return;
-                error = $"Could not show mip {key.Mip}: {exception.Message}";
+                error = $"Could not show mip {key.Mip}: {Reason(exception)}";
                 status = error;
                 loading = false;
                 RaiseAll();
@@ -202,6 +203,9 @@ public sealed class ImageViewerViewModel : ObservableObject, ITexturePreviewSour
         status = "";
         RaiseAll();
     }
+
+    private static string Reason(Exception exception) =>
+        exception is OutOfMemoryException ? "the image is too large to decode" : exception.Message;
 
     private void RaiseAll()
     {
