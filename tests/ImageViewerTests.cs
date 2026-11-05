@@ -96,6 +96,24 @@ public sealed class ImageViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ACutShortWebPIsAnErrorNotAPartImage()
+    {
+        using var folder = new TempFolder();
+        string path = folder.File("photo.webp");
+        // Noise, so the image data is long and a cut lands in it, past the header.
+        var pixels = new byte[256 * 256 * 4];
+        new Random(1).NextBytes(pixels);
+        for (int alpha = 3; alpha < pixels.Length; alpha += 4)
+            pixels[alpha] = 255;
+        TextureTestKit.WriteImage(path, new RgbaImage(256, 256, pixels));
+        byte[] whole = File.ReadAllBytes(path);
+        var image = new ImageViewerViewModel("photo.webp", whole[..(whole.Length * 2 / 3)]);
+        Settle(image);
+        Assert.Equal(-1, image.SelectedIndex);
+        Assert.StartsWith("Could not open photo.webp", image.Error);
+    }
+
+    [AvaloniaFact]
     public void DoubleClickingAnImageInTheExplorerOpensTheViewer()
     {
         MakeGame();
