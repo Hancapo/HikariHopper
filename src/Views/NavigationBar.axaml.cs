@@ -179,7 +179,7 @@ public partial class NavigationBar : UserControl
         if (hasWorkspace)
             RootSegment.SetHome(Ui.Theme.TextDim, model!.ArchiveIsRoot || !model.HasGame ? model.ArchiveRootName : ExplorerViewModel.HomeTitle);
         else
-            RootSegment.Set("Select the GTA V folder", false, Ui.Theme.TextDim);
+            RootSegment.Set("Select a game folder", false, Ui.Theme.TextDim);
 
         Segments.Children.Clear();
         // The overflow mark: the leading segments that don't fit, as a menu.

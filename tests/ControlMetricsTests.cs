@@ -498,7 +498,7 @@ public sealed class ControlMetricsTests
     {
         var main = new MainWindow();
         Assert.Equal((1360.0, 840.0, 940.0, 580.0), (main.Width, main.Height, main.MinWidth, main.MinHeight));
-        Assert.Equal("HikariHopper — RPF Explorer", main.Title);
+        Assert.Equal("HikariHopper — Modding Toolkit", main.Title);
         Assert.Equal("HikariHopper — Grand Theft Auto V", MainWindow.TitleFor(true, "Grand Theft Auto V"));
         Assert.Equal(WindowDecorations.None, main.WindowDecorations);
 

@@ -22,7 +22,7 @@
       <Image Name="Wordmark" Canvas.Left="90" Canvas.Top="50" Height="38"
              Source="avares://HikariHopper/Assets/Branding/wordmark-on-dark.png" RenderOptions.BitmapInterpolationMode="HighQuality"
              AutomationProperties.Name="HikariHopper" />
-      <TextBlock Canvas.Left="44" Canvas.Top="100" Text="RPF EXPLORER" Foreground="{x:Static ui:Theme.TextDim}"
+      <TextBlock Canvas.Left="44" Canvas.Top="100" Text="MODDING TOOLKIT" Foreground="{x:Static ui:Theme.TextDim}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                  FontWeight="Bold" LetterSpacing="1" />
     </Canvas>

@@ -151,7 +151,7 @@ public sealed class RenderScenarios
         switch (name)
         {
             case "titlebar":
-                return Host(w, h, new WindowTitleBar { TitleText = "HikariHopper — RPF Explorer", VerticalAlignment = VerticalAlignment.Top });
+                return Host(w, h, new WindowTitleBar { TitleText = "HikariHopper — Modding Toolkit", VerticalAlignment = VerticalAlignment.Top });
             case "titlebar_tool":
                 return Host(w, h, new WindowTitleBar { Height = 24, TitleText = "ABOUT", ShowMinimize = false, ShowMaximize = false, VerticalAlignment = VerticalAlignment.Top });
             case "titlebar_long":
@@ -272,7 +272,7 @@ public sealed class RenderScenarios
             case "settings":
                 return Host(w, h, TestSettings());
             case "splash":
-                return new SplashScreen { StartupMessage = "Loading FiveFury runtime and GTA V keys…", StartupPhase = "GAME" };
+                return new SplashScreen { StartupMessage = "Loading FiveFury runtime and game keys…", StartupPhase = "GAME" };
             case "splash_boot":
                 return new SplashScreen();
         }
