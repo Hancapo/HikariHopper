@@ -211,7 +211,7 @@ public sealed partial class ExplorerViewModel
         if (selection.Count == 0)
             return;
         List<string> values = Provider.InArchive
-            ? selection.Select(entry => $"{Provider.Info.SourcePath}::{entry.Path}").ToList()
+            ? selection.Select(entry => $"{Provider.ArchivePath}::{entry.Path}").ToList()
             : selection.Select(entry => GameChildPath(entry.Path)).ToList();
         _ = AppServices.Clipboard.SetTextAsync(string.Join("\n", values));
         SetStatus($"Copied {(values.Count == 1 ? "path" : $"{values.Count} paths")}");
