@@ -707,13 +707,21 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         ApplyModelSelection();
     }
 
-    private void ReplaceModelTexture(int row, Texture texture)
+    /// <summary>
+    /// Puts <paramref name="texture"/> in a row. Its thumbnail is made again by the caller, unless
+    /// <paramref name="samePixels"/> says only something else changed (a rename), when the row keeps the one it has.
+    /// </summary>
+    private void ReplaceModelTexture(int row, Texture texture, bool samePixels = false)
     {
         if (row < 0 || row >= TexturesModel.Count)
             return;
         TextureItem previous = TexturesModel[row];
-        TexturesModel[row] = new TextureItem(texture) { TextureSelected = previous.TextureSelected };
-        TextureBitmaps.DisposeLater(previous.Thumbnail);
+        var item = new TextureItem(texture) { TextureSelected = previous.TextureSelected };
+        if (samePixels)
+            item.SetThumbnail(previous.ThumbnailUrl, previous.Thumbnail);
+        TexturesModel[row] = item;
+        if (!samePixels)
+            TextureBitmaps.DisposeLater(previous.Thumbnail);
     }
 
     private void InsertModelTexture(int row, Texture texture)

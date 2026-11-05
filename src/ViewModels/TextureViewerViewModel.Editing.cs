@@ -248,7 +248,8 @@ public sealed partial class TextureViewerViewModel
                     textureRenames[originalName] = normalized;
             }
         }
-        ReplaceModelTexture(selectedIndex, renamed);
+        // A new name, the same pixels: the row keeps its thumbnail.
+        ReplaceModelTexture(selectedIndex, renamed, samePixels: true);
         SetStatus($"Renamed {record.Name} to {normalized}");
         EmitStateChanged();
         EmitSelectionChanged();

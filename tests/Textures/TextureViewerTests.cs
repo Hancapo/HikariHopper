@@ -85,6 +85,25 @@ public sealed class TextureViewerTests
     });
 
     [AvaloniaFact]
+    public Task RenamingKeepsTheTexturesThumbnail() => Headless.Run(() =>
+    {
+        TextureViewerViewModel viewer = Opened("textures.ytd", Bytes(Dictionary("paint", "detail")));
+        TextureItem before = viewer.TexturesModel[viewer.SelectedIndex];
+        Bitmap thumbnail = Assert.IsAssignableFrom<Bitmap>(before.Thumbnail);
+        string url = before.ThumbnailUrl;
+        Assert.NotEqual("", url);
+
+        // Only the name changes, so the row keeps its picture, at once and after things settle.
+        Assert.True(viewer.RenameSelected("renamed"));
+        TextureItem after = viewer.TexturesModel[viewer.SelectedIndex];
+        Assert.Equal("renamed", after.Name);
+        Assert.Same(thumbnail, after.Thumbnail);
+        Assert.Equal(url, after.ThumbnailUrl);
+        Settle(viewer);
+        Assert.Same(thumbnail, viewer.TexturesModel[viewer.SelectedIndex].Thumbnail);
+    });
+
+    [AvaloniaFact]
     public Task UndoesRenameAndRemoveOperations() => Headless.Run(() =>
     {
         TextureViewerViewModel viewer = Loaded(new TextureSet([Red("paint"), Red("detail")], GameTarget.Legacy));
