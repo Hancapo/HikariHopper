@@ -6,9 +6,9 @@
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Avalonia.Headless.XUnit 12.1.4 is built against xunit.v3 3.2.x. -->
+    <!-- Avalonia.Headless.XUnit 12.1.5 is built against xunit.v3 3.2.x. -->
     <PackageReference Include="xunit.v3" Version="3.2.2" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.5" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
