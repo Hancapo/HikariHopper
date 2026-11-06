@@ -41,7 +41,8 @@
   <Panel>
     <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
 
-    <Grid Margin="10,0" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+    <!-- 8px between the parts, each part's own left margin, so the view switch's gap goes with it when it slides away. -->
+    <Grid Margin="10,0" ColumnDefinitions="Auto,*,Auto,Auto">
       <Border Grid.Column="0" Classes="well">
         <StackPanel Orientation="Horizontal" Spacing="2">
           <c:ChromeToolButton Classes="segment nav" IconKind="back" IsEnabled="{Binding CanGoBack}"
@@ -56,7 +57,7 @@
       <!-- Address bar: just the path. It reads as separate clickable segments, and the segment
            that is an archive carries the blue package mark — the one place the UI says you have
            crossed into a container. -->
-      <Border Name="AddressBar" Grid.Column="1" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
+      <Border Name="AddressBar" Grid.Column="1" Margin="8,0,0,0" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
               ClipToBounds="True" CornerRadius="{x:Static ui:Theme.ControlCorner}" Background="{x:Static ui:Theme.InsetBg}"
               AutomationProperties.Name="Current game or archive path">
         <DockPanel Margin="3,0,2,0">
@@ -74,14 +75,14 @@
 
       <!-- The address as text, in the address bar's place while it is edited: a click on the bar's empty part,
            Ctrl+L or Alt+D. Enter goes to what was typed or pasted; Esc, or clicking away, puts the path back. -->
-      <c:FlatTextField Name="AddressField" Grid.Column="1" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
+      <c:FlatTextField Name="AddressField" Grid.Column="1" Margin="8,0,0,0" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
                        FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" IsVisible="False"
                        AutomationProperties.Name="Address" />
 
       <!-- Search mode, in the address bar's and the folder search's place: where to search, and the query with how
            it is read. Ctrl+Shift+F opens it; Esc, Back or "This folder" go back to the folder. -->
 
-      <DockPanel Name="SearchRow" Grid.Column="1" Grid.ColumnSpan="2" IsVisible="False" VerticalAlignment="Center">
+      <DockPanel Name="SearchRow" Grid.Column="1" Grid.ColumnSpan="2" Margin="8,0,0,0" IsVisible="False" VerticalAlignment="Center">
         <Panel>
           <c:FlatTextField Name="QueryField" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
                            FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
@@ -108,7 +109,7 @@
       <!-- The folder's search box. Where to search is the icon at its end, a button with the scopes' menu, here and in
            the search row's box: one control, moved between the two. Folder filters the folder shown; the others
            search. -->
-      <Panel Name="SearchBox" Grid.Column="2" Width="232" VerticalAlignment="Center">
+      <Panel Name="SearchBox" Grid.Column="2" Width="232" Margin="8,0,0,0" VerticalAlignment="Center">
         <c:FlatTextField Name="SearchField" Height="{x:Static ui:Theme.ToolbarControlHeight}"
                          VerticalAlignment="Center" FontSize="{x:Static ui:Theme.FontSize}" TrailingSpace="24"
                          IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"
@@ -121,11 +122,24 @@
         </Panel>
       </Panel>
 
-      <!-- List or grid: one switch, whose thumb slides under the view in use. -->
-      <c:SegmentedSwitch Name="ViewModeSwitch" Grid.Column="3" Height="{x:Static ui:Theme.ToolbarControlHeight}">
-        <c:SwitchSide Icon="list" Width="30" IconSize="16" Label="List view" />
-        <c:SwitchSide Icon="grid" Width="30" IconSize="15" Label="Grid view" />
-      </c:SegmentedSwitch>
+      <!-- List or grid: one switch, whose thumb slides under the view in use. While searching it slides away under the
+           search row's box, which grows into its room, and comes back out when the search ends. -->
+      <Panel Name="ViewModeSlot" Grid.Column="3" ClipToBounds="True">
+        <Panel.Transitions>
+          <Transitions>
+            <DoubleTransition Property="Width" Duration="0:0:0.22" Easing="CubicEaseOut" />
+          </Transitions>
+        </Panel.Transitions>
+        <c:SegmentedSwitch Name="ViewModeSwitch" HorizontalAlignment="Right" Margin="8,0,0,0" Height="{x:Static ui:Theme.ToolbarControlHeight}">
+          <c:SegmentedSwitch.Transitions>
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+          </c:SegmentedSwitch.Transitions>
+          <c:SwitchSide Icon="list" Width="30" IconSize="16" Label="List view" />
+          <c:SwitchSide Icon="grid" Width="30" IconSize="15" Label="Grid view" />
+        </c:SegmentedSwitch>
+      </Panel>
     </Grid>
   </Panel>
 </UserControl>
