@@ -47,6 +47,7 @@ public class ChromeIcon : Control
         ["plus"] = "plus",
         ["minus"] = "minus",
         ["search"] = "search",
+        ["subfolders"] = "list-tree",
         ["package"] = "package",
     };
 

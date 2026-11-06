@@ -71,26 +71,58 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public async Task AScopeKeepsTheSearchToAFolderOrAnRpf()
+    public async Task AScopeKeepsTheSearchToAFolderItsSubfoldersOrAnRpf()
     {
         ExplorerViewModel bridge = Game();
         bridge.OpenArchive(inner);
         bridge.Navigate("levels/gta5/props");
         Settle(bridge);
-        bridge.BeginSearch(SearchScope.FolderAndBelow);
-        bridge.SetSearchText("readme");
+        // The folder alone: its own listing, filtered, folders and RPFs included, with no index.
+        bridge.BeginSearch(SearchScope.Folder);
+        bridge.SetSearchText("v_");
         await Searched(bridge);
+        Assert.True(bridge.IsSearching);
+        Assert.False(bridge.SearchShowsLocation);
+        Assert.Equal(["v_street.rpf"], bridge.EntriesModel.Select(item => item.Name));
+        Assert.Equal("1 item", bridge.TabTitle);
+
+        // With subfolders, everything under it, from the index.
+        bridge.SetSearchText("readme");
+        bridge.ToggleSearchSubfolders();
+        await Searched(bridge);
+        Assert.True(bridge.SearchShowsLocation);
         Assert.Equal(["x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"], Names(bridge));
 
         bridge.BeginSearch(SearchScope.Archive);
         await Searched(bridge);
         Assert.Equal(["x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt", "x64i.rpf/levels/gta5/readme.txt"], Names(bridge).Order());
 
-        // "This folder" goes back to the folder, its filter holding the text.
-        bridge.BeginSearch(SearchScope.Folder);
+        // Ending it shows the folder as it is.
+        bridge.EndSearch();
         Assert.False(bridge.IsSearching);
-        Assert.Equal("readme", bridge.SearchQuery);
+        Assert.Equal("", bridge.SearchQuery);
         Assert.Equal("levels/gta5/props", bridge.CurrentPath);
+        Assert.Equal(["v_street.rpf"], bridge.EntriesModel.Select(item => item.Name));
+    }
+
+    [AvaloniaFact]
+    public async Task TheFolderIsSearchedWithTheSameMatching()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch(SearchScope.Folder);
+        bridge.SetSearchText("*.rpf");
+        await Searched(bridge);
+        Assert.True(bridge.SearchWildcards);
+        Assert.Equal(["x64i.rpf"], bridge.EntriesModel.Select(item => item.Name));
+        bridge.ToggleSearchRegex();
+        bridge.SetSearchText("^(mods|update)$");
+        await Searched(bridge);
+        Assert.Equal(["mods", "update"], bridge.EntriesModel.Select(item => item.Name));
+        Assert.Equal("2 items", bridge.TabTitle);
+        // A folder opened from the folder's search is where the search ends.
+        bridge.ActivateEntry(0);
+        Assert.False(bridge.IsSearching);
+        Assert.Equal("mods", bridge.CurrentPath);
     }
 
     [AvaloniaFact]
@@ -108,9 +140,10 @@ public sealed class SearchModeTests : ExplorerTestBase
         Assert.Equal(@"x64i.rpf\levels\gta5\props\v_street.rpf\notes", bridge.AddressText);
         Assert.Equal(["readme.txt"], bridge.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
 
+        // The next search starts afresh.
         bridge.BeginSearch();
         await Searched(bridge);
-        Assert.Equal("readme", bridge.SearchText);
+        Assert.Equal("", bridge.SearchText);
         bridge.GoBack();
         Assert.False(bridge.IsSearching);
     }

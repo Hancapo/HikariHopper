@@ -1014,22 +1014,24 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Bridge.Navigate("folder00");
         Pump();
         NavigationBar navigation = ui.Find<NavigationBar>();
-        TextBox search = navigation.FindControl<TextBox>("SearchField")!;
+        TextBox search = navigation.FindControl<TextBox>("QueryField")!;
 
+        // F3 searches the folder, in the search row.
         Key(ui.Window, PhysicalKey.F3);
+        Assert.True(ui.Bridge.IsSearching);
         Assert.True(search.IsFocused);
         ui.Window.KeyTextInput("ab");
         Pump();
-        Assert.Equal("ab", ui.Bridge.SearchQuery);
+        Assert.Equal("ab", ui.Bridge.SearchText);
         // Backspace edits the field instead of going up.
         Key(ui.Window, PhysicalKey.Backspace);
-        Assert.Equal("a", ui.Bridge.SearchQuery);
+        Assert.Equal("a", ui.Bridge.SearchText);
         Assert.Equal("folder00", ui.Bridge.CurrentPath);
         Assert.Equal("Esc", search.GetValue(Views.Controls.FlatTextField.KeyCapProperty));
 
-        // Escape clears it and gives the focus up; then Backspace goes up.
+        // Escape ends the search and gives the focus up; then Backspace goes up.
         Key(ui.Window, PhysicalKey.Escape);
-        Assert.Equal("", ui.Bridge.SearchQuery);
+        Assert.False(ui.Bridge.IsSearching);
         Assert.False(search.IsFocused);
         Key(ui.Window, PhysicalKey.Backspace);
         Assert.Equal(".", ui.Bridge.CurrentPath);

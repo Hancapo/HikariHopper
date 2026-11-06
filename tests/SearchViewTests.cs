@@ -91,11 +91,12 @@ public sealed class SearchViewTests : ExplorerTestBase
     public async Task TheFolderSearchBoxHasTheSelectorAndItsOtherScopesSearch()
     {
         var (window, bridge, navigation, workspace) = Open();
-        // Before the folder's box: Folder, the box's own filter.
+        // Before the folder's box: Folder.
         Assert.True(navigation.ScopeWell.IsVisible);
         Assert.Same(navigation.ScopeSlot, navigation.ScopeWell.Parent);
         Assert.Equal("Folder", navigation.ScopeText.Text);
 
+        // Text typed into the box comes along to whatever is chosen.
         navigation.SearchField.Text = "readme";
         ExplorerStateRenders.Pump(100);
         Point at = navigation.ScopeButton.TranslatePoint(new Point(20, 12), window)!.Value;
@@ -106,18 +107,52 @@ public sealed class SearchViewTests : ExplorerTestBase
         var menu = Assert.IsType<Views.Controls.RetroMenu>(navigation.ScopeMenu);
         var items = menu.Items.OfType<Views.Controls.RetroMenuItem>().ToArray();
         // The names only, with icons; what each covers is a tooltip.
-        Assert.Equal(["Folder", "Subfolders", "RPF", "Game"], items.Select(item => item.Text));
-        Assert.Equal(["folder", "list-tree", "package", "house"], items.Select(item => item.IconName));
+        Assert.Equal(["Folder", "RPF", "Game"], items.Select(item => item.Text));
+        Assert.Equal(["folder", "package", "house"], items.Select(item => item.IconName));
         Assert.All(items, item => Assert.Equal("", item.ShortcutText));
-        Assert.False(items[2].IsEnabled);
+        Assert.False(items[1].IsEnabled);
 
         // Game searches the whole game for what the box holds.
-        items[3].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
+        items[2].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
         await Searched(bridge);
         Assert.True(bridge.IsSearching);
         Assert.Equal("readme", bridge.SearchText);
         Assert.Equal("1 file", bridge.TabTitle);
         Assert.Equal("Game", navigation.ScopeText.Text);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task TheFolderBoxOpensTheSearchRowOnTheFolderAndSubfoldersWidenIt()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        navigation.SearchField.Focus();
+        ExplorerStateRenders.Pump(200);
+        // The search row, Folder chosen, the query taking the keyboard.
+        Assert.True(bridge.IsSearching);
+        Assert.Equal(SearchScope.Folder, bridge.SearchScopeValue);
+        Assert.Equal("Folder", navigation.ScopeText.Text);
+        Assert.True(navigation.QueryField.IsKeyboardFocusWithin);
+        Assert.True(navigation.SubfoldersToggle.IsEnabled);
+        Assert.False(navigation.SubfoldersToggle.Raised);
+
+        window.KeyTextInput("mo");
+        await Searched(bridge);
+        Assert.Equal(["mods"], bridge.EntriesModel.Select(item => item.Name));
+        Assert.False(((EntryTable)workspace.EntriesView!).LocationWidth > 0);
+
+        // With subfolders, results come from under the folder, with where each lives.
+        navigation.SubfoldersToggle.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        navigation.QueryField.Text = "readme";
+        await Searched(bridge);
+        Assert.True(navigation.SubfoldersToggle.Raised);
+        Assert.Equal(["mods/readme.txt"], bridge.EntriesModel.Select(item => item.Path));
+        Assert.True(((EntryTable)workspace.EntriesView!).LocationWidth > 0);
+
+        // Only the folder has subfolders to add: with Game the toggle is off.
+        bridge.BeginSearch(SearchScope.Everywhere);
+        ExplorerStateRenders.Pump(100);
+        Assert.False(navigation.SubfoldersToggle.IsEnabled);
         window.Close();
     }
 

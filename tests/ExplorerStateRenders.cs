@@ -110,8 +110,10 @@ public sealed class ExplorerStateRenders
                     break;
                 case "search":
                 {
+                    // The folder's box opens the search row on the folder; the text goes to its query.
                     TextBox field = window.GetVisualDescendants().OfType<NavigationBar>().Single().FindControl<TextBox>("SearchField")!;
                     field.Focus();
+                    Dispatcher.UIThread.RunJobs();
                     window.KeyTextInput(op[1].GetString()!);
                     break;
                 }

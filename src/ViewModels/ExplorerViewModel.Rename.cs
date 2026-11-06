@@ -20,7 +20,7 @@ public sealed partial class ExplorerViewModel
             string current = RenameSource;
             if (!string.Equals(normalized, current, StringComparison.OrdinalIgnoreCase))
                 EntryNames.EnsureEntryNameAvailable(normalized,
-                    searching && SelectedHits() is [var hit] ? SearchSiblingNames(hit) : currentEntryNames);
+                    SearchShowsLocation && SelectedHits() is [var hit] ? SearchSiblingNames(hit) : currentEntryNames);
             return "";
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
@@ -38,7 +38,7 @@ public sealed partial class ExplorerViewModel
         string normalized = EntryNames.NormalizeEntryName(name);
         if (string.Equals(normalized, current, StringComparison.Ordinal))
             return true;
-        if (searching)
+        if (SearchShowsLocation)
             return SelectedHits() is [var hit] && RenameSearchHit(hit, normalized);
         EntryCreationTarget target;
         try

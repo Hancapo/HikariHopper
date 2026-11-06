@@ -292,7 +292,7 @@ public sealed partial class ExplorerViewModel
         if (EntryOperationBusy || !SelectionDeletable)
             return false;
         List<EntryRecord> selection = SelectedEntries();
-        if (searching)
+        if (SearchShowsLocation)
             return DeleteSearchHits(SelectedHits());
         EntryDeletionTarget target;
         try

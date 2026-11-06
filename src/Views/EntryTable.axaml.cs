@@ -77,7 +77,7 @@ public partial class EntryTable : UserControl
     internal ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
     /// <summary>Whether the rows are search results, which show where each file lives.</summary>
-    internal bool ShowsLocation => Bridge?.IsSearching == true;
+    internal bool ShowsLocation => Bridge?.SearchShowsLocation == true;
 
     /// <summary>What the row leaves after its padding, TYPE, SIZE and the trailing lane.</summary>
     private double FreeWidth => RowWidth - RowPaddingLeft - TypeWidth - SizeWidth - TrailWidth - RowPaddingRight;
@@ -149,6 +149,7 @@ public partial class EntryTable : UserControl
                 RefreshEmptyState();
                 break;
             case nameof(ExplorerViewModel.IsSearching):
+            case nameof(ExplorerViewModel.SearchShowsLocation):
                 UpdateColumns();
                 RefreshHeaders();
                 RefreshEmptyState();
@@ -214,6 +215,13 @@ public partial class EntryTable : UserControl
     {
         bool hasWorkspace = Bridge?.HasWorkspace == true;
         EmptyState.IsVisible = (Bridge?.EntriesModel.Count ?? 0) == 0;
+        if (Bridge is { IsSearching: true, SearchShowsLocation: false } folder)
+        {
+            EmptyText.Text = folder.SearchError.Length > 0 ? folder.SearchError
+                : folder.SearchText.Length == 0 ? "This folder is empty" : "Nothing here matches";
+            OpenGameButton.IsVisible = false;
+            return;
+        }
         if (Bridge is { IsSearching: true } model)
         {
             EmptyText.Text = model.SearchError.Length > 0 ? model.SearchError
@@ -566,6 +574,16 @@ public sealed class EntryRow : Panel
             EntryText.MarkSpans(name.Inlines!, item.Name, hit.Spans, mark);
             EntryText.Location(location.Inlines!, hit.Location, selected);
             location.IsVisible = true;
+        }
+        else if (owner?.Bridge is { IsSearching: true } searching)
+        {
+            // The folder's own search marks what its pattern matched.
+            EntryText.MarkSpans(name.Inlines!, item.Name, searching.SearchSpans(item.Name), mark);
+            if (location.IsVisible)
+            {
+                location.Inlines!.Clear();
+                location.IsVisible = false;
+            }
         }
         else
         {

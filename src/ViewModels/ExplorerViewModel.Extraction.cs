@@ -24,7 +24,7 @@ public sealed partial class ExplorerViewModel
             return false;
         string noun = selection.Count == 1 ? selection[0].Name : $"{selection.Count} items";
         lastExtractFolder = folder;
-        if (searching)
+        if (SearchShowsLocation)
             return ExtractSearchFiles(SelectedHits(), folder, noun);
         return StartReadOperation($"Extracting {noun}…", () => Provider.ExtractEntries(selection, folder),
             _ =>
@@ -44,7 +44,7 @@ public sealed partial class ExplorerViewModel
         if (string.IsNullOrEmpty(folder))
             return false;
         lastExtractFolder = folder;
-        if (searching && archive.NativeEntry is Core.Search.SearchHit hit)
+        if (SearchShowsLocation && archive.NativeEntry is Core.Search.SearchHit hit)
             return ExtractSearchArchive(hit, folder);
         return StartReadOperation($"Extracting {archive.Name}…", () => Provider.ExtractArchiveContents(archive, folder),
             result =>
