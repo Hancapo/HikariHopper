@@ -88,6 +88,50 @@ public sealed class SearchIndexTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task AGameFolderThatGoesAwayEndsTheRefreshWithWhatWasKnown()
+    {
+        Game();
+        SearchIndex index = Index();
+        await index.Refresh();
+        Assert.Single(Paths(index, "carcols"));
+        string moved = Work + "-moved";
+        Directory.Move(Work, moved);
+        try
+        {
+            await index.Refresh();
+            Assert.True(index.State.Complete);
+            Assert.Single(Paths(index, "carcols"));
+        }
+        finally
+        {
+            Directory.Move(moved, Work);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ARefreshAskedForWhileOneRunsIsNeverLost()
+    {
+        Game();
+        SearchIndex index = Index();
+        Task first = index.Refresh();
+        Write(Path.Combine(Work, "mods", "late.meta"), "l");
+        Task second = index.Refresh();
+        await Task.WhenAll(first, second);
+        // The second request, made while the first ran, ran too: the file written in between is there.
+        Assert.Single(Paths(index, "late"));
+    }
+
+    [AvaloniaFact]
+    public void ACancelledSearchStopsInsideAGroup()
+    {
+        var files = Enumerable.Range(0, 2000).Select(i => new IndexedEntry(0, $"file{i}.txt", 1)).ToArray();
+        var state = new SearchIndexState([new IndexedGroup("", 0, 0, [""], files)], 0, 0, true);
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        Assert.Throws<OperationCanceledException>(() => state.Search(SearchPattern.Parse("file", false, null, false, out _)!, "", 10000, cancel.Token));
+    }
+
+    [AvaloniaFact]
     public async Task AnRpfThatCantBeReadIsSkipped()
     {
         Game();
