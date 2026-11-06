@@ -14,15 +14,20 @@ internal static class NavmeshMesh
     // Lines sit this far above the ground they mark, so the polygons don't hide them.
     private const float Lift = 0.06f;
     private const float OutlineWidth = 1.25f;
-    private const float EdgeWidth = 3;
-    private const float CoverEdgeWidth = 2;
-    private const float LinkWidth = 3;
-    private const int ArcSegments = 16;
+    // Bands along the edges peds climb, drop or take cover at, in metres; and how far above their polygon they lie.
+    private const float EdgeRibbon = .16f;
+    private const float CoverRibbon = .1f;
+    private const float RibbonLift = .02f;
     private const float ArcMinimumRise = .35f;
     private const float ArcMaximumRise = 3;
     private const float PuckHeight = .05f;
-    private const float CoverHeight = 0.8f;
-    private const float CoverReach = 0.6f;
+    // A cover point's puck, and its panel: in front of it, half a ped's height for low cover, a ped's height for a wall.
+    private const float CoverPuck = .14f;
+    private const float CoverReach = .32f;
+    private const float PanelWidth = .5f;
+    private const float PanelThickness = .06f;
+    private const float LowCoverHeight = .55f;
+    private const float WallCoverHeight = 1.1f;
 
     private static readonly uint Outline = Pack("#1B1C2C");
 
@@ -54,8 +59,8 @@ internal static class NavmeshMesh
     private static readonly uint PortalBase = ViewportMesh.Pack(T.ChromeBg);
     // Two portal ends closer than this are the same place.
     private const float SamePlace = .05f;
-    private static readonly uint LowCover = Pack("#9AD0F5");
-    private static readonly uint WallCover = ViewportMesh.Pack(T.Text);
+    private static readonly uint LowCover = Pack("#38BDF8");
+    private static readonly uint WallCover = Pack("#FACC15");
     private static readonly uint DisabledCover = ViewportMesh.Pack(T.TextFaint);
 
     /// <summary>The navmesh, relative to the middle of its vertices.</summary>
@@ -94,19 +99,49 @@ internal static class NavmeshMesh
             // Fanned into triangles whose own edges aren't drawn: they aren't the polygon's.
             for (int i = 1; i + 1 < count; i++)
                 mesh.Triangle(corners[0], corners[i], corners[i + 1], colour, edges: false);
-            // Each corner's edge runs to the next corner; the navmesh keeps one edge record per corner.
+            // Each corner's edge runs to the next corner; the navmesh keeps one edge record per corner. Every edge has
+            // the outline; one peds climb, drop or take cover at also gets a ribbon along it, lying on the polygon.
+            Vector3 centroid = Vector3.Zero;
+            foreach (Vector3 corner in corners)
+                centroid += corner / count;
             for (int i = 0; i < count; i++)
             {
-                Vector3 a = corners[i] + Vector3.UnitZ * Lift, b = corners[(i + 1) % count] + Vector3.UnitZ * Lift;
+                Vector3 a = corners[i], b = corners[(i + 1) % count];
                 if (first + i < edges.Count && Special(edges[first + i]) is { } special)
                 {
-                    mesh.Line(a, b, special.Colour, special.Colour == CoverEdge ? CoverEdgeWidth : EdgeWidth);
+                    Ribbon(mesh, a, b, centroid, special.Colour == CoverEdge ? CoverRibbon : EdgeRibbon, special.Colour);
                     mesh.Explain(special.Name, special.Colour);
                 }
-                else
-                    mesh.Line(a, b, Outline, OutlineWidth);
+                mesh.Line(a + Vector3.UnitZ * Lift, b + Vector3.UnitZ * Lift, Outline, OutlineWidth);
             }
         }
+    }
+
+    /// <summary>
+    /// A band along an edge, lying on its polygon just above it and running inwards from the edge towards the polygon's
+    /// middle, in metres: it is part of the ground it marks, not drawn over it. Narrower than a quarter of the way to
+    /// the middle, so a small polygon's bands don't cross.
+    /// </summary>
+    private static void Ribbon(ViewportMesh mesh, Vector3 a, Vector3 b, Vector3 centroid, float width, uint colour)
+    {
+        Vector3 along = b - a;
+        if (along.LengthSquared() < 1e-8f)
+            return;
+        along = Vector3.Normalize(along);
+        Vector3 middle = (a + b) / 2;
+        Vector3 inward = centroid - middle;
+        inward -= along * Vector3.Dot(inward, along);
+        float room = inward.Length();
+        if (room < 1e-4f)
+            return;
+        inward /= room;
+        width = Math.Min(width, room * .25f);
+        Vector3 up = Vector3.Cross(along, inward);
+        if (up.Z < 0)
+            up = -up;
+        up = Vector3.Normalize(up) * RibbonLift;
+        mesh.Triangle(a + up, b + up, b + inward * width + up, colour, edges: false);
+        mesh.Triangle(a + up, b + inward * width + up, a + inward * width + up, colour, edges: false);
     }
 
     /// <summary>What an edge is for, when it is more than a way to the next polygon.</summary>
@@ -182,32 +217,57 @@ internal static class NavmeshMesh
             control.Z = 2 * peak - (from.Z + to.Z) / 2;
         }
         Vector3 At(float t) => (1 - t) * (1 - t) * from + 2 * (1 - t) * t * control + t * t * to;
-
-        // Each arrowhead stops short of the puck it points at, its tip just clear of it; the tube runs between the
-        // cones' bases, a cone's length back along the way it arrives.
-        static Vector3 Away(Vector3 end, Vector3 toward) =>
-            Vector3.Distance(end, toward) > 1e-4f ? Vector3.Normalize(end - toward) : Vector3.UnitZ;
-        Vector3 landing = Away(to, control), leaving = Away(from, control);
-        Vector3 tipTo = to - landing * Clearance(landing, puck);
-        Vector3 tipFrom = both ? from - leaving * Clearance(leaving, puck) : from;
-        Vector3 start = both ? tipFrom - leaving * cone : from, finish = tipTo - landing * cone;
-        var path = new List<Vector3> { start };
-        for (int i = 1; i < ArcSegments; i++)
+        Vector3 Direction(float t)
         {
-            Vector3 point = At((float)i / ArcSegments);
-            if (Vector3.Distance(point, to) > Vector3.Distance(finish, to) && (!both || Vector3.Distance(point, from) > Vector3.Distance(start, from)))
-                path.Add(point);
+            Vector3 derivative = 2 * (1 - t) * (control - from) + 2 * t * (to - control);
+            return derivative.LengthSquared() > 1e-12f ? Vector3.Normalize(derivative) : Vector3.Normalize(to - from);
         }
-        path.Add(finish);
-        Tube(mesh, path, tube, colour);
-        Cone(mesh, finish, tipTo, tube * 2.8f, colour);
+
+        // The curve measured along its length, so the tube's rings are evenly spaced and its ends cut at a distance.
+        const int samples = 64;
+        var lengths = new float[samples + 1];
+        for (int i = 1; i <= samples; i++)
+            lengths[i] = lengths[i - 1] + Vector3.Distance(At((float)(i - 1) / samples), At((float)i / samples));
+        float total = lengths[samples];
+        float ParameterAt(float distance)
+        {
+            int i = Array.BinarySearch(lengths, Math.Clamp(distance, 0, total));
+            if (i >= 0)
+                return (float)i / samples;
+            i = ~i;
+            float span = lengths[i] - lengths[i - 1];
+            return (i - 1 + (span > 0 ? (distance - lengths[i - 1]) / span : 0)) / samples;
+        }
+
+        // Each arrowhead stops just clear of the puck it points at: the tube ends a cone's length and that clearance
+        // before the end, and the cone carries on straight along the curve's own direction from there, so the tube
+        // meets it without a bend.
+        float endTrim = cone + Clearance(Direction(1), puck);
+        float startTrim = both ? cone + Clearance(-Direction(0), puck) : 0;
+        if (endTrim + startTrim > total * .9f)
+        {
+            float scale = total * .9f / (endTrim + startTrim);
+            (endTrim, startTrim, cone) = (endTrim * scale, startTrim * scale, cone * scale);
+        }
+        float tubeStart = ParameterAt(startTrim), tubeEnd = ParameterAt(total - endTrim);
+        var points = new List<Vector3>();
+        var directions = new List<Vector3>();
+        for (int i = 0; i <= TubeRings; i++)
+        {
+            float t = ParameterAt(startTrim + (total - endTrim - startTrim) * i / TubeRings);
+            points.Add(At(t));
+            directions.Add(Direction(t));
+        }
+        Tube(mesh, points, directions, tube, colour);
+        Cone(mesh, At(tubeEnd), At(tubeEnd) + Direction(tubeEnd) * cone, tube * 2.8f, colour);
         if (both)
-            Cone(mesh, start, tipFrom, tube * 2.8f, colour);
+            Cone(mesh, At(tubeStart), At(tubeStart) - Direction(tubeStart) * cone, tube * 2.8f, colour);
         Puck(mesh, from, puck, PortalBase);
         Puck(mesh, to, puck, PortalBase);
     }
 
     private const int Sides = 12;
+    private const int TubeRings = 24;
     // The space between an arrowhead's tip and the puck it points at.
     private const float TipGap = .04f;
 
@@ -224,19 +284,18 @@ internal static class NavmeshMesh
         return Math.Min(throughFace, throughRim);
     }
 
-    // Rings around the path, turned along it without twisting (each ring's frame carried on from the last), joined by
-    // quads, each corner shaded by its own outward normal so the tube reads round.
-    private static void Tube(ViewportMesh mesh, List<Vector3> path, float radius, uint colour)
+    // Rings around the path, each turned to the path's direction there and carried on from the last without twisting,
+    // joined by quads, each corner shaded by its own outward normal so the tube reads round.
+    private static void Tube(ViewportMesh mesh, List<Vector3> points, List<Vector3> directions, float radius, uint colour)
     {
-        if (path.Count < 2)
+        if (points.Count < 2)
             return;
-        Vector3 Tangent(int i) => Vector3.Normalize(path[Math.Min(i + 1, path.Count - 1)] - path[Math.Max(i - 1, 0)]);
-        Vector3 normal = Vector3.Cross(Tangent(0), Vector3.UnitZ);
+        Vector3 normal = Vector3.Cross(directions[0], Vector3.UnitZ);
         normal = normal.LengthSquared() > 1e-6f ? Vector3.Normalize(normal) : Vector3.UnitX;
         Vector3[]? previousRing = null, previousNormals = null;
-        for (int i = 0; i < path.Count; i++)
+        for (int i = 0; i < points.Count; i++)
         {
-            Vector3 tangent = Tangent(i);
+            Vector3 tangent = directions[i];
             Vector3 carried = normal - tangent * Vector3.Dot(normal, tangent);
             normal = carried.LengthSquared() > 1e-8f ? Vector3.Normalize(carried) : normal;
             Vector3 binormal = Vector3.Cross(tangent, normal);
@@ -246,7 +305,7 @@ internal static class NavmeshMesh
             {
                 float angle = s * MathF.Tau / Sides;
                 normals[s] = normal * MathF.Cos(angle) + binormal * MathF.Sin(angle);
-                ring[s] = path[i] + normals[s] * radius;
+                ring[s] = points[i] + normals[s] * radius;
             }
             if (previousRing is not null && previousNormals is not null)
             {
@@ -296,21 +355,49 @@ internal static class NavmeshMesh
         }
     }
 
-    // A post where a ped can take cover, and a tick along the ground the way it faces.
+    // Where a ped takes cover: a dark puck where it stands, and in front of it, the way it faces, a panel as high as the
+    // cover it gets there, low or a whole wall.
     private static void AddCoverPoints(Ynv navmesh, ViewportMesh mesh)
     {
         foreach (YnvPoint point in navmesh.Points)
+            AddCoverPoint(mesh, point.Position, point.Direction, point.Type, point.Disabled);
+    }
+
+    /// <summary>One cover point, at a position, facing a heading in radians.</summary>
+    internal static void AddCoverPoint(ViewportMesh mesh, Vector3 position, float direction, YnvPointType type, bool disabled)
+    {
+        bool low = type is YnvPointType.LowWall or YnvPointType.LowWallToLeft or YnvPointType.LowWallToRight;
+        (string name, uint colour) = disabled ? ("Cover point, disabled", DisabledCover)
+            : low ? ("Cover point, low", LowCover)
+            : ("Cover point, wall", WallCover);
+        mesh.Explain(name, colour);
+        Vector3 foot = position + Vector3.UnitZ * Lift;
+        // The heading turns from north (+Y) towards west, as the game's headings do.
+        var facing = new Vector3(-MathF.Sin(direction), MathF.Cos(direction), 0);
+        Puck(mesh, foot, CoverPuck, PortalBase);
+        Panel(mesh, foot + facing * CoverReach, facing, low ? LowCoverHeight : WallCoverHeight, colour);
+    }
+
+    // An upright slab standing on the ground at `bottom`, its broad faces looking along `facing`.
+    private static void Panel(ViewportMesh mesh, Vector3 bottom, Vector3 facing, float height, uint colour)
+    {
+        Vector3 across = Vector3.Normalize(Vector3.Cross(Vector3.UnitZ, facing)) * (PanelWidth / 2);
+        Vector3 depth = facing * (PanelThickness / 2), up = Vector3.UnitZ * height;
+        Vector3[] c =
+        [
+            bottom - across - depth, bottom + across - depth, bottom + across + depth, bottom - across + depth,
+            bottom - across - depth + up, bottom + across - depth + up, bottom + across + depth + up, bottom - across + depth + up,
+        ];
+        void Face(int a, int b, int d, int e)
         {
-            (string name, uint colour) = point.Disabled ? ("Cover point, disabled", DisabledCover)
-                : point.Type is YnvPointType.LowWall or YnvPointType.LowWallToLeft or YnvPointType.LowWallToRight ? ("Cover point, low", LowCover)
-                : ("Cover point, wall", WallCover);
-            mesh.Explain(name, colour);
-            Vector3 foot = point.Position + Vector3.UnitZ * Lift;
-            // The heading turns from north (+Y) towards west, as the game's headings do.
-            var facing = new Vector3(-MathF.Sin(point.Direction), MathF.Cos(point.Direction), 0);
-            mesh.Line(foot, foot + Vector3.UnitZ * CoverHeight, colour, LinkWidth);
-            mesh.Line(foot, foot + facing * CoverReach, colour, LinkWidth);
+            mesh.Triangle(c[a], c[b], c[d], colour, edges: false);
+            mesh.Triangle(c[a], c[d], c[e], colour, edges: false);
         }
+        Face(0, 1, 5, 4);
+        Face(1, 2, 6, 5);
+        Face(2, 3, 7, 6);
+        Face(3, 0, 4, 7);
+        Face(4, 5, 6, 7);
     }
 
     private static uint Pack(string hex)

@@ -56,11 +56,12 @@ public sealed class ViewportTests
         Assert.Contains("Low climb", names);
         // Polygons are drawn whole: the triangles they were split into show no edges of their own.
         Assert.All(mesh.Vertices, vertex => Assert.Equal(0u, vertex.Colour >> 24));
-        // Every polygon edge has a line, the climb in its own colour and wider.
-        uint climb = mesh.Legend.Single(entry => entry.Name == "Low climb").Colour;
-        ViewportSegment climbing = Assert.Single(mesh.Segments, segment => segment.Colour == climb);
-        Assert.True(climbing.Width > mesh.Segments.Min(segment => segment.Width));
+        // Every polygon edge has its outline; the climb also gets a band in its colour, lying on the polygon.
         Assert.Equal(navmesh.Polygons.Sum(p => p.IndexCount), mesh.Segments.Count);
+        uint climb = mesh.Legend.Single(entry => entry.Name == "Low climb").Colour & 0xFFFFFF;
+        ViewportVertex[] band = [.. mesh.Vertices.Where(vertex => (vertex.Colour & 0xFFFFFF) == climb)];
+        Assert.Equal(6, band.Length);
+        Assert.All(band, vertex => Assert.Equal(30.02f, vertex.Position.Z + mesh.Origin.Z, 0.001));
     }
 
     [Fact]
@@ -87,6 +88,35 @@ public sealed class ViewportTests
         Assert.All(link, point => Assert.InRange(point.X, 1011.7f, 1012.3f));
         Assert.InRange(link.Min(point => point.Z), 30, 30.3f);
         Assert.InRange(link.Max(point => point.Z), 35.7f, 36);
+    }
+
+    [Fact]
+    public void ACoverPointIsAPanelInFrontOfWhereThePedStands()
+    {
+        var foot = new Vector3(1000, 2000, 30);
+        var mesh = new ViewportMesh(foot);
+
+        // Facing north (+Y): low cover, half a ped high.
+        NavmeshMesh.AddCoverPoint(mesh, foot, 0, YnvPointType.LowWall, disabled: false);
+
+        LegendEntry entry = Assert.Single(mesh.Legend);
+        Assert.Equal("Cover point, low", entry.Name);
+        Vector3[] panel = [.. mesh.Vertices.Where(v => (v.Colour & 0xFFFFFF) == (entry.Colour & 0xFFFFFF)).Select(v => v.Position + mesh.Origin)];
+        Vector3[] puck = [.. mesh.Vertices.Where(v => (v.Colour & 0xFFFFFF) == (ViewportMesh.Pack(Ui.Theme.ChromeBg) & 0xFFFFFF)).Select(v => v.Position + mesh.Origin)];
+        // The puck is where the ped stands; the panel stands in front of it, the way it faces, as wide as a ped.
+        Assert.All(puck, point => Assert.True(new Vector2(point.X - foot.X, point.Y - foot.Y).Length() < 0.2f));
+        Assert.All(panel, point => Assert.InRange(point.Y, 2000.25f, 2000.4f));
+        Assert.Equal(0.5f, panel.Max(point => point.X) - panel.Min(point => point.X), 0.001);
+        Assert.Equal(0.55f, panel.Max(point => point.Z) - panel.Min(point => point.Z), 0.001);
+
+        // A wall's panel is as high as a ped; one turned a quarter to the west is on the ped's west side.
+        var wall = new ViewportMesh(foot);
+        NavmeshMesh.AddCoverPoint(wall, foot, MathF.PI / 2, YnvPointType.WallToNeither, disabled: false);
+        LegendEntry wallEntry = Assert.Single(wall.Legend);
+        Assert.Equal("Cover point, wall", wallEntry.Name);
+        Vector3[] wallPanel = [.. wall.Vertices.Where(v => (v.Colour & 0xFFFFFF) == (wallEntry.Colour & 0xFFFFFF)).Select(v => v.Position + wall.Origin)];
+        Assert.Equal(1.1f, wallPanel.Max(point => point.Z) - wallPanel.Min(point => point.Z), 0.001);
+        Assert.All(wallPanel, point => Assert.InRange(point.X, 999.6f, 999.75f));
     }
 
     [Fact]
