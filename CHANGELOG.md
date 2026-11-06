@@ -29,6 +29,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Ctrl+C copies the selected files; Copy name has no shortcut, and folders can be dropped onto the explorer too. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
 - The window title and splash screen read Modding Toolkit, and the start-up and empty-state messages refer to your game. ([#72](https://github.com/Hancapo/HikariHopper/pull/72))
 - A new app icon: a railway conductor's cap on a brass tile. ([#73](https://github.com/Hancapo/HikariHopper/pull/73))
+- Dialogs and viewers close smoothly, shrinking away as they fade the way a macOS window does. ([#78](https://github.com/Hancapo/HikariHopper/pull/78))
 
 ### Fixed
 

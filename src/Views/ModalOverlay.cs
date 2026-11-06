@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -30,7 +31,8 @@ public interface IModalContent
 /// The window marks its content with <see cref="IsBackdropProperty"/>. While a modal is open that
 /// content blurs and the dim covers only it, so the title bar above stays live: the window can still
 /// be moved, minimised or closed (its menus are switched off, see <see cref="StateChanged"/>). The dim
-/// fades in, the dialog rises into place, and both fade back out on close; the blur eases with them.
+/// fades in and the dialog rises into place. On close it goes as a macOS window does: a picture of it
+/// shrinks toward its centre and fades, with the dim, while the blur eases away.
 /// </remarks>
 public sealed class ModalOverlay : Panel
 {
@@ -49,6 +51,12 @@ public sealed class ModalOverlay : Panel
     public const double BlurRadius = 14;
 
     private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(180);
+
+    /// <summary>How long a closing dialog takes to shrink away, as a macOS window or sheet does.</summary>
+    internal static TimeSpan CloseDuration { get; set; } = TimeSpan.FromMilliseconds(220);
+
+    /// <summary>How small a closing dialog gets as it fades.</summary>
+    private const double CloseScale = 0.92;
     private static readonly ConditionalWeakTable<TopLevel, List<ModalOverlay>> OpenOverlays = new();
 
     private readonly Control dialog;
@@ -56,6 +64,9 @@ public sealed class ModalOverlay : Panel
     private readonly IInputElement? previousFocus;
     private readonly Control? backdrop;
     private OverlayLayer? layer;
+    // While closing: the dialog as it last looked, which shrinks and fades in its place.
+    private Image? ghost;
+    private Rect ghostRect;
 
     private ModalOverlay(TopLevel host, Control dialog, Control? backdrop)
     {
@@ -158,12 +169,13 @@ public sealed class ModalOverlay : Panel
             list.Remove(this);
             last = list.Count == 0;
         }
-        // Stop taking input now, and leave once the fade is done.
+        // Stop taking input now. The dialog leaves at once, so what closes it can let go of what it shows; a picture
+        // of it shrinks away toward its centre and fades, with the dim, and the overlay leaves once that is done.
         IsHitTestVisible = false;
+        Transitions = [new DoubleTransition { Property = OpacityProperty, Duration = CloseDuration, Easing = new QuadraticEaseIn() }];
+        LeaveAsPicture();
         Opacity = 0;
-        dialog.Opacity = 0;
-        dialog.RenderTransform = Lift(6, 0.985);
-        DispatcherTimer.RunOnce(Detach, FadeDuration);
+        DispatcherTimer.RunOnce(Detach, CloseDuration);
         if (last)
         {
             Blur(backdrop, false);
@@ -227,10 +239,48 @@ public sealed class ModalOverlay : Panel
         stops[next].Focus(NavigationMethod.Tab);
     }
 
-    /// <summary>Leaves the window and lets go of the dialog, so it can be shown again.</summary>
+    /// <summary>Puts a picture of the dialog where it is, and lets the dialog go; the picture then shrinks and fades.</summary>
+    private void LeaveAsPicture()
+    {
+        Rect bounds = dialog.Bounds;
+        double scaling = host.RenderScaling;
+        if (bounds.Width >= 1 && bounds.Height >= 1 && dialog.Parent == this)
+        {
+            var picture = new RenderTargetBitmap(
+                new PixelSize((int)Math.Ceiling(bounds.Width * scaling), (int)Math.Ceiling(bounds.Height * scaling)),
+                new Vector(96 * scaling, 96 * scaling));
+            picture.Render(dialog);
+            ghost = new Image { Source = picture, Stretch = Stretch.Fill, Opacity = dialog.Opacity, RenderTransform = dialog.RenderTransform };
+            ghostRect = bounds;
+            ghost.Transitions =
+            [
+                new DoubleTransition { Property = OpacityProperty, Duration = CloseDuration, Easing = new QuadraticEaseIn() },
+                new TransformOperationsTransition { Property = RenderTransformProperty, Duration = CloseDuration, Easing = new CubicEaseOut() },
+            ];
+            Children.Add(ghost);
+            Image shrinking = ghost;
+            Dispatcher.UIThread.Post(() =>
+            {
+                shrinking.Opacity = 0;
+                shrinking.RenderTransform = Lift(0, CloseScale);
+            }, DispatcherPriority.Render);
+        }
+        Children.Remove(dialog);
+    }
+
+    /// <summary>Leaves the window and lets go of the dialog (and its picture), so it can be shown again.</summary>
     private void Detach()
     {
-        Children.Remove(dialog);
+        if (dialog.Parent == this)
+            Children.Remove(dialog);
+        if (ghost is not null)
+        {
+            Children.Remove(ghost);
+            IImage? picture = ghost.Source;
+            ghost.Source = null;
+            (picture as IDisposable)?.Dispose();
+            ghost = null;
+        }
         layer?.Children.Remove(this);
         layer = null;
     }
@@ -285,6 +335,9 @@ public sealed class ModalOverlay : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        ghost?.Measure(ghostRect.Size);
+        if (dialog.Parent != this)
+            return availableSize;
         if ((dialog is ModalSheet || GetFillsWindow(dialog)) && !double.IsInfinity(availableSize.Width) && !double.IsInfinity(availableSize.Height))
             dialog.Measure(SizeFor(dialog, availableSize));
         else
@@ -295,6 +348,9 @@ public sealed class ModalOverlay : Panel
     /// <summary>The dialog centred at <see cref="SizeFor"/>.</summary>
     protected override Size ArrangeOverride(Size finalSize)
     {
+        ghost?.Arrange(ghostRect);
+        if (dialog.Parent != this)
+            return finalSize;
         (double width, double height) = SizeFor(dialog, finalSize);
         double x = Math.Floor((finalSize.Width - width) / 2 + 0.5);
         double y = Math.Floor((finalSize.Height - height) / 2 + 0.5);

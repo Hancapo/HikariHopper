@@ -165,6 +165,51 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void AClosingModalShrinksAwayAsAPictureOfItself()
+    {
+        Explorer ui = OpenExplorer();
+        MenuRow menus = ui.Find<MenuRow>();
+        menus.OpenSettings();
+        Pump(300);
+        SettingsDialog settings = menus.Settings!;
+        ModalOverlay overlay = settings.FindAncestorOfType<ModalOverlay>()!;
+        Rect shown = settings.Bounds;
+        // Slowed down, so the close caught midway is still midway on a busy machine.
+        TimeSpan speed = ModalOverlay.CloseDuration;
+        ModalOverlay.CloseDuration = TimeSpan.FromMilliseconds(1200);
+        using var restore = new Restore(() => ModalOverlay.CloseDuration = speed);
+
+        // Closed: the dialog is let go at once, so what it shows can go too, and a picture of it takes its place.
+        settings.Close();
+        Assert.Null(settings.Parent);
+        Assert.False(ModalOverlay.IsOpen(ui.Window));
+        Image picture = Assert.Single(overlay.Children.OfType<Image>());
+        Pump(10);
+        Assert.Equal(shown, picture.Bounds);
+        Assert.NotNull(picture.Source);
+
+        // It shrinks toward its centre as it fades, with the dim, and the overlay leaves once it is gone.
+        Pump(500);
+        Assert.InRange(picture.Opacity, 0.01, 0.99);
+        Assert.InRange(overlay.Opacity, 0.01, 0.99);
+        Matrix midway = picture.RenderTransform!.Value;
+        Assert.InRange(midway.M11, 0.92, 0.999);
+        Assert.Equal(midway.M11, midway.M22, 3);
+        Pump(1200);
+        Assert.DoesNotContain(overlay, ui.Window.GetVisualDescendants());
+        Assert.Null(picture.Source);
+
+        // Shown again straight after closing, it is there as before.
+        menus.OpenSettings();
+        settings.Close();
+        menus.OpenSettings();
+        Pump(300);
+        Assert.True(settings.IsOpen);
+        Assert.Equal(shown.Size, settings.Bounds.Size);
+        ui.Window.Close();
+    }
+
+    [AvaloniaFact]
     public void SettingsOpensAsAModalOverTheBlurredExplorer()
     {
         Explorer ui = OpenExplorer();
