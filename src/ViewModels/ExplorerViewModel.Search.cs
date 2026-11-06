@@ -193,6 +193,7 @@ public sealed partial class ExplorerViewModel
         searchIndex = null;
         searchHits = [];
         folderPattern = null;
+        appliedSearchKey = "";
         ClearSelection();
         RefreshEntries();
         RaiseAll(SearchProperties);
@@ -300,17 +301,50 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Shows <paramref name="hits"/>, keeping the results that were selected selected.</summary>
+    /// <summary>What was searched for, to tell a new search from the same one run again as the index changed.</summary>
+    private string SearchKey() =>
+        $"{searchText}\n{searchMatchCase}\n{searchWildcards}\n{searchRegex}\n{searchScope}\n{searchSubfolders}\n{searchPrefix}";
+
+    private string appliedSearchKey = "";
+
+    /// <summary>
+    /// Whether the list is being refreshed in place: the same search run again, so the view keeps where it is
+    /// scrolled to and the selection it gets back doesn't move it.
+    /// </summary>
+    internal bool KeepsListPosition { get; private set; }
+
+    /// <summary>
+    /// Shows <paramref name="hits"/>, keeping the results that were selected selected. The same search run again (the
+    /// index filling in, or checked when a search starts) changes the list only if what it found changed, and then in
+    /// place: the view stays where you scrolled it.
+    /// </summary>
     private void ApplyHits(List<SearchHit> hits, bool complete)
     {
+        string key = SearchKey();
+        bool again = key == appliedSearchKey;
+        appliedSearchKey = key;
+        searchedComplete = complete;
+        if (again && hits.Count == searchHits.Count && hits.Select(hit => hit.Path).SequenceEqual(searchHits.Select(hit => hit.Path), StringComparer.Ordinal))
+        {
+            RaiseAll(SearchProperties);
+            return;
+        }
         var selected = SelectedEntries().Select(entry => entry.Path).ToHashSet(StringComparer.Ordinal);
         searchHits = hits;
-        searchedComplete = complete;
-        RefreshEntries();
-        if (selected.Count > 0)
+        KeepsListPosition = again;
+        try
         {
-            var rows = Enumerable.Range(0, entries.Count).Where(row => selected.Contains(entries[row].Path)).ToHashSet();
-            if (rows.Count > 0)
-                SetSelection(rows, rows.Min(), rows.Min(), force: true);
+            RefreshEntries();
+            if (selected.Count > 0)
+            {
+                var rows = Enumerable.Range(0, entries.Count).Where(row => selected.Contains(entries[row].Path)).ToHashSet();
+                if (rows.Count > 0)
+                    SetSelection(rows, rows.Min(), rows.Min(), force: true);
+            }
+        }
+        finally
+        {
+            KeepsListPosition = false;
         }
         RaiseAll(SearchProperties);
     }

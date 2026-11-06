@@ -72,6 +72,20 @@ public sealed class ListHighlightTracker
         Track();
     }
 
+    /// <summary>Puts the highlight on <paramref name="index"/> at once, without scrolling the view to it.</summary>
+    public void Place(int index)
+    {
+        timer.Stop();
+        targetIndex = index;
+        if (index < 0)
+        {
+            position = null;
+            return;
+        }
+        target = index * rowHeight;
+        position = target;
+    }
+
     /// <summary>The model was reset: the view regenerates without a current row.</summary>
     public void Reset()
     {
