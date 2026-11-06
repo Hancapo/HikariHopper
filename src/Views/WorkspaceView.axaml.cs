@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -21,6 +22,12 @@ public partial class WorkspaceView : UserControl
     private DeleteEntriesDialog? deleteDialog;
     private PropertiesDialog? propertiesDialog;
     private GridLength folderWidth = new(FolderPanel.PreferredWidth);
+    private bool foldersShown = true;
+    // Counts the folder panel's slides, so a newer one stops an older one's frames.
+    private int foldersSlide;
+
+    /// <summary>How long the folder panel takes to slide shut or open.</summary>
+    internal static TimeSpan FoldersSlideDuration { get; set; } = TimeSpan.FromMilliseconds(260);
 
     public WorkspaceView()
     {
@@ -43,6 +50,9 @@ public partial class WorkspaceView : UserControl
             () => Bridge?.CanShowProperties == true && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
             () => _ = OpenPropertiesDialog()));
     }
+
+    /// <summary>Whether the folder panel is shown, or on its way there (it slides).</summary>
+    internal bool ShowsFolders => foldersShown;
 
     /// <summary>The current entries view (table or grid).</summary>
     public Control? EntriesView => EntriesHost.Content as Control;
@@ -75,7 +85,8 @@ public partial class WorkspaceView : UserControl
             bridge.DeleteConfirmationRequested += OnDeleteConfirmationRequested;
         }
         contextMenu.DataContext = bridge;
-        RefreshFolders();
+        // Another tab: its folders as they are, at once.
+        RefreshFolders(animate: false);
         RefreshEntriesView();
     }
 
@@ -97,14 +108,77 @@ public partial class WorkspaceView : UserControl
         }
     }
 
-    /// <summary>SplitView hides a hidden item's handle; the panel keeps its width for when it returns.</summary>
-    private void RefreshFolders()
+    /// <summary>
+    /// SplitView hides a hidden item's handle; the panel keeps its width for when it returns. It slides shut or open,
+    /// the entries taking or giving back its room: the panel keeps its width as it goes and is cut off at its edge,
+    /// as a drawer, fading as it closes.
+    /// </summary>
+    private void RefreshFolders(bool animate = true)
     {
         bool visible = Bridge?.FoldersVisible != false && Bridge?.HasSearchQuery != true;
+        if (visible == foldersShown && foldersSlide == 0)
+        {
+            ApplyFolders(visible);
+            return;
+        }
+        if (visible == foldersShown)
+            return;
         ColumnDefinition column = Split.ColumnDefinitions[0];
-        if (!visible && FoldersFrame.IsVisible)
+        ColumnDefinition gutter = Split.ColumnDefinitions[1];
+        // The width it comes back at: what it had, unless it is still sliding.
+        if (!visible && foldersSlide == 0 && FoldersFrame.IsVisible)
             folderWidth = column.Width;
+        foldersShown = visible;
+        TopLevel? top = TopLevel.GetTopLevel(this);
+        if (!animate || top is null || !IsEffectivelyVisible || FoldersSlideDuration <= TimeSpan.Zero)
+        {
+            foldersSlide = 0;
+            ApplyFolders(visible);
+            return;
+        }
+        // From wherever it is now, so a slide turned round halfway goes back smoothly.
+        double fromWidth = FoldersFrame.IsVisible ? FoldersFrame.Bounds.Width : 0;
+        double fromGutter = FoldersFrame.IsVisible ? gutter.ActualWidth : 0;
+        double fromOpacity = FoldersFrame.IsVisible ? FoldersFrame.Opacity : 0;
+        double toWidth = visible ? folderWidth.Value : 0;
+        double toGutter = visible ? Ui.Theme.PanelGutter : 0;
+        FoldersFrame.IsVisible = true;
+        Handle.IsVisible = false;
+        column.MinWidth = 0;
+        Folders.Width = folderWidth.Value;
+        Folders.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left;
+        int slide = ++foldersSlide;
+        var clock = Stopwatch.StartNew();
+        void Step(TimeSpan _)
+        {
+            if (slide != foldersSlide)
+                return;
+            double progress = Math.Min(1, clock.Elapsed.TotalMilliseconds / FoldersSlideDuration.TotalMilliseconds);
+            double eased = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.Pow(-2 * progress + 2, 3) / 2;
+            column.Width = new GridLength(fromWidth + (toWidth - fromWidth) * eased);
+            gutter.Width = new GridLength(fromGutter + (toGutter - fromGutter) * eased);
+            // Closing, it is gone a little before its room is; opening, it shows as it comes.
+            double fade = visible ? eased : Math.Min(1, eased * 1.4);
+            FoldersFrame.Opacity = fromOpacity + ((visible ? 1 : 0) - fromOpacity) * fade;
+            if (progress < 1)
+            {
+                top.RequestAnimationFrame(Step);
+                return;
+            }
+            foldersSlide = 0;
+            ApplyFolders(visible);
+        }
+        top.RequestAnimationFrame(Step);
+    }
+
+    /// <summary>The folder panel at rest: shown at its width with its handle, or gone with its gutter.</summary>
+    private void ApplyFolders(bool visible)
+    {
+        ColumnDefinition column = Split.ColumnDefinitions[0];
         FoldersFrame.IsVisible = visible;
+        FoldersFrame.Opacity = 1;
+        Folders.Width = double.NaN;
+        Folders.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         Handle.IsVisible = visible;
         Split.ColumnDefinitions[1].Width = new GridLength(visible ? Ui.Theme.PanelGutter : 0);
         column.MinWidth = visible ? FolderPanel.MinimumWidth : 0;

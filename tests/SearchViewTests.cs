@@ -65,12 +65,12 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.Equal("house", navigation.ScopeButton.IconKind);
         Assert.Same(navigation.SearchScopeSlot, navigation.ScopeWell.Parent);
         // Open with nothing typed, the folders stay as they were.
-        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(workspace.ShowsFolders);
 
         navigation.QueryField.Text = "*.ydr";
         await Searched(bridge);
         // Results take the whole area, the folder panel included, and are always the list.
-        Assert.False(workspace.FoldersFrame.IsVisible);
+        Assert.False(workspace.ShowsFolders);
         Assert.IsType<EntryTable>(workspace.EntriesView);
         Assert.Equal("2 files", bridge.TabTitle);
         Assert.True(navigation.WildcardToggle.Raised);
@@ -84,7 +84,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.False(bridge.IsSearching);
         Assert.True(navigation.AddressBar.IsVisible);
         Assert.True(navigation.SearchField.IsVisible);
-        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(workspace.ShowsFolders);
         Assert.Equal("Home", bridge.TabTitle);
         window.Close();
     }
@@ -207,6 +207,50 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task TheFolderPanelSlidesShutForResultsAndOpenAfter()
+    {
+        // Slowed down, so the slide caught midway is still midway on a busy machine.
+        TimeSpan speed = WorkspaceView.FoldersSlideDuration;
+        WorkspaceView.FoldersSlideDuration = TimeSpan.FromMilliseconds(1200);
+        try
+        {
+            var (window, bridge, navigation, workspace) = Open();
+            Avalonia.Controls.ColumnDefinition column = workspace.Split.ColumnDefinitions[0];
+            double width = workspace.FoldersFrame.Bounds.Width;
+            Assert.True(width > 100);
+
+            // Typing slides it shut: midway it is narrower and fading, the panel inside at its full width, cut off.
+            bridge.BeginSearch(SearchScope.Everywhere);
+            navigation.QueryField.Text = "readme";
+            ExplorerStateRenders.Pump(500);
+            Assert.False(workspace.ShowsFolders);
+            Assert.True(workspace.FoldersFrame.IsVisible);
+            Assert.InRange(workspace.FoldersFrame.Bounds.Width, 1, width - 1);
+            Assert.InRange(workspace.FoldersFrame.Opacity, 0.001, 0.999);
+            Assert.Equal(width, workspace.Folders.Bounds.Width, 1);
+            ExplorerStateRenders.Pump(1200);
+            Assert.False(workspace.FoldersFrame.IsVisible);
+            Assert.Equal(0, column.Width.Value);
+
+            // Leaving the search slides it open again, to the width it had.
+            bridge.EndSearch();
+            ExplorerStateRenders.Pump(500);
+            Assert.True(workspace.ShowsFolders);
+            Assert.InRange(workspace.FoldersFrame.Bounds.Width, 1, width - 1);
+            ExplorerStateRenders.Pump(1200);
+            Assert.True(workspace.FoldersFrame.IsVisible);
+            Assert.Equal(1, workspace.FoldersFrame.Opacity);
+            Assert.Equal(width, workspace.FoldersFrame.Bounds.Width, 1);
+            Assert.True(double.IsNaN(workspace.Folders.Width));
+            window.Close();
+        }
+        finally
+        {
+            WorkspaceView.FoldersSlideDuration = speed;
+        }
+    }
+
+    [AvaloniaFact]
     public async Task ResultsCantBeShownAsAGrid()
     {
         var (window, bridge, navigation, workspace) = Open();
@@ -272,7 +316,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         table.FocusTarget.Focus();
         Key(window, Avalonia.Input.Key.Escape, RawInputModifiers.None, PhysicalKey.Escape);
         Assert.False(bridge.IsSearching);
-        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(workspace.ShowsFolders);
         Assert.True(navigation.AddressBar.IsVisible);
         window.Close();
     }
@@ -284,13 +328,13 @@ public sealed class SearchViewTests : ExplorerTestBase
         bridge.BeginSearch(SearchScope.Everywhere);
         navigation.QueryField.Text = "readme";
         await Searched(bridge);
-        Assert.False(workspace.FoldersFrame.IsVisible);
+        Assert.False(workspace.ShowsFolders);
         Assert.Equal(1, bridge.SearchHitCount);
 
         bridge.NavigateTree("game://mods");
         Settle(bridge);
         Assert.False(bridge.IsSearching);
-        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(workspace.ShowsFolders);
         Assert.Equal("mods", bridge.CurrentPath);
         Assert.Contains(bridge.EntriesModel, item => item.Name == "readme.txt");
 
@@ -370,7 +414,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Key(window, Avalonia.Input.Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter);
         Settle(bridge);
         Assert.False(bridge.IsSearching);
-        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(workspace.ShowsFolders);
         Assert.Equal("mods", bridge.CurrentPath);
         Assert.Equal(["readme.txt"], bridge.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
         window.Close();
