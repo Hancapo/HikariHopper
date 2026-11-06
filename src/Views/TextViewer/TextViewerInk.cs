@@ -13,7 +13,8 @@ internal static class TextViewerInk
 {
     public static readonly IBrush Number = new SolidColorBrush(Color.Parse("#7FAEEE"));
     public static readonly IBrush MatchWash = new SolidColorBrush(Color.Parse("#4DD0A94C"));
-    public static readonly IBrush SelectionWash = new SolidColorBrush(Color.FromArgb(0x5C, 0x5E, 0x8B, 0xD0));
+    // A deep blue of its own, not a wash of the accent: every ink keeps 4.5:1 on it, on the current line too.
+    public static readonly IBrush SelectionWash = new SolidColorBrush(Color.Parse("#203152"));
     public static readonly TextDecorationCollection Underline = TextDecorations.Underline;
 
     public static Typeface Typeface { get; } = new(Ui.Theme.MonoFont);

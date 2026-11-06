@@ -1,3 +1,4 @@
+using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using HikariHopper.Ui;
@@ -70,6 +71,28 @@ public sealed class ThemeContrastTests
         pairs.Add(nameof(Theme.SelectionInk), nameof(Theme.Selection), 4.5);
         pairs.Add(nameof(Theme.SelectionFaint), nameof(Theme.Selection), 4.5);
         return pairs;
+    }
+
+    /// <summary>The text viewer's inks, each kind of text it colours.</summary>
+    public static TheoryData<string> TextViewerInks()
+    {
+        var kinds = new TheoryData<string>();
+        foreach (Core.TextKind kind in Enum.GetValues<Core.TextKind>())
+            kinds.Add(kind.ToString());
+        return kinds;
+    }
+
+    // On the UI thread: the viewer's inks are made on first use, and they belong to the thread that makes them.
+    [AvaloniaTheory]
+    [MemberData(nameof(TextViewerInks))]
+    public void TheTextViewersInksReadOnItsSelectionAndItsLines(string kind)
+    {
+        var ink = (ISolidColorBrush)Views.TextViewerInk.Of(Enum.Parse<Core.TextKind>(kind));
+        var text = new ImmutableSolidColorBrush(ink.Color);
+        var selection = new ImmutableSolidColorBrush(((ISolidColorBrush)Views.TextViewerInk.SelectionWash).Color);
+        // Selected, and unselected on the page and on the current line.
+        foreach (IImmutableSolidColorBrush surface in new[] { selection, Theme.AppBg, Theme.HoverBg })
+            Assert.True(Ratio(text, surface) >= 4.5, $"{kind} on {surface.Color}: {Ratio(text, surface):0.00}:1");
     }
 
     public static TheoryData<string, string, double> NeighbourPairs => new()
