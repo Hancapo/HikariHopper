@@ -139,9 +139,21 @@ public sealed partial class ExplorerViewModel
             NavigateTree(NestedArchiveKey(inner));
             return true;
         }
-        // A file inside the archive: its folder, with it selected.
+        // A file inside the archive: its folder, with it selected. The folder can be a nested RPF's root, which is
+        // opened as an RPF, not found as a folder.
         int slash = inner.LastIndexOf('/');
-        NavigateTree(slash < 0 ? "archive://." : ArchiveDirectoryKey(inner[..slash]));
+        string parent = slash < 0 ? "" : inner[..slash];
+        if (parent.Length == 0)
+            NavigateTree("archive://.");
+        else if (IsArchiveFile(parent) && Provider.ArchiveEntryFromRoot(parent) is { IsDirectory: false })
+            NavigateTree(NestedArchiveKey(parent));
+        else
+            NavigateTree(ArchiveDirectoryKey(parent));
+        if (!entries.Any(item => string.Equals(item.Name, entry.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            SetStatus($"Could not show {entry.Name} in its folder");
+            return false;
+        }
         SelectEntriesByName([entry.Name]);
         return true;
     }
