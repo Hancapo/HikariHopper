@@ -149,8 +149,10 @@ public sealed partial class ExplorerViewModel
     private bool GoToFolder(string folder, string typed)
     {
         string root = HasGame ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.GamePath)) : "";
+        // A drive root keeps its separator (D:\), so it isn't doubled when the game is installed there.
+        string prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
         bool inGame = root.Length > 0 && (SamePath(folder, root)
-            || folder.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+            || folder.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         if (!inGame)
         {
             SetStatus($"Only folders inside the game can be shown here: {typed}");
