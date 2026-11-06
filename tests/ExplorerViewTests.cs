@@ -1591,14 +1591,17 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void StatusBarShowsTheEditionLampAndOnlyTheKeysThatMove()
+    public void StatusBarShowsTheGameItsItemsAndWhatIsSelected()
     {
         Explorer ui = OpenExplorer();
         StatusBar status = ui.Find<StatusBar>();
         Assert.Equal("GTA V Legacy", ui.Bridge.GameEdition);
+        // The game in a well of its own at the start, with its edition's mark, as on its tab.
         Assert.True(status.Edition.IsVisible);
         Assert.Equal("GTA V Legacy", status.EditionText.Text);
-        // The load confirmation only repeats the lamp.
+        Assert.False(status.EditionMark.Enhanced);
+        Assert.Equal(HikariHopper.Ui.Theme.InsetBg, status.Edition.Background);
+        // The load confirmation only repeats the game's well.
         Assert.Equal("Loaded GTA V Legacy", ui.Bridge.Status);
         Assert.Equal("", status.VisibleStatus);
         Assert.False(StatusBar.StatusWorthShowing("Loaded GTA V Legacy", "GTA V Legacy"));
@@ -1608,11 +1611,22 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         string[] texts = status.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text ?? "").ToArray();
         Assert.DoesNotContain(texts, text => text.Contains("FiveFury") || text.Contains("Ctrl+O") || text.Contains("F3"));
-        var caps = status.GetVisualDescendants().OfType<Views.Controls.KeyCap>().ToArray();
-        Assert.Equal(["Enter", ""], caps.Select(cap => cap.Text));
-        Assert.Equal("delete", caps[1].IconName);
+        // No key hints, and no lamp.
+        Assert.Empty(status.GetVisualDescendants().OfType<Views.Controls.KeyCap>());
+        Assert.Empty(status.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>());
 
-        // A standalone archive has no edition, so no lamp.
+        // What is selected, on the right: how many and how big.
+        Assert.Equal("", status.SelectionText.Text);
+        ui.Bridge.SelectEntry(0);
+        ui.Bridge.SelectEntry(1, KeyModifiers.Control);
+        Pump();
+        Assert.Equal($"2 selected · {ui.Bridge.SelectedSize}", status.SelectionText.Text);
+        Assert.Equal("1 selected", StatusBar.Selection(1, ""));
+        ui.Bridge.ClearEntrySelection();
+        Pump();
+        Assert.Equal("", status.SelectionText.Text);
+
+        // A standalone archive has no edition, so no well.
         ui.Bridge.CloseArchive();
         ui.Tabs.NewTab();
         Pump();
