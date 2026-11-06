@@ -78,6 +78,39 @@
                        FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" IsVisible="False"
                        AutomationProperties.Name="Address" />
 
+      <!-- Search mode, in the address bar's and the folder search's place: where to search, and the query with how
+           it is read. Ctrl+Shift+F opens it; Esc, Back or "This folder" go back to the folder. -->
+      <DockPanel Name="SearchRow" Grid.Column="1" Grid.ColumnSpan="2" IsVisible="False" VerticalAlignment="Center">
+        <Border DockPanel.Dock="Left" Classes="well" Margin="0,0,8,0">
+          <Border Name="ScopeButton" Height="26" Padding="8,0" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                  Background="{x:Static ui:Theme.ChromeRaised}" AutomationProperties.Name="Where to search">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <c:ChromeIcon Kind="home" Stroke="{x:Static ui:Theme.TextRow}" Width="13" Height="13" Thickness="1.6" VerticalAlignment="Center" />
+              <TextBlock Name="ScopeText" Text="Whole game" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Center"
+                         FontFamily="{x:Static ui:Theme.UiFont}" FontSize="12" />
+              <c:ChromeIcon Kind="chevron" Stroke="{x:Static ui:Theme.TextDim}" Width="9" Height="9" Thickness="2" VerticalAlignment="Center"
+                            RenderTransform="rotate(90deg)" />
+            </StackPanel>
+          </Border>
+        </Border>
+        <Panel>
+          <c:FlatTextField Name="QueryField" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
+                           FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
+                           LeadingIcon="search" LeadingColor="{x:Static ui:Theme.Brass}" KeyCap="Esc" TrailingSpace="94"
+                           PlaceholderText="Search by name: text, *.ydr, or a regular expression" AutomationProperties.Name="Search the game" />
+          <TextBlock Name="QueryError" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,142,0" IsHitTestVisible="False"
+                     Foreground="{x:Static ui:Theme.Error}" FontFamily="{x:Static ui:Theme.UiFont}" FontSize="11" />
+          <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,42,0">
+            <c:ChromeToolButton Name="CaseToggle" Width="28" Height="24" Bordered="False" Text="Aa" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                                AutomationProperties.Name="Match case" Click="OnCaseToggle" />
+            <c:ChromeToolButton Name="WildcardToggle" Width="28" Height="24" Bordered="False" Text="*" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                                AutomationProperties.Name="Wildcards" Click="OnWildcardToggle" />
+            <c:ChromeToolButton Name="RegexToggle" Width="28" Height="24" Bordered="False" Text=".*" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                                AutomationProperties.Name="Regular expression" Click="OnRegexToggle" />
+          </StackPanel>
+        </Panel>
+      </DockPanel>
+
       <c:FlatTextField Name="SearchField" Grid.Column="2" Width="232" Height="{x:Static ui:Theme.ToolbarControlHeight}"
                        VerticalAlignment="Center" FontSize="{x:Static ui:Theme.FontSize}"
                        IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"

@@ -28,6 +28,11 @@ public partial class WorkspaceView : UserControl
         Split.ColumnDefinitions[0].MinWidth = FolderPanel.MinimumWidth;
         DropArea.Attach(EntriesArea);
         contextMenu.CreateRequested += (_, request) => OpenCreateDialog(request.Kind, request.SuggestedName, request.SourcePath);
+        // Enter or Down in the search query moves to the results.
+        Navigation.ResultsFocusRequested += (_, _) => (EntriesView as EntryTable)?.FocusTarget.Focus(Avalonia.Input.NavigationMethod.Tab);
+        WindowShortcuts.Register(this, new WindowShortcut("Ctrl+Enter",
+            () => Bridge is { IsSearching: true, SelectionCount: 1 } && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
+            () => Bridge!.OpenSelectedLocation()));
         // F2 renames the one selected item, unless a text field is being typed in.
         WindowShortcuts.Register(this, new WindowShortcut("F2",
             () => Bridge?.CanRenameSelection == true && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox,
@@ -77,15 +82,25 @@ public partial class WorkspaceView : UserControl
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ExplorerViewModel.ViewMode))
+        {
             RefreshEntriesView();
+        }
         else if (e.PropertyName == nameof(ExplorerViewModel.FoldersVisible))
+        {
             RefreshFolders();
+        }
+        else if (e.PropertyName == nameof(ExplorerViewModel.IsSearching))
+        {
+            // Results take the whole area, folder panel included, and always as a list: they need its LOCATION.
+            RefreshFolders();
+            RefreshEntriesView();
+        }
     }
 
     /// <summary>SplitView hides a hidden item's handle; the panel keeps its width for when it returns.</summary>
     private void RefreshFolders()
     {
-        bool visible = Bridge?.FoldersVisible != false;
+        bool visible = Bridge?.FoldersVisible != false && Bridge?.IsSearching != true;
         ColumnDefinition column = Split.ColumnDefinitions[0];
         if (!visible && FoldersFrame.IsVisible)
             folderWidth = column.Width;
@@ -99,7 +114,7 @@ public partial class WorkspaceView : UserControl
     /// <summary>The Loader: <c>viewMode === "grid" ? gridComponent : listComponent</c>.</summary>
     private void RefreshEntriesView()
     {
-        bool grid = Bridge?.ViewMode == "grid";
+        bool grid = Bridge?.ViewMode == "grid" && Bridge?.IsSearching != true;
         if (grid && EntriesHost.Content is EntryGrid || !grid && EntriesHost.Content is EntryTable)
             return;
         switch (EntriesHost.Content)
@@ -131,6 +146,9 @@ public partial class WorkspaceView : UserControl
     /// <summary>QML <c>openContextMenu(source, localX, localY)</c>.</summary>
     public void OpenContextMenu(Control source, Point point)
     {
+        // Search results have no folder of their own to make things in or paste into.
+        if (Bridge is { IsSearching: true, SelectionCount: 0 })
+            return;
         Point mapped = source.TranslatePoint(point, this) ?? point;
         contextMenu.Refresh();
         contextMenu.Open(this, mapped.X, mapped.Y);

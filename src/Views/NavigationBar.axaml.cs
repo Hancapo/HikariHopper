@@ -41,6 +41,29 @@ public partial class NavigationBar : UserControl
         SearchField.KeyDown += OnSearchKeyDown;
         RefreshSearchField();
 
+        // Search mode: the query, where to look, and how the text is read.
+        QueryField.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty && Bridge is { IsSearching: true } model)
+                model.SetSearchText(QueryField.Text ?? "");
+        };
+        QueryField.KeyDown += OnQueryKeyDown;
+        PointerClick.Attach(ScopeButton, _ => OpenScopeMenu());
+        // The toggles read as the text they change: the query's mono face, larger and bold.
+        foreach (ChromeToolButton toggle in new[] { CaseToggle, WildcardToggle, RegexToggle })
+            toggle.TemplateApplied += (_, e) =>
+            {
+                if (e.NameScope.Find<TextBlock>("PART_Text") is { } text)
+                {
+                    text.FontFamily = Ui.Theme.MonoFont;
+                    text.FontSize = 13;
+                    text.FontWeight = FontWeight.Bold;
+                }
+            };
+        ThemedToolTip.Set(CaseToggle, "Match case");
+        ThemedToolTip.Set(WildcardToggle, "Wildcards: * for any run of characters, ? for one; on by itself with either");
+        ThemedToolTip.Set(RegexToggle, "Regular expression");
+
         // The address as text: a click on the bar's empty part edits it, a right-click offers copying and pasting.
         AddressBar.AddHandler(PointerPressedEvent, OnAddressBarPressed, RoutingStrategies.Bubble, handledEventsToo: true);
         AddressField.KeyDown += OnAddressKeyDown;
@@ -49,6 +72,7 @@ public partial class NavigationBar : UserControl
         WindowShortcuts.Register(this,
             new WindowShortcut("Ctrl+F", () => Bridge?.HasWorkspace == true, FocusSearch),
             new WindowShortcut("F3", () => Bridge?.HasWorkspace == true, FocusSearch),
+            new WindowShortcut("Ctrl+Shift+F", () => Bridge?.HasWorkspace == true, () => BeginSearch(ViewModels.SearchScope.Everywhere)),
             new WindowShortcut("Ctrl+L", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
             new WindowShortcut("Alt+D", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
             new WindowShortcut("Alt+Left", () => Bridge?.GoBack()),
@@ -67,6 +91,9 @@ public partial class NavigationBar : UserControl
     /// <summary>QML <c>focusSearch()</c>: focus the search field and select its text.</summary>
     public void FocusSearch()
     {
+        // From a search, the folder's own search: the text comes along.
+        if (Bridge is { IsSearching: true } model)
+            model.BeginSearch(ViewModels.SearchScope.Folder);
         SearchField.Focus(NavigationMethod.Pointer);
         SearchField.SelectAll();
     }
@@ -87,6 +114,7 @@ public partial class NavigationBar : UserControl
         }
         RefreshSegments();
         RefreshViewMode();
+        RefreshSearchRow();
     }
 
     private void OnSearchFocusRequested(object? sender, EventArgs e) => FocusSearch();
@@ -105,6 +133,15 @@ public partial class NavigationBar : UserControl
                 break;
             case nameof(ExplorerViewModel.ViewMode):
                 RefreshViewMode();
+                break;
+            case nameof(ExplorerViewModel.IsSearching):
+            case nameof(ExplorerViewModel.SearchScopeValue):
+            case nameof(ExplorerViewModel.SearchText):
+            case nameof(ExplorerViewModel.SearchError):
+            case nameof(ExplorerViewModel.SearchMatchCase):
+            case nameof(ExplorerViewModel.SearchWildcards):
+            case nameof(ExplorerViewModel.SearchRegex):
+                RefreshSearchRow();
                 break;
         }
     }
@@ -306,6 +343,128 @@ public partial class NavigationBar : UserControl
         menu.Closed += (_, _) => AddressMenu = null;
         menu.Open(AddressBar, at.X, at.Y);
     }
+
+    /// <summary>Raised when Enter or Down in the query should move to the results.</summary>
+    public event EventHandler? ResultsFocusRequested;
+
+    /// <summary>Starts searching <paramref name="scope"/>, the query focused with its text selected.</summary>
+    public void BeginSearch(ViewModels.SearchScope scope)
+    {
+        if (Bridge is not { HasWorkspace: true } model)
+            return;
+        EndAddressEdit();
+        model.BeginSearch(scope);
+        RefreshSearchRow();
+        QueryField.Focus(NavigationMethod.Pointer);
+        QueryField.SelectAll();
+    }
+
+    private static string ScopeLabel(ViewModels.SearchScope scope) => scope switch
+    {
+        ViewModels.SearchScope.FolderAndBelow => "This folder and below",
+        ViewModels.SearchScope.Archive => "This RPF",
+        _ => "Whole game",
+    };
+
+    /// <summary>The search row in the address bar's place while searching, showing what the tab searches.</summary>
+    private void RefreshSearchRow()
+    {
+        bool searching = Bridge?.IsSearching == true;
+        // However the search started (Ctrl+Shift+F, the Go menu), its query takes the keyboard.
+        if (searching && !SearchRow.IsVisible)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (Bridge?.IsSearching != true || QueryField.IsKeyboardFocusWithin)
+                    return;
+                QueryField.Focus(NavigationMethod.Pointer);
+                QueryField.SelectAll();
+            });
+        SearchRow.IsVisible = searching;
+        if (searching)
+        {
+            AddressField.IsVisible = false;
+            AddressBar.IsVisible = false;
+        }
+        else if (!AddressField.IsVisible)
+        {
+            AddressBar.IsVisible = true;
+        }
+        SearchField.IsVisible = !searching;
+        if (Bridge is not { } model || !searching)
+            return;
+        ScopeText.Text = ScopeLabel(model.SearchScopeValue);
+        if (QueryField.Text != model.SearchText)
+            QueryField.Text = model.SearchText;
+        QueryField.Invalid = model.SearchError.Length > 0;
+        QueryError.Text = model.SearchError;
+        CaseToggle.Raised = model.SearchMatchCase;
+        WildcardToggle.Raised = model.SearchWildcards;
+        RegexToggle.Raised = model.SearchRegex;
+    }
+
+    private void OnQueryKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Bridge?.EndSearch();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Enter or Key.Return or Key.Down && Bridge is { EntriesModel.Count: > 0 } model)
+        {
+            if (model.SelectedIndex < 0)
+                model.SelectEntry(0);
+            ResultsFocusRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The scopes: the folder (its own search), the folder and below, the RPF shown, the whole game.</summary>
+    private void OpenScopeMenu()
+    {
+        if (Bridge is not { IsSearching: true } model)
+            return;
+        var menu = new RetroMenu();
+        (ViewModels.SearchScope Scope, string Text, string Key, bool Enabled)[] scopes =
+        [
+            (ViewModels.SearchScope.Folder, "This folder", "Ctrl+F", true),
+            (ViewModels.SearchScope.FolderAndBelow, "This folder and below", "", true),
+            (ViewModels.SearchScope.Archive, "This RPF", "", model.CanSearchArchive),
+            (ViewModels.SearchScope.Everywhere, "Whole game", "Ctrl+Shift+F", true),
+        ];
+        foreach (var (scope, text, key, enabled) in scopes)
+        {
+            var item = new RetroMenuItem
+            {
+                Text = text, ShortcutText = key, Checkable = true, IsEnabled = enabled,
+                IsChecked = scope == model.SearchScopeValue,
+            };
+            item.Triggered += (_, _) =>
+            {
+                if (scope == ViewModels.SearchScope.Folder)
+                {
+                    model.BeginSearch(scope);
+                    SearchField.Focus(NavigationMethod.Pointer);
+                }
+                else
+                {
+                    BeginSearch(scope);
+                }
+            };
+            menu.Items.Add(item);
+        }
+        ScopeMenu = menu;
+        menu.Closed += (_, _) => ScopeMenu = null;
+        menu.OpenUnder(ScopeButton, 4);
+    }
+
+    /// <summary>The scope menu, while it is open.</summary>
+    internal RetroMenu? ScopeMenu { get; private set; }
+
+    private void OnCaseToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchMatchCase();
+
+    private void OnWildcardToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchWildcards();
+
+    private void OnRegexToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchRegex();
 
     private void OnBack(object? sender, RoutedEventArgs e) => Bridge?.GoBack();
 

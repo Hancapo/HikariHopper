@@ -76,8 +76,20 @@ public partial class EntryTable : UserControl
 
     internal ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
-    /// <summary>The NAME column: whatever the row leaves after its padding, TYPE, SIZE and the trailing lane.</summary>
-    public double NameWidth => Math.Max(160, RowWidth - RowPaddingLeft - TypeWidth - SizeWidth - TrailWidth - RowPaddingRight);
+    /// <summary>Whether the rows are search results, which show where each file lives.</summary>
+    internal bool ShowsLocation => Bridge?.IsSearching == true;
+
+    /// <summary>What the row leaves after its padding, TYPE, SIZE and the trailing lane.</summary>
+    private double FreeWidth => RowWidth - RowPaddingLeft - TypeWidth - SizeWidth - TrailWidth - RowPaddingRight;
+
+    /// <summary>
+    /// The NAME column: all of the free width, or, for search results, about a third of it, the rest going to
+    /// LOCATION.
+    /// </summary>
+    public double NameWidth => ShowsLocation ? Math.Clamp(FreeWidth * 0.32, 200, 360) : Math.Max(160, FreeWidth);
+
+    /// <summary>The LOCATION column of search results; nothing otherwise.</summary>
+    public double LocationWidth => ShowsLocation ? Math.Max(120, FreeWidth - NameWidth) : 0;
 
     /// <summary>The width of the rows and their columns, which span the panel.</summary>
     public double DataBlockWidth => RowWidth;
@@ -136,6 +148,17 @@ public partial class EntryTable : UserControl
             case nameof(ExplorerViewModel.HasWorkspace):
                 RefreshEmptyState();
                 break;
+            case nameof(ExplorerViewModel.IsSearching):
+                UpdateColumns();
+                RefreshHeaders();
+                RefreshEmptyState();
+                RefreshRows();
+                break;
+            case nameof(ExplorerViewModel.SearchError):
+            case nameof(ExplorerViewModel.SearchHitCount):
+            case nameof(ExplorerViewModel.SearchIndexing):
+                RefreshEmptyState();
+                break;
             case nameof(ExplorerViewModel.SelectedIndex):
                 // currentIndex: bridge.selectedIndex — the ListView's highlight follows it.
                 highlight.SetCurrentIndex(Bridge?.SelectedIndex ?? -1);
@@ -159,6 +182,8 @@ public partial class EntryTable : UserControl
     {
         // The header has no inset, so its NAME cell also covers the row inset and padding.
         NameHeader.Width = Ui.Theme.ListInset + RowPaddingLeft + NameWidth;
+        LocationHeader.IsVisible = ShowsLocation;
+        LocationHeader.Width = LocationWidth;
         foreach (Control container in EntryList.GetRealizedContainers())
         {
             if (container is EntryRow row)
@@ -172,6 +197,8 @@ public partial class EntryTable : UserControl
         string column = model?.SortColumn ?? "";
         bool ascending = model?.SortAscending ?? true;
         NameHeader.SortActive = column == "name";
+        LocationHeader.SortActive = column == "location";
+        LocationHeader.SortAscending = ascending;
         TypeHeader.SortActive = column == "type";
         SizeHeader.SortActive = column == "size";
         NameHeader.SortAscending = TypeHeader.SortAscending = SizeHeader.SortAscending = ascending;
@@ -187,11 +214,21 @@ public partial class EntryTable : UserControl
     {
         bool hasWorkspace = Bridge?.HasWorkspace == true;
         EmptyState.IsVisible = (Bridge?.EntriesModel.Count ?? 0) == 0;
+        if (Bridge is { IsSearching: true } model)
+        {
+            EmptyText.Text = model.SearchError.Length > 0 ? model.SearchError
+                : model.SearchText.Length == 0 ? "Type a name to search"
+                : model.SearchIndexing ? "Searching…" : "No files match";
+            OpenGameButton.IsVisible = false;
+            return;
+        }
         EmptyText.Text = hasWorkspace ? "This folder is empty" : "Configure a GTA V installation to begin";
         OpenGameButton.IsVisible = !hasWorkspace;
     }
 
     private void OnSortName(object? sender, EventArgs e) => Bridge?.SortEntries("name");
+
+    private void OnSortLocation(object? sender, EventArgs e) => Bridge?.SortEntries("location");
 
     private void OnSortType(object? sender, EventArgs e) => Bridge?.SortEntries("type");
 
@@ -455,6 +492,7 @@ public sealed class EntryRow : Panel
     private readonly RowFill fill;
     private readonly FileGlyph glyph = new();
     private readonly TextBlock name = Text(Ui.Theme.MonoFont, Ui.Theme.FontSize);
+    private readonly TextBlock location = Text(Ui.Theme.MonoFont, 11);
     private readonly TextBlock type = Text(Ui.Theme.UiFont, Ui.Theme.FontSize);
     private readonly TextBlock size = Text(Ui.Theme.MonoFont, Ui.Theme.FontSize);
     private EntryTable? owner;
@@ -469,12 +507,15 @@ public sealed class EntryRow : Panel
         fill = new RowFill(this);
         name.TextTrimming = TextTrimming.CharacterEllipsis;
         type.TextTrimming = TextTrimming.CharacterEllipsis;
+        location.TextTrimming = TextTrimming.CharacterEllipsis;
+        location.IsVisible = false;
         type.Padding = new Thickness(12, 0, 0, 0);
         size.Padding = new Thickness(0, 0, 12, 0);
         size.TextAlignment = TextAlignment.Right;
         Children.Add(fill);
         Children.Add(glyph);
         Children.Add(name);
+        Children.Add(location);
         Children.Add(type);
         Children.Add(size);
     }
@@ -519,7 +560,22 @@ public sealed class EntryRow : Panel
         glyph.Selected = selected;
         name.Foreground = selected ? Ui.Theme.SelectionText : Ui.Theme.TextRow;
         name.FontWeight = selected ? FontWeight.Bold : FontWeight.Normal;
-        EntryText.MarkMatch(name.Inlines!, item.Name, owner?.Bridge?.SearchQuery, selected ? Ui.Theme.SelectionText : Ui.Theme.Brass);
+        IBrush mark = selected ? Ui.Theme.SelectionText : Ui.Theme.Brass;
+        if (item.Record.NativeEntry is Core.Search.SearchHit hit)
+        {
+            EntryText.MarkSpans(name.Inlines!, item.Name, hit.Spans, mark);
+            EntryText.Location(location.Inlines!, hit.Location, selected);
+            location.IsVisible = true;
+        }
+        else
+        {
+            EntryText.MarkMatch(name.Inlines!, item.Name, owner?.Bridge?.SearchQuery, mark);
+            if (location.IsVisible)
+            {
+                location.Inlines!.Clear();
+                location.IsVisible = false;
+            }
+        }
         type.Text = item.TypeText;
         type.Foreground = selected ? Ui.Theme.SelectionInk : Ui.Theme.TextDim;
         size.Text = item.SizeText;
@@ -540,11 +596,14 @@ public sealed class EntryRow : Panel
 
     private double NameWidth => owner?.NameWidth ?? 300;
 
+    private double LocationWidth => owner?.LocationWidth ?? 0;
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var unbounded = new Size(double.PositiveInfinity, Ui.Theme.RowHeight);
         glyph.Measure(unbounded);
         name.Measure(new Size(NameCellAvailable(), Ui.Theme.RowHeight));
+        location.Measure(new Size(Math.Max(0, LocationWidth - 8), Ui.Theme.RowHeight));
         type.Measure(new Size(EntryTable.TypeWidth, Ui.Theme.RowHeight));
         size.Measure(new Size(EntryTable.SizeWidth, Ui.Theme.RowHeight));
         fill.Measure(unbounded);
@@ -560,8 +619,11 @@ public sealed class EntryRow : Panel
     protected override Size ArrangeOverride(Size finalSize)
     {
         double height = finalSize.Height;
-        double typeLeft = EntryTable.RowPaddingLeft + NameWidth;
+        double typeLeft = EntryTable.RowPaddingLeft + NameWidth + LocationWidth;
         fill.Arrange(new Rect(finalSize));
+        double locationHeight = location.DesiredSize.Height;
+        location.Arrange(new Rect(EntryTable.RowPaddingLeft + NameWidth, QtTextCenter(height, locationHeight),
+            Math.Min(location.DesiredSize.Width, Math.Max(0, LocationWidth - 8)), locationHeight));
         glyph.Arrange(new Rect(EntryTable.RowPaddingLeft, QtCenter(height, 16), 16, 16));
         // Text { width: Math.min(implicitWidth, available); anchors.verticalCenter }.
         double nameWidth = Math.Min(name.DesiredSize.Width, NameCellAvailable());

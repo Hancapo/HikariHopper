@@ -35,9 +35,15 @@
       </StackPanel>
     </StackPanel>
 
+    <!-- While the search index is being built: how far it has got, left of the key hints. -->
+    <StackPanel Name="Indexing" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" Margin="14,0,0,0" IsVisible="{Binding SearchIndexing}">
+      <TextBlock Text="{Binding SearchIndexText}" Foreground="{x:Static ui:Theme.TextDim}" />
+      <c:ThinProgress Width="110" VerticalAlignment="Center" Value="{Binding SearchIndexProgress}" />
+    </StackPanel>
+
     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="14">
       <Panel>
-        <TextBlock IsVisible="{Binding HasWorkspace}" Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
+        <TextBlock IsVisible="{Binding ShowsItemCount}" Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
         <TextBlock IsVisible="{Binding !HasWorkspace}" Text="NO GAME" />
       </Panel>
       <Border Name="EditionDivider" Classes="divider" />

@@ -40,7 +40,7 @@ public partial class StatusBar : UserControl
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition))
+        if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.IsSearching))
             Refresh();
     }
 
@@ -48,7 +48,9 @@ public partial class StatusBar : UserControl
     {
         string edition = Bridge?.GameEdition ?? "";
         bool status = StatusWorthShowing(Bridge?.Status ?? "", edition);
-        EditionDivider.IsVisible = Edition.IsVisible = edition.Length > 0;
+        Edition.IsVisible = edition.Length > 0;
+        // While searching the item count is the tab's, so nothing stands before the lamp to divide from.
+        EditionDivider.IsVisible = Edition.IsVisible && Bridge?.IsSearching != true;
         StatusDivider.IsVisible = StatusText.IsVisible = status;
     }
 }
