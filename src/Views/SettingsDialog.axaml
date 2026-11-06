@@ -9,7 +9,7 @@
               Heading="SETTINGS"
               BodyMargin="0"
               FooterText="Saved automatically">
-  <!-- The groups rail, then the selected group's page. Only Games exists so far; the others are
+  <!-- The groups rail, then the selected group's page: Games and Startup so far; the others are
        listed as coming, so the rail is already the shape it will have. -->
   <v:ModalSheet.Styles>
     <Style Selector="TextBlock.section">
@@ -30,6 +30,7 @@
     <StackPanel Background="{x:Static ui:Theme.SidebarBg}">
       <TextBlock Classes="section" Margin="16,16,0,8" Text="GROUPS" />
       <v:SettingsGroupRow Name="GamesGroup" Label="Games" Selected="True" />
+      <v:SettingsGroupRow Name="StartupGroup" Label="Startup" />
       <v:SettingsGroupRow Label="Explorer" Note="soon" Available="False" />
       <v:SettingsGroupRow Label="Appearance" Note="soon" Available="False" />
     </StackPanel>
@@ -38,23 +39,31 @@
 
     <ScrollViewer Grid.Column="2" Theme="{StaticResource BareScrollViewer}"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="20,16,20,16">
-        <TextBlock Classes="section" Text="GAMES" />
-        <TextBlock Classes="note" Margin="0,6,0,10"
-                   Text="Where each installation lives. HikariHopper checks the folder for the game's executable." />
-        <Border Background="{x:Static ui:Theme.WindowBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,6">
-          <StackPanel Name="GameRows" />
-        </Border>
+      <Panel Margin="20,16,20,16">
+        <StackPanel Name="GamesPage">
+          <TextBlock Classes="section" Text="GAMES" />
+          <TextBlock Classes="note" Margin="0,6,0,10"
+                     Text="Where each installation lives. HikariHopper checks the folder for the game's executable." />
+          <Border Background="{x:Static ui:Theme.WindowBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,6">
+            <StackPanel Name="GameRows" />
+          </Border>
+        </StackPanel>
 
-        <TextBlock Classes="section" Margin="0,24,0,8" Text="STARTUP" />
-        <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
-        <c:SquareCheckBox Name="CheckForUpdates" Margin="0,8,0,0" Text="Check for updates when HikariHopper starts" />
-        <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-          <TextBlock Name="RecentText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
-                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-          <c:ChromeToolButton Name="ClearRecents" Grid.Column="1" Width="84" Height="26" Raised="True" Text="Clear list" />
-        </Grid>
-      </StackPanel>
+        <StackPanel Name="StartupPage" IsVisible="False">
+          <TextBlock Classes="section" Text="STARTUP" />
+          <TextBlock Classes="note" Margin="0,6,0,12" Text="What HikariHopper does when it starts." />
+          <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
+          <c:SquareCheckBox Name="CheckForUpdates" Margin="0,8,0,0" Text="Check for updates when HikariHopper starts" />
+
+          <TextBlock Classes="section" Margin="0,24,0,0" Text="START PAGE" />
+          <TextBlock Classes="note" Margin="0,6,0,10" Text="The games opened lately, listed on the start page to open again." />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Name="RecentText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
+                       FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+            <c:ChromeToolButton Name="ClearRecents" Grid.Column="1" Width="84" Height="26" Raised="True" Text="Clear list" />
+          </Grid>
+        </StackPanel>
+      </Panel>
     </ScrollViewer>
   </Grid>
 </v:ModalSheet>

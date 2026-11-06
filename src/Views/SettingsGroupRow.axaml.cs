@@ -1,11 +1,15 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 
 namespace HikariHopper.Views;
 
-/// <summary>A group in the Settings rail (port of <c>SettingsGroupRow.qml</c>).</summary>
+/// <summary>
+/// A group in the Settings rail (port of <c>SettingsGroupRow.qml</c>). An available group lights up under the
+/// pointer and is chosen with a click.
+/// </summary>
 public partial class SettingsGroupRow : UserControl
 {
     public static readonly StyledProperty<string> LabelProperty =
@@ -23,6 +27,7 @@ public partial class SettingsGroupRow : UserControl
     private readonly Border surface;
     private readonly TextBlock labelText;
     private readonly TextBlock noteText;
+    private bool hovered;
 
     static SettingsGroupRow()
     {
@@ -62,6 +67,37 @@ public partial class SettingsGroupRow : UserControl
         set => SetValue(AvailableProperty, value);
     }
 
+    /// <summary>Raised when an available group is clicked.</summary>
+    public event EventHandler? Chosen;
+
+    protected override void OnPointerEntered(PointerEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        hovered = true;
+        Refresh();
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        hovered = false;
+        Refresh();
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (Available && e.InitialPressMouseButton == MouseButton.Left && new Rect(Bounds.Size).Contains(e.GetPosition(this)))
+            Choose();
+    }
+
+    /// <summary>Chooses this group, as a click does; nothing if it isn't available.</summary>
+    internal void Choose()
+    {
+        if (Available)
+            Chosen?.Invoke(this, EventArgs.Empty);
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -74,7 +110,7 @@ public partial class SettingsGroupRow : UserControl
     {
         if (surface is null)
             return;
-        surface.Background = Selected ? Ui.Theme.SelectionWash : Brushes.Transparent;
+        surface.Background = Selected ? Ui.Theme.SelectionWash : hovered && Available ? Ui.Theme.HoverBg : Brushes.Transparent;
         surface.BorderBrush = Selected ? Ui.Theme.SelectionRing : Brushes.Transparent;
         labelText.Text = Label;
         labelText.Foreground = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextRow : Ui.Theme.TextFaint;

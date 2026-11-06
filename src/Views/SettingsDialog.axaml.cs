@@ -7,9 +7,9 @@ using HikariHopper.ViewModels;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// Settings, shown as a sheet over the main window. The Games group lists every installation of the
-/// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>, and
-/// the startup options. Every change is saved as it is made.
+/// Settings, shown as a sheet over the main window, a group at a time. Games lists every installation of
+/// the games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>; Startup
+/// has what the app does when it starts, and the start page's recent games. Every change is saved as it is made.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public partial class SettingsDialog : ModalSheet
@@ -30,12 +30,26 @@ public partial class SettingsDialog : ModalSheet
         OpenLastGame.IsCheckedChanged += (_, _) => GameSettings.OpenLastGameOnStartup = OpenLastGame.IsChecked == true;
         CheckForUpdates.IsCheckedChanged += (_, _) => Infrastructure.Updates.CheckOnStartup = CheckForUpdates.IsChecked == true;
         ClearRecents.Click += (_, _) => tabs.ClearRecentGames();
+        GamesGroup.Chosen += (_, _) => ShowGroup(GamesGroup);
+        StartupGroup.Chosen += (_, _) => ShowGroup(StartupGroup);
         GamePaths.PathsChanged += (_, _) => RefreshGameRows();
         tabs.PropertyChanged += OnTabsChanged;
         Refresh();
     }
 
     public GamePathSettings GamePaths => tabs.GamePathSettings;
+
+    /// <summary>The group shown: "Games" or "Startup".</summary>
+    internal string Group => StartupGroup.Selected ? StartupGroup.Label : GamesGroup.Label;
+
+    /// <summary>Shows <paramref name="group"/>'s page and marks it in the rail.</summary>
+    internal void ShowGroup(SettingsGroupRow group)
+    {
+        GamesGroup.Selected = group == GamesGroup;
+        StartupGroup.Selected = group == StartupGroup;
+        GamesPage.IsVisible = GamesGroup.Selected;
+        StartupPage.IsVisible = StartupGroup.Selected;
+    }
 
     /// <summary>The installation rows, in catalogue order.</summary>
     internal IReadOnlyList<GamePathRow> Rows => [.. GameRows.Children.OfType<GamePathRow>()];

@@ -481,7 +481,23 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("", ui.Tabs.GamePathSettings.LegacyPath);
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
-        // Startup: reopening the last game is on until it is turned off, and then nothing reopens.
+        // Startup is a group of its own: choosing it in the rail shows its page in place of the games.
+        Assert.Equal("Games", settings.Group);
+        Assert.True(settings.GamesPage.IsVisible);
+        Assert.False(settings.StartupPage.IsVisible);
+        settings.StartupGroup.Choose();
+        Pump();
+        Assert.Equal("Startup", settings.Group);
+        Assert.True(settings.StartupGroup.Selected);
+        Assert.False(settings.GamesGroup.Selected);
+        Assert.False(settings.GamesPage.IsVisible);
+        Assert.True(settings.StartupPage.IsVisible);
+        Assert.True(settings.CheckForUpdates.IsChecked);
+        settings.CheckForUpdates.IsChecked = false;
+        Assert.False(Infrastructure.Updates.CheckOnStartup);
+        settings.CheckForUpdates.IsChecked = true;
+
+        // Reopening the last game is on until it is turned off, and then nothing reopens.
         HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.LastGameRootKey, legacy);
         Assert.True(settings.OpenLastGame.IsChecked);
         settings.OpenLastGame.IsChecked = false;
@@ -499,6 +515,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Empty(ui.Tabs.RecentGames);
         Assert.Equal("No recent games", settings.RecentText.Text);
         Assert.False(settings.ClearRecents.IsEnabled);
+        settings.Close();
+        Pump(250);
+
+        // Settings reopens on the group it was left at.
+        menus.OpenSettings();
+        Pump(200);
+        Assert.Equal("Startup", settings.Group);
         settings.Close();
         Pump(250);
     }
