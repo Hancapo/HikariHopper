@@ -78,6 +78,7 @@
 
     <c:RetroMenu x:Key="HelpMenu" x:DataType="vm:ExplorerTabsViewModel">
       <c:RetroMenuItem Text="Keyboard shortcuts" Triggered="OnShortcuts" />
+      <c:RetroMenuItem Text="Check for updates…" Triggered="OnCheckForUpdates" />
       <c:RetroMenuSeparator />
       <c:RetroMenuItem Text="About HikariHopper" Triggered="OnAbout" />
     </c:RetroMenu>

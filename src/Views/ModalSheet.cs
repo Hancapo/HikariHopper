@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Views;
@@ -25,6 +26,10 @@ public class ModalSheet : ContentControl, IModalContent
     public static readonly StyledProperty<string> FooterTextProperty =
         AvaloniaProperty.Register<ModalSheet, string>(nameof(FooterText), "");
 
+    /// <summary>The footer's own content, in place of <see cref="FooterText"/> and Close; for sheets with actions.</summary>
+    public static readonly StyledProperty<Control?> FooterProperty =
+        AvaloniaProperty.Register<ModalSheet, Control?>(nameof(Footer));
+
     public static readonly StyledProperty<Thickness> BodyMarginProperty =
         AvaloniaProperty.Register<ModalSheet, Thickness>(nameof(BodyMargin), new Thickness(18));
 
@@ -42,6 +47,14 @@ public class ModalSheet : ContentControl, IModalContent
 
     private ModalOverlay? overlay;
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        // A sheet that changes size while it is up (the update sheet, from its check to a new version) is laid out again.
+        if (change.Property == WindowShareProperty || change.Property == MinSizeProperty || change.Property == MaxSizeProperty)
+            (this.GetVisualParent() as Avalonia.Layout.Layoutable)?.InvalidateMeasure();
+    }
+
     public string Heading
     {
         get => GetValue(HeadingProperty);
@@ -52,6 +65,12 @@ public class ModalSheet : ContentControl, IModalContent
     {
         get => GetValue(FooterTextProperty);
         set => SetValue(FooterTextProperty, value);
+    }
+
+    public Control? Footer
+    {
+        get => GetValue(FooterProperty);
+        set => SetValue(FooterProperty, value);
     }
 
     public Thickness BodyMargin
