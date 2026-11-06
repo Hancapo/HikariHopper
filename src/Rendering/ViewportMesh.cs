@@ -69,6 +69,20 @@ internal sealed class ViewportMesh(Vector3 origin)
         vertices.Add(new ViewportVertex(c - Origin, normal, colour));
     }
 
+    /// <summary>
+    /// A triangle of a smooth surface: each corner with its own normal, so shading flows across the surface's faces
+    /// instead of breaking at them. Its edges aren't drawn.
+    /// </summary>
+    public void Triangle(Vector3 a, Vector3 b, Vector3 c, Vector3 normalA, Vector3 normalB, Vector3 normalC, uint colour)
+    {
+        if (Vector3.Cross(b - a, c - a).LengthSquared() <= 1e-14f)
+            return;
+        colour &= 0x00FFFFFF;
+        vertices.Add(new ViewportVertex(a - Origin, normalA, colour));
+        vertices.Add(new ViewportVertex(b - Origin, normalB, colour));
+        vertices.Add(new ViewportVertex(c - Origin, normalC, colour));
+    }
+
     /// <summary>A line between world positions, in an sRGB colour, this many pixels wide.</summary>
     public void Line(Vector3 a, Vector3 b, uint colour, float width)
     {

@@ -48,24 +48,57 @@ public sealed class ViewportTests
         YnvPoly polygon = navmesh.Polygons[0];
         polygon.Flags0 |= YnvPolyFlags0.IsWater;
         navmesh.Edges[polygon.IndexId].Current.AdjacencyType = YnvAdjacencyType.ClimbLow;
-        navmesh.Portals.Add(new YnvPortal { Type = YnvPortalType.ClimbLadder, PositionFrom = new(1012, 2022, 30), PositionTo = new(1012, 2022, 36) });
 
         ViewportMesh mesh = NavmeshMesh.Build(navmesh, new Vector3(1025, 2035, 30));
 
         string[] names = [.. mesh.Legend.Select(entry => entry.Name)];
         Assert.Contains("Water", names);
         Assert.Contains("Low climb", names);
-        Assert.Contains("Ladder up", names);
         // Polygons are drawn whole: the triangles they were split into show no edges of their own.
         Assert.All(mesh.Vertices, vertex => Assert.Equal(0u, vertex.Colour >> 24));
-        // The ladder: the link, and a post at each end.
-        uint ladder = mesh.Legend.Single(entry => entry.Name == "Ladder up").Colour;
-        Assert.Equal(3, mesh.Segments.Count(segment => segment.Colour == ladder));
         // Every polygon edge has a line, the climb in its own colour and wider.
         uint climb = mesh.Legend.Single(entry => entry.Name == "Low climb").Colour;
         ViewportSegment climbing = Assert.Single(mesh.Segments, segment => segment.Colour == climb);
         Assert.True(climbing.Width > mesh.Segments.Min(segment => segment.Width));
-        Assert.Equal(navmesh.Polygons.Sum(p => p.IndexCount), mesh.Segments.Count(segment => segment.Colour != ladder));
+        Assert.Equal(navmesh.Polygons.Sum(p => p.IndexCount), mesh.Segments.Count);
+    }
+
+    [Fact]
+    public void ALadderUpAndDownIsOneSolidLinkPointingBothWays()
+    {
+        Vector3[] vertices = [new(1010, 2020, 30), new(1040, 2020, 30), new(1040, 2050, 30), new(1010, 2050, 30)];
+        Ynv navmesh = YnvAuthoring.FromMesh(vertices, [0, 1, 2, 0, 2, 3]).Single().Mesh;
+        Vector3 foot = new(1012, 2022, 30), top = new(1012, 2022.2f, 36);
+        navmesh.Portals.Add(new YnvPortal { Type = YnvPortalType.ClimbLadder, PositionFrom = foot, PositionTo = top });
+        navmesh.Portals.Add(new YnvPortal { Type = YnvPortalType.DescendLadder, PositionFrom = top, PositionTo = foot });
+        ViewportMesh withoutLadder = NavmeshMesh.Build(YnvAuthoring.FromMesh(vertices, [0, 1, 2, 0, 2, 3]).Single().Mesh, foot);
+
+        ViewportMesh mesh = NavmeshMesh.Build(navmesh, foot);
+
+        // One entry for the pair, solid shapes (not lines) in its colour, and dark pucks at its ends.
+        LegendEntry ladder = Assert.Single(mesh.Legend, entry => entry.Name == "Ladder");
+        Assert.Equal(1, ladder.Count);
+        Assert.Equal(withoutLadder.Segments.Count, mesh.Segments.Count);
+        ViewportVertex[] shapes = [.. mesh.Vertices.Skip(withoutLadder.Vertices.Count)];
+        Assert.Contains(shapes, vertex => (vertex.Colour & 0xFFFFFF) == (ladder.Colour & 0xFFFFFF));
+        Assert.Contains(shapes, vertex => (vertex.Colour & 0xFFFFFF) == (ViewportMesh.Pack(Ui.Theme.ChromeBg) & 0xFFFFFF));
+        // Straight up, as a ladder goes, and pointing both ways: its colour reaches near both ends but no further.
+        Vector3[] link = [.. shapes.Where(vertex => (vertex.Colour & 0xFFFFFF) == (ladder.Colour & 0xFFFFFF)).Select(vertex => vertex.Position + mesh.Origin)];
+        Assert.All(link, point => Assert.InRange(point.X, 1011.7f, 1012.3f));
+        Assert.InRange(link.Min(point => point.Z), 30, 30.3f);
+        Assert.InRange(link.Max(point => point.Z), 35.7f, 36);
+    }
+
+    [Fact]
+    public void AnArrowStopsJustClearOfThePuckItPointsAt()
+    {
+        // Landing from straight above: out through the top. From below: through the bottom. Coming in flat: the rim.
+        Assert.Equal(.05f + .04f, NavmeshMesh.Clearance(-Vector3.UnitZ, .2f), 0.0001);
+        Assert.Equal(.03f + .04f, NavmeshMesh.Clearance(Vector3.UnitZ, .2f), 0.0001);
+        Assert.Equal(.2f + .04f, NavmeshMesh.Clearance(Vector3.UnitX, .2f), 0.0001);
+        // At a slant, whichever way out comes first.
+        Vector3 slant = Vector3.Normalize(new Vector3(1, 0, -1));
+        Assert.Equal(Math.Min(.09f / slant.X, .24f / slant.X), NavmeshMesh.Clearance(slant, .2f), 0.0001);
     }
 
     [Fact]
