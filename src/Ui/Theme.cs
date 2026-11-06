@@ -23,7 +23,7 @@ public static class Theme
     public static IImmutableSolidColorBrush AppBg { get; } = Hex("#1E1F30");         // the list canvas
     public static IImmutableSolidColorBrush PanelBg { get; } = Hex("#1E1F30");
     public static IImmutableSolidColorBrush TabActive { get; } = Hex("#1E1F30");     // active tab merges into the canvas
-    public static IImmutableSolidColorBrush TabStripBg { get; } = Hex("#1F2033");    // the strip the tabs hang from
+    public static IImmutableSolidColorBrush TabStripBg { get; } = Hex("#17182A");    // the strip the tabs hang from: the base, so tabs stand out
     public static IImmutableSolidColorBrush ListHeaderBg { get; } = Hex("#24253A");  // column titles over the list canvas
     public static IImmutableSolidColorBrush ChromeBg { get; } = Hex("#2C2D43");      // menu, toolbars, headers, status
     public static IImmutableSolidColorBrush SidebarBg { get; } = Hex("#2C2D43");
@@ -47,7 +47,7 @@ public static class Theme
     public static IImmutableSolidColorBrush Text { get; } = Hex("#FFFBFF");
     public static IImmutableSolidColorBrush TextRow { get; } = Hex("#C6C8DA");       // unselected row text
     public static IImmutableSolidColorBrush TextDim { get; } = Hex("#9A9CB4");
-    public static IImmutableSolidColorBrush TextFaint { get; } = Hex("#6E7089");
+    public static IImmutableSolidColorBrush TextFaint { get; } = Hex("#8587A2");     // 4.5:1 on the list, fields and tab strip
 
     // Blue: what a package is, plus the piping on the window frame and the
     // active tab. Deliberately never the selection.

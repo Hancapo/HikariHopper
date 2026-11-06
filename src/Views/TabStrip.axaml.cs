@@ -496,6 +496,10 @@ public sealed class TabStripTab : Decorator
         if (Active || IsPointerOver)
         {
             context.DrawGeometry(Active ? Ui.Theme.ChromeBg : Ui.Theme.TabBg, null, TabShape(w, h));
+            // The active tab's top edge catches the light, so its outline reads on any screen, however it shows dark
+            // tones.
+            if (Active)
+                context.DrawGeometry(null, BevelPen, TopEdge(w));
             return;
         }
         if (divider)
@@ -506,6 +510,24 @@ public sealed class TabStripTab : Decorator
     /// A filled tab's outline: rounded top corners and a foot that curves out into the toolbar on
     /// both sides, extending <see cref="FootRadius"/> beyond the tab's bounds.
     /// </summary>
+    private static readonly Pen BevelPen = new(Ui.Theme.Bevel, 1);
+
+    /// <summary>The tab's top edge and rounded corners, half a pixel in so the 1px line is crisp.</summary>
+    internal static Geometry TopEdge(double w)
+    {
+        double r = FootRadius - 0.5;
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext path = geometry.Open())
+        {
+            path.BeginFigure(new Point(0.5, r + 0.5), false);
+            path.ArcTo(new Point(r + 0.5, 0.5), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.LineTo(new Point(w - r - 0.5, 0.5));
+            path.ArcTo(new Point(w - 0.5, r + 0.5), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.EndFigure(false);
+        }
+        return geometry;
+    }
+
     internal static Geometry TabShape(double w, double h)
     {
         double r = FootRadius;
