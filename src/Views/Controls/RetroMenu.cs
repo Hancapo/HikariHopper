@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Primitives.PopupPositioning;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 
 namespace HikariHopper.Views.Controls;
@@ -29,6 +31,32 @@ public class RetroMenu : ContextMenu
         get => GetValue(ConnectionWidthProperty);
         set => SetValue(ConnectionWidthProperty, value);
     }
+
+    private static readonly List<RetroMenu> openMenus = [];
+
+    public RetroMenu()
+    {
+        Opened += (_, _) => openMenus.Add(this);
+        Closed += (_, _) => openMenus.Remove(this);
+    }
+
+    /// <summary>
+    /// Closes the menu opened last over <c>window</c>, if one is open, and says whether it did: Esc's first job. A
+    /// menu opened with the pointer leaves the keyboard with the window, so it doesn't see the key itself.
+    /// </summary>
+    internal static bool CloseLastOpen(TopLevel window)
+    {
+        // A menu whose window went away never says it closed.
+        openMenus.RemoveAll(menu => !menu.IsOpen || menu.Window is not { IsVisible: true });
+        RetroMenu? last = openMenus.LastOrDefault(menu => menu.Window == window);
+        if (last is null)
+            return false;
+        last.Close();
+        return true;
+    }
+
+    /// <summary>The window the menu was opened over: the first one among what it hangs from.</summary>
+    private TopLevel? Window => this.GetLogicalAncestors().OfType<TopLevel>().FirstOrDefault(top => top is not PopupRoot);
 
     /// <summary>QML <c>visible</c>.</summary>
     public bool Visible => IsOpen;

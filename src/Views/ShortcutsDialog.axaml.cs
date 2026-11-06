@@ -49,7 +49,7 @@ public partial class ShortcutsDialog : ModalSheet
             new("Ctrl+Shift+C", "Copy path"),
             new("Delete", "Delete selected files"),
             new("F3 · Ctrl+F", "Search this folder"),
-            new("Esc", "Clear the search"),
+            new("Esc", "Leave the search"),
         ]),
     ];
 }
