@@ -49,8 +49,6 @@ public class ChromeIcon : Control
         ["search"] = "search",
         ["subfolders"] = "list-tree",
         ["package"] = "package",
-        ["folder"] = "folder",
-        ["house"] = "house",
     };
 
     static ChromeIcon()
