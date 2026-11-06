@@ -436,7 +436,9 @@ public partial class NavigationBar : UserControl
             slot.Children.Add(ScopeWell);
         }
         var (_, icon, name, covers) = Scopes.Single(item => item.Scope == ShownScope);
-        ScopeIcon.IconName = icon;
+        // The box shows what it searches with the scope's icon, where a magnifier would be.
+        SearchField.LeadingIcon = icon;
+        QueryField.LeadingIcon = icon;
         ScopeText.Text = name;
         ThemedToolTip.Set(ScopeButton, covers);
         ScopeWell.IsVisible = Bridge?.HasWorkspace == true;

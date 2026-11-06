@@ -81,13 +81,13 @@
       <!-- Search mode, in the address bar's and the folder search's place: where to search, and the query with how
            it is read. Ctrl+Shift+F opens it; Esc, Back or "This folder" go back to the folder. -->
       <!-- Where to search: before the folder's search box, and at the start of the search row while searching.
-           One control, moved between the two places: Folder filters the folder shown; the others search. -->
+           One control, moved between the two places: Folder filters the folder shown; the others search. Its icon
+           is the search box's own, at the start of the box. -->
       <Panel Name="ScopeSlot" Grid.Column="2" VerticalAlignment="Center">
         <Border Name="ScopeWell" Classes="well">
           <Border Name="ScopeButton" Height="26" Padding="8,0" CornerRadius="{x:Static ui:Theme.InnerCorner}"
                   Background="{x:Static ui:Theme.ChromeRaised}" AutomationProperties.Name="Where to search">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <c:LucideIcon Name="ScopeIcon" IconName="folder" Stroke="{x:Static ui:Theme.TextRow}" Width="14" Height="14" VerticalAlignment="Center" />
               <TextBlock Name="ScopeText" Text="Folder" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Center"
                          FontFamily="{x:Static ui:Theme.UiFont}" FontSize="12" />
               <c:ChromeIcon Kind="chevron" Stroke="{x:Static ui:Theme.TextDim}" Width="9" Height="9" Thickness="2" VerticalAlignment="Center"
@@ -102,7 +102,7 @@
         <Panel>
           <c:FlatTextField Name="QueryField" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
                            FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
-                           LeadingIcon="search" LeadingColor="{x:Static ui:Theme.Brass}" KeyCap="Esc" TrailingSpace="124"
+                           LeadingIcon="folder" LeadingColor="{x:Static ui:Theme.Brass}" KeyCap="Esc" TrailingSpace="124"
                            PlaceholderText="Search by name: text, *.ydr, or a regular expression" AutomationProperties.Name="Search the game" />
           <TextBlock Name="QueryError" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,172,0" IsHitTestVisible="False"
                      Foreground="{x:Static ui:Theme.Error}" FontFamily="{x:Static ui:Theme.UiFont}" FontSize="11" />
@@ -121,7 +121,7 @@
 
       <c:FlatTextField Name="SearchField" Grid.Column="3" Width="232" Height="{x:Static ui:Theme.ToolbarControlHeight}"
                        VerticalAlignment="Center" FontSize="{x:Static ui:Theme.FontSize}"
-                       IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="search"
+                       IsEnabled="{Binding HasWorkspace}" PlaceholderText="Search this folder" LeadingIcon="folder"
                        AutomationProperties.Name="Search current entries" />
 
       <!-- List or grid: one switch, whose thumb slides under the view in use. -->
