@@ -156,7 +156,8 @@ public partial class NavigationBar : UserControl
                 RefreshSegments();
                 RefreshSearchRow();
                 break;
-            case nameof(ExplorerViewModel.ViewMode):
+            case nameof(ExplorerViewModel.ShownViewMode):
+            case nameof(ExplorerViewModel.CanChooseViewMode):
                 RefreshViewMode();
                 break;
             case nameof(ExplorerViewModel.IsSearching):
@@ -245,7 +246,9 @@ public partial class NavigationBar : UserControl
 
     private void RefreshViewMode()
     {
-        ViewModeSwitch.SelectedIndex = Bridge?.ViewMode == "grid" ? 1 : 0;
+        ViewModeSwitch.SelectedIndex = Bridge?.ShownViewMode == "grid" ? 1 : 0;
+        // Results are a list only, so there is nothing to switch to while they are shown.
+        ViewModeSwitch.IsEnabled = Bridge?.CanChooseViewMode != false;
     }
 
     private void RefreshSearchField()

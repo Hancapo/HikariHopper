@@ -246,6 +246,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary><c>list</c> or <c>grid</c>.</summary>
     public string ViewMode => viewMode;
 
+    /// <summary>The view the entries are shown in: <see cref="ViewMode"/>, except that results are always a list.</summary>
+    public string ShownViewMode => HasSearchQuery ? "list" : viewMode;
+
+    /// <summary>Whether the view can be chosen: not while results are shown, which only the list has room for.</summary>
+    public bool CanChooseViewMode => !HasSearchQuery;
+
     private void RaiseAll(string[] names)
     {
         foreach (string name in names)
@@ -750,10 +756,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
     public void SetViewMode(string mode)
     {
         string normalized = CaseFold(mode);
-        if (normalized is not ("list" or "grid") || normalized == viewMode)
+        if (normalized is not ("list" or "grid") || normalized == viewMode || !CanChooseViewMode)
             return;
         viewMode = normalized;
         OnPropertyChanged(nameof(ViewMode));
+        OnPropertyChanged(nameof(ShownViewMode));
     }
 
     public void RequestSearchFocus() => SearchFocusRequested?.Invoke(this, EventArgs.Empty);
