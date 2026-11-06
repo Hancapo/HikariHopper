@@ -18,18 +18,18 @@ public static class Theme
     // Every grey below is derived from the navy's hue; none of them is neutral.
 
     // Surfaces, darkest to lightest.
-    public static IImmutableSolidColorBrush WindowBg { get; } = Hex("#17182A");      // the base the panels float on
+    public static IImmutableSolidColorBrush WindowBg { get; } = Hex("#121322");      // the base the panels float on, a step below them
     public static IImmutableSolidColorBrush WindowChrome { get; } = Hex("#1B1C2C");  // hard seams and sunken wells
     public static IImmutableSolidColorBrush AppBg { get; } = Hex("#1E1F30");         // the list canvas
     public static IImmutableSolidColorBrush PanelBg { get; } = Hex("#1E1F30");
     public static IImmutableSolidColorBrush TabActive { get; } = Hex("#1E1F30");     // active tab merges into the canvas
-    public static IImmutableSolidColorBrush TabStripBg { get; } = Hex("#17182A");    // the strip the tabs hang from: the base, so tabs stand out
-    public static IImmutableSolidColorBrush ListHeaderBg { get; } = Hex("#24253A");  // column titles over the list canvas
+    public static IImmutableSolidColorBrush TabStripBg { get; } = Hex("#121322");    // the strip the tabs hang from: the base, so tabs stand out
+    public static IImmutableSolidColorBrush ListHeaderBg { get; } = Hex("#2A2C44");  // column titles over the list canvas, a step above it
     public static IImmutableSolidColorBrush ChromeBg { get; } = Hex("#2C2D43");      // menu, toolbars, headers, status
     public static IImmutableSolidColorBrush SidebarBg { get; } = Hex("#2C2D43");
     public static IImmutableSolidColorBrush NavigationBg { get; } = Hex("#2C2D43");
     public static IImmutableSolidColorBrush HeaderBg { get; } = Hex("#2C2D43");
-    public static IImmutableSolidColorBrush InsetBg { get; } = Hex("#1B1C2C");       // sunken fields
+    public static IImmutableSolidColorBrush InsetBg { get; } = Hex("#161623");       // sunken fields, below the chrome and the list alike
     public static IImmutableSolidColorBrush ChromeRaised { get; } = Hex("#33354C");  // menus, inactive tabs, raised buttons
     public static IImmutableSolidColorBrush TabBg { get; } = Hex("#33354C");
     public static IImmutableSolidColorBrush HoverBg { get; } = Hex("#2F3048");       // hover inside the list
@@ -38,7 +38,7 @@ public static class Theme
     // Lines. BorderHard is the dark seam every panel sits behind, Border is the
     // visible rule, Guide is the dotted tree guide.
     public static IImmutableSolidColorBrush BorderHard { get; } = Hex("#1B1C2C");
-    public static IImmutableSolidColorBrush Border { get; } = Hex("#43455F");
+    public static IImmutableSolidColorBrush Border { get; } = Hex("#4D4F6B");
     public static IImmutableSolidColorBrush BorderSoft { get; } = Hex("#33354C");
     public static IImmutableSolidColorBrush Guide { get; } = Hex("#4A4C68");
     public static IImmutableSolidColorBrush Bevel { get; } = Rgba(1, 0.984, 1, 0.07);  // 1px highlight on a top edge
@@ -46,21 +46,21 @@ public static class Theme
     // Ink.
     public static IImmutableSolidColorBrush Text { get; } = Hex("#FFFBFF");
     public static IImmutableSolidColorBrush TextRow { get; } = Hex("#C6C8DA");       // unselected row text
-    public static IImmutableSolidColorBrush TextDim { get; } = Hex("#9A9CB4");
-    public static IImmutableSolidColorBrush TextFaint { get; } = Hex("#8587A2");     // 4.5:1 on the list, fields and tab strip
+    public static IImmutableSolidColorBrush TextDim { get; } = Hex("#A8AABF");       // 4.5:1 on every surface, hovered buttons included
+    public static IImmutableSolidColorBrush TextFaint { get; } = Hex("#9698AF");     // 4.5:1 on the list, fields, chrome and hovered rows
 
     // Blue: what a package is, plus the piping on the window frame and the
     // active tab. Deliberately never the selection.
-    public static IImmutableSolidColorBrush Accent { get; } = Hex("#4C7ECB");
-    public static IImmutableSolidColorBrush BorderAccent { get; } = Hex("#4C7ECB");
-    public static IImmutableSolidColorBrush AccentWash { get; } = Rgba(0.298, 0.494, 0.796, 0.30);
-    public static IImmutableSolidColorBrush AccentMuted { get; } = Rgba(0.298, 0.494, 0.796, 0.55);
+    public static IImmutableSolidColorBrush Accent { get; } = Hex("#5E8BD0");     // 3:1 as a mark on raised and hovered chrome
+    public static IImmutableSolidColorBrush BorderAccent { get; } = Hex("#5E8BD0");
+    public static IImmutableSolidColorBrush AccentWash { get; } = Rgba(0.369, 0.545, 0.816, 0.30);
+    public static IImmutableSolidColorBrush AccentMuted { get; } = Rgba(0.369, 0.545, 0.816, 0.55);
 
     // Green: what is selected, and the action on it.
     public static IImmutableSolidColorBrush Selection { get; } = Hex("#D1F0AA");
     public static IImmutableSolidColorBrush SelectionText { get; } = Hex("#1B1C2C");
     public static IImmutableSolidColorBrush SelectionInk { get; } = Rgba(0.106, 0.110, 0.173, 0.74);
-    public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.58);
+    public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.66);
     public static IImmutableSolidColorBrush SelectionWash { get; } = Rgba(0.819, 0.941, 0.667, 0.13);  // unfocused pane
     public static IImmutableSolidColorBrush SelectionRing { get; } = Rgba(0.819, 0.941, 0.667, 0.55);
     public static IImmutableSolidColorBrush SelectionHalo { get; } = Rgba(0.819, 0.941, 0.667, 0.16);  // the status lamp's halo
@@ -93,7 +93,7 @@ public static class Theme
 
     // Kept for archive-parsing failures surfaced in the status bar. Outside the
     // character palette on purpose — nothing else in the UI should be red.
-    public static IImmutableSolidColorBrush Error { get; } = Hex("#D9706C");
+    public static IImmutableSolidColorBrush Error { get; } = Hex("#DE8481");
     public static IImmutableSolidColorBrush Warning { get; } = Hex("#E0A458");   // something to fix, not a failure
     public static IImmutableSolidColorBrush Ok { get; } = Hex("#A8D58A");        // a check that passed
 
