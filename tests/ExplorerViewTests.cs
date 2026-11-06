@@ -1027,7 +1027,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Key(ui.Window, PhysicalKey.Backspace);
         Assert.Equal("a", ui.Bridge.SearchText);
         Assert.Equal("folder00", ui.Bridge.CurrentPath);
-        Assert.Equal("Esc", search.GetValue(Views.Controls.FlatTextField.KeyCapProperty));
+        Assert.Equal("", search.GetValue(Views.Controls.FlatTextField.KeyCapProperty));
 
         // Escape ends the search and gives the focus up; then Backspace goes up.
         Key(ui.Window, PhysicalKey.Escape);
