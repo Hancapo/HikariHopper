@@ -10,15 +10,9 @@
               BodyMargin="0"
               FooterText="Saved automatically">
   <!-- The groups in a rail, each a raised segment in its well when chosen, and the chosen group's page: its
-       title and its settings as rows in wells, a control at the right of each. A row's second line is only for
-       what it holds now (a folder, a count, a version), never for saying again what its title says. -->
+       settings as rows on cards, a control at the right of each. The rail says which group it is, so the page
+       has no title; a row's second line is only for what it holds now (a folder, a count). -->
   <v:ModalSheet.Styles>
-    <Style Selector="TextBlock.title">
-      <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
-      <Setter Property="FontFamily" Value="{x:Static ui:Theme.UiFont}" />
-      <Setter Property="FontSize" Value="17" />
-      <Setter Property="FontWeight" Value="Bold" />
-    </Style>
     <Style Selector="TextBlock.section">
       <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
@@ -41,35 +35,29 @@
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <Panel Margin="20,16,22,18">
         <StackPanel Name="GamesPage">
-          <TextBlock Classes="title" Text="Games" />
           <StackPanel Name="GameRows" />
         </StackPanel>
 
         <StackPanel Name="StartupPage" IsVisible="False">
-          <TextBlock Classes="title" Margin="0,0,0,14" Text="Startup" />
-          <v:SettingsWell>
+          <v:SettingsCard>
             <v:SettingsRow Title="Open the last game">
               <c:OnOffSwitch Name="OpenLastGame" />
             </v:SettingsRow>
             <v:SettingsRow Name="RecentRow" Title="Recent games on the start page">
               <c:ChromeToolButton Name="ClearRecents" Width="88" Height="28" Raised="True" Text="Clear list" />
             </v:SettingsRow>
-          </v:SettingsWell>
+          </v:SettingsCard>
         </StackPanel>
 
         <StackPanel Name="UpdatesPage" IsVisible="False">
-          <TextBlock Classes="title" Margin="0,0,0,14" Text="Updates" />
-          <v:SettingsWell>
+          <v:SettingsCard>
             <v:SettingsRow Name="VersionRow">
               <c:ChromeToolButton Name="CheckNow" Width="104" Height="28" Raised="True" Text="Check now" />
             </v:SettingsRow>
             <v:SettingsRow Title="Check for updates at startup">
               <c:OnOffSwitch Name="CheckForUpdates" />
             </v:SettingsRow>
-            <v:SettingsRow Name="SkippedRow" Title="Skipped version" IsVisible="False">
-              <c:ChromeToolButton Name="OfferSkipped" Width="104" Height="28" Raised="True" Text="Offer again" />
-            </v:SettingsRow>
-          </v:SettingsWell>
+          </v:SettingsCard>
         </StackPanel>
       </Panel>
     </ScrollViewer>

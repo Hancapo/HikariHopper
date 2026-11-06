@@ -9,7 +9,8 @@ namespace HikariHopper.Views;
 /// <summary>
 /// Settings, shown as a sheet over the main window, a group at a time: Games lists every installation of the
 /// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>; Startup has what
-/// the app does when it starts, and the start page's recent games; Updates has the version and its updates.
+/// the app does when it starts, and the start page's recent games; Updates has the version, Check now and the
+/// check at startup.
 /// Every change is saved as it is made.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -37,11 +38,6 @@ public partial class SettingsDialog : ModalSheet
         {
             if (CheckForUpdatesNow is { } check)
                 await check(this);
-            RefreshUpdates();
-        };
-        OfferSkipped.Click += (_, _) =>
-        {
-            Infrastructure.Updates.SkippedVersion = "";
             RefreshUpdates();
         };
         foreach (SettingsGroupRow group in Groups)
@@ -84,7 +80,7 @@ public partial class SettingsDialog : ModalSheet
 
     /// <summary>The installation rows, in catalogue order.</summary>
     internal IReadOnlyList<GamePathRow> Rows =>
-        [.. GameRows.Children.OfType<SettingsWell>().SelectMany(well => well.Rows.OfType<GamePathRow>())];
+        [.. GameRows.Children.OfType<SettingsCard>().SelectMany(card => card.Rows.OfType<GamePathRow>())];
 
     protected override void OnPresented() => Refresh();
 
@@ -96,17 +92,17 @@ public partial class SettingsDialog : ModalSheet
 
     private void BuildGameRows()
     {
-        // A well per game, under its name.
+        // A card per game, under its name.
         foreach (SupportedGame game in GameCatalog.Games)
         {
             GameRows.Children.Add(new TextBlock
             {
                 Text = game.Title.ToUpperInvariant(),
-                Margin = new Avalonia.Thickness(0, 18, 0, 8),
+                Margin = new Avalonia.Thickness(0, GameRows.Children.Count == 0 ? 2 : 22, 0, 8),
                 Classes = { "section" },
             });
-            var well = new SettingsWell();
-            GameRows.Children.Add(well);
+            var card = new SettingsCard();
+            GameRows.Children.Add(card);
             foreach (GameEditionInfo edition in game.Editions)
             {
                 var row = new GamePathRow
@@ -118,7 +114,7 @@ public partial class SettingsDialog : ModalSheet
                 string id = edition.Id;
                 row.PathCommitted += (_, path) => GamePaths.SetPath(id, path);
                 row.BrowseRequested += async (_, _) => await GamePaths.Browse(id);
-                well.Rows.Add(row);
+                card.Rows.Add(row);
             }
         }
         RefreshGameRows();
@@ -137,11 +133,6 @@ public partial class SettingsDialog : ModalSheet
     {
         CheckForUpdates.IsOn = Infrastructure.Updates.CheckOnStartup;
         VersionRow.Title = $"HikariHopper {StartPage.AppVersion}";
-        // Only a dev build says anything here: it is the reason Check now finds nothing.
-        VersionRow.Detail = Infrastructure.Updates.Source.CanUpdate ? "" : "Dev build: doesn't update itself";
-        string skipped = Infrastructure.Updates.SkippedVersion;
-        SkippedRow.IsVisible = skipped.Length > 0;
-        SkippedRow.Detail = skipped;
     }
 
     private void RefreshGameRows()

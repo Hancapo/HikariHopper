@@ -6,33 +6,36 @@ using T = HikariHopper.Ui.Theme;
 
 namespace HikariHopper.Views;
 
-/// <summary>A group of settings: its rows in a well, a hairline between each two.</summary>
-public sealed class SettingsWell : Control
+/// <summary>
+/// A group of settings: its rows on a card of the chrome's colour, a seam between each two. The chrome, like the
+/// toolbar, is what the switches' sunken wells and the raised buttons are drawn to stand out against.
+/// </summary>
+public sealed class SettingsCard : Control
 {
     private readonly StackPanel stack = new();
-    private readonly Border well;
+    private readonly Border card;
 
-    public SettingsWell()
+    public SettingsCard()
     {
-        well = new Border
+        card = new Border
         {
-            Background = T.WindowBg, BorderBrush = T.BorderHard, BorderThickness = new Thickness(1), CornerRadius = T.PanelCorner,
+            Background = T.ChromeBg, BorderBrush = T.BorderHard, BorderThickness = new Thickness(1), CornerRadius = T.PanelCorner,
             Child = stack,
         };
-        LogicalChildren.Add(well);
-        VisualChildren.Add(well);
+        LogicalChildren.Add(card);
+        VisualChildren.Add(card);
         Rows.CollectionChanged += (_, _) => Rebuild();
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        well.Measure(availableSize);
-        return well.DesiredSize;
+        card.Measure(availableSize);
+        return card.DesiredSize;
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        well.Arrange(new Rect(finalSize));
+        card.Arrange(new Rect(finalSize));
         return finalSize;
     }
 
@@ -48,7 +51,7 @@ public sealed class SettingsWell : Control
             Control row = Rows[index];
             if (index > 0)
             {
-                var hairline = new Border { Height = 1, Background = T.BorderSoft, Margin = new Thickness(14, 0) };
+                var hairline = new Border { Height = 1, Background = T.BorderHard, Margin = new Thickness(14, 0) };
                 // The hairline above a row goes with it, so a hidden row leaves no double line.
                 hairline.Bind(IsVisibleProperty, row.GetObservable(IsVisibleProperty));
                 stack.Children.Add(hairline);

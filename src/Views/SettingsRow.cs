@@ -9,7 +9,7 @@ using T = HikariHopper.Ui.Theme;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// One setting in a <see cref="SettingsWell"/>: its <see cref="Title"/> and a line saying what it does on the left,
+/// One setting in a <see cref="SettingsCard"/>: its <see cref="Title"/> and a line saying what it does on the left,
 /// and its control (<see cref="Actions"/>) on the right.
 /// </summary>
 public sealed class SettingsRow : Control

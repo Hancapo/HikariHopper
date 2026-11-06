@@ -527,22 +527,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.False(Infrastructure.Updates.CheckOnStartup);
         settings.CheckForUpdates.IsOn = true;
         Assert.True(Infrastructure.Updates.CheckOnStartup);
-        Assert.False(settings.SkippedRow.IsVisible);
         settings.Close();
         Pump(250);
 
-        // Settings reopens on the group it was left at, up to date: a version skipped since shows, and can be
-        // offered again.
-        Infrastructure.Updates.SkippedVersion = "9.9.9";
+        // Settings reopens on the group it was left at, up to date: the check at startup turned off elsewhere shows off.
+        Infrastructure.Updates.CheckOnStartup = false;
         menus.OpenSettings();
         Pump(200);
         Assert.Equal("Updates", settings.Group);
-        Assert.True(settings.SkippedRow.IsVisible);
-        Assert.Equal("9.9.9", settings.SkippedRow.Detail);
-        settings.OfferSkipped.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        Pump();
-        Assert.Equal("", Infrastructure.Updates.SkippedVersion);
-        Assert.False(settings.SkippedRow.IsVisible);
+        Assert.False(settings.CheckForUpdates.IsOn);
+        Infrastructure.Updates.CheckOnStartup = true;
         settings.Close();
         Pump(250);
     }
