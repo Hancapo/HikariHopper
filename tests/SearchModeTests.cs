@@ -149,6 +149,21 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task AResultAtANestedRpfsRootOpensThatRpf()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch();
+        bridge.SetSearchText("prop_bench");
+        await Searched(bridge);
+        bridge.SelectEntry(0);
+        bridge.OpenSelectedLocation();
+        Settle(bridge);
+        Assert.False(bridge.IsSearching);
+        Assert.Equal(@"x64i.rpf\levels\gta5\props\v_street.rpf", bridge.AddressText);
+        Assert.Equal(["prop_bench_01a.ydr"], bridge.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
+    }
+
+    [AvaloniaFact]
     public async Task CopyPathAndCopyWorkOnResultsWhereverTheyLive()
     {
         ExplorerViewModel bridge = Game();
