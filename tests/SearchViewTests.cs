@@ -157,6 +157,48 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ResultsFoundAgainKeepTheViewWhereItWasScrolled()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        for (int folder = 0; folder < 10; folder++)
+            for (int file = 0; file < 40; file++)
+                Write(Path.Combine(Work, $"f{folder:00}", $"item{file:00}.xml"), "x");
+        bridge.BeginSearch();
+        navigation.QueryField.Text = ".xml";
+        await Searched(bridge);
+        EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
+        // A row selected near the top, then the view scrolled far below it.
+        bridge.SelectEntry(2);
+        ExplorerStateRenders.Pump(300);
+        table.ScrollViewer.Offset = new Vector(0, 6000);
+        ExplorerStateRenders.Pump(200);
+        Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
+
+        // The same search again, finding the same files: nothing moves.
+        bridge.Refresh();
+        await Searched(bridge);
+        ExplorerStateRenders.Pump(200);
+        Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
+
+        // Found again with a new file among them (the index caught up): the list changes in place, the selection
+        // stays, and the view neither jumps to the top nor to the selected row.
+        Write(Path.Combine(Work, "f00", "aaa_new.xml"), "n");
+        bridge.Refresh();
+        await Searched(bridge);
+        ExplorerStateRenders.Pump(300);
+        Assert.Equal(401, bridge.SearchHitCount);
+        Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
+        Assert.Single(bridge.EntriesModel, item => item.Selected);
+
+        // A new search starts at the top.
+        navigation.QueryField.Text = "item0";
+        await Searched(bridge);
+        ExplorerStateRenders.Pump(300);
+        Assert.Equal(0, table.ScrollViewer.Offset.Y, 1);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task AResultsMenuIsTheItemMenuWithOpenLocation()
     {
         var (window, bridge, navigation, workspace) = Open();

@@ -161,8 +161,12 @@ public partial class EntryTable : UserControl
                 RefreshEmptyState();
                 break;
             case nameof(ExplorerViewModel.SelectedIndex):
-                // currentIndex: bridge.selectedIndex — the ListView's highlight follows it.
-                highlight.SetCurrentIndex(Bridge?.SelectedIndex ?? -1);
+                // currentIndex: bridge.selectedIndex — the ListView's highlight follows it; a selection given back by
+                // a refresh in place doesn't move the view.
+                if (Bridge?.KeepsListPosition == true)
+                    highlight.Place(Bridge.SelectedIndex);
+                else
+                    highlight.SetCurrentIndex(Bridge?.SelectedIndex ?? -1);
                 break;
         }
     }
@@ -170,10 +174,12 @@ public partial class EntryTable : UserControl
     private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         int count = Bridge?.EntriesModel.Count ?? 0;
-        // A model reset regenerates the view at its start; onCountChanged: positionViewAtBeginning().
-        if (e.Action == NotifyCollectionChangedAction.Reset)
+        // A model reset regenerates the view at its start; onCountChanged: positionViewAtBeginning(). Not for a
+        // refresh in place (search results updated as the index fills in): the view stays where it was scrolled.
+        bool inPlace = Bridge?.KeepsListPosition == true;
+        if (e.Action == NotifyCollectionChangedAction.Reset && !inPlace)
             highlight.Reset();
-        if (e.Action == NotifyCollectionChangedAction.Reset || count != lastCount)
+        if ((e.Action == NotifyCollectionChangedAction.Reset || count != lastCount) && !inPlace)
             wheel.ScrollTo(0);
         lastCount = count;
         RefreshEmptyState();
