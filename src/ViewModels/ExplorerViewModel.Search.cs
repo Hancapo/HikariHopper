@@ -344,18 +344,29 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>
-    /// Runs <paramref name="work"/> on each group of <paramref name="hits"/> that one provider can see at once (the
-    /// loose ones, then each RPF's), with a reader of its own that is closed after.
+    /// The work of running <paramref name="work"/> on each group of <paramref name="hits"/> that one provider can see at
+    /// once (the loose ones, then each RPF's), with a reader of its own that is closed after. Where the hits live and
+    /// the game's keys are read here, on the UI thread, so the queued work owns everything it uses: ending the search
+    /// meanwhile changes nothing for it.
     /// </summary>
-    private List<T> WithReader<T>(IReadOnlyList<SearchHit> hits, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
+    private Func<object?> ReaderWork<T>(IReadOnlyList<SearchHit> hits, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
+    {
+        HitPlace[] places = [.. hits.Select(PlaceOf)];
+        LoadedGame? game = searchIndex is { StandaloneArchive: false } && Provider.GameTarget is { } target && Provider.Crypto is { } crypto
+            ? new LoadedGame(Provider.GamePath, target, crypto)
+            : null;
+        return () => RunReader(places, game, work);
+    }
+
+    private static List<T> RunReader<T>(HitPlace[] places, LoadedGame? game, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
     {
         var results = new List<T>();
         var reader = new RpfProvider();
         try
         {
-            if (searchIndex is { StandaloneArchive: false } && Provider.GameTarget is { } target && Provider.Crypto is { } crypto)
-                reader.ApplyLoadedGame(new LoadedGame(Provider.GamePath, target, crypto));
-            foreach (var group in hits.Select(PlaceOf).GroupBy(place => place.RootFull, StringComparer.OrdinalIgnoreCase))
+            if (game is not null)
+                reader.ApplyLoadedGame(game);
+            foreach (var group in places.GroupBy(place => place.RootFull, StringComparer.OrdinalIgnoreCase))
             {
                 var records = new List<EntryRecord>();
                 if (group.Key.Length == 0)
@@ -416,12 +427,12 @@ public sealed partial class ExplorerViewModel
         clipboardStaging?.Cleanup();
         var staging = new DragStaging();
         clipboardStaging = staging;
-        return StartReadOperation($"Copying {noun}…", () => WithReader(hits, (reader, records) => reader.ExportEntries(records, staging.Name)),
+        return StartReadOperation($"Copying {noun}…", ReaderWork(hits, (reader, records) => reader.ExportEntries(records, staging.Name)),
             result => _ = PutOnClipboard((List<string>)result!, noun), "copy");
     }
 
     private bool ExtractSearchFiles(IReadOnlyList<SearchHit> hits, string folder, string noun) =>
-        StartReadOperation($"Extracting {noun}…", () => WithReader(hits, (reader, records) => reader.ExtractEntries(records, folder)),
+        StartReadOperation($"Extracting {noun}…", ReaderWork(hits, (reader, records) => reader.ExtractEntries(records, folder)),
             _ =>
             {
                 SetStatus($"Extracted {noun} to {folder}");
@@ -429,7 +440,7 @@ public sealed partial class ExplorerViewModel
             }, "extract");
 
     private bool ExtractSearchArchive(SearchHit hit, string folder) =>
-        StartReadOperation($"Extracting {hit.Name}…", () => WithReader<string>([hit], (reader, records) => [reader.ExtractArchiveContents(records[0], folder)]),
+        StartReadOperation($"Extracting {hit.Name}…", ReaderWork<string>([hit], (reader, records) => [reader.ExtractArchiveContents(records[0], folder)]),
             result =>
             {
                 SetStatus($"Extracted {hit.Name} to {((List<string>)result!)[0]}");
@@ -440,10 +451,11 @@ public sealed partial class ExplorerViewModel
     {
         string before = Status;
         var result = new TaskCompletionSource<EntryProperties?>();
-        bool started = StartReadOperation($"Reading {hit.Name}…", () => WithReader<EntryProperties>([hit], (reader, records) => [reader.DescribeEntry(records[0])]), described =>
+        bool started = StartReadOperation($"Reading {hit.Name}…", ReaderWork<EntryProperties>([hit], (reader, records) => [reader.DescribeEntry(records[0])]), described =>
         {
             SetStatus(before);
-            bool still = searching && SelectedHits() is [var current] && current == hit;
+            // Results are found again as the index fills in: the same file is the same path, not the same object.
+            bool still = searching && SelectedHits() is [var current] && current.Path == hit.Path;
             result.TrySetResult(still ? ((List<EntryProperties>)described!)[0] : null);
         }, "read the properties", () => result.TrySetResult(null));
         return started ? result.Task : Task.FromResult<EntryProperties?>(null);

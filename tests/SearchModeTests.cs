@@ -163,6 +163,38 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ACopyStartedJustBeforeTheSearchEndsStillCopies()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch();
+        bridge.SetSearchText("readme");
+        await Searched(bridge);
+        bridge.SelectEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"));
+        Assert.True(await bridge.CopySelection());
+        // The search ends while the copy waits in the queue: it knows where its file lives all the same.
+        bridge.EndSearch();
+        Settle(bridge);
+        Assert.Equal("nested readme", File.ReadAllText(Assert.Single(Clipboard.Files)));
+    }
+
+    [AvaloniaFact]
+    public async Task PropertiesSurviveTheResultsBeingFoundAgain()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch();
+        bridge.SetSearchText("carcols");
+        await Searched(bridge);
+        bridge.SelectEntry(0);
+        Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
+        // The search runs again mid-read, as the index filling in makes it: new results, the same file selected.
+        bridge.SetSearchText("carcols.");
+        await Searched(bridge);
+        Assert.Equal(["carcols.ymt"], bridge.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
+        Settle(bridge);
+        Assert.Equal("carcols.ymt", Assert.IsType<EntryProperties>(reading.Result).Name);
+    }
+
+    [AvaloniaFact]
     public async Task PropertiesDescribeAResultInItsArchive()
     {
         ExplorerViewModel bridge = Game();
