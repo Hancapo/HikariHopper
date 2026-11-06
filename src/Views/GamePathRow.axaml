@@ -11,11 +11,13 @@
   <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,30">
     <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,2,12,0" VerticalAlignment="Top" />
     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-      <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}"
+      <!-- Both lines have a set height: the check's mono after the name would otherwise make the first a pixel
+           taller once a folder is set, and the card would move. -->
+      <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}" LineHeight="17"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="13" FontWeight="SemiBold"
                  TextTrimming="CharacterEllipsis" />
       <!-- Trimmed from the start: a long folder keeps its last folders, which name the game. -->
-      <TextBlock Name="DetailText" Margin="0,4,0,0" TextTrimming="LeadingCharacterEllipsis"
+      <TextBlock Name="DetailText" Margin="0,3,0,0" LineHeight="15" TextTrimming="LeadingCharacterEllipsis"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
     </StackPanel>
     <c:ChromeToolButton Name="BrowseButton" Grid.Column="2" Width="32" Height="28" Margin="16,0,0,0" Raised="True"

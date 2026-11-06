@@ -529,6 +529,28 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
+    public void GamePathRowKeepsItsSizeWhateverItsFolder() => UiThread.Run(() =>
+    {
+        // Not set, set and found, set and not found: the same height every time, so the card never moves. In a
+        // window, whose layout rounding is what turned the check's taller line into a pixel.
+        var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
+        var window = new Window { Width = 520, Height = 200, Content = new StackPanel { Children = { row } } };
+        window.Show();
+        double Height()
+        {
+            window.UpdateLayout();
+            return row.Bounds.Height;
+        }
+        double unset = Height();
+        row.GamePath = @"D:\Games\Grand Theft Auto V Enhanced";
+        row.PathValid = true;
+        Assert.Equal(unset, Height());
+        row.PathValid = false;
+        Assert.Equal(unset, Height());
+        window.Close();
+    });
+
+    [AvaloniaFact]
     public void GamePathRowReportsDetection() => UiThread.Run(() =>
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
