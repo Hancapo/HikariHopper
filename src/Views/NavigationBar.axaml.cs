@@ -78,6 +78,37 @@ public partial class NavigationBar : UserControl
             new WindowShortcut("Alt+Left", () => Bridge?.GoBack()),
             new WindowShortcut("Alt+Right", () => Bridge?.GoForward()),
             new WindowShortcut("Back", () => Bridge?.GoUp()));
+
+        // Esc ends a search wherever the focus is, once nothing on the way (a menu, a field being edited) took it.
+        TopLevel? host = null;
+        AttachedToVisualTree += (_, _) =>
+        {
+            host = TopLevel.GetTopLevel(this);
+            host?.AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+            host?.AddHandler(KeyDownEvent, OnWindowEscape, RoutingStrategies.Bubble);
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            host?.RemoveHandler(KeyDownEvent, OnWindowKeyDown);
+            host?.RemoveHandler(KeyDownEvent, OnWindowEscape);
+            host = null;
+        };
+    }
+
+    // Esc with a menu open closes the menu, and only that.
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!e.Handled && e.Key == Key.Escape && sender is TopLevel window && Controls.RetroMenu.CloseLastOpen(window))
+            e.Handled = true;
+    }
+
+    private void OnWindowEscape(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None || Bridge is not { IsSearching: true } model
+            || sender is TopLevel top && ModalOverlay.IsOpen(top))
+            return;
+        model.EndSearch();
+        e.Handled = true;
     }
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;

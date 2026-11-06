@@ -201,6 +201,38 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task EscEndsTheSearchFromTheResultsToo()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        bridge.BeginSearch(SearchScope.Everywhere);
+        navigation.QueryField.Text = "ydr";
+        await Searched(bridge);
+        EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
+        bridge.SelectEntry(0);
+        table.FocusTarget.Focus();
+        ExplorerStateRenders.Pump(50);
+        Assert.False(navigation.QueryField.IsKeyboardFocusWithin);
+
+        // A menu open over the search closes first.
+        Point at = navigation.ScopeButton.TranslatePoint(new Point(20, 12), window)!.Value;
+        window.MouseMove(at, RawInputModifiers.None);
+        window.MouseDown(at, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(at, MouseButton.Left, RawInputModifiers.None);
+        ExplorerStateRenders.Pump(200);
+        Assert.NotNull(navigation.ScopeMenu);
+        Key(window, Avalonia.Input.Key.Escape, RawInputModifiers.None, PhysicalKey.Escape);
+        Assert.Null(navigation.ScopeMenu);
+        Assert.True(bridge.IsSearching);
+
+        table.FocusTarget.Focus();
+        Key(window, Avalonia.Input.Key.Escape, RawInputModifiers.None, PhysicalKey.Escape);
+        Assert.False(bridge.IsSearching);
+        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.True(navigation.AddressBar.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task AFolderChosenInTheTreeEndsTheSearchThere()
     {
         var (window, bridge, navigation, workspace) = Open();
