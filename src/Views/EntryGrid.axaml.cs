@@ -13,7 +13,7 @@ namespace HikariHopper.Views;
 /// GridView geometry: <see cref="Ui.Theme.GridCellWidth"/>×<see cref="Ui.Theme.GridCellHeight"/> cells
 /// after a <see cref="Ui.Theme.GridContentInset"/> margin, as many columns as fit.
 /// </summary>
-public partial class EntryGrid : UserControl
+public partial class EntryGrid : UserControl, IEntryItemsView
 {
     private const double Inset = Ui.Theme.GridContentInset;
     private const double CellWidth = Ui.Theme.GridCellWidth;
@@ -124,6 +124,16 @@ public partial class EntryGrid : UserControl
         rows.ResetItems(Enumerable.Range(0, rowCount));
         EmptyText.IsVisible = Count == 0;
     }
+
+    ScrollViewer IEntryItemsView.Viewer => Scroller;
+
+    Control IEntryItemsView.Header => Header;
+
+    void IEntryItemsView.ShowFirst(int index) => wheel.ScrollTo(Inset + index / ColumnsVisible * CellHeight);
+
+    IEnumerable<(int Index, Control Item, Control Glyph, IReadOnlyList<Control> Details)> IEntryItemsView.ShownItems() =>
+        RealizedCells().Where(cell => cell.Item is not null && cell.Index >= 0)
+            .Select(cell => (cell.Index, (Control)cell, (Control)cell.Glyph, (IReadOnlyList<Control>)[cell.NameText, cell.SizeText]));
 
     internal IEnumerable<EntryGridCell> RealizedCells()
     {

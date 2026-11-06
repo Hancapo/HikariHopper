@@ -10,7 +10,7 @@
   <!-- Port of EntryTable.qml: the details list. Rows sit 6px inside the panel and span it; the
        NAME column takes what TYPE (200), SIZE (120) and a 14px scrollbar lane leave. -->
   <DockPanel>
-    <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
+    <Panel Name="HeaderRow" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
       <StackPanel Orientation="Horizontal">
         <v:EntryTableHeaderCell Name="NameHeader" Text="NAME" LeftPadding="16" Clicked="OnSortName" />
         <v:EntryTableHeaderCell Name="LocationHeader" Text="LOCATION" LeftPadding="8" IsVisible="False" Clicked="OnSortLocation" />

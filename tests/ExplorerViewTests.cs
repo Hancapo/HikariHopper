@@ -210,6 +210,58 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void SwitchingViewsMorphsOneIntoTheOtherWhereYouWere()
+    {
+        // Slowed down, so the morph caught midway is still midway on a busy machine; animated whatever Windows says.
+        double pace = EntryViewMorph.Pace;
+        EntryViewMorph.Pace = 4;
+        Ui.Motion.ReducedOverride = false;
+        using var restore = new Restore(() =>
+        {
+            EntryViewMorph.Pace = pace;
+            Ui.Motion.ReducedOverride = null;
+        });
+        Explorer ui = OpenExplorer(files: 80);
+        ExplorerViewModel bridge = ui.Session.Tabs.ActiveBridge;
+        WorkspaceView workspace = ui.Find<WorkspaceView>();
+        EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
+        table.ScrollViewer.Offset = new Vector(0, 30 * Ui.Theme.RowHeight);
+        Pump(200);
+
+        // The grid comes in where the list was: the row with the first item you could see, at the top.
+        bridge.SetViewMode("grid");
+        Pump(20);
+        EntryGrid grid = Assert.IsType<EntryGrid>(workspace.EntriesView);
+        int columns = grid.ColumnsVisible;
+        Assert.Equal(Ui.Theme.GridContentInset + 30 / columns * Ui.Theme.GridCellHeight, grid.ScrollViewer.Offset.Y, 1);
+        // The items glide from where they were, the old list fading out beneath as a picture of itself.
+        EntryGridCell[] cells = [.. grid.RealizedCells().Where(cell => cell.Item is not null)];
+        Assert.Contains(cells, cell => cell.RenderTransform is { } transform && !transform.Value.IsIdentity);
+        Assert.Contains(cells, cell => cell.NameText.Opacity < 1);
+        Assert.Single(workspace.EntriesArea.Children.OfType<Image>());
+
+        // Once there, nothing is left over: containers are reused as the grid scrolls.
+        Pump(2400);
+        Assert.All(grid.RealizedCells(), cell =>
+        {
+            Assert.Null(cell.RenderTransform);
+            Assert.Equal(1, cell.Opacity);
+            Assert.Equal(1, cell.NameText.Opacity);
+            Assert.Null(cell.Transitions);
+        });
+        Assert.Empty(workspace.EntriesArea.Children.OfType<Image>());
+
+        // With Windows' animation effects off, the switch is at once.
+        Ui.Motion.ReducedOverride = true;
+        bridge.SetViewMode("list");
+        Pump(20);
+        table = Assert.IsType<EntryTable>(workspace.EntriesView);
+        Assert.Empty(workspace.EntriesArea.Children.OfType<Image>());
+        Assert.All(table.GetVisualDescendants().OfType<EntryRow>(), row => Assert.Null(row.RenderTransform));
+        ui.Window.Close();
+    }
+
+    [AvaloniaFact]
     public void SettingsOpensAsAModalOverTheBlurredExplorer()
     {
         Explorer ui = OpenExplorer();
