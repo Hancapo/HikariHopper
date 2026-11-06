@@ -4,7 +4,7 @@ using HikariHopper.ViewModels;
 
 namespace HikariHopper.Views;
 
-/// <summary>The icon field's header (port of <c>EntryGridHeader.qml</c>); its DataContext is the tab's view model.</summary>
+/// <summary>The grid's sort header (port of <c>EntryGridHeader.qml</c>); its DataContext is the tab's view model.</summary>
 public partial class EntryGridHeader : UserControl
 {
     private ExplorerViewModel? bridge;
