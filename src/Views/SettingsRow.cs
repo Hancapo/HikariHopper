@@ -32,7 +32,7 @@ public sealed class SettingsRow : Control
     private readonly TextBlock detailText = new()
     {
         Foreground = T.TextDim, FontFamily = T.UiFont, FontSize = T.SmallFontSize, Margin = new Thickness(0, 4, 0, 0),
-        TextWrapping = TextWrapping.Wrap,
+        TextWrapping = TextWrapping.Wrap, IsVisible = false,
     };
 
     private readonly ContentControl actions = new()

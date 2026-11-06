@@ -137,12 +137,11 @@ public partial class SettingsDialog : ModalSheet
     {
         CheckForUpdates.IsOn = Infrastructure.Updates.CheckOnStartup;
         VersionRow.Title = $"HikariHopper {StartPage.AppVersion}";
-        VersionRow.Detail = Infrastructure.Updates.Source.CanUpdate
-            ? "Updates itself from its GitHub releases."
-            : "This build doesn't update itself; release builds do.";
+        // Only a dev build says anything here: it is the reason Check now finds nothing.
+        VersionRow.Detail = Infrastructure.Updates.Source.CanUpdate ? "" : "Dev build: doesn't update itself";
         string skipped = Infrastructure.Updates.SkippedVersion;
         SkippedRow.IsVisible = skipped.Length > 0;
-        SkippedRow.Detail = $"{skipped} isn't offered when HikariHopper starts.";
+        SkippedRow.Detail = skipped;
     }
 
     private void RefreshGameRows()
@@ -159,9 +158,9 @@ public partial class SettingsDialog : ModalSheet
         int count = tabs.RecentGames.Count;
         RecentRow.Detail = count switch
         {
-            0 => "No recent games",
-            1 => "1 recent game on the start page",
-            _ => $"{count} recent games on the start page",
+            0 => "None",
+            1 => "1 game",
+            _ => $"{count} games",
         };
         ClearRecents.IsEnabled = count > 0;
     }

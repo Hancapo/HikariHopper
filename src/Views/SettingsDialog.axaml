@@ -10,7 +10,8 @@
               BodyMargin="0"
               FooterText="Saved automatically">
   <!-- The groups in a rail, each a raised segment in its well when chosen, and the chosen group's page: its
-       title, what it is for, and its settings as rows in wells, a control at the right of each. -->
+       title and its settings as rows in wells, a control at the right of each. A row's second line is only for
+       what it holds now (a folder, a count, a version), never for saying again what its title says. -->
   <v:ModalSheet.Styles>
     <Style Selector="TextBlock.title">
       <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
@@ -24,12 +25,6 @@
       <Setter Property="FontSize" Value="9" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="LetterSpacing" Value="1.2" />
-    </Style>
-    <Style Selector="TextBlock.note">
-      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
-      <Setter Property="FontFamily" Value="{x:Static ui:Theme.UiFont}" />
-      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
-      <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
   </v:ModalSheet.Styles>
   <Grid ColumnDefinitions="Auto,*">
@@ -47,37 +42,28 @@
       <Panel Margin="20,16,22,18">
         <StackPanel Name="GamesPage">
           <TextBlock Classes="title" Text="Games" />
-          <TextBlock Classes="note" Margin="0,4,0,0"
-                     Text="Where each installation lives. HikariHopper looks for the game's executable in it." />
           <StackPanel Name="GameRows" />
         </StackPanel>
 
         <StackPanel Name="StartupPage" IsVisible="False">
-          <TextBlock Classes="title" Text="Startup" />
-          <TextBlock Classes="note" Margin="0,4,0,14" Text="What HikariHopper does when it starts." />
+          <TextBlock Classes="title" Margin="0,0,0,14" Text="Startup" />
           <v:SettingsWell>
-            <v:SettingsRow Title="Open the last game" Detail="Opens the game that was open when HikariHopper closed.">
+            <v:SettingsRow Title="Open the last game">
               <c:OnOffSwitch Name="OpenLastGame" />
             </v:SettingsRow>
-          </v:SettingsWell>
-
-          <TextBlock Classes="section" Margin="0,22,0,0" Text="START PAGE" />
-          <TextBlock Classes="note" Margin="0,5,0,10" Text="The games opened lately, listed on the start page to open again." />
-          <v:SettingsWell>
-            <v:SettingsRow Name="RecentRow" Title="Recent games">
+            <v:SettingsRow Name="RecentRow" Title="Recent games on the start page">
               <c:ChromeToolButton Name="ClearRecents" Width="88" Height="28" Raised="True" Text="Clear list" />
             </v:SettingsRow>
           </v:SettingsWell>
         </StackPanel>
 
         <StackPanel Name="UpdatesPage" IsVisible="False">
-          <TextBlock Classes="title" Text="Updates" />
-          <TextBlock Classes="note" Margin="0,4,0,14" Text="New versions come from HikariHopper's releases on GitHub." />
+          <TextBlock Classes="title" Margin="0,0,0,14" Text="Updates" />
           <v:SettingsWell>
             <v:SettingsRow Name="VersionRow">
               <c:ChromeToolButton Name="CheckNow" Width="104" Height="28" Raised="True" Text="Check now" />
             </v:SettingsRow>
-            <v:SettingsRow Title="Check at startup" Detail="Looks for a new version each time HikariHopper starts.">
+            <v:SettingsRow Title="Check for updates at startup">
               <c:OnOffSwitch Name="CheckForUpdates" />
             </v:SettingsRow>
             <v:SettingsRow Name="SkippedRow" Title="Skipped version" IsVisible="False">

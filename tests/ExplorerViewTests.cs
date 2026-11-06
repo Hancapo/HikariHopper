@@ -508,11 +508,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(legacy, HikariHopper.Core.GameSettings.GameRootToRestore());
 
         // The recents the launcher shows can be cleared.
-        Assert.Equal("1 recent game on the start page", settings.RecentRow.Detail);
+        Assert.Equal("1 game", settings.RecentRow.Detail);
         settings.ClearRecents.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Empty(ui.Tabs.RecentGames);
-        Assert.Equal("No recent games", settings.RecentRow.Detail);
+        Assert.Equal("None", settings.RecentRow.Detail);
         Assert.False(settings.ClearRecents.IsEnabled);
 
         // Updates: the version, the check at startup, and Check now.
@@ -538,7 +538,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(200);
         Assert.Equal("Updates", settings.Group);
         Assert.True(settings.SkippedRow.IsVisible);
-        Assert.Equal("9.9.9 isn't offered when HikariHopper starts.", settings.SkippedRow.Detail);
+        Assert.Equal("9.9.9", settings.SkippedRow.Detail);
         settings.OfferSkipped.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Equal("", Infrastructure.Updates.SkippedVersion);
