@@ -26,17 +26,16 @@ public partial class NavigationBar : UserControl
         InitializeComponent();
         PointerClick.Attach(RootSegment, _ => OnRootClicked(), () => Bridge?.HasWorkspace == true);
         ViewModeSwitch.SideRequested += (_, side) => Bridge?.SetViewMode(side == 1 ? "grid" : "list");
+        // The folder's box is the way into the search: as it takes the keyboard, the search row has it, Folder chosen.
+        SearchField.GotFocus += (_, _) =>
+        {
+            if (Bridge is { HasWorkspace: true, IsSearching: false })
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => BeginSearch(ViewModels.SearchScope.Folder));
+        };
         SearchField.PropertyChanged += (_, e) =>
         {
-            if (e.Property == TextBox.TextProperty)
-            {
-                Bridge?.SetSearch(SearchField.Text ?? "");
+            if (e.Property == TextBox.TextProperty || e.Property == IsKeyboardFocusWithinProperty)
                 RefreshSearchField();
-            }
-            else if (e.Property == IsKeyboardFocusWithinProperty)
-            {
-                RefreshSearchField();
-            }
         };
         SearchField.KeyDown += OnSearchKeyDown;
         RefreshSearchField();
@@ -63,6 +62,7 @@ public partial class NavigationBar : UserControl
         ThemedToolTip.Set(CaseToggle, "Match case");
         ThemedToolTip.Set(WildcardToggle, "Wildcards: * for any run of characters, ? for one; on by itself with either");
         ThemedToolTip.Set(RegexToggle, "Regular expression");
+        ThemedToolTip.Set(SubfoldersToggle, "Include subfolders: everything under this folder, inside RPFs too");
 
         // The address as text: a click on the bar's empty part edits it, a right-click offers copying and pasting.
         AddressBar.AddHandler(PointerPressedEvent, OnAddressBarPressed, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -89,14 +89,7 @@ public partial class NavigationBar : UserControl
     internal RetroMenu? OverflowMenu { get; private set; }
 
     /// <summary>QML <c>focusSearch()</c>: focus the search field and select its text.</summary>
-    public void FocusSearch()
-    {
-        // From a search, the folder's own search: the text comes along.
-        if (Bridge is { IsSearching: true } model)
-            model.BeginSearch(ViewModels.SearchScope.Folder);
-        SearchField.Focus(NavigationMethod.Pointer);
-        SearchField.SelectAll();
-    }
+    public void FocusSearch() => BeginSearch(ViewModels.SearchScope.Folder);
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -142,6 +135,7 @@ public partial class NavigationBar : UserControl
             case nameof(ExplorerViewModel.SearchMatchCase):
             case nameof(ExplorerViewModel.SearchWildcards):
             case nameof(ExplorerViewModel.SearchRegex):
+            case nameof(ExplorerViewModel.SearchSubfolders):
                 RefreshSearchRow();
                 break;
         }
@@ -354,6 +348,12 @@ public partial class NavigationBar : UserControl
         if (Bridge is not { HasWorkspace: true } model)
             return;
         EndAddressEdit();
+        // Anything typed into the folder's box before the row took over comes along.
+        if (!model.IsSearching && SearchField.Text is { Length: > 0 } typed)
+        {
+            model.SetSearch(typed);
+            SearchField.Text = "";
+        }
         model.BeginSearch(scope);
         RefreshSearchRow();
         QueryField.Focus(NavigationMethod.Pointer);
@@ -363,8 +363,7 @@ public partial class NavigationBar : UserControl
     /// <summary>Each scope's icon, one word, and what it covers, which its menu item says as a tooltip.</summary>
     private static readonly (ViewModels.SearchScope Scope, string Icon, string Name, string Covers)[] Scopes =
     [
-        (ViewModels.SearchScope.Folder, "folder", "Folder", "This folder only · Ctrl+F"),
-        (ViewModels.SearchScope.FolderAndBelow, "list-tree", "Subfolders", "This folder and everything in it"),
+        (ViewModels.SearchScope.Folder, "folder", "Folder", "This folder; its subfolders too with the toggle in the box · Ctrl+F"),
         (ViewModels.SearchScope.Archive, "package", "RPF", "The RPF you're in, nested ones included"),
         (ViewModels.SearchScope.Everywhere, "house", "Game", "The whole game · Ctrl+Shift+F"),
     ];
@@ -416,6 +415,9 @@ public partial class NavigationBar : UserControl
         CaseToggle.Raised = model.SearchMatchCase;
         WildcardToggle.Raised = model.SearchWildcards;
         RegexToggle.Raised = model.SearchRegex;
+        // Subfolders only widen a search of the folder: an RPF or the game have everything inside already.
+        SubfoldersToggle.IsEnabled = model.SearchScopeValue == ViewModels.SearchScope.Folder;
+        SubfoldersToggle.Raised = model.SearchSubfolders && SubfoldersToggle.IsEnabled;
     }
 
     private void OnQueryKeyDown(object? sender, KeyEventArgs e)
@@ -451,19 +453,7 @@ public partial class NavigationBar : UserControl
             };
             _ = shown;
             ThemedToolTip.Set(item, covers);
-            item.Triggered += (_, _) =>
-            {
-                if (scope == ViewModels.SearchScope.Folder)
-                {
-                    if (model.IsSearching)
-                        model.BeginSearch(scope);
-                    SearchField.Focus(NavigationMethod.Pointer);
-                }
-                else
-                {
-                    BeginSearch(scope);
-                }
-            };
+            item.Triggered += (_, _) => BeginSearch(scope);
             menu.Items.Add(item);
         }
         ScopeMenu = menu;
@@ -479,6 +469,8 @@ public partial class NavigationBar : UserControl
     private void OnWildcardToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchWildcards();
 
     private void OnRegexToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchRegex();
+
+    private void OnSubfoldersToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchSubfolders();
 
     private void OnBack(object? sender, RoutedEventArgs e) => Bridge?.GoBack();
 

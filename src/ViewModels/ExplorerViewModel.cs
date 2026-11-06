@@ -270,7 +270,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private void RefreshEntries()
     {
-        if (searching)
+        if (SearchShowsLocation)
         {
             RefreshSearchEntries();
             return;
@@ -289,7 +289,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         totalCount = records.Count;
         string query = CaseFold(search).Trim();
         var visible = SortedEntries(records
-            .Where(entry => query.Length == 0 || CaseFold(entry.Name).Contains(query, StringComparison.Ordinal))
+            .Where(entry => searching ? PassesFolderSearch(entry) : query.Length == 0 || CaseFold(entry.Name).Contains(query, StringComparison.Ordinal))
             .ToList());
         SetEntries(visible);
         RefreshTree();
@@ -722,7 +722,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return;
-        if (searching && searchIndex is not null)
+        if (SearchShowsLocation && searchIndex is not null)
         {
             searchIndexTask = searchIndex.Refresh();
             RunSearch(immediately: true);

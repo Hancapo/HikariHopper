@@ -211,7 +211,7 @@ public sealed partial class ExplorerViewModel
         List<EntryRecord> selection = SelectedEntries();
         if (selection.Count == 0)
             return;
-        if (searching)
+        if (SearchShowsLocation)
         {
             CopySearchPaths(SelectedHits());
             return;
@@ -232,7 +232,7 @@ public sealed partial class ExplorerViewModel
     public IReadOnlyList<string> StartEntryDrag(int row)
     {
         // Results live all over the game: they are copied with Ctrl+C rather than dragged.
-        if (EntryOperationBusy || searching)
+        if (EntryOperationBusy || SearchShowsLocation)
             return [];
         if (!selectedRows.Contains(row))
             SelectEntry(row);
@@ -285,12 +285,15 @@ public sealed partial class ExplorerViewModel
     {
         if (EntryOperationBusy)
             return;
-        if (searching)
+        if (SearchShowsLocation)
         {
             if (EntryAt(row)?.NativeEntry is SearchHit hit)
                 OpenHit(hit, open: true);
             return;
         }
+        // From the folder's own search, a folder opened is where the search ends.
+        if (searching && EntryAt(row) is { IsDirectory: true })
+            EndSearch();
         if (EntryAt(row) is not { } entry)
             return;
         SelectEntry(row);

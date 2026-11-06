@@ -22,7 +22,7 @@ public sealed partial class ExplorerViewModel
         if (EntryOperationBusy || selection.Count == 0)
             return false;
         string noun = selection.Count == 1 ? selection[0].Name : $"{selection.Count} items";
-        if (searching)
+        if (SearchShowsLocation)
             return CopySearchFiles(SelectedHits(), noun);
         if (!Provider.InArchive)
         {

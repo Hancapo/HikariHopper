@@ -8,11 +8,8 @@ namespace HikariHopper.ViewModels;
 /// <summary>Where a search looks.</summary>
 public enum SearchScope
 {
-    /// <summary>The folder shown: the search box's filter, as it always was.</summary>
+    /// <summary>The folder shown; with <see cref="ExplorerViewModel.SearchSubfolders"/>, everything under it too.</summary>
     Folder,
-
-    /// <summary>The folder shown and everything under it, inside RPFs too.</summary>
-    FolderAndBelow,
 
     /// <summary>The RPF shown, nested ones in it included.</summary>
     Archive,
@@ -22,9 +19,10 @@ public enum SearchScope
 }
 
 /// <summary>
-/// Searching more than the folder shown: the tab shows the files found, from the game's index, in place of the
-/// folder's. The list, its selection and its commands are the explorer's own; each result knows where it lives, so
-/// opening, copying, extracting, renaming and deleting it work wherever that is.
+/// Searching: the folder shown, or more of the game, in the same search row and with the same matching. The folder
+/// alone is its own listing, filtered; anything wider is files found in the game's index, each of which knows where
+/// it lives, so opening, copying, extracting, renaming and deleting it work wherever that is. Either way the list, its
+/// selection and its commands are the explorer's own.
 /// </summary>
 public sealed partial class ExplorerViewModel
 {
@@ -39,7 +37,7 @@ public sealed partial class ExplorerViewModel
         nameof(IsSearching), nameof(SearchScopeValue), nameof(SearchText), nameof(SearchMatchCase), nameof(SearchWildcards),
         nameof(SearchRegex), nameof(SearchError), nameof(SearchHitCount), nameof(SearchIndexing), nameof(SearchIndexProgress),
         nameof(SearchIndexText), nameof(TabTitle), nameof(CanPaste), nameof(CanGoBack), nameof(CanGoUp), nameof(ShowsItemCount),
-        nameof(CanSearchArchive),
+        nameof(CanSearchArchive), nameof(SearchSubfolders), nameof(SearchShowsLocation),
     ];
 
     private bool searching;
@@ -48,6 +46,8 @@ public sealed partial class ExplorerViewModel
     private bool searchMatchCase;
     private bool? searchWildcards;
     private bool searchRegex;
+    private bool searchSubfolders;
+    private SearchPattern? folderPattern;
     private string searchError = "";
     private string searchPrefix = "";
     private List<SearchHit> searchHits = [];
@@ -75,13 +75,22 @@ public sealed partial class ExplorerViewModel
 
     public bool SearchRegex => searchRegex;
 
+    /// <summary>Whether a search of the folder takes in everything under it as well.</summary>
+    public bool SearchSubfolders => searchSubfolders;
+
+    /// <summary>
+    /// Whether the results are files found in the index, from all over (each shown with where it lives), rather than
+    /// the folder's own listing, filtered.
+    /// </summary>
+    public bool SearchShowsLocation => searching && (searchScope != SearchScope.Folder || searchSubfolders);
+
     /// <summary>Why the text can't be searched (a regular expression that doesn't parse); empty when it can.</summary>
     public string SearchError => searchError;
 
-    public int SearchHitCount => searchHits.Count;
+    public int SearchHitCount => SearchShowsLocation ? searchHits.Count : entries.Count;
 
     /// <summary>Whether the index is still being built, so more results may come.</summary>
-    public bool SearchIndexing => searching && searchIndex is { State.Complete: false };
+    public bool SearchIndexing => SearchShowsLocation && searchIndex is { State.Complete: false };
 
     public double SearchIndexProgress => searchIndex?.State is { ArchivesTotal: > 0 } state ? (double)state.ArchivesDone / state.ArchivesTotal : 0;
 
@@ -103,6 +112,12 @@ public sealed partial class ExplorerViewModel
     {
         get
         {
+            if (!SearchShowsLocation)
+            {
+                // The folder's own listing: its folders and files.
+                int shown = searchError.Length > 0 ? 0 : entries.Count;
+                return shown == 0 ? "No items" : shown == 1 ? "1 item" : $"{shown:N0} items";
+            }
             int count = searchHits.Count;
             if (searchError.Length > 0 || searchText.Length == 0)
                 return searchText.Length == 0 ? "Search" : "No files";
@@ -113,46 +128,57 @@ public sealed partial class ExplorerViewModel
         }
     }
 
-    /// <summary>
-    /// Starts searching <paramref name="scope"/> (the whole game by default), or changes what is searched while one
-    /// runs. <see cref="SearchScope.Folder"/> goes back to the folder, its filter holding the text typed.
-    /// </summary>
+    /// <summary>Starts searching <paramref name="scope"/> (the whole game by default), or changes what is searched while one runs.</summary>
     public void BeginSearch(SearchScope scope = SearchScope.Everywhere)
     {
         if (!HasWorkspace)
             return;
-        if (scope == SearchScope.Folder)
-        {
-            string text = searchText;
-            EndSearch();
-            SetSearch(text);
-            return;
-        }
         if (scope == SearchScope.Archive && !Provider.InArchive)
             scope = SearchScope.Everywhere;
-        SearchIndex? index = IndexFor(scope);
-        if (index is null)
+        searchScope = scope;
+        if (!searching)
+        {
+            searching = true;
+            // A search starts afresh, from what the folder's box held if anything; that filter is done with.
+            searchText = search;
+            search = "";
+            OnPropertyChanged(nameof(SearchQuery));
+        }
+        ClearSelection();
+        UseIndexIfNeeded();
+        RunSearch(immediately: true);
+        RaiseAll(SearchProperties);
+        RaiseAll(CountsProperties);
+    }
+
+    /// <summary>The folder alone, or everything under it too.</summary>
+    public void ToggleSearchSubfolders()
+    {
+        searchSubfolders = !searchSubfolders;
+        if (!searching)
             return;
+        ClearSelection();
+        UseIndexIfNeeded();
+        RunSearch(immediately: true);
+        RaiseAll(SearchProperties);
+    }
+
+    /// <summary>Takes the index the scope needs, starting its refresh, or lets it go when the folder's listing will do.</summary>
+    private void UseIndexIfNeeded()
+    {
+        SearchIndex? index = SearchShowsLocation ? IndexFor(searchScope) : null;
         if (searchIndex != index)
         {
             if (searchIndex is not null)
                 searchIndex.Changed -= OnSearchIndexChanged;
             searchIndex = index;
-            searchIndex.Changed += OnSearchIndexChanged;
+            if (searchIndex is not null)
+                searchIndex.Changed += OnSearchIndexChanged;
         }
-        searchScope = scope;
-        searchPrefix = ScopePrefix(scope);
-        if (!searching)
-        {
-            searching = true;
-            // What the folder's box holds is the search's text to start from.
-            if (search.Length > 0)
-                searchText = search;
-        }
-        ClearSelection();
-        searchIndexTask = index.Refresh();
-        RunSearch(immediately: true);
-        RaiseAll(SearchProperties);
+        searchHits = [];
+        searchPrefix = ScopePrefix(searchScope);
+        if (searchIndex is not null)
+            searchIndexTask = searchIndex.Refresh();
     }
 
     /// <summary>Back to the folder the search started from; the search is kept for the next one.</summary>
@@ -166,6 +192,7 @@ public sealed partial class ExplorerViewModel
             searchIndex.Changed -= OnSearchIndexChanged;
         searchIndex = null;
         searchHits = [];
+        folderPattern = null;
         ClearSelection();
         RefreshEntries();
         RaiseAll(SearchProperties);
@@ -222,7 +249,7 @@ public sealed partial class ExplorerViewModel
     /// <summary>Where a scope's results must be under, as a path of the index; empty for all of it.</summary>
     private string ScopePrefix(SearchScope scope) => scope switch
     {
-        SearchScope.FolderAndBelow => AddressText.Replace('\\', '/'),
+        SearchScope.Folder => AddressText.Replace('\\', '/'),
         SearchScope.Archive => string.Join('/', new[]
         {
             Provider.ArchiveGamePath.Length > 0 ? Provider.ArchiveGamePath : Path.GetFileName(Provider.ArchivePath),
@@ -238,6 +265,16 @@ public sealed partial class ExplorerViewModel
         searchRun = run;
         SearchPattern? pattern = SearchPattern.Parse(searchText, searchMatchCase, searchWildcards, searchRegex, out string error);
         searchError = error;
+        if (!SearchShowsLocation)
+        {
+            // The folder's own listing, filtered here and now: every name, with no text.
+            folderPattern = pattern;
+            searchedComplete = true;
+            ClearSelection();
+            RefreshEntries();
+            RaiseAll(SearchProperties);
+            return;
+        }
         if (pattern is null || searchIndex is null)
         {
             ApplyHits([], complete: true);
@@ -304,6 +341,14 @@ public sealed partial class ExplorerViewModel
     }
 
     private List<SearchHit> SelectedHits() => [.. SelectedEntries().Select(entry => entry.NativeEntry).OfType<SearchHit>()];
+
+    /// <summary>The parts of a name the search matched, to mark them; none when it isn't searching the folder.</summary>
+    public IReadOnlyList<(int Start, int Length)> SearchSpans(string name) =>
+        searching && folderPattern?.Match(name) is { } spans ? spans : [];
+
+    /// <summary>Whether a folder's entry passes the search of the folder.</summary>
+    private bool PassesFolderSearch(EntryRecord entry) =>
+        searchError.Length == 0 && (folderPattern is null || folderPattern.Match(entry.Name) is not null);
 
     // ---------------- Where a result lives ----------------
 
@@ -412,8 +457,18 @@ public sealed partial class ExplorerViewModel
     /// <summary>Open location: the selected result's folder, with it selected.</summary>
     public void OpenSelectedLocation()
     {
-        if (searching && !EntryOperationBusy && SelectedHits() is [var hit])
+        if (!searching || EntryOperationBusy)
+            return;
+        if (SelectedHits() is [var hit])
+        {
             OpenHit(hit, open: false);
+        }
+        else if (SelectedEntries() is [var entry])
+        {
+            // A result of the folder's own search is already there: the folder, as it is, with it selected.
+            EndSearch();
+            SelectEntriesByName([entry.Name]);
+        }
     }
 
     private void CopySearchPaths(IReadOnlyList<SearchHit> hits)

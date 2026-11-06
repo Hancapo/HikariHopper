@@ -15,7 +15,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Rename… (F2) renames a file or folder, on disk or inside an RPF. ([#70](https://github.com/Hancapo/HikariHopper/pull/70))
 - Properties (Alt+Enter) shows where a file or folder is and its size, the contents of a texture dictionary, and an RPF's encryption and file count. ([#71](https://github.com/Hancapo/HikariHopper/pull/71))
 - The address bar can be copied and pasted: click its empty part or press Ctrl+L to edit the path, and type or paste a folder, an RPF or a path inside one to go there; right-click it for Copy address and Paste and go. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
-- Search the whole game from the search box (pick Game before it, or press Ctrl+Shift+F): find files by name inside every RPF, with wildcards such as *.ydr or a regular expression; results open, copy, extract, rename and delete as in a folder, and Open location shows a result where it lives. ([#77](https://github.com/Hancapo/HikariHopper/pull/77))
+- The search box searches the folder, the RPF you're in or the whole game, inside every RPF and with subfolders on request, by plain text, wildcards such as *.ydr or a regular expression; results open, copy, extract, rename and delete as in a folder, and Open location shows a result where it lives. ([#77](https://github.com/Hancapo/HikariHopper/pull/77))
 
 ### Changed
 
