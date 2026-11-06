@@ -51,8 +51,12 @@ public sealed record SearchIndexState(IReadOnlyList<IndexedGroup> Groups, int Ar
                 || (folder + "/").StartsWith(prefix, StringComparison.OrdinalIgnoreCase))];
             if (!inScope.Contains(true))
                 continue;
-            foreach (IndexedEntry entry in group.Files)
+            for (int index = 0; index < group.Files.Length; index++)
             {
+                // A superseded search stops soon, even inside one large group and with a slow regular expression.
+                if ((index & 255) == 0)
+                    cancel.ThrowIfCancellationRequested();
+                IndexedEntry entry = group.Files[index];
                 if (!inScope[entry.Folder] || pattern.Match(entry.Name) is not { } spans)
                     continue;
                 hits.Add(new SearchHit(group.PathOf(entry), entry.Size, spans));
@@ -77,7 +81,8 @@ public sealed class SearchIndex
 
     private readonly object gate = new();
     private readonly GameCrypto? crypto;
-    private Task? running;
+    private Task running = Task.CompletedTask;
+    private bool refreshing;
     private bool again;
     private bool cacheRead;
     private volatile SearchIndexState state = SearchIndexState.Empty;
@@ -126,11 +131,13 @@ public sealed class SearchIndex
     {
         lock (gate)
         {
-            if (running is { IsCompleted: false })
+            if (refreshing)
             {
                 again = true;
                 return running;
             }
+            refreshing = true;
+            again = false;
             running = Task.Run(RunRefreshes);
             return running;
         }
@@ -138,15 +145,36 @@ public sealed class SearchIndex
 
     private void RunRefreshes()
     {
-        while (true)
+        try
         {
-            RefreshOnce();
-            lock (gate)
+            while (true)
             {
-                if (!again)
-                    return;
-                again = false;
+                try
+                {
+                    RefreshOnce();
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    // The game folder went away (a drive disconnected, say): what was known stays, and the index is
+                    // done rather than indexing for ever.
+                    SearchIndexState last = state;
+                    Publish(last with { ArchivesDone = last.ArchivesTotal, Complete = true });
+                }
+                lock (gate)
+                {
+                    if (!again)
+                    {
+                        refreshing = false;
+                        return;
+                    }
+                    again = false;
+                }
             }
+        }
+        finally
+        {
+            lock (gate)
+                refreshing = false;
         }
     }
 
