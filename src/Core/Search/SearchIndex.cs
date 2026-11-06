@@ -145,6 +145,9 @@ public sealed class SearchIndex
 
     private void RunRefreshes()
     {
+        // Whether this run handed the flag back itself; only a run that didn't (it threw) clears it on the way out,
+        // or it could clear the flag of a newer run started meanwhile.
+        bool released = false;
         try
         {
             while (true)
@@ -165,6 +168,7 @@ public sealed class SearchIndex
                     if (!again)
                     {
                         refreshing = false;
+                        released = true;
                         return;
                     }
                     again = false;
@@ -173,8 +177,11 @@ public sealed class SearchIndex
         }
         finally
         {
-            lock (gate)
-                refreshing = false;
+            if (!released)
+            {
+                lock (gate)
+                    refreshing = false;
+            }
         }
     }
 
