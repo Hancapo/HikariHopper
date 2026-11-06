@@ -89,9 +89,10 @@ public partial class WorkspaceView : UserControl
         {
             RefreshFolders();
         }
-        else if (e.PropertyName == nameof(ExplorerViewModel.IsSearching))
+        else if (e.PropertyName == nameof(ExplorerViewModel.HasSearchQuery))
         {
             // Results take the whole area, folder panel included, and always as a list: they need its LOCATION.
+            // Only once there is a query: the search row open on its own leaves the folders as they were.
             RefreshFolders();
             RefreshEntriesView();
         }
@@ -100,7 +101,7 @@ public partial class WorkspaceView : UserControl
     /// <summary>SplitView hides a hidden item's handle; the panel keeps its width for when it returns.</summary>
     private void RefreshFolders()
     {
-        bool visible = Bridge?.FoldersVisible != false && Bridge?.IsSearching != true;
+        bool visible = Bridge?.FoldersVisible != false && Bridge?.HasSearchQuery != true;
         ColumnDefinition column = Split.ColumnDefinitions[0];
         if (!visible && FoldersFrame.IsVisible)
             folderWidth = column.Width;
@@ -114,7 +115,7 @@ public partial class WorkspaceView : UserControl
     /// <summary>The Loader: <c>viewMode === "grid" ? gridComponent : listComponent</c>.</summary>
     private void RefreshEntriesView()
     {
-        bool grid = Bridge?.ViewMode == "grid" && Bridge?.IsSearching != true;
+        bool grid = Bridge?.ViewMode == "grid" && Bridge?.HasSearchQuery != true;
         if (grid && EntriesHost.Content is EntryGrid || !grid && EntriesHost.Content is EntryTable)
             return;
         switch (EntriesHost.Content)

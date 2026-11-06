@@ -38,6 +38,9 @@ public sealed partial class ExplorerViewModel
     {
         if (EntryOperationBusy)
             return;
+        // A folder chosen in the tree during a search: the search ends there, the current folder included.
+        if (searching)
+            EndSearch();
         if (path.StartsWith("game://", StringComparison.Ordinal))
         {
             string target = path["game://".Length..];
