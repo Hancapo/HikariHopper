@@ -52,6 +52,10 @@ public abstract class ExplorerTestBase : IDisposable
         // Search indexes are cached beside the scratch game, never in the user's own folder.
         Core.Search.SearchIndex.CacheFolder = Path.Combine(scratch, "index-cache");
         Core.Search.SearchIndex.ForgetAll();
+        // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
+        Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
+        Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(null);
+        Infrastructure.ChangelogSource.Forget();
         previousDialogs = AppServices.Dialogs;
         AppServices.Dialogs = Dialogs;
         RecycleBin.Override = MoveToFakeTrash;

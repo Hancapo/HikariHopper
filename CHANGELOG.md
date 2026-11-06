@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The in-app changelog now loads from GitHub, so it stays up to date between releases. ([#86](https://github.com/Hancapo/HikariHopper/pull/86))
+
 ### Fixed
 
 ### Removed
