@@ -17,7 +17,7 @@ namespace HikariHopper.Views;
 /// Rows are virtualized; pointer input is routed per row (<see cref="EntryPointerArea"/>) or, on the
 /// background (below the rows and the panel's side insets), to the marquee.
 /// </summary>
-public partial class EntryTable : UserControl
+public partial class EntryTable : UserControl, IEntryItemsView
 {
     public const double TypeWidth = 200;
     public const double SizeWidth = 120;
@@ -110,6 +110,21 @@ public partial class EntryTable : UserControl
     internal bool MarqueeActive => marqueeActive;
 
     internal ScrollViewer ScrollViewer => Scroller;
+
+    ScrollViewer IEntryItemsView.Viewer => Scroller;
+
+    Control IEntryItemsView.Header => HeaderRow;
+
+    void IEntryItemsView.ShowFirst(int index) => wheel.ScrollTo(index * Ui.Theme.RowHeight);
+
+    IEnumerable<(int Index, Control Item, Control Glyph, IReadOnlyList<Control> Details)> IEntryItemsView.ShownItems()
+    {
+        foreach (Control container in EntryList.GetRealizedContainers())
+        {
+            if (container is EntryRow { Item: not null } row && EntryList.IndexFromContainer(row) is var index and >= 0)
+                yield return (index, row, row.Glyph, row.Details);
+        }
+    }
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -535,6 +550,12 @@ public sealed class EntryRow : Panel
     }
 
     public EntryItem? Item => item;
+
+    /// <summary>The row's icon.</summary>
+    internal Control Glyph => glyph;
+
+    /// <summary>The row's type and size, which follow its icon and name.</summary>
+    internal IReadOnlyList<Control> Details => [type, size];
 
     private static TextBlock Text(FontFamily family, double fontSize) => new()
     {

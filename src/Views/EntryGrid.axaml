@@ -9,7 +9,7 @@
   <!-- Port of EntryGrid.qml: the icon field. Cells are 148×112 inside a 10px content inset; rows
        of cells are virtualized. -->
   <DockPanel>
-    <v:EntryGridHeader DockPanel.Dock="Top" />
+    <v:EntryGridHeader Name="Header" DockPanel.Dock="Top" />
 
     <Panel Name="GridArea">
       <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}">

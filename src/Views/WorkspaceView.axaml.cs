@@ -201,18 +201,21 @@ public partial class WorkspaceView : UserControl
                 oldGrid.ContextMenuRequested -= OnContextMenuRequested;
                 break;
         }
+        Control next;
         if (grid)
         {
             var view = new EntryGrid();
             view.ContextMenuRequested += OnContextMenuRequested;
-            EntriesHost.Content = view;
+            next = view;
         }
         else
         {
             var view = new EntryTable();
             view.ContextMenuRequested += OnContextMenuRequested;
-            EntriesHost.Content = view;
+            next = view;
         }
+        // One view morphs into the other: the items glide to their new places.
+        EntryViewMorph.Run(EntriesArea, EntriesHost, next, () => EntriesHost.Content = next);
     }
 
     private void OnContextMenuRequested(object? sender, ContextMenuRequest request) =>

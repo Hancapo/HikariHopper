@@ -31,6 +31,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A new app icon: a railway conductor's cap on a brass tile. ([#73](https://github.com/Hancapo/HikariHopper/pull/73))
 - Dialogs and viewers close smoothly, shrinking away as they fade the way a macOS window does. ([#78](https://github.com/Hancapo/HikariHopper/pull/78))
 - The grid's header drops its ICON FIELD title; its sort buttons start where the list's NAME does. ([#79](https://github.com/Hancapo/HikariHopper/pull/79))
+- Switching between the list and the grid morphs one into the other, each item gliding to its new place, and keeps your place in the folder; with Windows' animation effects off it switches at once. ([#80](https://github.com/Hancapo/HikariHopper/pull/80))
 
 ### Fixed
 
