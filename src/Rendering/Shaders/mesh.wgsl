@@ -1,5 +1,6 @@
 // Collision and navmesh triangles: flat faces in their material's colour, lit so their shape reads, with their
-// edges drawn faintly so the triangles themselves show. Every triangle has corners of its own, so a corner's place
+// edges drawn faintly so the triangles themselves show (not where a polygon was split into triangles: its outline
+// is drawn as lines instead). Every triangle has corners of its own, so a corner's place
 // in its triangle (vertex_index % 3) gives the barycentric coordinates the edges are found with.
 // Scene, the colour helpers and the dither come from scene.wgsl.
 
@@ -7,7 +8,7 @@ struct MeshInput {
     @builtin(vertex_index) index: u32,
     @location(0) position: vec3f,
     @location(1) normal: vec3f,
-    // sRGB, as the material lists it.
+    // sRGB, as the material lists it; alpha is how strongly the triangle's own edges show.
     @location(2) colour: vec4f,
 };
 
@@ -16,6 +17,7 @@ struct MeshOutput {
     @location(0) normal: vec3f,
     @location(1) colour: vec3f,
     @location(2) barycentric: vec3f,
+    @location(3) edges: f32,
 };
 
 @vertex
@@ -26,6 +28,7 @@ fn vs_mesh(input: MeshInput) -> MeshOutput {
     output.normal = input.normal;
     output.colour = srgb_to_linear(input.colour.rgb);
     output.barycentric = corners[input.index % 3u];
+    output.edges = input.colour.a;
     return output;
 }
 
@@ -45,7 +48,7 @@ fn fs_mesh(input: MeshOutput, @builtin(front_facing) front: bool) -> @location(0
     let width = fwidth(input.barycentric);
     let inside = smoothstep(vec3f(0.0), width * 1.2, input.barycentric);
     let edge = 1.0 - min(min(inside.x, inside.y), inside.z);
-    colour = mix(colour, colour * 0.45, edge * 0.7);
+    colour = mix(colour, colour * 0.45, edge * 0.7 * input.edges);
 
     return vec4f(dither(colour, input.position.xy), 1.0);
 }

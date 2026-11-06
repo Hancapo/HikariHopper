@@ -35,6 +35,20 @@ internal sealed class CollisionMesh
             ? ViewportMesh.Pack(rgb.R, rgb.G, rgb.B)
             : Fallback;
 
+    /// <summary>The material's name as the legend shows it: "Tarmac painted" for TARMAC_PAINTED.</summary>
+    internal static string Name(BoundMaterialType type)
+    {
+        string name = BoundMaterialLibrary.Default.Entries.TryGetValue(type, out BoundMaterialInfo info) ? info.Name : $"Material {(byte)type}";
+        name = name.Replace('_', ' ').ToLowerInvariant();
+        return name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
+    }
+
+    private void Material(BoundMaterialType type)
+    {
+        colour = Colour(type);
+        mesh.Explain(Name(type), colour);
+    }
+
     private void Add(Bound bound, Matrix4x4 parent)
     {
         switch (bound)
@@ -50,7 +64,7 @@ internal sealed class CollisionMesh
                 return;
         }
         transform = parent;
-        colour = Colour(bound.Material.Type);
+        Material(bound.Material.Type);
         Vector3 center = bound.Box.Center;
         switch (bound)
         {
@@ -77,7 +91,10 @@ internal sealed class CollisionMesh
         List<Vector3> vertices = geometry.Vertices;
         foreach (BoundPolygon polygon in geometry.Polygons)
         {
-            colour = polygon.MaterialIndex < geometry.Materials.Count ? Colour(geometry.Materials[polygon.MaterialIndex].Type) : Fallback;
+            if (polygon.MaterialIndex < geometry.Materials.Count)
+                Material(geometry.Materials[polygon.MaterialIndex].Type);
+            else
+                colour = Fallback;
             bool inRange = true;
             for (int i = 0; i < polygon.VertexCount; i++)
                 inRange &= polygon.VertexIndex(i) < vertices.Count;

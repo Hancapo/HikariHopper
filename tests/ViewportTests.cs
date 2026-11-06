@@ -36,6 +36,46 @@ public sealed class ViewportTests
             Assert.Equal(ViewportMesh.Pack(129, 118, 154), vertex.Colour);
         });
         Assert.Empty(content.Mesh.Skipped);
+        // The legend names the material, with how many shapes wear it.
+        Assert.Equal([new LegendEntry("Tarmac", ViewportMesh.Pack(129, 118, 154), 1)], content.Mesh.Legend);
+    }
+
+    [Fact]
+    public void ANavmeshIsColouredByItsGroundAndShowsWherePedsClimbAndDrop()
+    {
+        Vector3[] vertices = [new(1010, 2020, 30), new(1040, 2020, 30), new(1040, 2050, 30), new(1010, 2050, 30)];
+        Ynv navmesh = YnvAuthoring.FromMesh(vertices, [0, 1, 2, 0, 2, 3]).Single().Mesh;
+        YnvPoly polygon = navmesh.Polygons[0];
+        polygon.Flags0 |= YnvPolyFlags0.IsWater;
+        navmesh.Edges[polygon.IndexId].Current.AdjacencyType = YnvAdjacencyType.ClimbLow;
+        navmesh.Portals.Add(new YnvPortal { Type = YnvPortalType.ClimbLadder, PositionFrom = new(1012, 2022, 30), PositionTo = new(1012, 2022, 36) });
+
+        ViewportMesh mesh = NavmeshMesh.Build(navmesh, new Vector3(1025, 2035, 30));
+
+        string[] names = [.. mesh.Legend.Select(entry => entry.Name)];
+        Assert.Contains("Water", names);
+        Assert.Contains("Low climb", names);
+        Assert.Contains("Ladder up", names);
+        // Polygons are drawn whole: the triangles they were split into show no edges of their own.
+        Assert.All(mesh.Vertices, vertex => Assert.Equal(0u, vertex.Colour >> 24));
+        // The ladder: the link, and a post at each end.
+        uint ladder = mesh.Legend.Single(entry => entry.Name == "Ladder up").Colour;
+        Assert.Equal(3, mesh.Segments.Count(segment => segment.Colour == ladder));
+        // Every polygon edge has a line, the climb in its own colour and wider.
+        uint climb = mesh.Legend.Single(entry => entry.Name == "Low climb").Colour;
+        ViewportSegment climbing = Assert.Single(mesh.Segments, segment => segment.Colour == climb);
+        Assert.True(climbing.Width > mesh.Segments.Min(segment => segment.Width));
+        Assert.Equal(navmesh.Polygons.Sum(p => p.IndexCount), mesh.Segments.Count(segment => segment.Colour != ladder));
+    }
+
+    [Fact]
+    public void ANavmeshPolygonTakesItsMostTellingGround()
+    {
+        Assert.Equal("Walkable", NavmeshMesh.Ground(new YnvPoly()));
+        Assert.Equal("Road", NavmeshMesh.Ground(new YnvPoly { Flags1 = YnvPolyFlags1.IsRoad }));
+        Assert.Equal("Pavement", NavmeshMesh.Ground(new YnvPoly { Flags0 = YnvPolyFlags0.IsPavement | YnvPolyFlags0.InShelter }));
+        Assert.Equal("Too steep", NavmeshMesh.Ground(new YnvPoly { Flags0 = YnvPolyFlags0.TooSteepToWalkOn | YnvPolyFlags0.IsWater }));
+        Assert.Equal("Shallow water", NavmeshMesh.Ground(new YnvPoly { Flags1 = YnvPolyFlags1.IsShallowWater | YnvPolyFlags1.IsRoad }));
     }
 
     [Fact]

@@ -12,6 +12,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The update check at startup can be turned off in Settings. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
 - An Updates page in Settings, to check for updates. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 - A 3D viewer for collisions (.ybn) and navmeshes (.ynv), which shows them where they are in the world. ([#90](https://github.com/Hancapo/HikariHopper/pull/90))
+- Navmeshes in the 3D viewer show their kinds of ground, climbs, drops, ladders and cover points, with a legend. ([#90](https://github.com/Hancapo/HikariHopper/pull/90))
 
 ### Changed
 

@@ -65,11 +65,39 @@ public partial class ModelViewer : UserControl, IModalContent
             return "Nothing in it";
         Viewport.Frame(content.Box);
         Viewport.Show(content.Mesh);
+        ShowLegend(content.Mesh.Legend);
         System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")}{(skipped > 0 ? $" ({skipped:N0} shapes not drawn)" : "")} · "
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
+    }
+
+    /// <summary>The most entries the legend lists; the rest are counted.</summary>
+    private const int LegendLength = 14;
+
+    /// <summary>The legend's entries as shown, most used first.</summary>
+    internal IReadOnlyList<LegendEntry> LegendShown { get; private set; } = [];
+
+    private void ShowLegend(IReadOnlyList<LegendEntry> legend)
+    {
+        LegendShown = [.. legend.OrderByDescending(entry => entry.Count).Take(LegendLength)];
+        LegendPanel.Children.Clear();
+        foreach (LegendEntry entry in LegendShown)
+        {
+            var item = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            item.Children.Add(new Border
+            {
+                Width = 10, Height = 10, CornerRadius = new CornerRadius(2), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                Background = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(ViewportMesh.Unpack(entry.Colour)),
+            });
+            item.Children.Add(new TextBlock { Text = entry.Name, Classes = { "status" } });
+            ToolTip.SetTip(item, $"{entry.Name}: {entry.Count:N0}");
+            LegendPanel.Children.Add(item);
+        }
+        if (legend.Count > LegendLength)
+            LegendPanel.Children.Add(new TextBlock { Text = $"+{legend.Count - LegendLength} more", Classes = { "status" }, Foreground = Ui.Theme.TextFaint });
+        LegendBar.IsVisible = LegendShown.Count > 0;
     }
 
     /// <summary>The control the viewer opens over, in the main window.</summary>

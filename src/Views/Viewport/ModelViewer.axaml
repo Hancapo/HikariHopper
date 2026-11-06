@@ -46,6 +46,11 @@
             </Grid>
           </Panel>
 
+          <!-- What the colours mean: the materials of a collision, or a navmesh's ground and what is drawn on it. -->
+          <Border Name="LegendBar" DockPanel.Dock="Bottom" IsVisible="False" Background="{x:Static ui:Theme.ChromeBg}" Padding="10,6,10,4">
+            <WrapPanel Name="LegendPanel" ItemSpacing="14" LineSpacing="4" />
+          </Border>
+
           <v:ViewportHost Name="Viewport" />
         </DockPanel>
 

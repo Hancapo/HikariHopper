@@ -15,7 +15,7 @@ namespace HikariHopper.Rendering;
 /// <remarks>Single-threaded: create, draw, resize and dispose it on one thread, while its window is alive.</remarks>
 internal sealed unsafe class ViewportRenderer : IDisposable
 {
-    private const int SceneBytes = 272;
+    private const int SceneBytes = 288;
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
     private readonly Surface surface;
@@ -26,6 +26,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
     private readonly BindGroup sceneGroup;
     private readonly RenderPipeline backdrop;
     private readonly RenderPipeline meshes;
+    private readonly RenderPipeline lines;
     // The swap chain's format, and the sRGB view of it that frames are drawn through.
     private readonly TextureFormat surfaceFormat;
     private readonly TextureFormat viewFormat;
@@ -34,6 +35,8 @@ internal sealed unsafe class ViewportRenderer : IDisposable
     private TextureView? depthView;
     private Buffer? vertexBuffer;
     private uint vertexCount;
+    private Buffer? segmentBuffer;
+    private uint segmentCount;
     private Vector3 origin;
     private int width;
     private int height;
@@ -139,6 +142,39 @@ internal sealed unsafe class ViewportRenderer : IDisposable
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Greater },
         });
+        // Lines over the meshes: tested against them, writing no depth. Each segment is one instance of six corners.
+        ShaderModule lineShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("lines.wgsl") });
+        lines = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = pipelineLayout,
+            Vertex = new VertexState
+            {
+                Module = lineShader,
+                EntryPoint = "vs_line",
+                Buffers = new[]
+                {
+                    new VertexBufferLayout
+                    {
+                        ArrayStride = ViewportSegment.Size,
+                        StepMode = VertexStepMode.Instance,
+                        Attributes = new[]
+                        {
+                            new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 1, Offset = 12, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 2, Offset = 24, Format = VertexFormat.Unorm8x4 },
+                            new VertexAttribute { ShaderLocation = 3, Offset = 28, Format = VertexFormat.Float32 },
+                        },
+                    },
+                },
+            },
+            Fragment = new FragmentState
+            {
+                Module = lineShader,
+                EntryPoint = "fs_line",
+                Targets = new[] { new ColorTargetState { Format = viewFormat } },
+            },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
+        });
         Resize(width, height);
         ThrowIfFailed();
     }
@@ -166,22 +202,37 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         Ground = box.Minimum.Z;
     }
 
-    /// <summary>Shows these triangles in place of any before; null shows none.</summary>
+    /// <summary>Shows these triangles and lines in place of any before; null shows none.</summary>
     public void Show(ViewportMesh? mesh)
     {
-        vertexBuffer = null;
-        vertexCount = 0;
-        if (mesh is null || mesh.Vertices.Count == 0)
+        vertexBuffer = segmentBuffer = null;
+        vertexCount = segmentCount = 0;
+        if (mesh is null)
             return;
-        ViewportVertex[] vertices = mesh.ToArray();
-        vertexBuffer = device.CreateBuffer(new BufferDescriptor
+        origin = mesh.Origin;
+        if (mesh.Vertices.Count > 0)
         {
-            Size = (ulong)vertices.Length * ViewportVertex.Size,
+            ViewportVertex[] vertices = mesh.ToArray();
+            vertexBuffer = Upload((ReadOnlySpan<ViewportVertex>)vertices, ViewportVertex.Size);
+            vertexCount = (uint)vertices.Length;
+        }
+        if (mesh.Segments.Count > 0)
+        {
+            ViewportSegment[] segments = mesh.SegmentArray();
+            segmentBuffer = Upload((ReadOnlySpan<ViewportSegment>)segments, ViewportSegment.Size);
+            segmentCount = (uint)segments.Length;
+        }
+    }
+
+    private Buffer Upload<T>(ReadOnlySpan<T> items, int size) where T : unmanaged
+    {
+        Buffer buffer = device.CreateBuffer(new BufferDescriptor
+        {
+            Size = (ulong)items.Length * (ulong)size,
             Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
         });
-        queue.WriteBuffer(vertexBuffer, 0, (ReadOnlySpan<ViewportVertex>)vertices);
-        vertexCount = (uint)vertices.Length;
-        origin = mesh.Origin;
+        queue.WriteBuffer(buffer, 0, items);
+        return buffer;
     }
 
     /// <summary>Reconfigures the swap chain for a window resized to these pixels; an empty window draws nothing.</summary>
@@ -270,6 +321,12 @@ internal sealed unsafe class ViewportRenderer : IDisposable
             pass.SetVertexBuffer(0, vertexBuffer);
             pass.Draw(vertexCount);
         }
+        if (segmentBuffer is not null)
+        {
+            pass.SetPipeline(lines);
+            pass.SetVertexBuffer(0, segmentBuffer);
+            pass.Draw(6, segmentCount);
+        }
         pass.End();
         queue.Submit(encoder.Finish());
         surface.Present();
@@ -290,6 +347,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         vectors[4] = new Vector4(aspect, OrbitCamera.TanHalf, Ground, GridSpacing(Camera.Radius));
         ViewportPalette.Linear().CopyTo(vectors[5..]);
         vectors[12] = new Vector4(origin, 0);
+        vectors[13] = new Vector4(width, height, 0, 0);
         queue.WriteBuffer(sceneBuffer, 0, (ReadOnlySpan<float>)values);
     }
 

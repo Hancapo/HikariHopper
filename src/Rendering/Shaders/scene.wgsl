@@ -24,6 +24,8 @@ struct Scene {
     axis_y: vec4f,
     // The world position meshes are drawn relative to.
     origin: vec4f,
+    // The viewport's width and height in pixels.
+    viewport: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> scene: Scene;
