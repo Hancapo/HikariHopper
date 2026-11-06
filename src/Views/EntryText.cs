@@ -21,10 +21,6 @@ public static class EntryText
     }
 
     /// <summary>
-    /// Fills <paramref name="inlines"/> with the name, marking the match in <paramref name="ink"/>.
-    /// The unmatched runs inherit the TextBlock's foreground, as the StyledText did.
-    /// </summary>
-    /// <summary>
     /// Writes where a search result lives as the address bar does: folders dim between chevrons, RPFs in blue with
     /// their mark, and a DLC pack's own folder a little brighter, since it is what tells two results apart.
     /// </summary>
@@ -74,6 +70,10 @@ public static class EntryText
             inlines.Add(new Run(name[at..]));
     }
 
+    /// <summary>
+    /// Fills <paramref name="inlines"/> with the name, marking the match in <paramref name="ink"/>.
+    /// The unmatched runs inherit the TextBlock's foreground, as the StyledText did.
+    /// </summary>
     public static void MarkMatch(InlineCollection inlines, string name, string? query, IBrush ink)
     {
         inlines.Clear();
