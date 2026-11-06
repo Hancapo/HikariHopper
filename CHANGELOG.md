@@ -18,41 +18,41 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- Import images… in the texture editor's File menu (Ctrl+I) adds images as new textures named after their files. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
-- An image viewer: double-click a DDS, PNG, JPEG, BMP, TGA or WebP file to view it over the explorer, with its channels, zoom and, for a DDS, its mips. ([#62](https://github.com/Hancapo/HikariHopper/pull/62))
-- Extract… copies the selected files and folders to a folder you pick, and Extract all content… writes an RPF's whole content into a folder named after it. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
-- Copy (Ctrl+C) and Paste (Ctrl+V) work with files and folders, in and out of RPFs and to and from Windows Explorer; a pasted name already there gets a number. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
-- Rename… (F2) renames a file or folder, on disk or inside an RPF. ([#70](https://github.com/Hancapo/HikariHopper/pull/70))
-- Properties (Alt+Enter) shows where a file or folder is and its size, the contents of a texture dictionary, and an RPF's encryption and file count. ([#71](https://github.com/Hancapo/HikariHopper/pull/71))
-- The address bar can be copied and pasted: click its empty part or press Ctrl+L to edit the path, and type or paste a folder, an RPF or a path inside one to go there; right-click it for Copy address and Paste and go. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
-- The search box searches the folder, the RPF you're in or the whole game, inside every RPF and with subfolders on request, by plain text, wildcards such as *.ydr or a regular expression; results open, copy, extract, rename and delete as in a folder, and Open location shows a result where it lives. ([#77](https://github.com/Hancapo/HikariHopper/pull/77))
+- Import images as new textures in the texture editor. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
+- Image viewer for DDS, PNG, JPEG, BMP, TGA and WebP files, with channels, zoom and DDS mips. ([#62](https://github.com/Hancapo/HikariHopper/pull/62))
+- Extract files and folders to a folder of your choice, or an RPF's whole content at once. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
+- Copy and paste files and folders, in and out of RPFs and to and from Windows Explorer. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
+- Rename files and folders, on disk or inside an RPF. ([#70](https://github.com/Hancapo/HikariHopper/pull/70))
+- Properties for files and folders: size and location, a texture dictionary's contents, and an RPF's encryption and file count. ([#71](https://github.com/Hancapo/HikariHopper/pull/71))
+- Editable address bar: type or paste a path to go there, or copy the current one. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
+- Search the current folder, the current RPF or the whole game, nested RPFs included, with plain text, wildcards or regular expressions. ([#77](https://github.com/Hancapo/HikariHopper/pull/77))
 
 ### Changed
 
-- The window no longer has a blue border. ([#55](https://github.com/Hancapo/HikariHopper/pull/55))
-- The texture context menu is regrouped with icons, and Resize and Format open their options. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
-- The texture editor's and the text viewer's headers show the file's icon and name, the way the explorer lists it. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
-- Image and text files have their own icons and types in the explorer, such as PNG Image and DDS Texture. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
-- The changelog in the app lists only released versions; test builds also show the changes not released yet. ([#64](https://github.com/Hancapo/HikariHopper/pull/64))
-- Files inside an archive show the size they take in it, and compressed ones say so in their type. ([#66](https://github.com/Hancapo/HikariHopper/pull/66))
-- The explorer's context menu fits what you right-click: an item gets Open, Copy name, Copy path and Delete, and empty space gets New and Refresh. ([#67](https://github.com/Hancapo/HikariHopper/pull/67))
-- Ctrl+C copies the selected files; Copy name has no shortcut, and folders can be dropped onto the explorer too. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
-- The window title and splash screen read Modding Toolkit, and the start-up and empty-state messages refer to your game. ([#72](https://github.com/Hancapo/HikariHopper/pull/72))
-- A new app icon: a railway conductor's cap on a brass tile. ([#73](https://github.com/Hancapo/HikariHopper/pull/73))
-- Dialogs and viewers close smoothly, shrinking away as they fade the way a macOS window does. ([#78](https://github.com/Hancapo/HikariHopper/pull/78))
-- The grid's header drops its ICON FIELD title; its sort buttons start where the list's NAME does. ([#79](https://github.com/Hancapo/HikariHopper/pull/79))
-- Switching between the list and the grid morphs one into the other, each item gliding to its new place, and keeps your place in the folder; with Windows' animation effects off it switches at once. ([#80](https://github.com/Hancapo/HikariHopper/pull/80))
-- Better contrast across the app: secondary text, hints, menu shortcuts and errors are easier to read, and tabs, panels, column headers and fields stand apart more clearly, notably on IPS screens. ([#81](https://github.com/Hancapo/HikariHopper/pull/81))
-- The footer shows the open game as its edition's mark and name, as on its tab, and what is selected, instead of a status lamp and key hints. ([#82](https://github.com/Hancapo/HikariHopper/pull/82))
+- Removed the window's blue border. ([#55](https://github.com/Hancapo/HikariHopper/pull/55))
+- Regrouped the texture context menu and added icons. ([#56](https://github.com/Hancapo/HikariHopper/pull/56))
+- Texture editor and text viewer headers now show the file's icon and name. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
+- Image and text files get their own icons and type names, such as PNG Image and DDS Texture. ([#63](https://github.com/Hancapo/HikariHopper/pull/63))
+- The in-app changelog only lists released versions; test builds also show unreleased changes. ([#64](https://github.com/Hancapo/HikariHopper/pull/64))
+- Files inside an archive show their size in the archive, and compressed files are labeled as such. ([#66](https://github.com/Hancapo/HikariHopper/pull/66))
+- The context menu now matches what you right-click. ([#67](https://github.com/Hancapo/HikariHopper/pull/67))
+- Ctrl+C now copies the selected files, and you can drop folders onto the explorer. ([#69](https://github.com/Hancapo/HikariHopper/pull/69))
+- The title bar and splash screen now say "Modding Toolkit". ([#72](https://github.com/Hancapo/HikariHopper/pull/72))
+- New app icon: a railway conductor's cap on a brass tile. ([#73](https://github.com/Hancapo/HikariHopper/pull/73))
+- Dialogs and viewers now close smoothly, shrinking as they fade out. ([#78](https://github.com/Hancapo/HikariHopper/pull/78))
+- Removed the "ICON FIELD" title from the grid header. ([#79](https://github.com/Hancapo/HikariHopper/pull/79))
+- Switching between list and grid animates each item to its new place and keeps your scroll position. ([#80](https://github.com/Hancapo/HikariHopper/pull/80))
+- Improved contrast throughout the app, especially on IPS screens. ([#81](https://github.com/Hancapo/HikariHopper/pull/81))
+- The footer now shows the open game's edition mark and your selection, instead of a status light and key hints. ([#82](https://github.com/Hancapo/HikariHopper/pull/82))
 
 ### Fixed
 
-- Images dragged into the texture editor from a browser or out of a zip are imported. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
-- The changelog scrolls with the mouse wheel anywhere over it, not only over its text. ([#60](https://github.com/Hancapo/HikariHopper/pull/60))
-- Scrolling through big text files in the text viewer is smooth, without stutter. ([#61](https://github.com/Hancapo/HikariHopper/pull/61))
-- Renaming a texture in the texture editor keeps its thumbnail. ([#65](https://github.com/Hancapo/HikariHopper/pull/65))
-- A long path no longer runs under the refresh button: its leading folders fold into a … menu, and a name too long to fit is cut short. ([#74](https://github.com/Hancapo/HikariHopper/pull/74))
-- Copy path inside a nested RPF gives the path from the archive's file on disk. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
+- Images dragged into the texture editor from a browser or a zip file now import. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
+- The changelog now scrolls with the mouse wheel anywhere over it. ([#60](https://github.com/Hancapo/HikariHopper/pull/60))
+- Scrolling large text files no longer stutters. ([#61](https://github.com/Hancapo/HikariHopper/pull/61))
+- Renaming a texture no longer loses its thumbnail. ([#65](https://github.com/Hancapo/HikariHopper/pull/65))
+- Long paths no longer run under the refresh button. ([#74](https://github.com/Hancapo/HikariHopper/pull/74))
+- Copy path inside a nested RPF now gives the path from the archive file on disk. ([#75](https://github.com/Hancapo/HikariHopper/pull/75))
 
 ### Removed
 
@@ -62,51 +62,51 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- A read-only text viewer: double-click a TXT, XML, META, JSON, CSV, INI, LUA, LOG or DAT file to open it over the explorer, with syntax colours, line numbers, find (Ctrl+F), wrapping and zoom. CSV files open as a table, and can be switched to text. ([#46](https://github.com/Hancapo/HikariHopper/pull/46))
-- Settings can turn off reopening the last game at startup, and clear the recent games the start page lists. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
-- HikariHopper has its own logo and icon, on the exe, the taskbar, the title bars, About and the splash screen. ([#34](https://github.com/Hancapo/HikariHopper/pull/34))
-- Dragging entries out of the explorer shows a cursor with what is being extracted and how many items. ([#23](https://github.com/Hancapo/HikariHopper/pull/23), [#25](https://github.com/Hancapo/HikariHopper/pull/25))
-- Game tabs show their edition with a V, grey for Legacy and green for Enhanced, and their path on hover. ([#26](https://github.com/Hancapo/HikariHopper/pull/26))
-- Tabs can be reordered by dragging them along the tab strip, and the others glide into place when one closes. ([#31](https://github.com/Hancapo/HikariHopper/pull/31), [#32](https://github.com/Hancapo/HikariHopper/pull/32))
-- While a menu is open, pointing at another menu title opens that menu, in the explorer and in the texture editor. ([#42](https://github.com/Hancapo/HikariHopper/pull/42))
+- Text viewer for TXT, XML, META, JSON, CSV, INI, LUA, LOG and DAT files, with syntax colours, line numbers, find, wrapping and zoom; CSV files open as a table. ([#46](https://github.com/Hancapo/HikariHopper/pull/46))
+- Choose whether the last game reopens at startup, and clear the start page's recent games. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
+- HikariHopper's own logo and icon. ([#34](https://github.com/Hancapo/HikariHopper/pull/34))
+- Dragging items out of the explorer shows what is being extracted and how many. ([#23](https://github.com/Hancapo/HikariHopper/pull/23), [#25](https://github.com/Hancapo/HikariHopper/pull/25))
+- Game tabs show their edition as a V, grey for Legacy and green for Enhanced, and their path on hover. ([#26](https://github.com/Hancapo/HikariHopper/pull/26))
+- Reorder tabs by dragging them; the others glide into place when one closes. ([#31](https://github.com/Hancapo/HikariHopper/pull/31), [#32](https://github.com/Hancapo/HikariHopper/pull/32))
+- With a menu open, hovering another menu title opens that one. ([#42](https://github.com/Hancapo/HikariHopper/pull/42))
 
 ### Changed
 
-- About is redone around the logo, with a link to GitHub, and the changelog can be read in the app. ([#51](https://github.com/Hancapo/HikariHopper/pull/51))
-- Settings, About, Keyboard shortcuts and the texture editor open inside the main window instead of as separate windows. Settings lists each game's installations with a clear status. ([#35](https://github.com/Hancapo/HikariHopper/pull/35), [#36](https://github.com/Hancapo/HikariHopper/pull/36))
-- The texture preview's toolbar is regrouped, with each channel letter in its own colour, and its zoom readout offers presets from 25% to 800%. ([#38](https://github.com/Hancapo/HikariHopper/pull/38))
-- Option groups (channels, Smooth / Pixels, Fit / 1:1, List / Grid) are switches. ([#40](https://github.com/Hancapo/HikariHopper/pull/40))
-- The start page is a game launcher: the games to open, grouped by game with their editions, and a standalone RPF. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
-- Menus hang from the title that opened them, and cast a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
-- Tabs are named after the folder or RPF they are in, and Home at a game's root. The folder tree and the path bar no longer repeat the root. ([#43](https://github.com/Hancapo/HikariHopper/pull/43))
+- Redesigned About around the logo, with a GitHub link and the changelog. ([#51](https://github.com/Hancapo/HikariHopper/pull/51))
+- Settings, About, Keyboard shortcuts and the texture editor now open inside the main window, and Settings shows each installation's status. ([#35](https://github.com/Hancapo/HikariHopper/pull/35), [#36](https://github.com/Hancapo/HikariHopper/pull/36))
+- Regrouped the texture preview toolbar, with colour-coded channels and more zoom presets. ([#38](https://github.com/Hancapo/HikariHopper/pull/38))
+- Option groups such as channels and list or grid are now switches. ([#40](https://github.com/Hancapo/HikariHopper/pull/40))
+- The start page is now a game launcher, grouped by game and edition. ([#33](https://github.com/Hancapo/HikariHopper/pull/33))
+- Menus now hang from their title and cast a soft shadow. ([#30](https://github.com/Hancapo/HikariHopper/pull/30))
+- Tabs are named after the folder or RPF they show, and the folder tree and path bar no longer repeat the root. ([#43](https://github.com/Hancapo/HikariHopper/pull/43))
 
 ### Fixed
 
-- A YDR with no embedded textures no longer opens an empty texture editor. ([#48](https://github.com/Hancapo/HikariHopper/pull/48))
-- Tab and Escape keep working in a dialog after a click on the title bar. ([#44](https://github.com/Hancapo/HikariHopper/pull/44))
-- The folder tree no longer keeps the folder you left outlined after going back to the root. ([#45](https://github.com/Hancapo/HikariHopper/pull/45))
-- About shows the app's real version, and credits Avalonia instead of Qt. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
-- The folder tree shows an expand arrow only on RPFs that have folders or other RPFs inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
-- The mip slider jumps to where it is clicked. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
+- A YDR without embedded textures no longer opens an empty texture editor. ([#48](https://github.com/Hancapo/HikariHopper/pull/48))
+- Tab and Escape keep working in a dialog after clicking the title bar. ([#44](https://github.com/Hancapo/HikariHopper/pull/44))
+- The folder tree no longer keeps the previous folder outlined after going back to the root. ([#45](https://github.com/Hancapo/HikariHopper/pull/45))
+- About shows the real version and credits Avalonia instead of Qt. ([#35](https://github.com/Hancapo/HikariHopper/pull/35))
+- The folder tree only shows expand arrows on RPFs with something inside. ([#19](https://github.com/Hancapo/HikariHopper/pull/19))
+- The mip slider jumps to where you click. ([#20](https://github.com/Hancapo/HikariHopper/pull/20))
 - Switching mips and channels in the texture viewer is instant. ([#21](https://github.com/Hancapo/HikariHopper/pull/21), [#39](https://github.com/Hancapo/HikariHopper/pull/39))
-- The zoom presets open under the zoom readout. ([#41](https://github.com/Hancapo/HikariHopper/pull/41))
-- Opening a texture's context menu no longer makes the preview blink or jump back to the first mip. ([#22](https://github.com/Hancapo/HikariHopper/pull/22))
+- Zoom presets open under the zoom readout. ([#41](https://github.com/Hancapo/HikariHopper/pull/41))
+- Opening a texture's context menu no longer makes the preview blink or reset to the first mip. ([#22](https://github.com/Hancapo/HikariHopper/pull/22))
 - Long folder names in the folder tree end in an ellipsis. ([#27](https://github.com/Hancapo/HikariHopper/pull/27))
-- Menu titles no longer keep a white line after their menu closes, and show focus only when it comes from the keyboard. ([#29](https://github.com/Hancapo/HikariHopper/pull/29))
+- Menu titles no longer keep a white line after closing, and only show focus from the keyboard. ([#29](https://github.com/Hancapo/HikariHopper/pull/29))
 - Release builds no longer contain the build machine's folder paths. ([#18](https://github.com/Hancapo/HikariHopper/pull/18))
 
 ## [0.0.2] - 2026-11-02
 
 ### Changed
 
-- Text uses Avalonia's own rendering, keeping each font's letter widths and line heights instead of rounding them the way Qt does. ([#13](https://github.com/Hancapo/HikariHopper/pull/13))
+- Text now uses Avalonia's own rendering, keeping each font's true letter widths and line heights. ([#13](https://github.com/Hancapo/HikariHopper/pull/13))
 - Releases are native builds and no longer need the .NET 10 Runtime. ([#14](https://github.com/Hancapo/HikariHopper/pull/14))
 
 ## [0.0.1] - 2026-11-02
 
 ### Added
 
-- RPF explorer for GTA V Legacy and Enhanced, with nested archives, a folder tree, list and grid views, search and tabs.
+- Explorer for GTA V Legacy and Enhanced game files, with nested RPF archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
 [Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...HEAD
