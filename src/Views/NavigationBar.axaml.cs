@@ -240,8 +240,11 @@ public partial class NavigationBar : UserControl
     private void RefreshViewMode()
     {
         ViewModeSwitch.SelectedIndex = Bridge?.ShownViewMode == "grid" ? 1 : 0;
-        // Results are a list only, so there is nothing to switch to while they are shown.
-        ViewModeSwitch.IsEnabled = Bridge?.CanChooseViewMode != false;
+        // Results are a list only, so there is no switch while searching; the search row takes its room. Gone for
+        // the whole search, not only once there are results, so the box doesn't grow under the first letter typed.
+        bool searching = Bridge?.IsSearching == true;
+        ViewModeSwitch.IsVisible = !searching;
+        Grid.SetColumnSpan(SearchRow, searching ? 3 : 2);
     }
 
     private void OnSearchKeyDown(object? sender, KeyEventArgs e)
@@ -394,6 +397,7 @@ public partial class NavigationBar : UserControl
     private void RefreshSearchRow()
     {
         bool searching = Bridge?.IsSearching == true;
+        RefreshViewMode();
         // However the search started (Ctrl+Shift+F, the Go menu), its query takes the keyboard.
         if (searching && !SearchRow.IsVisible)
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
