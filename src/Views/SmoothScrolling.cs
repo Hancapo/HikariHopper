@@ -45,11 +45,19 @@ public sealed class SmoothScrolling
         fallback = new DispatcherTimer(TimeSpan.FromMilliseconds(8), DispatcherPriority.Render, (_, _) => Step());
         viewer.AddHandler(InputElement.PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         // A press anywhere in the view, the scrollbar included, takes over from a glide.
-        viewer.AddHandler(InputElement.PointerPressedEvent, (_, _) => { if (running) Stop(); }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        viewer.AddHandler(InputElement.PointerPressedEvent, (_, _) =>
+        {
+            if (running)
+                Stop();
+            UserScrolled?.Invoke();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
         viewer.ScrollChanged += OnScrollChanged;
     }
 
     public static SmoothScrolling Attach(ScrollViewer viewer) => new(viewer);
+
+    /// <summary>The user took the view in hand: turned the wheel over it or pressed in it (the scrollbar too).</summary>
+    public event Action? UserScrolled;
 
     /// <summary>Whether the view is still gliding or springing back.</summary>
     public bool Animating => running;
@@ -107,6 +115,7 @@ public sealed class SmoothScrolling
             return;
         e.Handled = true;
         pending = null;
+        UserScrolled?.Invoke();
         double maximum = Maximum;
         if (!running)
         {

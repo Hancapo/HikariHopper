@@ -10,7 +10,9 @@ namespace HikariHopper.Views;
 /// a <c>SmoothedAnimation</c> at <c>highlightMoveVelocity</c> 400 px/s (accelerating, then braking),
 /// and the view scrolls only when that highlight and the current row are both past an edge
 /// (QQuickListView::trackedPositionChanged). A list without a current row has no highlight, so the
-/// next current row is reached at once.
+/// next current row is reached at once. The view follows only while the current index moved it
+/// (moveReason SetIndex): once the user scrolls, it is theirs until the current index changes again,
+/// which matters after a jump across a long list, where the glide goes on for minutes.
 /// </summary>
 public sealed class ListHighlightTracker
 {
@@ -24,6 +26,7 @@ public sealed class ListHighlightTracker
     private double? position;
     private double target;
     private int targetIndex = -1;
+    private bool following;
     // QSmoothedAnimation state.
     private double start;
     private double velocity;
@@ -42,6 +45,7 @@ public sealed class ListHighlightTracker
         this.scrolling = scrolling;
         this.rowHeight = rowHeight;
         timer = new DispatcherTimer(TimeSpan.FromMilliseconds(8), DispatcherPriority.Render, OnTick);
+        scrolling.UserScrolled += () => following = false;
     }
 
     /// <summary>The highlight's top edge in content coordinates, or null without a current row.</summary>
@@ -53,6 +57,7 @@ public sealed class ListHighlightTracker
     public void SetCurrentIndex(int index)
     {
         targetIndex = index;
+        following = true;
         if (index < 0)
         {
             timer.Stop();
@@ -162,7 +167,7 @@ public sealed class ListHighlightTracker
 
     private void Track()
     {
-        if (position is not { } tracked || targetIndex < 0)
+        if (!following || position is not { } tracked || targetIndex < 0)
             return;
         double view = viewer.Offset.Y;
         double size = viewer.Viewport.Height;

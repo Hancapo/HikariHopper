@@ -199,6 +199,50 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ScrollingPastAFarSelectionIsNotPulledBack()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        for (int folder = 0; folder < 10; folder++)
+            for (int file = 0; file < 40; file++)
+                Write(Path.Combine(Work, $"f{folder:00}", $"item{file:00}.xml"), "x");
+        bridge.BeginSearch();
+        navigation.QueryField.Text = ".xml";
+        await Searched(bridge);
+        EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
+        Avalonia.Controls.ScrollViewer viewer = table.ScrollViewer;
+        // A row selected a screen down, then one near the end: the current row's highlight sets off on a glide of
+        // thousands of pixels, which takes a while.
+        bridge.SelectEntry(30);
+        ExplorerStateRenders.Pump(300);
+        viewer.Offset = new Vector(0, viewer.Extent.Height - viewer.Viewport.Height);
+        ExplorerStateRenders.Pump(100);
+        bridge.SelectEntry(bridge.EntriesModel.Count - 3);
+        ExplorerStateRenders.Pump(50);
+
+        // Wheeled up from above that row, past where the glide is: the view goes where the wheel takes it, to the top,
+        // instead of being caught by the glide and pulled down with it.
+        viewer.Offset = new Vector(0, 2000);
+        ExplorerStateRenders.Pump(50);
+        Point over = table.TranslatePoint(new Point(300, 200), window)!.Value;
+        double last = viewer.Offset.Y;
+        for (int notch = 0; notch < 50; notch++)
+        {
+            window.MouseWheel(over, new Vector(0, 1), RawInputModifiers.None);
+            ExplorerStateRenders.Pump(30);
+            Assert.True(viewer.Offset.Y <= last + 0.5, $"notch {notch}: {last} -> {viewer.Offset.Y}");
+            last = viewer.Offset.Y;
+        }
+        ExplorerStateRenders.Pump(300);
+        Assert.Equal(0, viewer.Offset.Y, 1);
+
+        // Moving the current row again follows it as before.
+        bridge.SelectEntry(bridge.EntriesModel.Count - 1);
+        ExplorerStateRenders.Pump(300);
+        Assert.True(viewer.Offset.Y > 0);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task AResultsMenuIsTheItemMenuWithOpenLocation()
     {
         var (window, bridge, navigation, workspace) = Open();
