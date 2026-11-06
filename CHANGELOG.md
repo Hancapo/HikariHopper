@@ -8,6 +8,16 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.0.4] - 2026-11-06
+
+### Added
+
 - Import images… in the texture editor's File menu (Ctrl+I) adds images as new textures named after their files. ([#57](https://github.com/Hancapo/HikariHopper/pull/57))
 - An image viewer: double-click a DDS, PNG, JPEG, BMP, TGA or WebP file to view it over the explorer, with its channels, zoom and, for a DDS, its mips. ([#62](https://github.com/Hancapo/HikariHopper/pull/62))
 - Extract… copies the selected files and folders to a folder you pick, and Extract all content… writes an RPF's whole content into a folder named after it. ([#68](https://github.com/Hancapo/HikariHopper/pull/68))
@@ -99,7 +109,8 @@ All notable changes to HikariHopper are documented here. The format follows
 - RPF explorer for GTA V Legacy and Enhanced, with nested archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/Hancapo/HikariHopper/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Hancapo/HikariHopper/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Hancapo/HikariHopper/releases/tag/v0.0.1
