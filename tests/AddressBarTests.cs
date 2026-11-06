@@ -23,7 +23,7 @@ public sealed class AddressBarTests : ExplorerTestBase
     {
         MakeGame();
         Write(Path.Combine(Work, "x64", "levels", "notes.txt"), "n");
-        RpfArchive inner = Archive("inner.rpf", ("deep/b.txt", "b"));
+        RpfArchive inner = Archive("inner.rpf", ("deep/b.txt", "b"), ("top.txt", "t"));
         SaveArchive(Path.Combine(Work, "mods", "mods.rpf"), ("data/carcols.meta", "<Item />"), ("inner.rpf", inner));
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
@@ -99,6 +99,11 @@ public sealed class AddressBarTests : ExplorerTestBase
         Assert.True(bridge.GoToAddress($"{Path.Combine(Work, "mods", "mods.rpf")}::data/carcols.meta"));
         Assert.True(bridge.InArchive);
         Assert.Equal(["carcols.meta"], Selected(bridge));
+
+        // A file at a nested RPF's root: that RPF opens, the file selected in it.
+        Assert.True(bridge.GoToAddress(Path.Combine(Work, "mods", "mods.rpf", "inner.rpf", "top.txt")));
+        Assert.Equal(@"mods\mods.rpf\inner.rpf", bridge.AddressText);
+        Assert.Equal(["top.txt"], Selected(bridge));
 
         // What Copy path gives inside a nested RPF goes back to the same file.
         Assert.True(bridge.GoToAddress(Path.Combine(Work, "mods", "mods.rpf", "inner.rpf", "deep")));
