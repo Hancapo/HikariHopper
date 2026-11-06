@@ -33,8 +33,6 @@ public partial class NavigationBar : UserControl
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => BeginSearch(ViewModels.SearchScope.Folder));
         };
         SearchField.KeyDown += OnSearchKeyDown;
-        // The selector sits over the start of whichever box it is in; their text starts after it.
-        ScopeWell.SizeChanged += (_, _) => SearchField.LeadingSpace = QueryField.LeadingSpace = ScopeWell.Bounds.Width + 2 + 8;
 
         // Search mode: the query, where to look, and how the text is read.
         QueryField.PropertyChanged += (_, e) =>
@@ -43,7 +41,6 @@ public partial class NavigationBar : UserControl
                 model.SetSearchText(QueryField.Text ?? "");
         };
         QueryField.KeyDown += OnQueryKeyDown;
-        PointerClick.Attach(ScopeButton, _ => OpenScopeMenu());
         // The toggles read as the text they change: the query's mono face, larger and bold.
         foreach (ChromeToolButton toggle in new[] { CaseToggle, WildcardToggle, RegexToggle })
             toggle.TemplateApplied += (_, e) =>
@@ -426,9 +423,9 @@ public partial class NavigationBar : UserControl
             slot.Children.Add(ScopeWell);
         }
         var (_, icon, name, covers) = Scopes.Single(item => item.Scope == ShownScope);
-        ScopeIcon.IconName = icon;
-        ScopeText.Text = name;
-        ThemedToolTip.Set(ScopeButton, covers);
+        ScopeButton.IconKind = icon;
+        ThemedToolTip.Set(ScopeButton, $"{name}: {covers}");
+        AutomationProperties.SetName(ScopeButton, $"Where to search: {name}");
         ScopeWell.IsVisible = Bridge?.HasWorkspace == true;
         if (Bridge is not { } model || !searching)
             return;
@@ -459,6 +456,8 @@ public partial class NavigationBar : UserControl
             e.Handled = true;
         }
     }
+
+    private void OnScopeClick(object? sender, RoutedEventArgs e) => OpenScopeMenu();
 
     /// <summary>The scopes: the folder (its own search), the folder and below, the RPF shown, the whole game.</summary>
     private void OpenScopeMenu()

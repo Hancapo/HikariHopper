@@ -62,7 +62,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.False(navigation.AddressBar.IsVisible);
         Assert.False(navigation.SearchField.IsVisible);
         Assert.True(navigation.QueryField.IsKeyboardFocusWithin);
-        Assert.Equal("Game", navigation.ScopeText.Text);
+        Assert.Equal("house", navigation.ScopeButton.IconKind);
         Assert.Same(navigation.SearchScopeSlot, navigation.ScopeWell.Parent);
         // Open with nothing typed, the folders stay as they were.
         Assert.True(workspace.FoldersFrame.IsVisible);
@@ -93,17 +93,16 @@ public sealed class SearchViewTests : ExplorerTestBase
     public async Task TheFolderSearchBoxHasTheSelectorAndItsOtherScopesSearch()
     {
         var (window, bridge, navigation, workspace) = Open();
-        // Before the folder's box: Folder.
+        // In the folder's box, at its end, as the icon of where it searches: Folder. No key cap; the text stops short.
         Assert.True(navigation.ScopeWell.IsVisible);
         Assert.Same(navigation.ScopeSlot, navigation.ScopeWell.Parent);
-        // Inside the box, at its start, the box's text after it; no key cap.
         Assert.Same(navigation.SearchBox, navigation.ScopeSlot.Parent);
-        Assert.Equal(navigation.ScopeWell.Bounds.Width + 10, navigation.SearchField.Padding.Left, 1);
+        Assert.Equal("folder", navigation.ScopeButton.IconKind);
         Assert.Equal("", navigation.SearchField.KeyCap);
-        Point scopeAt = navigation.ScopeWell.TranslatePoint(default, navigation.SearchField)!.Value;
-        Assert.Equal(2, scopeAt.X, 1);
-        Assert.Equal((navigation.SearchField.Bounds.Height - navigation.ScopeWell.Bounds.Height) / 2, scopeAt.Y, 1);
-        Assert.Equal("Folder", navigation.ScopeText.Text);
+        Point scopeAt = navigation.ScopeButton.TranslatePoint(default, navigation.SearchField)!.Value;
+        Assert.Equal(navigation.SearchField.Bounds.Width - 3, scopeAt.X + navigation.ScopeButton.Bounds.Width, 1);
+        Assert.Equal((navigation.SearchField.Bounds.Height - navigation.ScopeButton.Bounds.Height) / 2, scopeAt.Y, 1);
+        Assert.True(navigation.SearchField.Padding.Right >= navigation.ScopeButton.Bounds.Width + 3);
 
         // Text typed into the box comes along to whatever is chosen.
         navigation.SearchField.Text = "readme";
@@ -127,7 +126,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.True(bridge.IsSearching);
         Assert.Equal("readme", bridge.SearchText);
         Assert.Equal("1 file", bridge.TabTitle);
-        Assert.Equal("Game", navigation.ScopeText.Text);
+        Assert.Equal("house", navigation.ScopeButton.IconKind);
         window.Close();
     }
 
@@ -140,7 +139,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         // The search row, Folder chosen, the query taking the keyboard.
         Assert.True(bridge.IsSearching);
         Assert.Equal(SearchScope.Folder, bridge.SearchScopeValue);
-        Assert.Equal("Folder", navigation.ScopeText.Text);
+        Assert.Equal("folder", navigation.ScopeButton.IconKind);
         Assert.True(navigation.QueryField.IsKeyboardFocusWithin);
         Assert.True(navigation.SubfoldersToggle.IsEnabled);
         Assert.False(navigation.SubfoldersToggle.Raised);
