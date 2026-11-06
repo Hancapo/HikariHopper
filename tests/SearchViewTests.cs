@@ -64,12 +64,14 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.True(navigation.QueryField.IsKeyboardFocusWithin);
         Assert.Equal("Game", navigation.ScopeText.Text);
         Assert.Same(navigation.SearchScopeSlot, navigation.ScopeWell.Parent);
-        // The results take the whole area: no folder panel, and always the list.
-        Assert.False(workspace.FoldersFrame.IsVisible);
-        Assert.IsType<EntryTable>(workspace.EntriesView);
+        // Open with nothing typed, the folders stay as they were.
+        Assert.True(workspace.FoldersFrame.IsVisible);
 
         navigation.QueryField.Text = "*.ydr";
         await Searched(bridge);
+        // Results take the whole area, the folder panel included, and are always the list.
+        Assert.False(workspace.FoldersFrame.IsVisible);
+        Assert.IsType<EntryTable>(workspace.EntriesView);
         Assert.Equal("2 files", bridge.TabTitle);
         Assert.True(navigation.WildcardToggle.Raised);
         EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
@@ -199,6 +201,35 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task AFolderChosenInTheTreeEndsTheSearchThere()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        bridge.BeginSearch(SearchScope.Everywhere);
+        navigation.QueryField.Text = "readme";
+        await Searched(bridge);
+        Assert.False(workspace.FoldersFrame.IsVisible);
+        Assert.Equal(1, bridge.SearchHitCount);
+
+        bridge.NavigateTree("game://mods");
+        Settle(bridge);
+        Assert.False(bridge.IsSearching);
+        Assert.True(workspace.FoldersFrame.IsVisible);
+        Assert.Equal("mods", bridge.CurrentPath);
+        Assert.Contains(bridge.EntriesModel, item => item.Name == "readme.txt");
+
+        // The folder you were already in, chosen again: the search ends and its contents come back.
+        bridge.BeginSearch();
+        navigation.QueryField.Text = "nothing like it";
+        await Searched(bridge);
+        Assert.Empty(bridge.EntriesModel);
+        bridge.NavigateTree("game://mods");
+        Settle(bridge);
+        Assert.False(bridge.IsSearching);
+        Assert.Single(bridge.EntriesModel);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task ScrollingPastAFarSelectionIsNotPulledBack()
     {
         var (window, bridge, navigation, workspace) = Open();
@@ -262,6 +293,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Key(window, Avalonia.Input.Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter);
         Settle(bridge);
         Assert.False(bridge.IsSearching);
+        Assert.True(workspace.FoldersFrame.IsVisible);
         Assert.Equal("mods", bridge.CurrentPath);
         Assert.Equal(["readme.txt"], bridge.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
         window.Close();

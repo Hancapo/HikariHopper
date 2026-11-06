@@ -613,6 +613,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return;
+        if (searching)
+            EndSearch();
         string normalized = path.Length > 0 ? path : ".";
         if (normalized == currentPath)
             return;

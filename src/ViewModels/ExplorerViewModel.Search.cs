@@ -37,7 +37,7 @@ public sealed partial class ExplorerViewModel
         nameof(IsSearching), nameof(SearchScopeValue), nameof(SearchText), nameof(SearchMatchCase), nameof(SearchWildcards),
         nameof(SearchRegex), nameof(SearchError), nameof(SearchHitCount), nameof(SearchIndexing), nameof(SearchIndexProgress),
         nameof(SearchIndexText), nameof(TabTitle), nameof(CanPaste), nameof(CanGoBack), nameof(CanGoUp), nameof(ShowsItemCount),
-        nameof(CanSearchArchive), nameof(SearchSubfolders), nameof(SearchShowsLocation),
+        nameof(CanSearchArchive), nameof(SearchSubfolders), nameof(SearchShowsLocation), nameof(HasSearchQuery),
     ];
 
     private bool searching;
@@ -83,6 +83,9 @@ public sealed partial class ExplorerViewModel
     /// the folder's own listing, filtered.
     /// </summary>
     public bool SearchShowsLocation => searching && (searchScope != SearchScope.Folder || searchSubfolders);
+
+    /// <summary>Whether something is being searched for: the search row is open with a query typed in it.</summary>
+    public bool HasSearchQuery => searching && searchText.Length > 0;
 
     /// <summary>Why the text can't be searched (a regular expression that doesn't parse); empty when it can.</summary>
     public string SearchError => searchError;
