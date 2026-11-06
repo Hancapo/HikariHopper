@@ -130,6 +130,7 @@ public partial class NavigationBar : UserControl
             case nameof(ExplorerViewModel.GameName):
             case nameof(ExplorerViewModel.ArchiveRootName):
                 RefreshSegments();
+                RefreshSearchRow();
                 break;
             case nameof(ExplorerViewModel.ViewMode):
                 RefreshViewMode();
@@ -359,12 +360,16 @@ public partial class NavigationBar : UserControl
         QueryField.SelectAll();
     }
 
-    private static string ScopeLabel(ViewModels.SearchScope scope) => scope switch
-    {
-        ViewModels.SearchScope.FolderAndBelow => "This folder and below",
-        ViewModels.SearchScope.Archive => "This RPF",
-        _ => "Whole game",
-    };
+    /// <summary>Each scope's icon, one word, and what it covers, which its menu item says as a tooltip.</summary>
+    private static readonly (ViewModels.SearchScope Scope, string Icon, string Name, string Covers)[] Scopes =
+    [
+        (ViewModels.SearchScope.Folder, "folder", "Folder", "This folder only · Ctrl+F"),
+        (ViewModels.SearchScope.FolderAndBelow, "list-tree", "Subfolders", "This folder and everything in it"),
+        (ViewModels.SearchScope.Archive, "package", "RPF", "The RPF you're in, nested ones included"),
+        (ViewModels.SearchScope.Everywhere, "house", "Game", "The whole game · Ctrl+Shift+F"),
+    ];
+
+    private ViewModels.SearchScope ShownScope => Bridge is { IsSearching: true } model ? model.SearchScopeValue : ViewModels.SearchScope.Folder;
 
     /// <summary>The search row in the address bar's place while searching, showing what the tab searches.</summary>
     private void RefreshSearchRow()
@@ -390,9 +395,20 @@ public partial class NavigationBar : UserControl
             AddressBar.IsVisible = true;
         }
         SearchField.IsVisible = !searching;
+        // The selector goes where the query is: before the folder's box, or at the start of the search row.
+        Panel slot = searching ? SearchScopeSlot : ScopeSlot;
+        if (ScopeWell.Parent != slot)
+        {
+            (ScopeWell.Parent as Panel)?.Children.Remove(ScopeWell);
+            slot.Children.Add(ScopeWell);
+        }
+        var (_, icon, name, covers) = Scopes.Single(item => item.Scope == ShownScope);
+        ScopeIcon.IconName = icon;
+        ScopeText.Text = name;
+        ThemedToolTip.Set(ScopeButton, covers);
+        ScopeWell.IsVisible = Bridge?.HasWorkspace == true;
         if (Bridge is not { } model || !searching)
             return;
-        ScopeText.Text = ScopeLabel(model.SearchScopeValue);
         if (QueryField.Text != model.SearchText)
             QueryField.Text = model.SearchText;
         QueryField.Invalid = model.SearchError.Length > 0;
@@ -421,28 +437,26 @@ public partial class NavigationBar : UserControl
     /// <summary>The scopes: the folder (its own search), the folder and below, the RPF shown, the whole game.</summary>
     private void OpenScopeMenu()
     {
-        if (Bridge is not { IsSearching: true } model)
+        if (Bridge is not { HasWorkspace: true } model)
             return;
-        var menu = new RetroMenu();
-        (ViewModels.SearchScope Scope, string Text, string Key, bool Enabled)[] scopes =
-        [
-            (ViewModels.SearchScope.Folder, "This folder", "Ctrl+F", true),
-            (ViewModels.SearchScope.FolderAndBelow, "This folder and below", "", true),
-            (ViewModels.SearchScope.Archive, "This RPF", "", model.CanSearchArchive),
-            (ViewModels.SearchScope.Everywhere, "Whole game", "Ctrl+Shift+F", true),
-        ];
-        foreach (var (scope, text, key, enabled) in scopes)
+        // The names only; what each covers is its tooltip.
+        var menu = new RetroMenu { Width = 150 + 2 * Ui.Theme.MenuPadding };
+        ViewModels.SearchScope shown = ShownScope;
+        foreach (var (scope, icon, name, covers) in Scopes)
         {
             var item = new RetroMenuItem
             {
-                Text = text, ShortcutText = key, Checkable = true, IsEnabled = enabled,
-                IsChecked = scope == model.SearchScopeValue,
+                Text = name, IconName = icon, MinWidth = 0,
+                IsEnabled = scope != ViewModels.SearchScope.Archive || model.CanSearchArchive,
             };
+            _ = shown;
+            ThemedToolTip.Set(item, covers);
             item.Triggered += (_, _) =>
             {
                 if (scope == ViewModels.SearchScope.Folder)
                 {
-                    model.BeginSearch(scope);
+                    if (model.IsSearching)
+                        model.BeginSearch(scope);
                     SearchField.Focus(NavigationMethod.Pointer);
                 }
                 else

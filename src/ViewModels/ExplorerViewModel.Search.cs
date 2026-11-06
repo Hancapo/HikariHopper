@@ -145,8 +145,8 @@ public sealed partial class ExplorerViewModel
         if (!searching)
         {
             searching = true;
-            // The folder's filter is the search's text to start from.
-            if (searchText.Length == 0 && search.Length > 0)
+            // What the folder's box holds is the search's text to start from.
+            if (search.Length > 0)
                 searchText = search;
         }
         ClearSelection();

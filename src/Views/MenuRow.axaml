@@ -73,8 +73,6 @@
       <c:RetroMenuItem Text="Forward" ShortcutText="Alt+Right" IsEnabled="{Binding ActiveBridge.CanGoForward}" Triggered="OnForward" />
       <c:RetroMenuSeparator />
       <c:RetroMenuItem Text="Up one level" ShortcutText="Backspace" IsEnabled="{Binding ActiveBridge.CanGoUp}" Triggered="OnUp" />
-      <c:RetroMenuSeparator />
-      <c:RetroMenuItem Text="Search the game" ShortcutText="Ctrl+Shift+F" IconName="search" IsEnabled="{Binding ActiveBridge.HasWorkspace}" Triggered="OnSearchGame" />
     </c:RetroMenu>
 
     <c:RetroMenu x:Key="HelpMenu" x:DataType="vm:ExplorerTabsViewModel">
