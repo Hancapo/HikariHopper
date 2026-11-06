@@ -214,18 +214,19 @@ public sealed class SearchViewTests : ExplorerTestBase
         ExplorerStateRenders.Pump(100);
         Assert.IsType<EntryGrid>(workspace.EntriesView);
 
-        // The search row open with nothing typed leaves the grid.
+        // The search row open with nothing typed leaves the grid; the switch makes way for the row.
+        double barRight = navigation.ViewModeSwitch.TranslatePoint(new Point(navigation.ViewModeSwitch.Bounds.Width, 0), navigation)!.Value.X;
         bridge.BeginSearch(SearchScope.Everywhere);
         ExplorerStateRenders.Pump(100);
         Assert.IsType<EntryGrid>(workspace.EntriesView);
-        Assert.True(navigation.ViewModeSwitch.IsEnabled);
+        Assert.False(navigation.ViewModeSwitch.IsVisible);
+        Assert.Equal(barRight, navigation.QueryField.TranslatePoint(new Point(navigation.QueryField.Bounds.Width, 0), navigation)!.Value.X, 1);
 
         // Results: the list, with the grid not there to pick.
         navigation.QueryField.Text = "ydr";
         await Searched(bridge);
         Assert.IsType<EntryTable>(workspace.EntriesView);
-        Assert.Equal(0, navigation.ViewModeSwitch.SelectedIndex);
-        Assert.False(navigation.ViewModeSwitch.IsEnabled);
+        Assert.False(navigation.ViewModeSwitch.IsVisible);
         Assert.False(bridge.CanChooseViewMode);
         bridge.SetViewMode("list");
         bridge.SetViewMode("grid");
@@ -237,7 +238,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         ExplorerStateRenders.Pump(100);
         Assert.IsType<EntryGrid>(workspace.EntriesView);
         Assert.Equal(1, navigation.ViewModeSwitch.SelectedIndex);
-        Assert.True(navigation.ViewModeSwitch.IsEnabled);
+        Assert.True(navigation.ViewModeSwitch.IsVisible);
         window.Close();
     }
 
