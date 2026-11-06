@@ -60,9 +60,10 @@
 
     <c:RetroMenu x:Key="ViewMenu" x:DataType="vm:ExplorerTabsViewModel">
       <c:RetroMenuItem Text="List view" Checkable="True" AutoExclusive="True" Triggered="OnListView"
-                       IsChecked="{Binding ActiveBridge.ViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=list}" />
+                       IsChecked="{Binding ActiveBridge.ShownViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=list}" />
       <c:RetroMenuItem Text="Grid view" Checkable="True" AutoExclusive="True" Triggered="OnGridView"
-                       IsChecked="{Binding ActiveBridge.ViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=grid}" />
+                       IsChecked="{Binding ActiveBridge.ShownViewMode, Mode=OneWay, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=grid}"
+                       IsEnabled="{Binding ActiveBridge.CanChooseViewMode, Mode=OneWay}" />
       <c:RetroMenuSeparator />
       <c:RetroMenuItem Text="Folders pane" Checkable="True" Toggled="OnFoldersToggled"
                        IsChecked="{Binding ActiveBridge.FoldersVisible, Mode=OneWay}" />

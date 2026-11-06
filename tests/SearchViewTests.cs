@@ -201,6 +201,41 @@ public sealed class SearchViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ResultsCantBeShownAsAGrid()
+    {
+        var (window, bridge, navigation, workspace) = Open();
+        bridge.SetViewMode("grid");
+        ExplorerStateRenders.Pump(100);
+        Assert.IsType<EntryGrid>(workspace.EntriesView);
+
+        // The search row open with nothing typed leaves the grid.
+        bridge.BeginSearch(SearchScope.Everywhere);
+        ExplorerStateRenders.Pump(100);
+        Assert.IsType<EntryGrid>(workspace.EntriesView);
+        Assert.True(navigation.ViewModeSwitch.IsEnabled);
+
+        // Results: the list, with the grid not there to pick.
+        navigation.QueryField.Text = "ydr";
+        await Searched(bridge);
+        Assert.IsType<EntryTable>(workspace.EntriesView);
+        Assert.Equal(0, navigation.ViewModeSwitch.SelectedIndex);
+        Assert.False(navigation.ViewModeSwitch.IsEnabled);
+        Assert.False(bridge.CanChooseViewMode);
+        bridge.SetViewMode("list");
+        bridge.SetViewMode("grid");
+        Assert.Equal("list", bridge.ShownViewMode);
+        Assert.IsType<EntryTable>(workspace.EntriesView);
+
+        // The search over, the grid comes back as it was.
+        bridge.EndSearch();
+        ExplorerStateRenders.Pump(100);
+        Assert.IsType<EntryGrid>(workspace.EntriesView);
+        Assert.Equal(1, navigation.ViewModeSwitch.SelectedIndex);
+        Assert.True(navigation.ViewModeSwitch.IsEnabled);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task EscEndsTheSearchFromTheResultsToo()
     {
         var (window, bridge, navigation, workspace) = Open();

@@ -8,7 +8,7 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// A tab with a workspace (port of <c>WorkspaceView.qml</c>); its DataContext is the tab's view model.
-/// The entries pane is an <see cref="EntryTable"/> or an <see cref="EntryGrid"/> by <see cref="ExplorerViewModel.ViewMode"/>.
+/// The entries pane is an <see cref="EntryTable"/> or an <see cref="EntryGrid"/> by <see cref="ExplorerViewModel.ShownViewMode"/>.
 /// </summary>
 public partial class WorkspaceView : UserControl
 {
@@ -81,7 +81,7 @@ public partial class WorkspaceView : UserControl
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ExplorerViewModel.ViewMode))
+        if (e.PropertyName == nameof(ExplorerViewModel.ShownViewMode))
         {
             RefreshEntriesView();
         }
@@ -91,10 +91,9 @@ public partial class WorkspaceView : UserControl
         }
         else if (e.PropertyName == nameof(ExplorerViewModel.HasSearchQuery))
         {
-            // Results take the whole area, folder panel included, and always as a list: they need its LOCATION.
-            // Only once there is a query: the search row open on its own leaves the folders as they were.
+            // Results take the whole area, folder panel included; only once there is a query: the search row open
+            // on its own leaves the folders as they were.
             RefreshFolders();
-            RefreshEntriesView();
         }
     }
 
@@ -115,7 +114,8 @@ public partial class WorkspaceView : UserControl
     /// <summary>The Loader: <c>viewMode === "grid" ? gridComponent : listComponent</c>.</summary>
     private void RefreshEntriesView()
     {
-        bool grid = Bridge?.ViewMode == "grid" && Bridge?.HasSearchQuery != true;
+        // Results are always the list: they need its LOCATION.
+        bool grid = Bridge?.ShownViewMode == "grid";
         if (grid && EntriesHost.Content is EntryGrid || !grid && EntriesHost.Content is EntryTable)
             return;
         switch (EntriesHost.Content)

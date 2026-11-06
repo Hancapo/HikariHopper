@@ -38,6 +38,7 @@ public sealed partial class ExplorerViewModel
         nameof(SearchRegex), nameof(SearchError), nameof(SearchHitCount), nameof(SearchIndexing), nameof(SearchIndexProgress),
         nameof(SearchIndexText), nameof(TabTitle), nameof(CanPaste), nameof(CanGoBack), nameof(CanGoUp), nameof(ShowsItemCount),
         nameof(CanSearchArchive), nameof(SearchSubfolders), nameof(SearchShowsLocation), nameof(HasSearchQuery),
+        nameof(ShownViewMode), nameof(CanChooseViewMode),
     ];
 
     private bool searching;
