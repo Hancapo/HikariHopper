@@ -13,7 +13,7 @@ internal static class TextViewerInk
 {
     public static readonly IBrush Number = new SolidColorBrush(Color.Parse("#7FAEEE"));
     public static readonly IBrush MatchWash = new SolidColorBrush(Color.Parse("#4DD0A94C"));
-    public static readonly IBrush SelectionWash = new SolidColorBrush(Color.FromArgb(0x5C, 0x4C, 0x7E, 0xCB));
+    public static readonly IBrush SelectionWash = new SolidColorBrush(Color.FromArgb(0x5C, 0x5E, 0x8B, 0xD0));
     public static readonly TextDecorationCollection Underline = TextDecorations.Underline;
 
     public static Typeface Typeface { get; } = new(Ui.Theme.MonoFont);

@@ -204,7 +204,8 @@ public class RetroMenuItem : MenuItem
         arrow.Stroke = mark;
         label.Foreground = !enabled ? Ui.Theme.TextFaint : highlighted ? Ui.Theme.Text : Ui.Theme.TextRow;
         shortcut.IsVisible = ShortcutText.Length > 0;
-        shortcut.Foreground = enabled && highlighted ? Ui.Theme.TextDim : Ui.Theme.TextFaint;
+        // Dim, not faint: the menu is a raised surface, where faint ink is too light to read at this size.
+        shortcut.Foreground = enabled ? Ui.Theme.TextDim : Ui.Theme.TextFaint;
         content.Margin = new Thickness(32, 0, HasSubMenu ? 26 : 10, 0);
     }
 }

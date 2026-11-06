@@ -55,7 +55,7 @@
         <Border Name="PART_Background" CornerRadius="{x:Static ui:Theme.InnerCorner}">
           <DockPanel Margin="{TemplateBinding Padding}">
             <TextBlock Name="PART_Note" DockPanel.Dock="Right" Margin="8,0,0,0" Text="{TemplateBinding Note}"
-                       Foreground="{x:Static ui:Theme.TextFaint}"
+                       Foreground="{x:Static ui:Theme.TextDim}"
                        FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                        VerticalAlignment="Center" />
             <TextBlock Name="PART_Label" Text="{TemplateBinding Label}"
