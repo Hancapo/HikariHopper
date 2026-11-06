@@ -26,6 +26,8 @@ public partial class NavigationBar : UserControl
         InitializeComponent();
         PointerClick.Attach(RootSegment, _ => OnRootClicked(), () => Bridge?.HasWorkspace == true);
         ViewModeSwitch.SideRequested += (_, side) => Bridge?.SetViewMode(side == 1 ? "grid" : "list");
+        // Its room set before it is shown, so the first width isn't animated to.
+        ViewModeSlot.Width = ViewModeSwitchRoom;
         // The folder's box is the way into the search: as it takes the keyboard, the search row has it, Folder chosen.
         SearchField.GotFocus += (_, _) =>
         {
@@ -237,14 +239,30 @@ public partial class NavigationBar : UserControl
         menu.OpenUnder(anchor, 4);
     }
 
+    /// <summary>What the view switch takes in the bar: itself and the gap before it.</summary>
+    private double ViewModeSwitchRoom
+    {
+        get
+        {
+            ViewModeSwitch.Measure(Size.Infinity);
+            return ViewModeSwitch.DesiredSize.Width + ViewModeSwitch.Margin.Left;
+        }
+    }
+
+    /// <summary>Whether the view switch is in the bar (not slid away for a search), for tests.</summary>
+    internal bool ShowsViewModeSwitch => ViewModeSwitch.IsHitTestVisible;
+
     private void RefreshViewMode()
     {
         ViewModeSwitch.SelectedIndex = Bridge?.ShownViewMode == "grid" ? 1 : 0;
-        // Results are a list only, so there is no switch while searching; the search row takes its room. Gone for
-        // the whole search, not only once there are results, so the box doesn't grow under the first letter typed.
+        // Results are a list only, so there is no switch while searching: it slides away and the search row's box
+        // grows into its room. Gone for the whole search, not only once there are results, so the box doesn't grow
+        // under the first letter typed.
         bool searching = Bridge?.IsSearching == true;
-        ViewModeSwitch.IsVisible = !searching;
-        Grid.SetColumnSpan(SearchRow, searching ? 3 : 2);
+        ViewModeSlot.Width = searching ? 0 : ViewModeSwitchRoom;
+        ViewModeSwitch.Opacity = searching ? 0 : 1;
+        ViewModeSwitch.IsHitTestVisible = !searching;
+        ViewModeSwitch.Focusable = !searching;
     }
 
     private void OnSearchKeyDown(object? sender, KeyEventArgs e)
