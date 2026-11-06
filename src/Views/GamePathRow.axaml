@@ -5,8 +5,8 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.GamePathRow"
              x:DataType="v:GamePathRow">
-  <!-- One installation in Settings, a row of its game's well: the edition's mark and name over its folder and
-       whether the game's executable is in it, then a folder button that chooses it and a mark that clears it. -->
+  <!-- One installation in Settings, a row of its game's well: the edition's mark and name, with whether the game's
+       executable is in its folder, over the folder; then a folder button that chooses it and a mark that clears it. -->
   <!-- The clear mark's column stays when it is hidden, so every row's folder button lines up. -->
   <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,30">
     <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,2,12,0" VerticalAlignment="Top" />
@@ -14,7 +14,7 @@
       <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="13" FontWeight="SemiBold"
                  TextTrimming="CharacterEllipsis" />
-      <!-- Trimmed from the start: a long folder keeps its last folders, which name the game, and the check. -->
+      <!-- Trimmed from the start: a long folder keeps its last folders, which name the game. -->
       <TextBlock Name="DetailText" Margin="0,4,0,0" TextTrimming="LeadingCharacterEllipsis"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
     </StackPanel>

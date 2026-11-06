@@ -7,8 +7,9 @@ using HikariHopper.Core;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// One installation in Settings: the edition's mark and <see cref="Title"/>, over its folder
-/// (<see cref="GamePath"/>) and whether <see cref="ExpectedExecutable"/> is in it. The folder button (Choose folder…,
+/// One installation in Settings: the edition's mark and <see cref="Title"/> with whether
+/// <see cref="ExpectedExecutable"/> is in its folder, over the folder (<see cref="GamePath"/>), which has its line
+/// to itself. The folder button (Choose folder…,
 /// or Change folder… once one is set) raises <see cref="BrowseRequested"/>; the clear mark commits an empty folder
 /// through <see cref="PathCommitted"/>.
 /// </summary>
@@ -29,15 +30,19 @@ public partial class GamePathRow : UserControl
     public static readonly StyledProperty<bool> PathValidProperty =
         AvaloniaProperty.Register<GamePathRow, bool>(nameof(PathValid));
 
-    private readonly Run pathRun = new() { Foreground = Ui.Theme.TextRow };
+    private readonly Run titleRun = new();
     private readonly Run gap = new("   ");
 
     public GamePathRow()
     {
         InitializeComponent();
-        DetailText.Inlines!.Add(pathRun);
-        DetailText.Inlines.Add(gap);
-        DetailText.Inlines.Add(StatusText);
+        // The check sits after the name, on its baseline, in the small mono of the details.
+        StatusText.FontFamily = Ui.Theme.MonoFont;
+        StatusText.FontSize = Ui.Theme.SmallFontSize;
+        StatusText.FontWeight = Avalonia.Media.FontWeight.Normal;
+        TitleText.Inlines!.Add(titleRun);
+        TitleText.Inlines.Add(gap);
+        TitleText.Inlines.Add(StatusText);
         BrowseButton.Click += (_, _) => BrowseRequested?.Invoke(this, EventArgs.Empty);
         ClearButton.Click += (_, _) => PathCommitted?.Invoke(this, "");
         Refresh();
@@ -79,13 +84,13 @@ public partial class GamePathRow : UserControl
         set => SetValue(PathValidProperty, value);
     }
 
-    /// <summary>Whether the executable is there, after the folder.</summary>
+    /// <summary>Whether the executable is in the folder, after the edition's name.</summary>
     internal Run StatusText { get; } = new();
 
     /// <summary>What the folder button does, as its tooltip says.</summary>
     public string BrowseLabel => GamePath.Length > 0 ? "Change folder…" : "Choose folder…";
 
-    /// <summary>What the line under the name says about the folder.</summary>
+    /// <summary>What the row says about the folder: "Not set" in place of it, or the check after the name.</summary>
     public string StatusMessage => GamePath.Length == 0
         ? "Not set"
         : PathValid ? $"✓ {ExpectedExecutable} found" : $"{ExpectedExecutable} isn't in this folder";
@@ -104,11 +109,12 @@ public partial class GamePathRow : UserControl
             return;
         bool set = GamePath.Length > 0;
         Mark.Enhanced = Edition == GameSettings.EnhancedEdition;
-        TitleText.Text = Title;
-        pathRun.Text = GamePath;
+        titleRun.Text = Title;
         gap.Text = set ? "   " : "";
-        StatusText.Text = StatusMessage;
+        StatusText.Text = set ? StatusMessage : "";
         StatusText.Foreground = !set ? Ui.Theme.TextFaint : PathValid ? Ui.Theme.Ok : Ui.Theme.Warning;
+        DetailText.Text = set ? GamePath : StatusMessage;
+        DetailText.Foreground = set ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
         ToolTip.SetTip(BrowseButton, BrowseLabel);
         ClearButton.IsVisible = set;
         ToolTip.SetTip(DetailText, set ? GamePath : null);
