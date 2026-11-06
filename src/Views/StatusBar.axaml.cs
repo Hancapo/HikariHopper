@@ -15,13 +15,13 @@ public partial class StatusBar : UserControl
         Refresh();
     }
 
-    /// <summary>The status message shown after the lamp, or "" when there is none worth showing.</summary>
+    /// <summary>The status message shown after the count, or "" when there is none worth showing.</summary>
     public string VisibleStatus => StatusText.IsVisible ? StatusText.Text ?? "" : "";
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
     /// <summary>
-    /// The load confirmation only repeats what the lamp already says, so it is not shown; every
+    /// The load confirmation only repeats what the game's well already says, so it is not shown; every
     /// other message is.
     /// </summary>
     public static bool StatusWorthShowing(string status, string edition) =>
@@ -40,7 +40,8 @@ public partial class StatusBar : UserControl
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.IsSearching))
+        if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition)
+            or nameof(ExplorerViewModel.SelectionCount) or nameof(ExplorerViewModel.SelectedSize))
             Refresh();
     }
 
@@ -49,8 +50,14 @@ public partial class StatusBar : UserControl
         string edition = Bridge?.GameEdition ?? "";
         bool status = StatusWorthShowing(Bridge?.Status ?? "", edition);
         Edition.IsVisible = edition.Length > 0;
-        // While searching the item count is the tab's, so nothing stands before the lamp to divide from.
-        EditionDivider.IsVisible = Edition.IsVisible && Bridge?.IsSearching != true;
+        EditionMark.Enhanced = edition == "GTA V Enhanced";
+        // Without a game's well the count starts the line, at the bar's own margin.
+        Count.Margin = new Avalonia.Thickness(Edition.IsVisible ? 0 : 6, 0, 0, 0);
         StatusDivider.IsVisible = StatusText.IsVisible = status;
+        SelectionText.Text = Selection(Bridge?.SelectionCount ?? 0, Bridge?.SelectedSize ?? "");
     }
+
+    /// <summary>"3 selected · 1.2 MB", or "" with nothing selected.</summary>
+    public static string Selection(int count, string size) =>
+        count == 0 ? "" : size.Length > 0 ? $"{count} selected · {size}" : $"{count} selected";
 }

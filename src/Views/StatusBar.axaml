@@ -6,8 +6,8 @@
              x:Class="HikariHopper.Views.StatusBar"
              x:DataType="vm:ExplorerViewModel"
              Height="{x:Static ui:Theme.ExplorerStatusHeight}">
-  <!-- Port of StatusBar.qml, on the window's base under the panels: the item count, the open
-       edition behind a signal lamp, the latest status message, and the two keys that move you. -->
+  <!-- On the window's base under the panels: the game that is open, as its mark and name in a small well, the
+       item count, the latest status message, and what is selected. -->
   <UserControl.Styles>
     <Style Selector="TextBlock">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
@@ -22,39 +22,29 @@
       <Setter Property="Background" Value="{x:Static ui:Theme.BorderSoft}" />
     </Style>
   </UserControl.Styles>
-  <DockPanel Margin="14,0">
-    <!-- Key hints, the key on a cap and what it does beside it. -->
-    <StackPanel Name="Hints" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="14" Margin="14,0,0,0">
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <c:KeyCap Text="Enter" />
-        <TextBlock Text="Open" />
-      </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <c:KeyCap IconName="delete" AutomationProperties.Name="Backspace" />
-        <TextBlock Text="Up" />
-      </StackPanel>
-    </StackPanel>
+  <DockPanel Margin="8,0,14,0">
+    <!-- What is selected: how many, and how big. -->
+    <TextBlock Name="SelectionText" DockPanel.Dock="Right" Margin="14,0,0,0" />
 
-    <!-- While the search index is being built: how far it has got, left of the key hints. -->
+    <!-- While the search index is being built: how far it has got, left of the selection. -->
     <StackPanel Name="Indexing" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" Margin="14,0,0,0" IsVisible="{Binding SearchIndexing}">
       <TextBlock Text="{Binding SearchIndexText}" Foreground="{x:Static ui:Theme.TextDim}" />
       <c:ThinProgress Width="110" VerticalAlignment="Center" Value="{Binding SearchIndexProgress}" />
     </StackPanel>
 
     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="14">
-      <Panel>
+      <!-- The game: its edition's mark, as on its tab, and its name, in a well of their own. -->
+      <Border Name="Edition" Height="22" Padding="8,0" VerticalAlignment="Center"
+              Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+        <StackPanel Orientation="Horizontal" Spacing="7">
+          <c:EditionMark Name="EditionMark" Width="12" Height="12" VerticalAlignment="Center" />
+          <TextBlock Name="EditionText" Foreground="{x:Static ui:Theme.TextRow}" Text="{Binding GameEdition}" />
+        </StackPanel>
+      </Border>
+      <Panel Name="Count">
         <TextBlock IsVisible="{Binding ShowsItemCount}" Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
         <TextBlock IsVisible="{Binding !HasWorkspace}" Text="NO GAME" />
       </Panel>
-      <Border Name="EditionDivider" Classes="divider" />
-      <!-- The signal lamp: lit while a game is open. -->
-      <StackPanel Name="Edition" Orientation="Horizontal" Spacing="8">
-        <Panel Width="14" Height="14" VerticalAlignment="Center">
-          <Ellipse Width="14" Height="14" Fill="{x:Static ui:Theme.SelectionHalo}" />
-          <Ellipse Width="8" Height="8" Fill="{x:Static ui:Theme.Selection}" />
-        </Panel>
-        <TextBlock Name="EditionText" Foreground="{x:Static ui:Theme.TextRow}" Text="{Binding GameEdition}" />
-      </StackPanel>
       <Border Name="StatusDivider" Classes="divider" />
     </StackPanel>
 
