@@ -64,6 +64,23 @@ public sealed class ExplorerTabsViewModel : ObservableObject
 
     public void RestoreLastGame() => ActiveBridge.RestoreLastGame();
 
+    /// <summary>
+    /// Opens <paramref name="path"/> (a path as the address bar takes it) in a new tab on <paramref name="source"/>'s
+    /// game or RPF, and shows that tab; <paramref name="source"/> stays as it is.
+    /// </summary>
+    private void OpenInNewTab(ExplorerViewModel source, string path)
+    {
+        string game = source.HasGame ? source.GamePath : "";
+        string archive = source.HasGame ? "" : source.Provider.ArchivePath;
+        int row = NewTab();
+        ExplorerViewModel tab = tabs[row];
+        if (game.Length > 0)
+            tab.OpenGame(game);
+        else if (archive.Length > 0)
+            tab.OpenArchive(archive);
+        tab.GoToAddress(path);
+    }
+
     /// <summary>Opens and activates an empty tab; returns its index.</summary>
     public int NewTab()
     {
@@ -84,11 +101,13 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         EventHandler<IReadOnlyList<string>> looseFiles = (_, paths) => PrepareLooseFileDeletion(bridge, paths);
         EventHandler<object> contentChanged = (_, target) => ContentChanged(bridge, target);
         EventHandler<string> archiveWrite = (_, rootPath) => PrepareArchiveWrite(rootPath);
+        EventHandler<string> newTab = (_, path) => OpenInNewTab(bridge, path);
         bridge.PropertyChanged += propertyChanged;
         bridge.GameOpened += gameOpened;
         bridge.LooseFilesAboutToBeDeleted += looseFiles;
         bridge.ContentChanged += contentChanged;
         bridge.ArchiveWriteRequested += archiveWrite;
+        bridge.OpenInNewTabRequested += newTab;
         unsubscribers[bridge] = () =>
         {
             bridge.PropertyChanged -= propertyChanged;
@@ -96,6 +115,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
             bridge.LooseFilesAboutToBeDeleted -= looseFiles;
             bridge.ContentChanged -= contentChanged;
             bridge.ArchiveWriteRequested -= archiveWrite;
+            bridge.OpenInNewTabRequested -= newTab;
         };
         tabs.Add(bridge);
         SynchronizeOperationState();

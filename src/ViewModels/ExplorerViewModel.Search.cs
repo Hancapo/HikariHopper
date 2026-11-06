@@ -397,11 +397,15 @@ public sealed partial class ExplorerViewModel
     private Func<object?> ReaderWork<T>(IReadOnlyList<SearchHit> hits, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
     {
         HitPlace[] places = [.. hits.Select(PlaceOf)];
-        LoadedGame? game = searchIndex is { StandaloneArchive: false } && Provider.GameTarget is { } target && Provider.Crypto is { } crypto
-            ? new LoadedGame(Provider.GamePath, target, crypto)
-            : null;
+        LoadedGame? game = ReaderGame();
         return () => RunReader(places, game, work);
     }
+
+    /// <summary>The game a reader of results loads, with the tab's own keys; none for an RPF searched on its own.</summary>
+    private LoadedGame? ReaderGame() =>
+        searchIndex is { StandaloneArchive: false } && Provider.GameTarget is { } target && Provider.Crypto is { } crypto
+            ? new LoadedGame(Provider.GamePath, target, crypto)
+            : null;
 
     private static List<T> RunReader<T>(HitPlace[] places, LoadedGame? game, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
     {
@@ -445,14 +449,83 @@ public sealed partial class ExplorerViewModel
 
     // ---------------- The commands, for results ----------------
 
-    /// <summary>Goes to a result's folder with it selected, and, with <paramref name="open"/>, opens it as Enter would.</summary>
+    /// <summary>
+    /// Opens a result as Enter opens a file, without leaving the search: a texture dictionary or drawable in the texture
+    /// editor (saving back into its RPF), a text file or an image in its viewer. An RPF is browsed, which a list of
+    /// results can't do, so it opens in a tab of its own and this one keeps its search. Without <paramref name="open"/>,
+    /// Open location: the result's folder, with it selected, which does end the search.
+    /// </summary>
     private void OpenHit(SearchHit hit, bool open)
     {
-        string path = hit.Path;
-        EndSearch();
-        if (GoToAddress(path) && open && SelectedIndex >= 0)
-            ActivateEntry(SelectedIndex);
+        if (!open)
+        {
+            string path = hit.Path;
+            EndSearch();
+            GoToAddress(path);
+            return;
+        }
+        string name = hit.Name;
+        if (IsArchiveFile(name))
+        {
+            OpenInNewTabRequested?.Invoke(this, hit.Path);
+            SetStatus($"Opened {name} in a new tab");
+            return;
+        }
+        bool texture = name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
+        bool text = TextDocument.IsTextName(name);
+        bool image = Textures.TextureImport.IsImagePath(name);
+        if (!texture && !text && !image)
+        {
+            SetStatus($"{name} has no viewer here; Open location shows it in its folder");
+            return;
+        }
+        long limit = text ? TextDocument.MaxSize : image ? ImageViewerViewModel.MaxSize : long.MaxValue;
+        if (hit.Size > limit)
+        {
+            SetStatus($"{name} is too large to view ({Formatting.FormatSize(hit.Size)})");
+            return;
+        }
+        (byte[] Data, string Source, ArchiveEntryTarget? Target) file;
+        try
+        {
+            // Read where it lives; the save target keeps only paths, so the reader can go at once.
+            file = RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
+                new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
+                    reader.InArchive ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open {name}: {error.Message}");
+            return;
+        }
+        if (texture)
+        {
+            ArchiveEntryTarget? target = file.Target;
+            TextureViewer.OpenDictionary(name, file.Source, file.Data,
+                sourceSaver: target is not null ? target.Save : null,
+                sourcePrepare: target is not null ? () => PrepareTextureWrite(target) : null,
+                sourceRootPath: target?.RootPath ?? "");
+            SetStatus($"Opening {name}");
+        }
+        else if (text)
+        {
+            if (!TextDocument.LooksLikeText(file.Data))
+            {
+                SetStatus($"{name} isn't a text file");
+                return;
+            }
+            TextFileOpened?.Invoke(this, TextDocument.Load(name, file.Data));
+            SetStatus($"Opened {name}");
+        }
+        else
+        {
+            ImageFileOpened?.Invoke(this, new ImageViewerViewModel(name, file.Data));
+            SetStatus($"Opened {name}");
+        }
     }
+
+    /// <summary>Asks for a tab of its own at <c>path</c> (an RPF result, to browse it); the tabs open it.</summary>
+    public event EventHandler<string>? OpenInNewTabRequested;
 
     /// <summary>Open location: the selected result's folder, with it selected.</summary>
     public void OpenSelectedLocation()

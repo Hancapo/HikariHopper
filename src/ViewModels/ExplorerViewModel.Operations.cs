@@ -462,6 +462,8 @@ public sealed partial class ExplorerViewModel
         var target = new EntryCreationTarget(ArchivePath: result.RootPath);
         RefreshExternalContent(target);
         ContentChanged?.Invoke(this, target);
+        if (SearchShowsLocation && searchIndex is not null)
+            searchIndexTask = searchIndex.Refresh();
         if (result.Success)
             SetStatus($"Saved {(TextureViewer.IsDrawable ? "YDR" : "YTD")} inside RPF");
     }

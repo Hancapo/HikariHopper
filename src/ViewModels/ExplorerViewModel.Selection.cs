@@ -288,7 +288,10 @@ public sealed partial class ExplorerViewModel
         if (SearchShowsLocation)
         {
             if (EntryAt(row)?.NativeEntry is SearchHit hit)
+            {
+                SelectEntry(row);
                 OpenHit(hit, open: true);
+            }
             return;
         }
         // From the folder's own search, a folder opened is where the search ends.

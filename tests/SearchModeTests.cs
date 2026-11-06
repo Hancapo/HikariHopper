@@ -164,6 +164,57 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task OpeningAResultOpensItWithoutLeavingTheSearch()
+    {
+        ExplorerViewModel bridge = Game();
+        var ytd = new RpfArchive("textures.rpf");
+        ytd.AddResource("vehicles/adder.ytd", Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("adder_body")));
+        ytd.Save(Path.Combine(Work, "textures.rpf"));
+        TextDocument? opened = null;
+        bridge.TextFileOpened += (_, document) => opened = document;
+        bridge.BeginSearch();
+        bridge.SetSearchText("readme");
+        await Searched(bridge);
+
+        // A text file in a nested RPF: in the viewer, and the results stay.
+        bridge.ActivateEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"));
+        Assert.True(bridge.IsSearching);
+        Assert.Equal("readme.txt", opened?.Name);
+        Assert.Equal(3, bridge.SearchHitCount);
+
+        // A texture dictionary in an RPF: in the texture editor, its saves going back to that RPF.
+        bridge.SetSearchText("adder");
+        await Searched(bridge);
+        bridge.ActivateEntry(Row(bridge, "textures.rpf/vehicles/adder.ytd"));
+        Assert.True(bridge.IsSearching);
+        Assert.Equal("adder.ytd", bridge.TextureViewer.SourceName);
+    }
+
+    [AvaloniaFact]
+    public async Task OpeningAnRpfResultBrowsesItInANewTab()
+    {
+        MakeGame();
+        RpfArchive street = Archive("v_street.rpf", ("prop_bench_01a.ydr", "b"));
+        SaveArchive(Path.Combine(Work, "x64i.rpf"), ("levels/gta5/props/v_street.rpf", street));
+        var tabs = new ExplorerTabsViewModel();
+        ExplorerViewModel bridge = tabs.ActiveBridge;
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.BeginSearch();
+        bridge.SetSearchText("v_street");
+        await Searched(bridge);
+        bridge.ActivateEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf"));
+        Settle(tabs.ActiveBridge);
+        Assert.Equal(2, tabs.Tabs.Count);
+        Assert.True(tabs.Tabs[0].IsSearching);
+        ExplorerViewModel opened = tabs.ActiveBridge;
+        Assert.NotSame(bridge, opened);
+        Assert.True(opened.InArchive);
+        Assert.Equal(@"x64i.rpf\levels\gta5\props\v_street.rpf", opened.AddressText);
+        Assert.Equal(["prop_bench_01a.ydr"], opened.EntriesModel.Select(item => item.Name));
+    }
+
+    [AvaloniaFact]
     public async Task CopyPathAndCopyWorkOnResultsWhereverTheyLive()
     {
         ExplorerViewModel bridge = Game();
