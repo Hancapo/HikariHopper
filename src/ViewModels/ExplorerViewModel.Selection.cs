@@ -321,6 +321,11 @@ public sealed partial class ExplorerViewModel
             OpenImageFile(entry);
             return;
         }
+        if (IsModelName(entry.Name))
+        {
+            OpenModelFile(entry);
+            return;
+        }
         if (!entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
             return;
         OpenArchiveEntry(entry);
@@ -372,6 +377,28 @@ public sealed partial class ExplorerViewModel
             return;
         }
         ImageFileOpened?.Invoke(this, new ImageViewerViewModel(entry.Name, data));
+        SetStatus($"Opened {entry.Name}");
+    }
+
+    /// <summary>Reads a collision or navmesh file and hands it to the 3D viewer; unless it is too big.</summary>
+    private void OpenModelFile(EntryRecord entry)
+    {
+        if (entry.Size > ModelFile.MaxSize)
+        {
+            SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(entry.Size)})");
+            return;
+        }
+        byte[] data;
+        try
+        {
+            data = Provider.ReadEntryBytes(entry);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open {entry.Name}: {error.Message}");
+            return;
+        }
+        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data));
         SetStatus($"Opened {entry.Name}");
     }
 

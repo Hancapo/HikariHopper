@@ -23,6 +23,7 @@
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
+    <EmbeddedResource Include="Rendering/Shaders/*.wgsl" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <!-- The native linker records only the PDB's file name (MSVC's %_PDB%), not this machine's path to it. -->
@@ -34,6 +35,7 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="WebGPUSharp" Version="0.5.8" />
   </ItemGroup>
   <ItemGroup>
     <!-- FiveFury is consumed as a managed .NET library. -->

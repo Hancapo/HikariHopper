@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:HikariHopper.Views"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.ModelViewer"
+             v:ModalOverlay.FillsWindow="True"
+             Focusable="True"
+             FontFamily="{x:Static ui:Theme.UiFont}"
+             FontSize="{x:Static ui:Theme.FontSize}"
+             Foreground="{x:Static ui:Theme.Text}">
+  <!-- A 3D file, to look at, as a modal that fills the main window, in the image viewer's frame: a header naming
+       the file with a close mark, the 3D viewport, and the status bar: where the content is, and the GPU. -->
+  <UserControl.Styles>
+    <Style Selector="TextBlock.status">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
+    </Style>
+  </UserControl.Styles>
+  <Border Background="{x:Static ui:Theme.AppBg}"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+    <c:RoundedClip Radius="{x:Static ui:Theme.SheetRadius}">
+      <Panel>
+        <DockPanel>
+          <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.WindowTitleHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+            <StackPanel Margin="12,0,44,0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <c:FileGlyph Name="TitleGlyph" Width="13" Height="13" VerticalAlignment="Center" />
+              <TextBlock Name="TitleText" VerticalAlignment="Center" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <c:ChromeToolButton Name="CloseMark" Width="24" Height="22" Margin="0,0,6,0"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Bordered="False"
+                                CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="close" IconSize="11" IconThickness="1.4"
+                                AutomationProperties.Name="Close the 3D viewer" />
+          </Panel>
+
+          <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ExplorerStatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+            <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+            <Grid Margin="0,1,0,0" ColumnDefinitions="*,Auto">
+              <TextBlock Name="StatusText" Grid.Column="0" Classes="status" Margin="10,0,0,0"
+                         Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Name="AdapterText" Grid.Column="1" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
+            </Grid>
+          </Panel>
+
+          <v:ViewportHost Name="Viewport" />
+        </DockPanel>
+
+        <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
+        <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"
+                IsHitTestVisible="False" />
+      </Panel>
+    </c:RoundedClip>
+  </Border>
+</UserControl>

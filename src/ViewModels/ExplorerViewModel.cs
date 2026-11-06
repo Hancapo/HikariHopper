@@ -78,6 +78,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>An image file was opened for viewing; the image viewer shows it.</summary>
     public event EventHandler<ImageViewerViewModel>? ImageFileOpened;
 
+    /// <summary>A collision or navmesh file was opened for viewing; the 3D viewer shows it.</summary>
+    public event EventHandler<ModelFile>? ModelFileOpened;
+
+    /// <summary>Whether the 3D viewer opens a file of this name: collisions (.ybn) and navmeshes (.ynv).</summary>
+    public static bool IsModelName(string name) =>
+        name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ynv", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Files changed at a location (an <see cref="EntryCreationTarget"/> or <see cref="EntryDeletionTarget"/>),
     /// so peer tabs refresh.
