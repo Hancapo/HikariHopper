@@ -15,6 +15,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - The in-app changelog now loads from GitHub, so it stays up to date between releases. ([#86](https://github.com/Hancapo/HikariHopper/pull/86))
 - The release zip updates itself, so it needs a folder you can write to. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
+- Startup options have their own group in Settings. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 
 ### Fixed
 
