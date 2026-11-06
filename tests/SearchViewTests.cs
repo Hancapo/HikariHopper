@@ -96,6 +96,13 @@ public sealed class SearchViewTests : ExplorerTestBase
         // Before the folder's box: Folder.
         Assert.True(navigation.ScopeWell.IsVisible);
         Assert.Same(navigation.ScopeSlot, navigation.ScopeWell.Parent);
+        // Inside the box, at its start, the box's text after it; no key cap.
+        Assert.Same(navigation.SearchBox, navigation.ScopeSlot.Parent);
+        Assert.Equal(navigation.ScopeWell.Bounds.Width + 10, navigation.SearchField.Padding.Left, 1);
+        Assert.Equal("", navigation.SearchField.KeyCap);
+        Point scopeAt = navigation.ScopeWell.TranslatePoint(default, navigation.SearchField)!.Value;
+        Assert.Equal(2, scopeAt.X, 1);
+        Assert.Equal((navigation.SearchField.Bounds.Height - navigation.ScopeWell.Bounds.Height) / 2, scopeAt.Y, 1);
         Assert.Equal("Folder", navigation.ScopeText.Text);
 
         // Text typed into the box comes along to whatever is chosen.

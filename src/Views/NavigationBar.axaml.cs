@@ -32,13 +32,9 @@ public partial class NavigationBar : UserControl
             if (Bridge is { HasWorkspace: true, IsSearching: false })
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => BeginSearch(ViewModels.SearchScope.Folder));
         };
-        SearchField.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == TextBox.TextProperty || e.Property == IsKeyboardFocusWithinProperty)
-                RefreshSearchField();
-        };
         SearchField.KeyDown += OnSearchKeyDown;
-        RefreshSearchField();
+        // The selector sits over the start of whichever box it is in; their text starts after it.
+        ScopeWell.SizeChanged += (_, _) => SearchField.LeadingSpace = QueryField.LeadingSpace = ScopeWell.Bounds.Width + 2 + 8;
 
         // Search mode: the query, where to look, and how the text is read.
         QueryField.PropertyChanged += (_, e) =>
@@ -251,13 +247,6 @@ public partial class NavigationBar : UserControl
         ViewModeSwitch.IsEnabled = Bridge?.CanChooseViewMode != false;
     }
 
-    private void RefreshSearchField()
-    {
-        bool hasText = !string.IsNullOrEmpty(SearchField.Text);
-        SearchField.KeyCap = SearchField.IsKeyboardFocusWithin || hasText ? "Esc" : "F3";
-        SearchField.LeadingColor = hasText ? Ui.Theme.Brass : Ui.Theme.TextFaint;
-    }
-
     private void OnSearchKeyDown(object? sender, KeyEventArgs e)
     {
         // Keys.onEscapePressed: { clear(); focus = false }
@@ -428,6 +417,7 @@ public partial class NavigationBar : UserControl
             AddressBar.IsVisible = true;
         }
         SearchField.IsVisible = !searching;
+        SearchBox.IsVisible = !searching;
         // The selector goes where the query is: before the folder's box, or at the start of the search row.
         Panel slot = searching ? SearchScopeSlot : ScopeSlot;
         if (ScopeWell.Parent != slot)
@@ -436,9 +426,7 @@ public partial class NavigationBar : UserControl
             slot.Children.Add(ScopeWell);
         }
         var (_, icon, name, covers) = Scopes.Single(item => item.Scope == ShownScope);
-        // The box shows what it searches with the scope's icon, where a magnifier would be.
-        SearchField.LeadingIcon = icon;
-        QueryField.LeadingIcon = icon;
+        ScopeIcon.IconName = icon;
         ScopeText.Text = name;
         ThemedToolTip.Set(ScopeButton, covers);
         ScopeWell.IsVisible = Bridge?.HasWorkspace == true;
