@@ -6,8 +6,9 @@
              x:Class="HikariHopper.Views.GamePathRow"
              x:DataType="v:GamePathRow">
   <!-- One installation in Settings, a row of its game's well: the edition's mark and name over its folder and
-       whether the game's executable is in it, then Choose folder… (Change… once set) and a mark that clears it. -->
-  <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,Auto">
+       whether the game's executable is in it, then a folder button that chooses it and a mark that clears it. -->
+  <!-- The clear mark's column stays when it is hidden, so every row's folder button lines up. -->
+  <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,30">
     <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,2,12,0" VerticalAlignment="Top" />
     <StackPanel Grid.Column="1" VerticalAlignment="Center">
       <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}"
@@ -17,9 +18,9 @@
       <TextBlock Name="DetailText" Margin="0,4,0,0" TextTrimming="LeadingCharacterEllipsis"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
     </StackPanel>
-    <c:ChromeToolButton Name="BrowseButton" Grid.Column="2" Height="28" Margin="16,0,0,0" Raised="True"
-                        VerticalAlignment="Center" />
-    <c:ChromeToolButton Name="ClearButton" Grid.Column="3" Width="26" Height="26" Margin="4,0,0,0" VerticalAlignment="Center"
+    <c:ChromeToolButton Name="BrowseButton" Grid.Column="2" Width="32" Height="28" Margin="16,0,0,0" Raised="True"
+                        VerticalAlignment="Center" IconKind="folder" IconSize="15" IconThickness="1.5" />
+    <c:ChromeToolButton Name="ClearButton" Grid.Column="3" Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Center"
                         Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
                         IconKind="close" IconSize="11" IconThickness="1.4" />
   </Grid>

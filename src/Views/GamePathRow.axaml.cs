@@ -8,8 +8,9 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// One installation in Settings: the edition's mark and <see cref="Title"/>, over its folder
-/// (<see cref="GamePath"/>) and whether <see cref="ExpectedExecutable"/> is in it. Choose folder… (Change… once one
-/// is set) raises <see cref="BrowseRequested"/>; the clear mark commits an empty folder through <see cref="PathCommitted"/>.
+/// (<see cref="GamePath"/>) and whether <see cref="ExpectedExecutable"/> is in it. The folder button (Choose folder…,
+/// or Change folder… once one is set) raises <see cref="BrowseRequested"/>; the clear mark commits an empty folder
+/// through <see cref="PathCommitted"/>.
 /// </summary>
 public partial class GamePathRow : UserControl
 {
@@ -81,6 +82,9 @@ public partial class GamePathRow : UserControl
     /// <summary>Whether the executable is there, after the folder.</summary>
     internal Run StatusText { get; } = new();
 
+    /// <summary>What the folder button does, as its tooltip says.</summary>
+    public string BrowseLabel => GamePath.Length > 0 ? "Change folder…" : "Choose folder…";
+
     /// <summary>What the line under the name says about the folder.</summary>
     public string StatusMessage => GamePath.Length == 0
         ? "Not set"
@@ -105,11 +109,11 @@ public partial class GamePathRow : UserControl
         gap.Text = set ? "   " : "";
         StatusText.Text = StatusMessage;
         StatusText.Foreground = !set ? Ui.Theme.TextFaint : PathValid ? Ui.Theme.Ok : Ui.Theme.Warning;
-        BrowseButton.Text = set ? "Change…" : "Choose folder…";
-        BrowseButton.Width = set ? 84 : 118;
+        ToolTip.SetTip(BrowseButton, BrowseLabel);
         ClearButton.IsVisible = set;
         ToolTip.SetTip(DetailText, set ? GamePath : null);
         AutomationProperties.SetName(BrowseButton, set ? $"Change the {Title} folder" : $"Choose the {Title} folder");
+        ToolTip.SetTip(ClearButton, "Clear");
         AutomationProperties.SetName(ClearButton, $"Clear the {Title} folder");
     }
 }

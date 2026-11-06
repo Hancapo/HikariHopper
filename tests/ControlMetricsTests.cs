@@ -533,13 +533,14 @@ public sealed class ControlMetricsTests
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
         Assert.Equal("Not set", row.StatusMessage);
-        Assert.Equal("Choose folder…", row.BrowseButton.Text);
+        Assert.Equal("folder", row.BrowseButton.IconKind);
+        Assert.Equal("Choose folder…", ToolTip.GetTip(row.BrowseButton));
         Assert.False(row.ClearButton.IsVisible);
         Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);
-        Assert.Equal("Change…", row.BrowseButton.Text);
+        Assert.Equal("Change folder…", ToolTip.GetTip(row.BrowseButton));
         Assert.True(row.ClearButton.IsVisible);
         row.PathValid = true;
         Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);

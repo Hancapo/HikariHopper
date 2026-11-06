@@ -470,14 +470,14 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         GamePathRow legacyRow = settings.Rows[1];
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
-        // A folder chosen is saved and checked, and the button offers to change it; the clear mark forgets it.
-        Assert.Equal("Choose folder…", legacyRow.BrowseButton.Text);
+        // A folder chosen is saved and checked, and the folder button offers to change it; the clear mark forgets it.
+        Assert.Equal("Choose folder…", legacyRow.BrowseLabel);
         Dialogs.Folders.Enqueue(legacy);
         legacyRow.BrowseButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Equal(legacy, ui.Tabs.GamePathSettings.LegacyPath);
         Assert.Equal("✓ GTA5.exe found", legacyRow.StatusMessage);
-        Assert.Equal("Change…", legacyRow.BrowseButton.Text);
+        Assert.Equal("Change folder…", legacyRow.BrowseLabel);
         legacyRow.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Equal("", ui.Tabs.GamePathSettings.LegacyPath);
