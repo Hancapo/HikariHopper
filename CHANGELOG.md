@@ -32,6 +32,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Dialogs and viewers close smoothly, shrinking away as they fade the way a macOS window does. ([#78](https://github.com/Hancapo/HikariHopper/pull/78))
 - The grid's header drops its ICON FIELD title; its sort buttons start where the list's NAME does. ([#79](https://github.com/Hancapo/HikariHopper/pull/79))
 - Switching between the list and the grid morphs one into the other, each item gliding to its new place, and keeps your place in the folder; with Windows' animation effects off it switches at once. ([#80](https://github.com/Hancapo/HikariHopper/pull/80))
+- Tabs stand out from the strip they hang from, and faint text such as item counts, sizes and placeholders is easier to read, notably on IPS screens. ([#81](https://github.com/Hancapo/HikariHopper/pull/81))
 
 ### Fixed
 
