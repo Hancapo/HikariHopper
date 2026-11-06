@@ -1588,14 +1588,18 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         NavigationBar navigation = ui.Find<NavigationBar>();
         Assert.Equal((new Point(0, 74), 46.0), (At(navigation), navigation.Bounds.Height));
 
-        // Two panels floating on the base with 8px gutters, and the status bar under them.
+        // Two panels floating on the base with 8px gutters, and the status bar right under them: its own height is
+        // the gap below the panels, so what it shows is centred between them and the window's edge.
         WorkspaceView workspace = ui.Find<WorkspaceView>();
-        Assert.Equal(new Rect(8, 128, 238, 672), new Rect(At(workspace.FoldersFrame), workspace.FoldersFrame.Bounds.Size));
+        Assert.Equal(new Rect(8, 128, 238, 680), new Rect(At(workspace.FoldersFrame), workspace.FoldersFrame.Bounds.Size));
         Assert.Equal(new Point(254, 128), At(workspace.EntriesFrame));
         Assert.Equal(new CornerRadius(6), workspace.FoldersFrame.CornerRadius);
         Assert.Equal(new CornerRadius(6), workspace.EntriesFrame.CornerRadius);
         StatusBar status = ui.Find<StatusBar>();
         Assert.Equal((new Point(0, 808), 32.0), (At(status), status.Bounds.Height));
+        // The game's well sits as far below the panels as above the window's edge.
+        Border edition = status.Edition;
+        Assert.Equal(At(edition).Y - 808, 808 + 32 - (At(edition).Y + edition.Bounds.Height));
 
         using var frame = window.CaptureRenderedFrame()!;
         Assert.Equal(HikariHopper.Ui.Theme.WindowBg.Color, Pixel(frame, 4, 400));        // left gutter
