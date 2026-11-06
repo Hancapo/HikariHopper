@@ -514,8 +514,8 @@ public sealed class ControlMetricsTests
     {
         // Their share of the window, within their least and most, never closer than 24px to an edge.
         var settings = new SettingsDialog();
-        Assert.Equal(new Size(870, 592), ModalOverlay.SizeFor(settings, new Size(1360, 800)));
-        Assert.Equal(new Size(1040, 760), ModalOverlay.SizeFor(settings, new Size(2560, 1400)));
+        Assert.Equal(new Size(816, 592), ModalOverlay.SizeFor(settings, new Size(1360, 800)));
+        Assert.Equal(new Size(880, 640), ModalOverlay.SizeFor(settings, new Size(2560, 1400)));
         Assert.Equal(new Size(700, 460), ModalOverlay.SizeFor(settings, new Size(940, 540)));
         Assert.Equal(new Size(552, 352), ModalOverlay.SizeFor(settings, new Size(600, 400)));
         var about = new AboutDialog();
@@ -533,11 +533,13 @@ public sealed class ControlMetricsTests
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
         Assert.Equal("Not set", row.StatusMessage);
+        Assert.Equal("Choose folder…", row.BrowseButton.Text);
         Assert.False(row.ClearButton.IsVisible);
         Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);
+        Assert.Equal("Change…", row.BrowseButton.Text);
         Assert.True(row.ClearButton.IsVisible);
         row.PathValid = true;
         Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);

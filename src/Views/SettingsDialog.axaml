@@ -5,13 +5,19 @@
               xmlns:ui="using:HikariHopper.Ui"
               x:Class="HikariHopper.Views.SettingsDialog"
               x:DataType="v:SettingsDialog"
-              WindowShare="0.64,0.74" MinSize="700,460" MaxSize="1040,760"
+              WindowShare="0.6,0.74" MinSize="700,460" MaxSize="880,640"
               Heading="SETTINGS"
               BodyMargin="0"
               FooterText="Saved automatically">
-  <!-- The groups rail, then the selected group's page: Games and Startup so far; the others are
-       listed as coming, so the rail is already the shape it will have. -->
+  <!-- The groups in a rail, each a raised segment in its well when chosen, and the chosen group's page: its
+       title, what it is for, and its settings as rows in wells, a control at the right of each. -->
   <v:ModalSheet.Styles>
+    <Style Selector="TextBlock.title">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.Text}" />
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.UiFont}" />
+      <Setter Property="FontSize" Value="17" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
     <Style Selector="TextBlock.section">
       <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
@@ -26,42 +32,58 @@
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
   </v:ModalSheet.Styles>
-  <Grid ColumnDefinitions="176,1,*">
-    <StackPanel Background="{x:Static ui:Theme.SidebarBg}">
-      <TextBlock Classes="section" Margin="16,16,0,8" Text="GROUPS" />
-      <v:SettingsGroupRow Name="GamesGroup" Label="Games" Selected="True" />
-      <v:SettingsGroupRow Name="StartupGroup" Label="Startup" />
-      <v:SettingsGroupRow Label="Explorer" Note="soon" Available="False" />
-      <v:SettingsGroupRow Label="Appearance" Note="soon" Available="False" />
-    </StackPanel>
+  <Grid ColumnDefinitions="Auto,*">
+    <Border Width="176" Margin="12,14,0,14" Padding="4" VerticalAlignment="Top"
+            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}">
+      <StackPanel Spacing="2">
+        <v:SettingsGroupRow Name="GamesGroup" Label="Games" Icon="box" Selected="True" />
+        <v:SettingsGroupRow Name="StartupGroup" Label="Startup" Icon="zap" />
+        <v:SettingsGroupRow Name="UpdatesGroup" Label="Updates" Icon="download" />
+      </StackPanel>
+    </Border>
 
-    <Border Grid.Column="1" Background="{x:Static ui:Theme.BorderHard}" />
-
-    <ScrollViewer Grid.Column="2" Theme="{StaticResource BareScrollViewer}"
+    <ScrollViewer Grid.Column="1" Theme="{StaticResource BareScrollViewer}"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <Panel Margin="20,16,20,16">
+      <Panel Margin="20,16,22,18">
         <StackPanel Name="GamesPage">
-          <TextBlock Classes="section" Text="GAMES" />
-          <TextBlock Classes="note" Margin="0,6,0,10"
-                     Text="Where each installation lives. HikariHopper checks the folder for the game's executable." />
-          <Border Background="{x:Static ui:Theme.WindowBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,6">
-            <StackPanel Name="GameRows" />
-          </Border>
+          <TextBlock Classes="title" Text="Games" />
+          <TextBlock Classes="note" Margin="0,4,0,0"
+                     Text="Where each installation lives. HikariHopper looks for the game's executable in it." />
+          <StackPanel Name="GameRows" />
         </StackPanel>
 
         <StackPanel Name="StartupPage" IsVisible="False">
-          <TextBlock Classes="section" Text="STARTUP" />
-          <TextBlock Classes="note" Margin="0,6,0,12" Text="What HikariHopper does when it starts." />
-          <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
-          <c:SquareCheckBox Name="CheckForUpdates" Margin="0,8,0,0" Text="Check for updates when HikariHopper starts" />
+          <TextBlock Classes="title" Text="Startup" />
+          <TextBlock Classes="note" Margin="0,4,0,14" Text="What HikariHopper does when it starts." />
+          <v:SettingsWell>
+            <v:SettingsRow Title="Open the last game" Detail="Opens the game that was open when HikariHopper closed.">
+              <c:OnOffSwitch Name="OpenLastGame" />
+            </v:SettingsRow>
+          </v:SettingsWell>
 
-          <TextBlock Classes="section" Margin="0,24,0,0" Text="START PAGE" />
-          <TextBlock Classes="note" Margin="0,6,0,10" Text="The games opened lately, listed on the start page to open again." />
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Name="RecentText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
-                       FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-            <c:ChromeToolButton Name="ClearRecents" Grid.Column="1" Width="84" Height="26" Raised="True" Text="Clear list" />
-          </Grid>
+          <TextBlock Classes="section" Margin="0,22,0,0" Text="START PAGE" />
+          <TextBlock Classes="note" Margin="0,5,0,10" Text="The games opened lately, listed on the start page to open again." />
+          <v:SettingsWell>
+            <v:SettingsRow Name="RecentRow" Title="Recent games">
+              <c:ChromeToolButton Name="ClearRecents" Width="88" Height="28" Raised="True" Text="Clear list" />
+            </v:SettingsRow>
+          </v:SettingsWell>
+        </StackPanel>
+
+        <StackPanel Name="UpdatesPage" IsVisible="False">
+          <TextBlock Classes="title" Text="Updates" />
+          <TextBlock Classes="note" Margin="0,4,0,14" Text="New versions come from HikariHopper's releases on GitHub." />
+          <v:SettingsWell>
+            <v:SettingsRow Name="VersionRow">
+              <c:ChromeToolButton Name="CheckNow" Width="104" Height="28" Raised="True" Text="Check now" />
+            </v:SettingsRow>
+            <v:SettingsRow Title="Check at startup" Detail="Looks for a new version each time HikariHopper starts.">
+              <c:OnOffSwitch Name="CheckForUpdates" />
+            </v:SettingsRow>
+            <v:SettingsRow Name="SkippedRow" Title="Skipped version" IsVisible="False">
+              <c:ChromeToolButton Name="OfferSkipped" Width="104" Height="28" Raised="True" Text="Offer again" />
+            </v:SettingsRow>
+          </v:SettingsWell>
         </StackPanel>
       </Panel>
     </ScrollViewer>

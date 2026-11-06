@@ -5,19 +5,22 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.GamePathRow"
              x:DataType="v:GamePathRow">
-  <!-- One installation in Settings: the edition's mark and name, its folder, Browse… and a mark that
-       clears it, and under the folder a plain line saying whether the game's executable is there. -->
-  <Grid Margin="10,6,8,6" ColumnDefinitions="18,72,*,Auto,Auto" RowDefinitions="28,Auto" ColumnSpacing="9">
-    <c:EditionMark Name="Mark" Width="16" Height="16" VerticalAlignment="Center" />
-    <TextBlock Name="TitleText" Grid.Column="1" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.Text}"
-               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="13" FontWeight="SemiBold"
-               TextTrimming="CharacterEllipsis" />
-    <c:FlatTextField Name="PathField" Grid.Column="2" Height="28" PlaceholderText="Select the installation folder" />
-    <c:ChromeToolButton Name="BrowseButton" Grid.Column="3" Width="78" Height="28" Raised="True" Text="Browse…" />
-    <c:ChromeToolButton Name="ClearButton" Grid.Column="4" Width="24" Height="24" VerticalAlignment="Center"
+  <!-- One installation in Settings, a row of its game's well: the edition's mark and name over its folder and
+       whether the game's executable is in it, then Choose folder… (Change… once set) and a mark that clears it. -->
+  <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,Auto">
+    <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,2,12,0" VerticalAlignment="Top" />
+    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+      <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}"
+                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="13" FontWeight="SemiBold"
+                 TextTrimming="CharacterEllipsis" />
+      <!-- Trimmed from the start: a long folder keeps its last folders, which name the game, and the check. -->
+      <TextBlock Name="DetailText" Margin="0,4,0,0" TextTrimming="LeadingCharacterEllipsis"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+    </StackPanel>
+    <c:ChromeToolButton Name="BrowseButton" Grid.Column="2" Height="28" Margin="16,0,0,0" Raised="True"
+                        VerticalAlignment="Center" />
+    <c:ChromeToolButton Name="ClearButton" Grid.Column="3" Width="26" Height="26" Margin="4,0,0,0" VerticalAlignment="Center"
                         Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
                         IconKind="close" IconSize="11" IconThickness="1.4" />
-    <TextBlock Name="StatusText" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="3" Margin="2,5,0,0"
-               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
   </Grid>
 </UserControl>

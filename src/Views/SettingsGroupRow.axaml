@@ -2,16 +2,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:v="using:HikariHopper.Views"
              xmlns:ui="using:HikariHopper.Ui"
+             xmlns:c="using:HikariHopper.Views.Controls"
              x:Class="HikariHopper.Views.SettingsGroupRow"
              x:DataType="v:SettingsGroupRow">
-  <!-- One group of the Settings rail: its name, and a note such as "soon" for groups still to come.
-       The selected group wears the explorer's selection: a soft wash with a ring. -->
-  <Border Name="Surface" Margin="6,1" Padding="10,0" CornerRadius="{x:Static ui:Theme.ItemCorner}" BorderThickness="1">
-    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-      <TextBlock Name="LabelText" VerticalAlignment="Center"
+  <!-- One group of the Settings rail, in its well: its icon and name, and a note such as "soon" for a group
+       still to come. The selected group is the well's raised segment, lit along its top edge. -->
+  <Border Name="Surface" Padding="10,0" CornerRadius="{x:Static ui:Theme.ControlCorner}" BorderThickness="0,1,0,0">
+    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+      <c:LucideIcon Name="IconMark" Width="15" Height="15" VerticalAlignment="Center" />
+      <TextBlock Name="LabelText" Grid.Column="1" VerticalAlignment="Center"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
                  TextTrimming="CharacterEllipsis" />
-      <TextBlock Name="NoteText" Grid.Column="1" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextFaint}"
+      <TextBlock Name="NoteText" Grid.Column="2" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextFaint}"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" />
     </Grid>
   </Border>

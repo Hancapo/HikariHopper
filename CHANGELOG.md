@@ -10,16 +10,20 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - HikariHopper updates itself: new versions are offered with what changed in them, and install with a restart. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
 - The update check at startup can be turned off in Settings. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
+- An Updates page in Settings to check for updates, or offer a skipped version again. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 
 ### Changed
 
 - The in-app changelog now loads from GitHub, so it stays up to date between releases. ([#86](https://github.com/Hancapo/HikariHopper/pull/86))
 - The release zip updates itself, so it needs a folder you can write to. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
-- Startup options have their own group in Settings. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
+- Settings has a page per group, picked from a rail with icons. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
+- Settings that are on or off use Off/On switches. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 
 ### Fixed
 
 ### Removed
+
+- Typing a game folder in Settings; choose it with the folder picker instead. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 
 ## [0.0.4] - 2026-11-06
 

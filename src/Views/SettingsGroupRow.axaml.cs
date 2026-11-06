@@ -15,6 +15,10 @@ public partial class SettingsGroupRow : UserControl
     public static readonly StyledProperty<string> LabelProperty =
         AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Label), "");
 
+    /// <summary>The group's Lucide icon.</summary>
+    public static readonly StyledProperty<string> IconProperty =
+        AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Icon), "");
+
     public static readonly StyledProperty<string> NoteProperty =
         AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Note), "");
 
@@ -27,11 +31,12 @@ public partial class SettingsGroupRow : UserControl
     private readonly Border surface;
     private readonly TextBlock labelText;
     private readonly TextBlock noteText;
+    private readonly Controls.LucideIcon iconMark;
     private bool hovered;
 
     static SettingsGroupRow()
     {
-        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(34);
+        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(32);
     }
 
     public SettingsGroupRow()
@@ -40,6 +45,7 @@ public partial class SettingsGroupRow : UserControl
         surface = this.FindControl<Border>("Surface")!;
         labelText = this.FindControl<TextBlock>("LabelText")!;
         noteText = this.FindControl<TextBlock>("NoteText")!;
+        iconMark = this.FindControl<Controls.LucideIcon>("IconMark")!;
         Refresh();
     }
 
@@ -47,6 +53,12 @@ public partial class SettingsGroupRow : UserControl
     {
         get => GetValue(LabelProperty);
         set => SetValue(LabelProperty, value);
+    }
+
+    public string Icon
+    {
+        get => GetValue(IconProperty);
+        set => SetValue(IconProperty, value);
     }
 
     public string Note
@@ -101,7 +113,7 @@ public partial class SettingsGroupRow : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == LabelProperty || change.Property == NoteProperty
+        if (change.Property == LabelProperty || change.Property == NoteProperty || change.Property == IconProperty
             || change.Property == SelectedProperty || change.Property == AvailableProperty)
             Refresh();
     }
@@ -110,8 +122,11 @@ public partial class SettingsGroupRow : UserControl
     {
         if (surface is null)
             return;
-        surface.Background = Selected ? Ui.Theme.SelectionWash : hovered && Available ? Ui.Theme.HoverBg : Brushes.Transparent;
-        surface.BorderBrush = Selected ? Ui.Theme.SelectionRing : Brushes.Transparent;
+        surface.Background = Selected ? Ui.Theme.ChromeRaised : hovered && Available ? Ui.Theme.HoverBg : Brushes.Transparent;
+        surface.BorderBrush = Selected ? Ui.Theme.Bevel : Brushes.Transparent;
+        iconMark.IconName = Icon;
+        iconMark.IsVisible = Icon.Length > 0;
+        iconMark.Stroke = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextDim : Ui.Theme.TextFaint;
         labelText.Text = Label;
         labelText.Foreground = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
         labelText.FontWeight = Selected ? FontWeight.SemiBold : FontWeight.Normal;

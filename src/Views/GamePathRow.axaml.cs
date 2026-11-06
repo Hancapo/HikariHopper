@@ -1,15 +1,15 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using HikariHopper.Core;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// One installation in Settings: the edition's mark and <see cref="Title"/>, its folder
-/// (<see cref="GamePath"/>), Browse… and a mark that clears it, over a line that says whether
-/// <see cref="ExpectedExecutable"/> is in that folder. Typing a folder raises <see cref="PathCommitted"/>
-/// when the field loses focus or Enter is pressed.
+/// One installation in Settings: the edition's mark and <see cref="Title"/>, over its folder
+/// (<see cref="GamePath"/>) and whether <see cref="ExpectedExecutable"/> is in it. Choose folder… (Change… once one
+/// is set) raises <see cref="BrowseRequested"/>; the clear mark commits an empty folder through <see cref="PathCommitted"/>.
 /// </summary>
 public partial class GamePathRow : UserControl
 {
@@ -28,10 +28,15 @@ public partial class GamePathRow : UserControl
     public static readonly StyledProperty<bool> PathValidProperty =
         AvaloniaProperty.Register<GamePathRow, bool>(nameof(PathValid));
 
+    private readonly Run pathRun = new() { Foreground = Ui.Theme.TextRow };
+    private readonly Run gap = new("   ");
+
     public GamePathRow()
     {
         InitializeComponent();
-        PathField.EditingFinished += (_, _) => PathCommitted?.Invoke(this, PathField.Text ?? "");
+        DetailText.Inlines!.Add(pathRun);
+        DetailText.Inlines.Add(gap);
+        DetailText.Inlines.Add(StatusText);
         BrowseButton.Click += (_, _) => BrowseRequested?.Invoke(this, EventArgs.Empty);
         ClearButton.Click += (_, _) => PathCommitted?.Invoke(this, "");
         Refresh();
@@ -73,7 +78,10 @@ public partial class GamePathRow : UserControl
         set => SetValue(PathValidProperty, value);
     }
 
-    /// <summary>The line under the folder.</summary>
+    /// <summary>Whether the executable is there, after the folder.</summary>
+    internal Run StatusText { get; } = new();
+
+    /// <summary>What the line under the name says about the folder.</summary>
     public string StatusMessage => GamePath.Length == 0
         ? "Not set"
         : PathValid ? $"✓ {ExpectedExecutable} found" : $"{ExpectedExecutable} isn't in this folder";
@@ -81,11 +89,6 @@ public partial class GamePathRow : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == GamePathProperty && PathField is not null && PathField.Text != GamePath)
-        {
-            PathField.Text = GamePath;
-            PathField.CaretIndex = GamePath.Length;  // the end: a long path shows its last folders, which name the game
-        }
         if (change.Property == TitleProperty || change.Property == EditionProperty || change.Property == GamePathProperty
             || change.Property == ExpectedExecutableProperty || change.Property == PathValidProperty)
             Refresh();
@@ -93,14 +96,20 @@ public partial class GamePathRow : UserControl
 
     private void Refresh()
     {
-        if (StatusText is null)
+        if (DetailText is null)
             return;
+        bool set = GamePath.Length > 0;
         Mark.Enhanced = Edition == GameSettings.EnhancedEdition;
         TitleText.Text = Title;
-        ClearButton.IsVisible = GamePath.Length > 0;
+        pathRun.Text = GamePath;
+        gap.Text = set ? "   " : "";
         StatusText.Text = StatusMessage;
-        StatusText.Foreground = GamePath.Length == 0 ? Ui.Theme.TextFaint : PathValid ? Ui.Theme.Ok : Ui.Theme.Warning;
+        StatusText.Foreground = !set ? Ui.Theme.TextFaint : PathValid ? Ui.Theme.Ok : Ui.Theme.Warning;
+        BrowseButton.Text = set ? "Change…" : "Choose folder…";
+        BrowseButton.Width = set ? 84 : 118;
+        ClearButton.IsVisible = set;
+        ToolTip.SetTip(DetailText, set ? GamePath : null);
+        AutomationProperties.SetName(BrowseButton, set ? $"Change the {Title} folder" : $"Choose the {Title} folder");
         AutomationProperties.SetName(ClearButton, $"Clear the {Title} folder");
-        AutomationProperties.SetName(PathField, $"{Title} installation folder");
     }
 }
