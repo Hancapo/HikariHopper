@@ -9,6 +9,7 @@
        (a folder, an archive or a file; or several) when something is selected, and the folder's own when
        nothing is, after a right-click on empty space. -->
   <c:RetroMenuItem Name="OpenItem" Text="Open" ShortcutText="Enter" IconName="external-link" Triggered="OnOpen" />
+  <c:RetroMenuItem Name="OpenLocationItem" Text="Open location" ShortcutText="Ctrl+Enter" IconName="folder-input" Triggered="OnOpenLocation" />
   <c:RetroMenuItem Name="CopyItem" Text="Copy" ShortcutText="Ctrl+C" IconName="copy" Triggered="OnCopy" />
   <c:RetroMenuItem Name="CopyNameItem" Text="Copy name" IconName="file" Triggered="OnCopyName" />
   <c:RetroMenuItem Name="CopyPathItem" Text="Copy path" ShortcutText="Ctrl+Shift+C" IconName="link" Triggered="OnCopyPath" />

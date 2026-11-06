@@ -13,7 +13,7 @@ public sealed partial class ExplorerViewModel
     private DragStaging? clipboardStaging;
 
     /// <summary>Whether a paste can run here now: files on the clipboard, a location open and nothing else running.</summary>
-    public bool CanPaste => HasWorkspace && !EntryOperationBusy && AppServices.Clipboard.HasFiles;
+    public bool CanPaste => HasWorkspace && !searching && !EntryOperationBusy && AppServices.Clipboard.HasFiles;
 
     /// <summary>Copy: puts the selected files and folders on the clipboard.</summary>
     public async Task<bool> CopySelection()
@@ -22,6 +22,8 @@ public sealed partial class ExplorerViewModel
         if (EntryOperationBusy || selection.Count == 0)
             return false;
         string noun = selection.Count == 1 ? selection[0].Name : $"{selection.Count} items";
+        if (searching)
+            return CopySearchFiles(SelectedHits(), noun);
         if (!Provider.InArchive)
         {
             List<string> paths;
@@ -46,7 +48,7 @@ public sealed partial class ExplorerViewModel
     /// <summary>Paste: copies the files and folders on the clipboard into the folder shown; a name already here gets " (2)".</summary>
     public async Task<bool> Paste()
     {
-        if (EntryOperationBusy || !HasWorkspace)
+        if (EntryOperationBusy || !HasWorkspace || searching)
             return false;
         IReadOnlyList<string> files = await AppServices.Clipboard.GetFilesAsync();
         if (files.Count == 0)

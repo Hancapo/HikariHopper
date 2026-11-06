@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
 
@@ -23,6 +24,56 @@ public static class EntryText
     /// Fills <paramref name="inlines"/> with the name, marking the match in <paramref name="ink"/>.
     /// The unmatched runs inherit the TextBlock's foreground, as the StyledText did.
     /// </summary>
+    /// <summary>
+    /// Writes where a search result lives as the address bar does: folders dim between chevrons, RPFs in blue with
+    /// their mark, and a DLC pack's own folder a little brighter, since it is what tells two results apart.
+    /// </summary>
+    public static void Location(InlineCollection inlines, string location, bool selected)
+    {
+        inlines.Clear();
+        if (location.Length == 0)
+        {
+            inlines.Add(new Run("Home") { Foreground = selected ? Ui.Theme.SelectionInk : Ui.Theme.TextFaint });
+            return;
+        }
+        string[] parts = location.Split('/');
+        for (int index = 0; index < parts.Length; index++)
+        {
+            bool archive = parts[index].EndsWith(".rpf", StringComparison.OrdinalIgnoreCase);
+            if (index > 0)
+                inlines.Add(Icon("chevron", selected ? Ui.Theme.SelectionInk : Ui.Theme.TextFaint, 9, 2, new Thickness(3, 0)));
+            if (archive)
+                inlines.Add(Icon("package", selected ? Ui.Theme.SelectionText : Ui.Theme.Accent, 11, 1.6, new Thickness(0, 0, 3, 0)));
+            bool pack = index > 0 && string.Equals(parts[index - 1], "dlcpacks", StringComparison.OrdinalIgnoreCase);
+            IBrush ink = selected ? Ui.Theme.SelectionText : archive ? Ui.Theme.Accent : pack ? Ui.Theme.TextRow : Ui.Theme.TextDim;
+            inlines.Add(new Run(parts[index]) { Foreground = ink });
+        }
+    }
+
+    private static InlineUIContainer Icon(string kind, IBrush ink, double size, double thickness, Thickness margin) => new(new Controls.ChromeIcon
+    {
+        Kind = kind, Stroke = ink, Width = size, Height = size, Thickness = thickness, Margin = margin,
+    })
+    { BaselineAlignment = BaselineAlignment.Center };
+
+    /// <summary>Fills <paramref name="inlines"/> with the name, marking each of <paramref name="spans"/> in <paramref name="ink"/>.</summary>
+    public static void MarkSpans(InlineCollection inlines, string name, IReadOnlyList<(int Start, int Length)> spans, IBrush ink)
+    {
+        inlines.Clear();
+        int at = 0;
+        foreach ((int start, int length) in spans.OrderBy(span => span.Start))
+        {
+            if (start < at || start + length > name.Length)
+                continue;
+            if (start > at)
+                inlines.Add(new Run(name[at..start]));
+            inlines.Add(new Run(name.Substring(start, length)) { Foreground = ink, FontWeight = FontWeight.Bold });
+            at = start + length;
+        }
+        if (at < name.Length)
+            inlines.Add(new Run(name[at..]));
+    }
+
     public static void MarkMatch(InlineCollection inlines, string name, string? query, IBrush ink)
     {
         inlines.Clear();

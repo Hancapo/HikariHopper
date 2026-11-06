@@ -39,6 +39,8 @@ public partial class ShortcutsDialog : ModalSheet
             new("Alt+Right", "Forward"),
             new("Backspace", "Up one level"),
             new("Enter", "Open the selected entry"),
+            new("Ctrl+Shift+F", "Search the whole game"),
+            new("Ctrl+Enter", "Open a search result's location"),
         ]),
         new("EDIT",
         [

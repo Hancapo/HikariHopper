@@ -1342,9 +1342,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         EntryTable table = ui.Find<EntryTable>();
         TextBlock[] Cells(string name) => table.GetVisualDescendants().OfType<EntryRow>()
-            .Single(row => row.Item?.Name == name).GetVisualChildren().OfType<TextBlock>().ToArray();
+            .Single(row => row.Item?.Name == name).GetVisualChildren().OfType<TextBlock>().Where(cell => cell.IsVisible).ToArray();
 
-        // Name, type and size only: the count no longer trails the name.
+        // Name, type and size only: the count no longer trails the name, and only search results show a location.
         TextBlock[] full = Cells("folder00");
         Assert.Equal(3, full.Length);
         Assert.Equal(("", "2 items"), (full[1].Text, full[2].Text));

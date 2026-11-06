@@ -61,6 +61,8 @@ public partial class ExplorerContextMenu : RetroMenu
 
         // An item's: opening one the app can open, copying, deleting.
         OpenItem.IsVisible = count == 1;
+        OpenLocationItem.IsVisible = count == 1 && bridge?.IsSearching == true;
+        OpenLocationItem.IsEnabled = !busy;
         OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
         CopyItem.IsVisible = CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
         CopyItem.IsEnabled = !busy;
@@ -154,6 +156,12 @@ public partial class ExplorerContextMenu : RetroMenu
     }
 
     private void OnCopyName(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedName();
+
+    private void OnOpenLocation(object? sender, RoutedEventArgs e)
+    {
+        ExplorerViewModel? bridge = Bridge;
+        Dispatcher.UIThread.Post(() => bridge?.OpenSelectedLocation());
+    }
 
     private void OnCopyPath(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedPath();
 

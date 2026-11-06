@@ -134,7 +134,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <see cref="HomeTitle"/>, since the tab's mark already names the game; at a lone RPF's root, the RPF.
     /// </summary>
     public string TabTitle =>
-        NavigationPathSegments is [.., var current] ? current.Label
+        searching ? SearchTabTitle
+        : NavigationPathSegments is [.., var current] ? current.Label
         : ArchiveIsRoot ? Provider.RootArchiveName : Provider.HasGame ? HomeTitle : "New tab";
 
     /// <summary>
@@ -228,11 +229,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public int VisibleCount => visibleCount;
 
-    public bool CanGoBack => historyIndex > 0;
+    public bool CanGoBack => searching || historyIndex > 0;
 
     public bool CanGoForward => historyIndex + 1 < history.Count;
 
-    public bool CanGoUp => currentPath is not ("" or ".");
+    public bool CanGoUp => searching || currentPath is not ("" or ".");
 
     public bool FoldersVisible => foldersVisible;
 
@@ -269,6 +270,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private void RefreshEntries()
     {
+        if (searching)
+        {
+            RefreshSearchEntries();
+            return;
+        }
         string current = currentPath;
         while (current != "." && Provider.IsOpen && !Provider.HasDirectory(current))
             current = PosixParent(current);
@@ -309,6 +315,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
                 int size = left.ShownSize.CompareTo(right.ShownSize);
                 return size != 0 ? size : ByName(left, right);
             },
+            // Search results only: where they live, then their names.
+            "location" => (left, right) =>
+            {
+                int location = string.CompareOrdinal(CaseFold(left.Path[..Math.Max(0, left.Path.Length - left.Name.Length)]),
+                    CaseFold(right.Path[..Math.Max(0, right.Path.Length - right.Name.Length)]));
+                return location != 0 ? location : ByName(left, right);
+            },
             _ => ByName,
         };
 
@@ -345,6 +358,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private void PublishWorkspace()
     {
+        // Another game or archive: whatever was being searched is not there any more.
+        EndSearch();
         RaiseAll(WorkspaceProperties);
         PublishNavigation();
     }
@@ -613,6 +628,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return;
+        // Back from a search is the folder it started from.
+        if (searching)
+        {
+            EndSearch();
+            return;
+        }
         if (historyIndex > 0)
         {
             historyIndex--;
@@ -637,6 +658,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public void GoUp()
     {
+        if (searching)
+        {
+            EndSearch();
+            return;
+        }
         if (CanGoUp)
             Navigate(PosixParent(currentPath));
     }
@@ -659,7 +685,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (EntryOperationBusy)
             return;
         string normalized = CaseFold(column);
-        if (normalized is not ("name" or "type" or "size"))
+        if (normalized is not ("name" or "type" or "size") && !(searching && normalized == "location"))
             return;
 
         var selectedPaths = SelectedEntries().Select(entry => entry.Path).ToHashSet(StringComparer.Ordinal);
@@ -696,6 +722,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return;
+        if (searching && searchIndex is not null)
+        {
+            searchIndexTask = searchIndex.Refresh();
+            RunSearch(immediately: true);
+            return;
+        }
         if (Provider.IsOpen)
         {
             ClearSelection();

@@ -13,6 +13,7 @@
     <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.ListHeaderHeight}" Background="{x:Static ui:Theme.ListHeaderBg}">
       <StackPanel Orientation="Horizontal">
         <v:EntryTableHeaderCell Name="NameHeader" Text="NAME" LeftPadding="16" Clicked="OnSortName" />
+        <v:EntryTableHeaderCell Name="LocationHeader" Text="LOCATION" LeftPadding="8" IsVisible="False" Clicked="OnSortLocation" />
         <v:EntryTableHeaderCell Name="TypeHeader" Text="TYPE" LeftPadding="12" Width="{x:Static v:EntryTable.TypeWidth}" Clicked="OnSortType" />
         <v:EntryTableHeaderCell Name="SizeHeader" Text="SIZE" AlignRight="True" RightPadding="12" Width="{x:Static v:EntryTable.SizeWidth}" Clicked="OnSortSize" />
       </StackPanel>

@@ -308,6 +308,11 @@ public sealed class TabStripTab : Decorator
 
     private readonly FileGlyph glyph = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
     private readonly EditionMark edition = new() { Width = 15, Height = 15, VerticalAlignment = VerticalAlignment.Center };
+    private readonly ChromeIcon searchMark = new()
+    {
+        Kind = "search", Stroke = Ui.Theme.Brass, Width = 14, Height = 14, Thickness = 1.8,
+        VerticalAlignment = VerticalAlignment.Center, IsVisible = false,
+    };
     private readonly TextBlock tip = new() { FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize, Foreground = Ui.Theme.Text };
     private readonly TextBlock title = new()
     {
@@ -343,6 +348,7 @@ public sealed class TabStripTab : Decorator
         };
         row.Children.Add(glyph);
         row.Children.Add(edition);
+        row.Children.Add(searchMark);
         Grid.SetColumn(title, 1);
         row.Children.Add(title);
         Grid.SetColumn(close, 2);
@@ -426,7 +432,7 @@ public sealed class TabStripTab : Decorator
     private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ExplorerViewModel.TabTitle) or nameof(ExplorerViewModel.TabActive)
-            or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.HasArchive))
+            or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.HasArchive) or nameof(ExplorerViewModel.IsSearching))
             Refresh();
     }
 
@@ -442,9 +448,12 @@ public sealed class TabStripTab : Decorator
         if (Parent is Control host)
             host.ZIndex = active ? 2 : hovered ? 1 : 0;
         bool game = Tab?.HasGame == true;
-        edition.IsVisible = game;
+        // A searching tab wears the search mark, its title the number of files found.
+        bool searching = Tab?.IsSearching == true;
+        searchMark.IsVisible = searching;
+        edition.IsVisible = game && !searching;
         edition.Enhanced = Tab?.GameEdition == "GTA V Enhanced";
-        glyph.IsVisible = !game;
+        glyph.IsVisible = !game && !searching;
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
         RefreshTip();
         title.Text = text;

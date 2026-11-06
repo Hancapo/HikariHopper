@@ -32,6 +32,10 @@ public class FlatTextField : TextBox
     public static readonly StyledProperty<IBrush> LeadingColorProperty =
         AvaloniaProperty.Register<FlatTextField, IBrush>(nameof(LeadingColor), Ui.Theme.TextFaint);
 
+    /// <summary>Room kept free before the key cap, for controls laid over the field's right end.</summary>
+    public static readonly StyledProperty<double> TrailingSpaceProperty =
+        AvaloniaProperty.Register<FlatTextField, double>(nameof(TrailingSpace));
+
     public static readonly StyledProperty<bool> InvalidProperty =
         AvaloniaProperty.Register<FlatTextField, bool>(nameof(Invalid));
 
@@ -61,6 +65,12 @@ public class FlatTextField : TextBox
     {
         add => AddHandler(EditingFinishedEvent, value);
         remove => RemoveHandler(EditingFinishedEvent, value);
+    }
+
+    public double TrailingSpace
+    {
+        get => GetValue(TrailingSpaceProperty);
+        set => SetValue(TrailingSpaceProperty, value);
     }
 
     public string KeyCap
@@ -111,7 +121,7 @@ public class FlatTextField : TextBox
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == LeadingIconProperty || change.Property == KeyCapProperty)
+        if (change.Property == LeadingIconProperty || change.Property == KeyCapProperty || change.Property == TrailingSpaceProperty)
             UpdatePadding();
         // Qt's TextInput moves its cursor to the end whenever the text is replaced from outside.
         if (change.Property == TextProperty && !IsKeyboardFocusWithin)
@@ -162,7 +172,7 @@ public class FlatTextField : TextBox
 
     /// <summary>leftPadding 10 (32 with a leading icon), rightPadding 10 (40 with a key cap), no vertical padding.</summary>
     private void UpdatePadding() =>
-        Padding = new Thickness(LeadingIcon.Length == 0 ? 10 : 32, 0, KeyCap.Length == 0 ? 10 : 40, 0);
+        Padding = new Thickness(LeadingIcon.Length == 0 ? 10 : 32, 0, (KeyCap.Length == 0 ? 10 : 40) + TrailingSpace, 0);
 
     private void Refresh()
     {

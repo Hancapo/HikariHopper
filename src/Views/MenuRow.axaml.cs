@@ -156,6 +156,8 @@ public partial class MenuRow : UserControl
 
     private void OnUp(object? sender, RoutedEventArgs e) => Bridge?.GoUp();
 
+    private void OnSearchGame(object? sender, RoutedEventArgs e) => Bridge?.BeginSearch();
+
     private void OnShortcuts(object? sender, RoutedEventArgs e) => (shortcutsDialog ??= new ShortcutsDialog()).Present(this);
 
     private void OnAbout(object? sender, RoutedEventArgs e) => (aboutDialog ??= new AboutDialog()).Present(this);

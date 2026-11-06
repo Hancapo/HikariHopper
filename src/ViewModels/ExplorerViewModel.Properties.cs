@@ -17,6 +17,8 @@ public sealed partial class ExplorerViewModel
         if (!CanShowProperties)
             return Task.FromResult<EntryProperties?>(null);
         EntryRecord entry = SelectedEntries()[0];
+        if (searching && entry.NativeEntry is Core.Search.SearchHit hit)
+            return ReadSearchProperties(hit);
         string before = Status;
         var result = new TaskCompletionSource<EntryProperties?>();
         bool started = StartReadOperation($"Reading {entry.Name}…", () => Provider.DescribeEntry(entry), described =>

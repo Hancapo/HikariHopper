@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using HikariHopper.Core;
+using HikariHopper.Core.Search;
 using HikariHopper.Infrastructure;
 
 namespace HikariHopper.ViewModels;
@@ -210,6 +211,11 @@ public sealed partial class ExplorerViewModel
         List<EntryRecord> selection = SelectedEntries();
         if (selection.Count == 0)
             return;
+        if (searching)
+        {
+            CopySearchPaths(SelectedHits());
+            return;
+        }
         List<string> values = Provider.InArchive
             ? selection.Select(entry => $"{Provider.ArchivePath}::{entry.Path}").ToList()
             : selection.Select(entry => GameChildPath(entry.Path)).ToList();
@@ -225,7 +231,8 @@ public sealed partial class ExplorerViewModel
     /// </summary>
     public IReadOnlyList<string> StartEntryDrag(int row)
     {
-        if (EntryOperationBusy)
+        // Results live all over the game: they are copied with Ctrl+C rather than dragged.
+        if (EntryOperationBusy || searching)
             return [];
         if (!selectedRows.Contains(row))
             SelectEntry(row);
@@ -278,6 +285,12 @@ public sealed partial class ExplorerViewModel
     {
         if (EntryOperationBusy)
             return;
+        if (searching)
+        {
+            if (EntryAt(row)?.NativeEntry is SearchHit hit)
+                OpenHit(hit, open: true);
+            return;
+        }
         if (EntryAt(row) is not { } entry)
             return;
         SelectEntry(row);
