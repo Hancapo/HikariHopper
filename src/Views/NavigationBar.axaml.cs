@@ -129,6 +129,9 @@ public partial class NavigationBar : UserControl
             segment.Set(part.Label, part.Archive,
                 part.Archive ? Ui.Theme.Accent : last ? Ui.Theme.Text : Ui.Theme.TextDim);
             PointerClick.Attach(segment, _ => Bridge?.NavigateTree(part.Target));
+            // The current folder is the one segment that can be cut short: its whole name is a hover away.
+            if (last)
+                ThemedToolTip.Set(segment, part.Label);
             Segments.Children.Add(Row(segment));
         }
     }

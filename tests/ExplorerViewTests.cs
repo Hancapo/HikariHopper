@@ -820,6 +820,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.True(navigation.OverflowSegment!.Bounds.Width > 0);
         Assert.All(crumbs.Take(hidden), segment => Assert.Equal(0, segment.Bounds.Width));
 
+        // Wider, the whole path fits again: nothing folded, no mark; narrower again, it folds as before.
+        ui.Window.Width = 2400;
+        Pump(100);
+        Assert.Equal(0, navigation.Segments.HiddenCount);
+        Assert.Equal(0, navigation.OverflowSegment!.Bounds.Width);
+        Assert.All(crumbs, segment => Assert.True(segment.Bounds.Width > 0));
+        ui.Window.Width = 900;
+        Pump(100);
+        Assert.Equal(hidden, navigation.Segments.HiddenCount);
+
         // The "…" mark lists the folded folders, outermost first, and goes to the one picked.
         Point mark = navigation.OverflowSegment.TranslatePoint(new Point(navigation.OverflowSegment.Bounds.Width / 2, 12), ui.Window)!.Value;
         Click(ui.Window, mark);
