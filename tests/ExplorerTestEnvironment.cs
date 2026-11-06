@@ -49,6 +49,9 @@ public abstract class ExplorerTestBase : IDisposable
         ExplorerViewModel.GameLoader = FakeLoadGame;
         previousClipboard = AppServices.Clipboard;
         AppServices.Clipboard = Clipboard;
+        // Search indexes are cached beside the scratch game, never in the user's own folder.
+        Core.Search.SearchIndex.CacheFolder = Path.Combine(scratch, "index-cache");
+        Core.Search.SearchIndex.ForgetAll();
         previousDialogs = AppServices.Dialogs;
         AppServices.Dialogs = Dialogs;
         RecycleBin.Override = MoveToFakeTrash;
