@@ -309,6 +309,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         Views.ModelViewer viewer = Assert.IsType<Views.ModelViewer>(session.ModelViewer);
         ExplorerStateRenders.Pump(400);
+        Settle(viewer);
         Assert.True(viewer.IsOpen);
         Assert.Equal("Opened ch2_04_15.ybn", bridge.Status);
         Assert.Equal("ch2_04_15.ybn", viewer.TitleText.Text);
@@ -330,6 +331,18 @@ public sealed class ModelViewerTests : ExplorerTestBase
     public void AFileThatCantBeReadSaysWhy()
     {
         var viewer = new Views.ModelViewer(new ModelFile("broken.ybn", [1, 2, 3, 4]));
+        // It's read in the background, and says so meanwhile.
+        Assert.Equal("Reading broken.ybn…", viewer.StatusText.Text);
+        Settle(viewer);
         Assert.StartsWith("Couldn't read broken.ybn: ", viewer.Location);
+    }
+
+    /// <summary>Waits for a viewer's background read to finish and be shown.</summary>
+    private static void Settle(Views.ModelViewer viewer)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Assert.True(viewer.Reading.IsCompletedSuccessfully);
     }
 }
