@@ -81,10 +81,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>A collision, navmesh or drawable file was opened for viewing; the 3D viewer shows it.</summary>
     public event EventHandler<ModelFile>? ModelFileOpened;
 
-    /// <summary>Whether the 3D viewer opens a file of this name: collisions (.ybn), navmeshes (.ynv) and drawables (.ydr).</summary>
+    /// <summary>
+    /// Whether the 3D viewer opens a file of this name: collisions (.ybn), navmeshes (.ynv), drawables (.ydr),
+    /// drawable dictionaries (.ydd) and fragments (.yft).
+    /// </summary>
     public static bool IsModelName(string name) =>
         name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ynv", StringComparison.OrdinalIgnoreCase)
-        || name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
+        || ModelFile.IsDrawableName(name);
 
     /// <summary>
     /// Files changed at a location (an <see cref="EntryCreationTarget"/> or <see cref="EntryDeletionTarget"/>),

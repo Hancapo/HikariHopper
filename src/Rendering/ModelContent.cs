@@ -1,8 +1,11 @@
 using System.Numerics;
 using CommonFury.Numerics;
 using FiveFury.Textures;
+using FiveFury.Drawables;
 using FiveFury.Ybn;
+using FiveFury.Ydd;
 using FiveFury.Ydr;
+using FiveFury.Yft;
 using FiveFury.Ynv;
 using FiveFury.Ytd;
 
@@ -16,28 +19,37 @@ namespace HikariHopper.Rendering;
 internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene? Surfaces = null)
 {
     /// <summary>
-    /// Reads a collision (.ybn), a navmesh (.ynv) or a drawable (.ydr). A drawable's textures come from its own
-    /// dictionary, then from <paramref name="dictionaries"/> (.ytd files found beside it), the first holding a name
-    /// winning; ones that can't be read are left out.
+    /// Reads a collision (.ybn), a navmesh (.ynv), a drawable (.ydr), a drawable dictionary (.ydd, its drawables
+    /// together) or a fragment (.yft: its main drawable, a vehicle's body and parts, and its wheels). A drawable's
+    /// textures come from its own dictionary, then from <paramref name="dictionaries"/> (the .ytd files named for it,
+    /// in order), and then from <paramref name="nearby"/> (the other .ytd files beside it), which are read only for a
+    /// texture still missing. Dictionaries that can't be read are left out.
     /// </summary>
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
-    public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null)
+    public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
+        IReadOnlyList<NearbyDictionary>? nearby = null)
     {
-        if (name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        IReadOnlyList<SceneModel>? models = Path.GetExtension(name).ToLowerInvariant() switch
         {
-            Ydr ydr = Ydr.Read(data);
-            var external = new List<TextureDictionary>();
+            ".ydr" => [new SceneModel(name, Ydr.Read(data).Drawable, Matrix4x4.Identity)],
+            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel($"0x{entry.Name.Value:X8}", entry.Drawable, Matrix4x4.Identity))],
+            ".yft" => FragmentModels.Of(Yft.Read(data)),
+            _ => null,
+        };
+        if (models is not null)
+        {
+            var named = new List<TextureDictionary>();
             foreach (byte[] dictionary in dictionaries ?? [])
             {
                 try
                 {
-                    external.Add(Ytd.Read(dictionary).Dictionary);
+                    named.Add(Ytd.Read(dictionary).Dictionary);
                 }
                 catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException)
                 {
                 }
             }
-            DrawableScene scene = DrawableScene.Build(ydr.Drawable, external);
+            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? []));
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);
         }
         if (name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase))
@@ -61,6 +73,6 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
             var box = new Aabb3(minimum, maximum);
             return new ModelContent(box, NavmeshMesh.Build(navmesh, box.Center));
         }
-        throw new InvalidDataException($"{name} isn't a collision, navmesh or drawable file.");
+        throw new InvalidDataException($"{name} isn't a collision, navmesh, drawable or fragment file.");
     }
 }
