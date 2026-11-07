@@ -174,7 +174,7 @@ internal sealed unsafe partial class ViewportRenderer
             SurfaceMaterial material = drawable.Materials[part.Material];
             return (part, groups[part.Material], material.Decal ? AlphaMode.Blend : material.AlphaMode);
         })];
-        FitShadow(drawable);
+        FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
     }
 
@@ -187,6 +187,7 @@ internal sealed unsafe partial class ViewportRenderer
             buffer.Destroy();
         materialBuffers.Clear();
         surfaceVertices = surfaceIndices = null;
+        shadowRadius = 0;
         surfaceParts = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
