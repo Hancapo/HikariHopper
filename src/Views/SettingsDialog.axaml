@@ -48,6 +48,7 @@
 
         <TextBlock Classes="section" Margin="0,24,0,8" Text="STARTUP" />
         <c:SquareCheckBox Name="OpenLastGame" Text="Open the last game when HikariHopper starts" />
+        <c:SquareCheckBox Name="CheckForUpdates" Margin="0,8,0,0" Text="Check for updates when HikariHopper starts" />
         <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
           <TextBlock Name="RecentText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
                      FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />

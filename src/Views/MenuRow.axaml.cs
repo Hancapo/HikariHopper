@@ -27,6 +27,7 @@ public partial class MenuRow : UserControl
     public MenuRow()
     {
         InitializeComponent();
+        Updates = new UpdateFlow(this, () => Tabs);
         Bind(FileButton, "FileMenu");
         Bind(EditButton, "EditMenu");
         Bind(ViewButton, "ViewMenu");
@@ -140,6 +141,9 @@ public partial class MenuRow : UserControl
     /// <summary>The sheets this menu row opens, once they have been opened.</summary>
     internal SettingsDialog? Settings => settingsDialog;
 
+    /// <summary>The app's updates: Help's check, and the one at startup.</summary>
+    internal UpdateFlow Updates { get; }
+
     private void OnListView(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("list");
 
     private void OnGridView(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("grid");
@@ -157,6 +161,8 @@ public partial class MenuRow : UserControl
     private void OnUp(object? sender, RoutedEventArgs e) => Bridge?.GoUp();
 
     private void OnShortcuts(object? sender, RoutedEventArgs e) => (shortcutsDialog ??= new ShortcutsDialog()).Present(this);
+
+    private void OnCheckForUpdates(object? sender, RoutedEventArgs e) => _ = Updates.CheckByHand();
 
     private void OnAbout(object? sender, RoutedEventArgs e) => (aboutDialog ??= new AboutDialog()).Present(this);
 }

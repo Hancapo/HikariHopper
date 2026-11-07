@@ -44,6 +44,8 @@ public sealed class ExplorerSession : IStartupSession
         window = mainWindow;
         var screen = new ExplorerScreen { DataContext = Tabs };
         mainWindow.ExplorerScreenHost.Content = screen;
+        // A new version is offered once the window is up.
+        mainWindow.Opened += (_, _) => _ = screen.Menu.Updates.CheckAtStartup();
         mainWindow.TitleBar.LeadingContent = screen.Menu;
         Tabs.PropertyChanged += OnTabsPropertyChanged;
         Tabs.Tabs.CollectionChanged += OnTabsChanged;

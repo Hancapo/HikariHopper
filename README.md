@@ -37,5 +37,8 @@ pwsh tools/release.ps1 -GameRoot "D:\Path\To\Grand Theft Auto V"
 ```
 
 The script publishes the AOT build and fails on any AOT compiler warning. It then runs
-`HikariHopper.exe --self-test` on the native binary against the game, checks that the window
-opens, and zips the result into `artifacts\`.
+`HikariHopper.exe --self-test` on the native binary against the game and checks that the window
+opens. [Velopack](https://velopack.io) (`vpk`, pinned in `dotnet-tools.json`) packs it into
+`artifacts\`: the zip people download, which updates itself, and the files the app's updater
+reads from the GitHub release. The script ends with the `gh release create` command that
+publishes them, with the version's changelog section as the notes.

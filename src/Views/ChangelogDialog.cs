@@ -119,6 +119,13 @@ public sealed class ChangelogDialog : ModalSheet
                 VerticalAlignment = VerticalAlignment.Center,
             });
         panel.Children.Add(title);
+        AddGroups(panel, release);
+        return panel;
+    }
+
+    /// <summary>Adds a version's groups, in small caps, and their entries to <paramref name="panel"/>.</summary>
+    internal static void AddGroups(Panel panel, ChangelogRelease release)
+    {
         foreach (ChangelogGroup group in release.Groups)
         {
             panel.Children.Add(new TextBlock
@@ -138,6 +145,5 @@ public sealed class ChangelogDialog : ModalSheet
                 panel.Children.Add(row);
             }
         }
-        return panel;
     }
 }

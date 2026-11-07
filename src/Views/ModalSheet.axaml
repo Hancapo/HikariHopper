@@ -34,10 +34,13 @@
                   <TextBlock Margin="16,0,0,0" Text="{TemplateBinding FooterText}"
                              Foreground="{x:Static ui:Theme.TextFaint}"
                              FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                             HorizontalAlignment="Left" VerticalAlignment="Center" />
+                             HorizontalAlignment="Left" VerticalAlignment="Center"
+                             IsVisible="{TemplateBinding Footer, Converter={x:Static ObjectConverters.IsNull}}" />
                   <c:ChromeToolButton Name="PART_CloseButton" Width="92" Height="28" Margin="0,0,12,0"
                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                      Raised="True" Text="Close" />
+                                      Raised="True" Text="Close"
+                                      IsVisible="{TemplateBinding Footer, Converter={x:Static ObjectConverters.IsNull}}" />
+                  <ContentPresenter Margin="16,0,12,0" Content="{TemplateBinding Footer}" VerticalAlignment="Center" />
                 </Panel>
               </Border>
               <ContentPresenter Name="PART_ContentPresenter"

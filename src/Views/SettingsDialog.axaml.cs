@@ -28,6 +28,7 @@ public partial class SettingsDialog : ModalSheet
 
         BuildGameRows();
         OpenLastGame.IsCheckedChanged += (_, _) => GameSettings.OpenLastGameOnStartup = OpenLastGame.IsChecked == true;
+        CheckForUpdates.IsCheckedChanged += (_, _) => Infrastructure.Updates.CheckOnStartup = CheckForUpdates.IsChecked == true;
         ClearRecents.Click += (_, _) => tabs.ClearRecentGames();
         GamePaths.PathsChanged += (_, _) => RefreshGameRows();
         tabs.PropertyChanged += OnTabsChanged;
@@ -79,6 +80,7 @@ public partial class SettingsDialog : ModalSheet
         GamePaths.Refresh();
         RefreshGameRows();
         OpenLastGame.IsChecked = GameSettings.OpenLastGameOnStartup;
+        CheckForUpdates.IsChecked = Infrastructure.Updates.CheckOnStartup;
         RefreshRecents();
     }
 

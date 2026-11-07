@@ -11,6 +11,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // First of all: an update being installed runs the app with Velopack's arguments, which this answers and exits.
+        Velopack.VelopackApp.Build().Run();
         if (args is not ["--self-test", .. var rest])
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         // A WinExe has no console of its own; report to the terminal it was started from.
