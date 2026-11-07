@@ -51,7 +51,8 @@ internal static class NavmeshMesh
     private static readonly uint ClimbHigh = Pack("#FF5E3A");
     private static readonly uint Drop = Pack("#C792EA");
     private static readonly uint HighDrop = Pack("#FF5FA2");
-    private static readonly uint CoverEdge = ViewportMesh.Pack(T.Brass);
+    // White: no ground colour is near it (train tracks are brass), so a cover edge shows on any of them.
+    private static readonly uint CoverEdge = Pack("#F4F5FA");
     // Portals are solid shapes: the link in a saturated colour nothing else uses, so it stands out from the ground,
     // and its ends on dark pucks, which read as the bases it stands on rather than as more of the link.
     private static readonly uint Ladder = Pack("#FF4FD8");

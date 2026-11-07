@@ -18,6 +18,8 @@ internal sealed class CollisionMesh
     private readonly ViewportMesh mesh;
     private Matrix4x4 transform;
     private uint colour;
+    // The current material's legend name; null when it has none.
+    private string? material;
 
     private CollisionMesh(ViewportMesh mesh) => this.mesh = mesh;
 
@@ -46,7 +48,14 @@ internal sealed class CollisionMesh
     private void Material(BoundMaterialType type)
     {
         colour = Colour(type);
-        mesh.Explain(Name(type), colour);
+        material = Name(type);
+    }
+
+    /// <summary>Counts the material for the legend if the shape just added drew anything: skipped ones don't count.</summary>
+    private void Counted(int trianglesBefore)
+    {
+        if (material is not null && mesh.TriangleCount > trianglesBefore)
+            mesh.Explain(material, colour);
     }
 
     private void Add(Bound bound, Matrix4x4 parent)
@@ -66,6 +75,7 @@ internal sealed class CollisionMesh
         transform = parent;
         Material(bound.Material.Type);
         Vector3 center = bound.Box.Center;
+        int before = mesh.TriangleCount;
         switch (bound)
         {
             case BoundSphere:
@@ -84,6 +94,7 @@ internal sealed class CollisionMesh
                 mesh.Skip(bound.Type.ToString());
                 break;
         }
+        Counted(before);
     }
 
     private void Add(BoundGeometry geometry)
@@ -94,7 +105,7 @@ internal sealed class CollisionMesh
             if (polygon.MaterialIndex < geometry.Materials.Count)
                 Material(geometry.Materials[polygon.MaterialIndex].Type);
             else
-                colour = Fallback;
+                (colour, material) = (Fallback, null);
             bool inRange = true;
             for (int i = 0; i < polygon.VertexCount; i++)
                 inRange &= polygon.VertexIndex(i) < vertices.Count;
@@ -104,6 +115,7 @@ internal sealed class CollisionMesh
                 continue;
             }
             Vector3 Point(int slot) => vertices[polygon.VertexIndex(slot)];
+            int before = mesh.TriangleCount;
             switch (polygon)
             {
                 case BoundTriangle:
@@ -125,6 +137,7 @@ internal sealed class CollisionMesh
                     mesh.Skip(polygon.Type.ToString());
                     break;
             }
+            Counted(before);
         }
     }
 

@@ -81,23 +81,42 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private void ShowLegend(IReadOnlyList<LegendEntry> legend)
     {
-        LegendShown = [.. legend.OrderByDescending(entry => entry.Count).Take(LegendLength)];
+        LegendEntry[] ordered = [.. legend.OrderByDescending(entry => entry.Count)];
+        LegendShown = [.. ordered.Take(LegendLength)];
+        LegendHidden = [.. ordered.Skip(LegendLength)];
         LegendPanel.Children.Clear();
         foreach (LegendEntry entry in LegendShown)
         {
-            var item = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
-            item.Children.Add(new Border
-            {
-                Width = 10, Height = 10, CornerRadius = new CornerRadius(2), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Background = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(ViewportMesh.Unpack(entry.Colour)),
-            });
-            item.Children.Add(new TextBlock { Text = entry.Name, Classes = { "status" } });
+            Control item = LegendItem(entry);
             ToolTip.SetTip(item, $"{entry.Name}: {entry.Count:N0}");
             LegendPanel.Children.Add(item);
         }
-        if (legend.Count > LegendLength)
-            LegendPanel.Children.Add(new TextBlock { Text = $"+{legend.Count - LegendLength} more", Classes = { "status" }, Foreground = Ui.Theme.TextFaint });
+        if (LegendHidden.Count > 0)
+        {
+            // The rest, swatches and all, in the tooltip of their count.
+            var rest = new StackPanel { Spacing = 4 };
+            foreach (LegendEntry entry in LegendHidden)
+                rest.Children.Add(LegendItem(entry, $"{entry.Name}: {entry.Count:N0}"));
+            var more = new TextBlock { Text = $"+{LegendHidden.Count} more", Classes = { "status" }, Foreground = Ui.Theme.TextFaint };
+            ToolTip.SetTip(more, rest);
+            LegendPanel.Children.Add(more);
+        }
         LegendBar.IsVisible = LegendShown.Count > 0;
+    }
+
+    /// <summary>The legend's entries left out of the bar, listed in the tooltip of its "+N more".</summary>
+    internal IReadOnlyList<LegendEntry> LegendHidden { get; private set; } = [];
+
+    private static Control LegendItem(LegendEntry entry, string? text = null)
+    {
+        var item = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+        item.Children.Add(new Border
+        {
+            Width = 10, Height = 10, CornerRadius = new CornerRadius(2), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Background = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(ViewportMesh.Unpack(entry.Colour)),
+        });
+        item.Children.Add(new TextBlock { Text = text ?? entry.Name, Classes = { "status" } });
+        return item;
     }
 
     /// <summary>The control the viewer opens over, in the main window.</summary>

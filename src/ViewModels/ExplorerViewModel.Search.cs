@@ -512,12 +512,13 @@ public sealed partial class ExplorerViewModel
         bool texture = name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
         bool text = TextDocument.IsTextName(name);
         bool image = Textures.TextureImport.IsImagePath(name);
-        if (!texture && !text && !image)
+        bool model = IsModelName(name);
+        if (!texture && !text && !image && !model)
         {
             SetStatus($"{name} has no viewer here; Open location shows it in its folder");
             return;
         }
-        long limit = text ? TextDocument.MaxSize : image ? ImageViewerViewModel.MaxSize : long.MaxValue;
+        long limit = text ? TextDocument.MaxSize : image ? ImageViewerViewModel.MaxSize : model ? ModelFile.MaxSize : long.MaxValue;
         if (hit.Size > limit)
         {
             SetStatus($"{name} is too large to view ({Formatting.FormatSize(hit.Size)})");
@@ -553,6 +554,11 @@ public sealed partial class ExplorerViewModel
                 return;
             }
             TextFileOpened?.Invoke(this, TextDocument.Load(name, file.Data));
+            SetStatus($"Opened {name}");
+        }
+        else if (model)
+        {
+            ModelFileOpened?.Invoke(this, new ModelFile(name, file.Data));
             SetStatus($"Opened {name}");
         }
         else

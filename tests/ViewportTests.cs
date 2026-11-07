@@ -41,6 +41,46 @@ public sealed class ViewportTests
     }
 
     [Fact]
+    public void TheLegendCountsOnlyShapesThatAreDrawn()
+    {
+        // A disc isn't drawn: its material isn't in the legend, whose counts stay those of what shows.
+        var composite = new BoundComposite();
+        var box = new BoundBox(new Aabb3(Vector3.Zero, Vector3.One));
+        box.Material.Type = (BoundMaterialType)4;
+        var disc = new BoundDisc(new Vector3(3, 0, 0), 1);
+        disc.Material.Type = (BoundMaterialType)1;
+        composite.Children.Add(new BoundChild(box));
+        composite.Children.Add(new BoundChild(disc));
+
+        ViewportMesh mesh = CollisionMesh.Build(new Ybn(composite));
+
+        Assert.Equal(12, mesh.TriangleCount);
+        Assert.Equal(1, mesh.Skipped["Disc"]);
+        Assert.Equal([new LegendEntry("Tarmac", ViewportMesh.Pack(129, 118, 154), 1)], mesh.Legend);
+    }
+
+    [Fact]
+    public void TrianglesThatArentFiniteAreLeftOut()
+    {
+        var mesh = new ViewportMesh(Vector3.Zero);
+        Vector3 nan = new(float.NaN, 0, 0);
+        mesh.Triangle(nan, Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, 0);
+        mesh.Triangle(Vector3.Zero, Vector3.UnitX, Vector3.UnitY, nan, Vector3.UnitZ, Vector3.UnitZ, 0);
+        mesh.Triangle(nan, Vector3.UnitX, Vector3.UnitY, 0);
+        Assert.Equal(0, mesh.TriangleCount);
+        mesh.Triangle(Vector3.Zero, Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, 0);
+        Assert.Equal(1, mesh.TriangleCount);
+    }
+
+    [Fact]
+    public void OpenIsOfferedForCollisionsAndNavmeshes()
+    {
+        Assert.True(ExplorerViewModel.Opens(new HikariHopper.Core.EntryRecord("ch2_04_15.ybn", "ch2_04_15.ybn", "ybn", 1)));
+        Assert.True(ExplorerViewModel.Opens(new HikariHopper.Core.EntryRecord("navmesh.ynv", "navmesh.ynv", "ynv", 1)));
+        Assert.False(ExplorerViewModel.Opens(new HikariHopper.Core.EntryRecord("model.ymap", "model.ymap", "ymap", 1)));
+    }
+
+    [Fact]
     public void ANavmeshIsColouredByItsGroundAndShowsWherePedsClimbAndDrop()
     {
         Vector3[] vertices = [new(1010, 2020, 30), new(1040, 2020, 30), new(1040, 2050, 30), new(1010, 2050, 30)];

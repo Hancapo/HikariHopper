@@ -75,7 +75,11 @@ internal sealed class ViewportMesh(Vector3 origin)
     /// </summary>
     public void Triangle(Vector3 a, Vector3 b, Vector3 c, Vector3 normalA, Vector3 normalB, Vector3 normalC, uint colour)
     {
-        if (Vector3.Cross(b - a, c - a).LengthSquared() <= 1e-14f)
+        // NaN fails every comparison, so the test is written to fail it: no area, or a corner or normal that isn't
+        // finite (a curve of no length), is left out.
+        float area = Vector3.Cross(b - a, c - a).LengthSquared();
+        if (!(area > 1e-14f) || !float.IsFinite(area)
+            || !float.IsFinite((normalA + normalB + normalC).LengthSquared()))
             return;
         colour &= 0x00FFFFFF;
         vertices.Add(new ViewportVertex(a - Origin, normalA, colour));

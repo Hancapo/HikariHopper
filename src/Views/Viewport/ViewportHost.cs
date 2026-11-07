@@ -95,7 +95,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             Started?.Invoke(renderer.AdapterName);
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or EntryPointNotFoundException or TimeoutException)
+            or EntryPointNotFoundException or TimeoutException or WebGpuSharp.WebGPUException)
         {
             Fail(error);
         }

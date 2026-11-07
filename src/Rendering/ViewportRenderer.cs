@@ -205,6 +205,9 @@ internal sealed unsafe class ViewportRenderer : IDisposable
     /// <summary>Shows these triangles and lines in place of any before; null shows none.</summary>
     public void Show(ViewportMesh? mesh)
     {
+        // The GPU memory goes now, not whenever the handles are collected.
+        vertexBuffer?.Destroy();
+        segmentBuffer?.Destroy();
         vertexBuffer = segmentBuffer = null;
         vertexCount = segmentCount = 0;
         if (mesh is null)
@@ -395,6 +398,8 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         disposed = true;
         // The rest is released with its handles; the swap chain lets go of the window now.
         depth?.Destroy();
+        vertexBuffer?.Destroy();
+        segmentBuffer?.Destroy();
         surface.Unconfigure();
     }
 }
