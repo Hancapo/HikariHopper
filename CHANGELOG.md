@@ -8,6 +8,16 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.0.5] - 2026-11-06
+
+### Added
+
 - HikariHopper updates itself: new versions are offered with what changed in them, and install with a restart. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
 - The update check at startup can be turned off in Settings. ([#87](https://github.com/Hancapo/HikariHopper/pull/87))
 - An Updates page in Settings, to check for updates. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
@@ -21,8 +31,6 @@ All notable changes to HikariHopper are documented here. The format follows
 - Settings has a page per group, picked from a rail with icons. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 - Settings that are on or off use Off/On switches. ([#88](https://github.com/Hancapo/HikariHopper/pull/88))
 - The panels are taller, and the status bar is centred under them. ([#89](https://github.com/Hancapo/HikariHopper/pull/89))
-
-### Fixed
 
 ### Removed
 
@@ -123,7 +131,8 @@ All notable changes to HikariHopper are documented here. The format follows
 - Explorer for GTA V Legacy and Enhanced game files, with nested RPF archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/Hancapo/HikariHopper/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/Hancapo/HikariHopper/compare/v0.0.1...v0.0.2
