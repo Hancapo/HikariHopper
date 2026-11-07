@@ -400,23 +400,22 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open {entry.Name}: {error.Message}");
             return;
         }
-        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data) { Dictionaries = DictionariesBeside(entry) });
+        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data) { Dictionaries = DictionariesBeside(entry), Nearby = NearbyDictionaries(entry) });
         SetStatus($"Opened {entry.Name}");
     }
 
     /// <summary>
-    /// The texture dictionary a drawable shares its name with, in the same folder, where its textures usually are when
-    /// it doesn't embed them; none for other files, or when it can't be read.
+    /// The texture dictionaries in the same folder that usually hold a drawable's textures when it doesn't embed them
+    /// (<see cref="ModelFile.DictionaryNames"/>), in that order; none for other files, and those that can't be read
+    /// are left out.
     /// </summary>
     private IReadOnlyList<byte[]> DictionariesBeside(EntryRecord entry)
     {
-        if (!entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
-            return [];
-        string wanted = Path.ChangeExtension(entry.Name, ".ytd");
         var found = new List<byte[]>();
-        foreach (EntryRecord sibling in entries.Select(row => row.Record))
+        foreach (string wanted in ModelFile.DictionaryNames(entry.Name))
         {
-            if (!string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase) || sibling.Size > ModelFile.MaxSize)
+            if (entries.Select(row => row.Record).FirstOrDefault(sibling => string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                is not { } sibling || sibling.Size > ModelFile.MaxSize)
                 continue;
             try
             {
@@ -427,6 +426,21 @@ public sealed partial class ExplorerViewModel
             }
         }
         return found;
+    }
+
+    /// <summary>
+    /// The folder's other texture dictionaries, for a drawable's textures that neither it nor the dictionaries named
+    /// for it hold; each is read only when the search reaches it, while the viewer opens the file.
+    /// </summary>
+    private IReadOnlyList<Rendering.NearbyDictionary> NearbyDictionaries(EntryRecord entry)
+    {
+        if (!ModelFile.IsDrawableName(entry.Name))
+            return [];
+        var named = ModelFile.DictionaryNames(entry.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        RpfProvider provider = Provider;
+        return [.. entries.Select(row => row.Record)
+            .Where(sibling => !sibling.IsDirectory && sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) && !named.Contains(sibling.Name))
+            .Select(sibling => new Rendering.NearbyDictionary(sibling.Name, sibling.Size, () => provider.ReadEntryBytes(sibling)))];
     }
 
     private void OpenArchiveEntry(EntryRecord entry)
