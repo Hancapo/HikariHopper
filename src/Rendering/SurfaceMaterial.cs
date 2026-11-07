@@ -158,6 +158,14 @@ internal sealed class SurfaceMaterial
         u[15] = result.Vehicle ? 1 : 0;
         if (result.Vehicle)
             Vehicle(u, specular);
+        // vehicle_interior, _interior2, _cloth and _cloth2 write no specular intensity to the G-buffer: no highlight
+        // and nothing reflected.
+        if (result.Vehicle && Pattern(shader, "no_specular") == "true")
+        {
+            u[2] = 0;
+            u[33] = 0;
+            u[35] = 1;
+        }
         return result;
 
         // PS_DeferredVehicleTextured: the paint's colour (or ramp), its dirt, and the second specular lobe. The game
