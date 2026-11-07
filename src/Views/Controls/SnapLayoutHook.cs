@@ -57,19 +57,19 @@ internal sealed class SnapLayoutHook : IDisposable
 
     private nint Procedure(nint hwnd, uint message, nint wParam, nint lParam, ref bool handled)
     {
-        Point? at = null;
-        if (message == NcHitTest)
-        {
-            // Screen coordinates in physical pixels, signed: a second monitor can be left of or above the first.
-            int x = (short)(lParam & 0xFFFF), y = (short)((lParam >> 16) & 0xFFFF);
-            at = window.PointToClient(new PixelPoint(x, y));
-        }
+        Point? at = message == NcHitTest ? window.PointToClient(ScreenPoint(lParam)) : null;
         (bool taken, nint result) = Handle(message, wParam, at);
         if (message == NcMouseMove && wParam == MaxButton && !tracking)
             tracking = TrackLeaving(hwnd);
         handled = taken;
         return result;
     }
+
+    /// <summary>
+    /// The screen point a mouse message's lParam holds, in physical pixels: two signed 16-bit words, as a monitor left
+    /// of or above the main one has negative coordinates.
+    /// </summary>
+    internal static PixelPoint ScreenPoint(nint lParam) => new((short)(lParam & 0xFFFF), (short)((lParam >> 16) & 0xFFFF));
 
     /// <summary>
     /// One window message: whether it is taken, and the result. <paramref name="at"/> is the pointer in the window's

@@ -199,6 +199,9 @@ public sealed class ControlMetricsTests
         WindowControlGlyph glyph = maximize.GetVisualDescendants().OfType<WindowControlGlyph>().Single();
         Point middle = maximize.TranslatePoint(new Point(maximize.Bounds.Width / 2, maximize.Bounds.Height / 2), window)!.Value;
 
+        // The pointer's screen position comes as two signed words: a monitor left of or above the main one is negative.
+        Assert.Equal(new PixelPoint(-2553, -7), SnapLayoutHook.ScreenPoint(unchecked((nint)(uint)((-7 << 16) | (-2553 & 0xFFFF)))));
+        Assert.Equal(new PixelPoint(1891, 291), SnapLayoutHook.ScreenPoint((291 << 16) | 1891));
         // Windows asks what is under the pointer: the button's area answers HTMAXBUTTON, the rest of the bar is left alone.
         Assert.Equal((true, SnapLayoutHook.MaxButton), hook.Handle(SnapLayoutHook.NcHitTest, 0, middle));
         Assert.Equal((false, (nint)0), hook.Handle(SnapLayoutHook.NcHitTest, 0, new Point(60, 15)));

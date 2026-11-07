@@ -74,12 +74,14 @@ public static class QtFramelessWindow
         if (message != NcCalcSize || (GetWindowLongW(hwnd, -16) & WsThickFrame) == 0)
             return 0;
         handled = true;
-        // With wParam set, lParam is an NCCALCSIZE_PARAMS whose first rectangle becomes the client area; without, a
-        // RECT that does. Left alone, either is the window's own rectangle.
+        // With wParam set, lParam is an NCCALCSIZE_PARAMS whose first rectangle, the window's proposed one, becomes the
+        // client area; without, a RECT that does. Left alone, either is the window's own rectangle. The monitor is the
+        // proposed rectangle's: a maximized window moving to another monitor is still on the old one here.
         if (wParam != 0 && IsZoomed(hwnd))
         {
+            Rect proposed = Marshal.PtrToStructure<Rect>(lParam);
             var monitor = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-            if (GetMonitorInfoW(MonitorFromWindow(hwnd, MonitorDefaultToNearest), ref monitor))
+            if (GetMonitorInfoW(MonitorFromRect(ref proposed, MonitorDefaultToNearest), ref monitor))
                 Marshal.StructureToPtr(monitor.Work, lParam, false);
         }
         return 0;
@@ -108,7 +110,7 @@ public static class QtFramelessWindow
     private static extern bool IsZoomed(nint hwnd);
 
     [DllImport("user32.dll")]
-    private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    private static extern nint MonitorFromRect(ref Rect rect, uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
