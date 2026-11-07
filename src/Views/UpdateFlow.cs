@@ -179,7 +179,16 @@ internal sealed class UpdateFlow
             Offer(update, late);
             return;
         }
-        Updates.Source.ApplyOnExit(update);
+        try
+        {
+            Updates.Source.ApplyOnExit(update);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            // The updater didn't start (Update.exe missing, say): the app stays, and the sheet offers the update again.
+            Offer(update, "The updater couldn't start");
+            return;
+        }
         Quit();
     }
 

@@ -103,8 +103,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed' }
     # The last release's package, so this one also gets a delta: copies that have updated before download only what changed.
     Write-Host 'Fetching the last release for its package...'
+    # A repository with no release in Velopack's feed succeeds and downloads nothing; failing is a network or GitHub
+    # error, and packing on would ship this version without its delta.
     & dotnet vpk download github --repoUrl $repository --outputDir $updates 2>&1 | Write-Host
-    if ($LASTEXITCODE -ne 0) { Write-Host 'No release to update from yet; packing without a delta.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Fetching the last release failed' }
     Write-Host 'Packing with Velopack...'
     # --noInst: no installer, only the zip. --runtime, or vpk takes the build for x86.
     & dotnet vpk pack --packId HikariHopper --packVersion $version --packTitle HikariHopper --packAuthors Hancapo `

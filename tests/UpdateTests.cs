@@ -41,7 +41,15 @@ internal sealed class FakeUpdateSource : IUpdateSource
         progress(100);
     }
 
-    public void ApplyOnExit(AvailableUpdate update) => Applied = update;
+    /// <summary>Thrown when the updater is started, as when Update.exe is missing.</summary>
+    public Exception? ApplyError { get; set; }
+
+    public void ApplyOnExit(AvailableUpdate update)
+    {
+        if (ApplyError is not null)
+            throw ApplyError;
+        Applied = update;
+    }
 }
 
 [Collection(ExplorerCollection.Name)]
@@ -181,6 +189,28 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
         Assert.Null(source.Applied);
 
         source.DownloadGate.SetResult();
+        await Settled(updates.Updating);
+        Assert.Same(source.Found, source.Applied);
+        Assert.Equal(1, quits);
+    }
+
+    [AvaloniaFact]
+    public async Task AnUpdaterThatCantStartLeavesTheAppRunningAndTheUpdateOffered()
+    {
+        source.Found = Version005;
+        source.ApplyError = new FileNotFoundException("Update.exe");
+        UpdateFlow updates = Open(out _);
+        await Settled(updates.Checked);
+
+        Click(updates.Sheet!, "Update and restart");
+        await Settled(updates.Updating);
+        Assert.Equal("available", updates.Sheet!.State);
+        Assert.Equal("The updater couldn't start", updates.Sheet.Detail);
+        Assert.Equal(0, quits);
+
+        // It can be tried again.
+        source.ApplyError = null;
+        Click(updates.Sheet, "Update and restart");
         await Settled(updates.Updating);
         Assert.Same(source.Found, source.Applied);
         Assert.Equal(1, quits);
