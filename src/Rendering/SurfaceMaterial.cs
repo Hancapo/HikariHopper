@@ -24,7 +24,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform.</summary>
-    public const int UniformBytes = 144;
+    public const int UniformBytes = 192;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -55,6 +55,9 @@ internal sealed class SurfaceMaterial
 
     /// <summary>A vehicle paint's colour by viewing angle, for paints with a ramp in place of a colour.</summary>
     public Texture? DiffuseRamp { get; private init; }
+
+    /// <summary>A vehicle's second diffuse layer (diffuseTexture2): its livery or decals, over the paint.</summary>
+    public Texture? DiffuseLayer { get; private init; }
 
     /// <summary>Textures the material names that neither the drawable nor its dictionaries hold.</summary>
     public IReadOnlyList<string> MissingTextures { get; private init; } = [];
@@ -123,6 +126,7 @@ internal sealed class SurfaceMaterial
             TintPalette = Texture("tint_palette"),
             Dirt = Texture("dirt"),
             DiffuseRamp = Texture("diffuse_ramp"),
+            DiffuseLayer = Texture("diffuse2"),
             AlphaMode = (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -156,22 +160,49 @@ internal sealed class SurfaceMaterial
         u[13] = result.TintPalette is not null ? 1 : 0;
         u[14] = Constant("tint_palette_selector", 0)[0];
         u[15] = result.Vehicle ? 1 : 0;
+        // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
+        u[41] = 1;
         if (result.Vehicle)
-            Vehicle(u, specular);
-        // vehicle_interior, _interior2, _cloth and _cloth2 write no specular intensity to the G-buffer: no highlight
-        // and nothing reflected.
-        if (result.Vehicle && Pattern(shader, "no_specular") == "true")
         {
-            u[2] = 0;
-            u[33] = 0;
-            u[35] = 1;
+            Vehicle(u);
+            VehicleSpecular(u);
         }
         return result;
+
+        // What the shader's program writes to the G-buffer's specular (materials.json's vehicle_specular).
+        void VehicleSpecular(Span<float> v)
+        {
+            JsonElement table = Mapping.RootElement.GetProperty("vehicle_specular");
+            JsonElement own = table.TryGetProperty(shader, out JsonElement found) ? found : default;
+            JsonElement Setting(string name) => own.ValueKind == JsonValueKind.Object && own.TryGetProperty(name, out JsonElement value)
+                ? value : table.GetProperty("default").TryGetProperty(name, out JsonElement fallback) ? fallback : default;
+            float Number(string name, string role, float fallback) => Setting(name) is { ValueKind: JsonValueKind.Number } n ? n.GetSingle() : Constant(role, fallback)[0];
+            string? Word(string name) => Setting(name) is { ValueKind: JsonValueKind.String } w ? w.GetString() : null;
+
+            v[2] = Number("scale", "specular_intensity", .125f);
+            v[1] = Number("power_scale", "specular_falloff", 100);
+            v[0] = Setting("fresnel").ValueKind == JsonValueKind.Number ? Setting("fresnel").GetSingle() : Constant("fresnel", .97f)[0];
+            if (Setting("bump") is { ValueKind: JsonValueKind.Number } bump)
+                v[3] = bump.GetSingle();
+            v[36] = Word("map") switch { "masked" => 1, "red" => 2, _ => 0 };
+            v[37] = Word("rough") switch { "dirt" => 1, "level" => 2, _ => 0 };
+            v[38] = Word("power") switch { "alpha" => 1, "green" => 2, _ => 0 };
+            v[39] = Word("fresnel") == "blue" ? 1 : 0;
+            v[40] = Setting("uv") is { ValueKind: JsonValueKind.Number } uv ? uv.GetSingle() : 0;
+            v[41] = Setting("tiled").ValueKind == JsonValueKind.True ? Constant("specular_tile", 1)[0] : 1;
+            // The second diffuse layer, over the paint by its alpha times matDiffuseColor2's w: the paints read it on
+            // the second UV set, vehicle_cloth2 on the first.
+            v[42] = result.DiffuseLayer is not null ? 1 : 0;
+            v[43] = shader.Contains("cloth", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+            float[] layer = Constant("diffuse2_colour", 1, 1, 1, 1);
+            for (int i = 0; i < 4; i++)
+                v[44 + i] = i < layer.Length ? layer[i] : 1;
+        }
 
         // PS_DeferredVehicleTextured: the paint's colour (or ramp), its dirt, and the second specular lobe. The game
         // sets a vehicle's colours and dirt as it drives; the viewer shows a clean vehicle, its paint slots as the game
         // fills them when no vehicle's colours apply.
-        void Vehicle(Span<float> v, bool constants)
+        void Vehicle(Span<float> v)
         {
             float[] paint = Constant("paint_colour", 1, 1, 1);
             Vector3 colour = PaintColour(paint);
@@ -199,8 +230,6 @@ internal sealed class SurfaceMaterial
             v[32] = Pattern(shader, "paint") == "true" ? 1 : 0;
             v[33] = second ? 1 : 0;
             v[34] = result.DiffuseRamp is not null ? 1 : 0;
-            // Paint-style shaders take their specular from constants; mesh-style ones from their specular map.
-            v[35] = constants ? 1 : 0;
         }
     }
 

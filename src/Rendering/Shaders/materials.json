@@ -7,7 +7,8 @@
     "specular": ["SpecSampler"],
     "tint_palette": ["TintPaletteSampler"],
     "dirt": ["DirtSampler"],
-    "diffuse_ramp": ["DiffuseRampTextureSampler"]
+    "diffuse_ramp": ["DiffuseRampTextureSampler"],
+    "diffuse2": ["DiffuseSampler2"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -21,12 +22,12 @@
     "ramp_enabled": ["matDiffuseSpecularRampEnabled"],
     "dirt_level": ["dirtLevelMod"],
     "dirt_colour": ["dirtColor"],
-    "specular2": ["specular2Color_DirLerp"]
+    "specular2": ["specular2Color_DirLerp"],
+    "specular_tile": ["specTexTileUV"],
+    "diffuse2_colour": ["matDiffuseColor2"]
   },
   "patterns": [
     { "contains": "vehicle_paint", "paint": true },
-    { "contains": "vehicle_interior", "no_specular": true },
-    { "contains": "vehicle_cloth", "no_specular": true },
     { "contains": "emissive", "emissive": true },
     { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
     { "contains": "cutout", "alpha_mode": "MASK" },
@@ -61,6 +62,41 @@
       "spec_tnt", "spec_twiddle_tnt", "weapon_emissive_tnt", "weapon_normal_spec_detail_palette", "weapon_normal_spec_detail_tnt",
       "weapon_normal_spec_palette", "weapon_normal_spec_tnt"
     ]
+  },
+  "vehicle_specular": {
+    "about": "What each PS_DeferredVehicleTextured shader writes to the G-buffer's specular intensity, power and fresnel, as decoded from its program, for an undamaged, dry vehicle. intensity = vertex AO * scale * map * rough; power = power_scale * power; fresnel as given. scale: 'mult' (specularIntensityMult) or a number. map: 'masked' (specMapIntMask . (R², G², B)), 'red' (R²) or null. rough: 'dirt' (one less the dirt map's roughness), 'level' (dirtLevelMod.z) or null. power: 'alpha' (A), 'green' (G²) or null; power_scale: 'falloff' (specularFalloffMult) or a number. fresnel: 'constant' (specularFresnel), 'blue' (one less B) or a number. uv: the UV set the specular map is read on; tiled: by specTexTileUV. bump: a fixed bumpiness.",
+    "default": { "scale": "mult", "map": "masked", "rough": "dirt", "power": "alpha", "power_scale": "falloff", "fresnel": "constant", "uv": 0, "tiled": false },
+    "vehicle_paint1": { "map": null, "power": null },
+    "vehicle_paint1_enveff": { "tiled": true },
+    "vehicle_paint2_enveff": { "tiled": true },
+    "vehicle_paint3": { "uv": 1 },
+    "vehicle_paint3_lvr": { "uv": 1 },
+    "vehicle_paint3_enveff": { "uv": 1, "tiled": true },
+    "vehicle_paint4": { "tiled": true },
+    "vehicle_paint4_emissive": { "tiled": true },
+    "vehicle_paint4_enveff": { "tiled": true },
+    "vehicle_paint5_enveff": { "tiled": true },
+    "vehicle_paint6": { "tiled": true },
+    "vehicle_paint6_enveff": { "tiled": true },
+    "vehicle_paint7": { "uv": 1 },
+    "vehicle_paint7_enveff": { "uv": 1, "tiled": true },
+    "vehicle_paint8": { "uv": 1, "tiled": true },
+    "vehicle_paint9": { "uv": 1, "tiled": true },
+    "vehicle_basic": { "rough": "level" },
+    "vehicle_generic": { "rough": "level" },
+    "vehicle_shuts": { "scale": 0.065, "rough": "level", "power_scale": 179, "fresnel": 0.83, "bump": 0.6 },
+    "vehicle_detail2": { "scale": 1, "rough": "level", "power_scale": 15, "fresnel": 0.8 },
+    "vehicle_emissive_opaque": { "scale": 0.8, "power_scale": 510, "fresnel": 0.96 },
+    "vehicle_mesh": { "scale": 0.6, "map": "red", "power": "green", "power_scale": 460, "fresnel": "blue" },
+    "vehicle_mesh_enveff": { "scale": 0.6, "map": "red", "power": "green", "power_scale": 460, "fresnel": "blue" },
+    "vehicle_mesh2_enveff": { "scale": 0.6, "map": "red", "power": "green", "power_scale": 460, "fresnel": "blue" },
+    "vehicle_tire": { "scale": 1, "map": "red", "power": "green", "power_scale": 512, "fresnel": "blue" },
+    "vehicle_tire_emissive": { "scale": 1, "map": "red", "power": "green", "power_scale": 512, "fresnel": "blue" },
+    "vehicle_interior": { "scale": 0 },
+    "vehicle_interior2": { "scale": 0, "power_scale": 10 },
+    "vehicle_cloth": { "scale": 0 },
+    "vehicle_cloth2": { "scale": 0 },
+    "vehicle_dash_emissive_opaque": { "scale": 0, "fresnel": 1 }
   },
   "shaders": {}
 }
