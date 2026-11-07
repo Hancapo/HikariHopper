@@ -17,6 +17,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer opens fragments (.yft), such as vehicles with their wheels, and drawable dictionaries (.ydd). ([#94](https://github.com/Hancapo/HikariHopper/pull/94))
 - The 3D viewer finds a model's textures in the texture dictionaries beside it, such as a vehicle's shared and interior ones. ([#94](https://github.com/Hancapo/HikariHopper/pull/94))
 - Vehicles in the 3D viewer are shaded with GTA V's vehicle shaders: paint, body parts, tyres and interiors, with paint slots filled as the game fills them without a vehicle's colours. ([#99](https://github.com/Hancapo/HikariHopper/pull/99))
+- Models in the 3D viewer are lit as GTA V lights them on a clear afternoon, with the game's sun, ambient light, exposure and tone map, and the sun's shadows on them and on the ground. ([#96](https://github.com/Hancapo/HikariHopper/pull/96))
 
 ### Changed
 
