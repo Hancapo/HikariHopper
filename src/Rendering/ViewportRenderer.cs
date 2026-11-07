@@ -349,9 +349,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             pass.Draw(6, segmentCount);
         }
         pass.End();
-        // Drawables in HDR, then tone-mapped over the backdrop.
+        // Drawables in HDR, reflecting the scene as it is from the camera, then tone-mapped over the backdrop.
         if (drawable)
         {
+            DrawSceneReflections(encoder);
             RenderPassEncoder lit = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments =

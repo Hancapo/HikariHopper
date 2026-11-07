@@ -18,7 +18,7 @@ internal sealed unsafe partial class ViewportRenderer
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
-    private BindGroup? lightGroup;
+    private BindGroup? lightGroup, skyLightGroup;
     private Buffer? lightBuffer;
     private Texture? shadowMap;
     private TextureView? shadowView;
@@ -96,7 +96,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
-        lightGroup = device.CreateBindGroup(new BindGroupDescriptor
+        // Drawables reflect the scene map; drawn into it, they reflect the sky map.
+        BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = lightLayout,
             Entries =
@@ -104,10 +105,12 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 0, Buffer = lightBuffer, Size = LightBytes },
                 new BindGroupEntry { Binding = 1, TextureView = shadowView },
                 new BindGroupEntry { Binding = 2, Sampler = compare },
-                new BindGroupEntry { Binding = 3, TextureView = reflectionView! },
+                new BindGroupEntry { Binding = 3, TextureView = reflections },
                 new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
             ],
         });
+        lightGroup = LightGroup(sceneMap!.View);
+        skyLightGroup = LightGroup(skyMap!.View);
 
         // The shadow map: depth only, from the sun, nearer is smaller.
         BindGroupLayout shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor

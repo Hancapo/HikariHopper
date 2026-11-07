@@ -15,6 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? solidSurfaces;
     private RenderPipeline? doubleSidedSurfaces;
     private RenderPipeline? blendedSurfaces;
+    private RenderPipeline? solidReflected, doubleSidedReflected, blendedReflected;
     private Sampler? surfaceSampler;
     private Sampler? paletteSampler;
     private TextureView? white;
@@ -59,14 +60,18 @@ internal sealed unsafe partial class ViewportRenderer
             ],
         });
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!] });
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") });
-        RenderPipeline Pipeline(CullMode cull, bool blend) => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        PipelineLayout reflectedLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
         {
-            Layout = layout,
+            BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!, reflectionViewLayout!],
+        });
+        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") });
+        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false) => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = reflected ? reflectedLayout : layout,
             Vertex = new VertexState
             {
                 Module = shader,
-                EntryPoint = "vs_surface",
+                EntryPoint = reflected ? "vs_surface_paraboloid" : "vs_surface",
                 Buffers = new[]
                 {
                     new VertexBufferLayout
@@ -90,7 +95,7 @@ internal sealed unsafe partial class ViewportRenderer
             Fragment = new FragmentState
             {
                 Module = shader,
-                EntryPoint = "fs_surface",
+                EntryPoint = reflected ? "fs_surface_reflected" : "fs_surface",
                 Targets = new[]
                 {
                     new ColorTargetState
@@ -110,12 +115,17 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 Format = DepthFormat,
                 DepthWriteEnabled = blend ? OptionalBool.False : OptionalBool.True,
-                DepthCompare = CompareFunction.GreaterEqual,
+                // The main view's depth is reversed; the reflection map's is the distance.
+                DepthCompare = reflected ? CompareFunction.LessEqual : CompareFunction.GreaterEqual,
             },
         });
         solidSurfaces = Pipeline(CullMode.Back, blend: false);
         doubleSidedSurfaces = Pipeline(CullMode.None, blend: false);
         blendedSurfaces = Pipeline(CullMode.None, blend: true);
+        // Into the reflection map: nothing culled, as the paraboloid mirrors the winding and the map's halves differ.
+        solidReflected = Pipeline(CullMode.None, blend: false, reflected: true);
+        doubleSidedReflected = solidReflected;
+        blendedReflected = Pipeline(CullMode.None, blend: true, reflected: true);
         surfaceSampler = device.CreateSampler(new SamplerDescriptor
         {
             AddressModeU = AddressMode.Repeat,
@@ -207,7 +217,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
     }
 
-    private void DrawSurfaces(RenderPassEncoder pass)
+    private void DrawSurfaces(RenderPassEncoder pass, bool reflected = false)
     {
         if (surfaceVertices is null || surfaceIndices is null || surfaceParts.Length == 0)
             return;
@@ -217,12 +227,13 @@ internal sealed unsafe partial class ViewportRenderer
         foreach (var (part, group, mode) in surfaceParts)
             if (mode != AlphaMode.Blend)
             {
-                pass.SetPipeline(mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!);
+                pass.SetPipeline(reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
+                    : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!);
                 pass.SetBindGroup(1, group);
                 pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
             }
         Vector3 eye = Camera.Eye - origin;
-        pass.SetPipeline(blendedSurfaces!);
+        pass.SetPipeline(reflected ? blendedReflected! : blendedSurfaces!);
         foreach (var (part, group, _) in surfaceParts.Where(p => p.Mode == AlphaMode.Blend).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
         {
             pass.SetBindGroup(1, group);
