@@ -17,26 +17,36 @@ internal enum AlphaMode
 }
 
 /// <summary>
-/// A GTA V material made ready for surface.wgsl: its textures and the constants its shader reads, from either edition.
+/// A GTA V material made ready for surface.wgsl, or terrain.wgsl for the terrain shaders: its textures and the
+/// constants its shader reads, from either edition.
 /// Which parameter fills which role is in materials.json, by Legacy name; Enhanced materials reach those names through
 /// FiveFury's shader catalogue, and a value a material leaves out is its shader's default from the same catalogue.
 /// </summary>
 internal sealed class SurfaceMaterial
 {
-    /// <summary>The bytes of surface.wgsl's Material uniform.</summary>
+    /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 32.</summary>
     public const int UniformBytes = 192;
 
-    /// <summary>The Material uniform, as floats: see surface.wgsl.</summary>
+    /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
 
     /// <summary>The shader's name, or its hash when the catalogues don't know it.</summary>
     public string Shader { get; private init; } = "";
 
-    /// <summary>Whether the shader is one of the families surface.wgsl rebuilds; others are drawn as the closest it does.</summary>
+    /// <summary>
+    /// Whether the shader is one of the families surface.wgsl or terrain.wgsl rebuilds; others are drawn as the closest
+    /// they do.
+    /// </summary>
     public bool Rebuilt { get; private init; }
 
     /// <summary>Whether it is a vehicle shader (PS_DeferredVehicleTextured): paint, mesh, tyres, interiors and the rest.</summary>
     public bool Vehicle { get; private init; }
+
+    /// <summary>
+    /// Whether it is a terrain shader, drawn with terrain.wgsl: those the shader rebuilds, and the rest of the terrain
+    /// shaders without what sets them apart (parallax, tint textures).
+    /// </summary>
+    public bool Terrain { get; private init; }
 
     public AlphaMode AlphaMode { get; private init; }
 
@@ -59,6 +69,12 @@ internal sealed class SurfaceMaterial
     /// <summary>A vehicle's second diffuse layer (diffuseTexture2): its livery or decals, over the paint.</summary>
     public Texture? DiffuseLayer { get; private init; }
 
+    /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps.</summary>
+    public Texture?[] Layers { get; private init; } = new Texture?[8];
+
+    /// <summary>A terrain shader's lookup map, which holds the layer weights on the second UV set (_cm, _2tex_blend).</summary>
+    public Texture? Lookup { get; private init; }
+
     /// <summary>Textures the material names that neither the drawable nor its dictionaries hold.</summary>
     public IReadOnlyList<string> MissingTextures { get; private init; } = [];
 
@@ -66,6 +82,8 @@ internal sealed class SurfaceMaterial
 
     private static readonly HashSet<string> Textured = Family("textured");
     private static readonly HashSet<string> Vehicles = Family("vehicle");
+    private static readonly HashSet<string> Terrains = Family("terrain");
+    private static readonly HashSet<string> ApproximateTerrains = Family("terrain_approximate");
 
     private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
         .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -118,8 +136,11 @@ internal sealed class SurfaceMaterial
         var result = new SurfaceMaterial
         {
             Shader = shader,
-            Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader),
+            Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
+            Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
+            Layers = [.. Enumerable.Range(0, 4).Select(i => Texture($"layer{i}")), .. Enumerable.Range(0, 4).Select(i => Texture($"layer_bump{i}"))],
+            Lookup = Texture("lookup"),
             Diffuse = Texture("diffuse"),
             Normal = Texture("normal"),
             Specular = Texture("specular"),
@@ -137,9 +158,15 @@ internal sealed class SurfaceMaterial
             MissingTextures = missing,
         };
 
+        Span<float> u = result.Uniforms;
+        if (result.Terrain)
+        {
+            TerrainUniforms(u);
+            return result;
+        }
+
         // PS_DeferredTextured: a shader without specular constants (default, emissive) writes no specular, and a
         // fresnel of 0.98; one with them takes its power and intensity from them, scaled by a specular map if it has one.
-        Span<float> u = result.Uniforms;
         bool specular = Declares("constants", "specular_intensity");
         u[0] = specular ? Constant("fresnel", .97f)[0] : .98f;
         u[1] = specular ? Constant("specular_falloff", 100)[0] : 0;
@@ -168,6 +195,20 @@ internal sealed class SurfaceMaterial
             VehicleSpecular(u);
         }
         return result;
+
+        // The terrain shaders' PS_TexturedDeferred: specularIntensityMult (squared by the program), specularFalloffMult and
+        // a fixed fresnel of 0.98; the layer weights from the vertex, the lookup map or both; no bumps for the _lod shaders.
+        void TerrainUniforms(Span<float> v)
+        {
+            v[0] = Constant("specular_intensity", 0)[0];
+            v[1] = Constant("specular_falloff", 48)[0];
+            v[2] = Constant("bumpiness", 1)[0];
+            v[3] = .98f;
+            v[4] = Pattern(shader, "terrain_weights") switch { "blend" => 1, "map" => 2, _ => 0 };
+            v[5] = Enumerable.Range(0, 4).Any(i => Declares("textures", $"layer_bump{i}")) ? 1 : 0;
+            v[6] = result.TintPalette is not null ? 1 : 0;
+            v[7] = Constant("tint_palette_selector", 0)[0];
+        }
 
         // What the shader's program writes to the G-buffer's specular (materials.json's vehicle_specular).
         void VehicleSpecular(Span<float> v)
