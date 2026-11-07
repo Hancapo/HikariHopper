@@ -23,7 +23,7 @@
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
-    <EmbeddedResource Include="Rendering/Shaders/*.wgsl" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <!-- The native linker records only the PDB's file name (MSVC's %_PDB%), not this machine's path to it. -->

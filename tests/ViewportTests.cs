@@ -233,7 +233,8 @@ public sealed class ViewportTests
         Assert.Throws<InvalidDataException>(() => ModelContent.Read("model.ydr", [1, 2, 3, 4]));
         Assert.True(ExplorerViewModel.IsModelName("CH2_04_15.YBN"));
         Assert.True(ExplorerViewModel.IsModelName("navmesh.ynv"));
-        Assert.False(ExplorerViewModel.IsModelName("model.ydr"));
+        Assert.True(ExplorerViewModel.IsModelName("model.ydr"));
+        Assert.False(ExplorerViewModel.IsModelName("model.ytd"));
     }
 
     [Fact]

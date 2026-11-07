@@ -54,7 +54,7 @@ public partial class ModelViewer : UserControl, IModalContent
         ModelContent content;
         try
         {
-            content = ModelContent.Read(file.Name, file.Data);
+            content = ModelContent.Read(file.Name, file.Data, file.Dictionaries);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)
@@ -64,13 +64,29 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Box.IsEmpty)
             return "Nothing in it";
         Viewport.Frame(content.Box);
+        System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
+        if (content.Surfaces is { } surfaces)
+        {
+            Viewport.Show(surfaces);
+            ShowLegend([]);
+            return Describe(surfaces, size);
+        }
         Viewport.Show(content.Mesh);
         ShowLegend(content.Mesh.Legend);
-        System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")}{(skipped > 0 ? $" ({skipped:N0} shapes not drawn)" : "")} · "
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
+    }
+
+    /// <summary>A drawable's line: its triangles, materials and size, and the textures it names that weren't found.</summary>
+    private static string Describe(DrawableScene scene, System.Numerics.Vector3 size)
+    {
+        int triangles = scene.TriangleCount, materials = scene.Materials.Count;
+        int missing = scene.Materials.SelectMany(material => material.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        string found = missing > 0 ? $" · {missing} {(missing == 1 ? "texture" : "textures")} not found" : "";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")} · {materials} {(materials == 1 ? "material" : "materials")} · {size.X:0.##} × {size.Y:0.##} × {size.Z:0.##} m{found}");
     }
 
     /// <summary>The most entries the legend lists; the rest are counted.</summary>
