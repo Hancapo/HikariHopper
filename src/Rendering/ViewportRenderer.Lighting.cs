@@ -36,6 +36,8 @@ internal sealed unsafe partial class ViewportRenderer
     private TimecycleLight cycle;
     private Matrix4x4 shadowMatrix;
     private float shadowTexel, shadowDepth;
+    // The radius the shadow is fitted to, for refitting it when the sun moves; none without a drawable.
+    private float shadowRadius;
 
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
     public float Hours { get; private set; } = DayCycle.DefaultHours;
@@ -232,9 +234,13 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>Lights drawables at this time of day: where the light comes from, and the timecycle's light then.</summary>
     public void SetTime(float hours)
     {
-        Hours = hours;
+        // Evaluated first: an hour that isn't a number throws and changes nothing.
         key = DayCycle.Evaluate(hours);
         cycle = Timecycle.Evaluate(hours);
+        Hours = hours;
+        // A drawable's shadow follows the sun.
+        if (shadowRadius > 0)
+            FitShadow(shadowRadius);
         DrawReflections(hours);
     }
 
@@ -269,9 +275,9 @@ internal sealed unsafe partial class ViewportRenderer
     /// sphere (positions are relative to its middle, the scene's origin), deep enough to reach the ground well beyond
     /// it, where a low sun casts long shadows.
     /// </summary>
-    private void FitShadow(DrawableScene drawable)
+    private void FitShadow(float radius)
     {
-        float radius = Math.Max(drawable.Box.Size.Length() / 2, .25f);
+        shadowRadius = radius;
         Vector3 sun = key.Direction;
         Vector3 up = MathF.Abs(sun.Z) > .99f ? Vector3.UnitY : Vector3.UnitZ;
         Matrix4x4 view = Matrix4x4.CreateLookAt(sun * radius * 2, Vector3.Zero, up);

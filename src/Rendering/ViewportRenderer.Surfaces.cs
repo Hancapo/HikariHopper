@@ -20,6 +20,8 @@ internal sealed unsafe partial class ViewportRenderer
     private Sampler? paletteSampler;
     private TextureView? white;
     private TextureView? flat;
+    // A missing second diffuse layer lays nothing over the paint.
+    private TextureView? clear;
     private readonly Dictionary<GameTexture, TextureView?> textures = new(ReferenceEqualityComparer.Instance);
     private readonly List<WebGpuSharp.Texture> uploaded = [];
     private Buffer? surfaceVertices;
@@ -154,6 +156,7 @@ internal sealed unsafe partial class ViewportRenderer
         // What a material without a map reads: white for diffuse and specular, a flat normal.
         white = Solid(255, 255, 255, 255);
         flat = Solid(128, 128, 255, 255);
+        clear = Solid(0, 0, 0, 0);
     }
 
     /// <summary>Shows a drawable's surfaces in place of anything before; null shows none.</summary>
@@ -174,7 +177,7 @@ internal sealed unsafe partial class ViewportRenderer
             SurfaceMaterial material = drawable.Materials[part.Material];
             return (part, groups[part.Material], material.Decal ? AlphaMode.Blend : material.AlphaMode);
         })];
-        FitShadow(drawable);
+        FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
     }
 
@@ -187,6 +190,7 @@ internal sealed unsafe partial class ViewportRenderer
             buffer.Destroy();
         materialBuffers.Clear();
         surfaceVertices = surfaceIndices = null;
+        shadowRadius = 0;
         surfaceParts = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
@@ -213,7 +217,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 6, Sampler = paletteSampler! },
                 new BindGroupEntry { Binding = 7, TextureView = View(material.Dirt) ?? white! },
                 new BindGroupEntry { Binding = 8, TextureView = View(material.DiffuseRamp) ?? white! },
-                new BindGroupEntry { Binding = 9, TextureView = View(material.DiffuseLayer) ?? white! },
+                new BindGroupEntry { Binding = 9, TextureView = View(material.DiffuseLayer) ?? clear! },
             ],
         });
     }

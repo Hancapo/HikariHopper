@@ -413,9 +413,10 @@ public sealed partial class ExplorerViewModel
     private IReadOnlyList<byte[]> DictionariesBeside(EntryRecord entry)
     {
         var found = new List<byte[]>();
+        List<EntryRecord> folder = FolderRecords();
         foreach (string wanted in ModelFile.DictionaryNames(entry.Name))
         {
-            if (entries.Select(row => row.Record).FirstOrDefault(sibling => string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase))
+            if (folder.FirstOrDefault(sibling => string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase))
                 is not { } sibling || sibling.Size > ModelFile.MaxSize)
                 continue;
             try
@@ -431,8 +432,8 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>
     /// The folder's other texture dictionaries, for a drawable's textures that neither it nor the dictionaries named
-    /// for it hold; each is read only when the search reaches it, while the viewer reads the file in the background.
-    /// The archive reader is the explorer's, so the read itself happens on the UI thread.
+    /// for it hold, in name order; each is read only when the search reaches it, while the viewer reads the file in
+    /// the background. The archive reader is the explorer's, so the read itself happens on the UI thread.
     /// </summary>
     private IReadOnlyList<Rendering.NearbyDictionary> NearbyDictionaries(EntryRecord entry)
     {
@@ -440,10 +441,26 @@ public sealed partial class ExplorerViewModel
             return [];
         var named = ModelFile.DictionaryNames(entry.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         RpfProvider provider = Provider;
-        return [.. entries.Select(row => row.Record)
+        return [.. FolderRecords()
             .Where(sibling => !sibling.IsDirectory && sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) && !named.Contains(sibling.Name))
             .Select(sibling => new Rendering.NearbyDictionary(sibling.Name, sibling.Size,
                 () => Dispatcher.UIThread.CheckAccess() ? provider.ReadEntryBytes(sibling) : Dispatcher.UIThread.Invoke(() => provider.ReadEntryBytes(sibling))))];
+    }
+
+    /// <summary>
+    /// Everything in the open folder, whatever the folder filter shows, in name order: a model's texture dictionaries
+    /// are found there even when the filter hides them, and searched in an order the sort doesn't change.
+    /// </summary>
+    private List<EntryRecord> FolderRecords()
+    {
+        try
+        {
+            return [.. Provider.Entries(currentPath).OrderBy(record => record.Name, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            return [];
+        }
     }
 
     private void OpenArchiveEntry(EntryRecord entry)
