@@ -54,6 +54,7 @@ public partial class WindowTitleBar : UserControl
 
     private Window? observedWindow;
     private IDisposable? windowStateSubscription;
+    private SnapLayoutHook? snapLayouts;
     private PointerPressedEventArgs? dragPress;
     private Point dragOrigin;
     private bool maximized;
@@ -146,6 +147,9 @@ public partial class WindowTitleBar : UserControl
 
     private Window? EffectiveWindow => TargetWindow ?? TopLevel.GetTopLevel(this) as Window;
 
+    /// <summary>The window's snap layouts on the maximize button, while it has a window.</summary>
+    internal SnapLayoutHook? SnapLayouts => snapLayouts;
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
@@ -157,6 +161,8 @@ public partial class WindowTitleBar : UserControl
         base.OnDetachedFromVisualTree(e);
         windowStateSubscription?.Dispose();
         windowStateSubscription = null;
+        snapLayouts?.Dispose();
+        snapLayouts = null;
         observedWindow = null;
     }
 
@@ -178,7 +184,11 @@ public partial class WindowTitleBar : UserControl
         if (window == observedWindow)
             return;
         windowStateSubscription?.Dispose();
+        snapLayouts?.Dispose();
         observedWindow = window;
+        // Hovering maximize offers Windows 11's snap layouts, where the window can be maximized.
+        snapLayouts = window is null ? null
+            : new SnapLayoutHook(window, MaximizeButton, () => ShowMaximize && window.CanResize, ToggleMaximized);
         windowStateSubscription = window?.GetObservable(Window.WindowStateProperty)
             .Subscribe(new AnonymousObserver<WindowState>(state => Maximized = state == WindowState.Maximized));
         Maximized = window?.WindowState == WindowState.Maximized;
