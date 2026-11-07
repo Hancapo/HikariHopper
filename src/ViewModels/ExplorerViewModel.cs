@@ -485,6 +485,10 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private void PublishOpenedGame()
     {
         GameSettings.RememberGameRoot(Provider.GamePath);
+        // Where the game keeps models' textures beyond the models themselves, worked out in the background now, so
+        // the 3D viewer has it when a model opens.
+        if (LoadedGameOfProvider() is { } game)
+            _ = GameTextures.ForGame(game).Load();
         GameOpened?.Invoke(this, Provider.GamePath);
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();

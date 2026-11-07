@@ -401,8 +401,55 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open {entry.Name}: {error.Message}");
             return;
         }
-        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data) { Dictionaries = DictionariesBeside(entry), Nearby = NearbyDictionaries(entry) });
+        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data)
+        {
+            Dictionaries = DictionariesBeside(entry),
+            GameDictionaries = GameDictionaries(entry),
+            Nearby = NearbyDictionaries(entry),
+        });
         SetStatus($"Opened {entry.Name}");
+    }
+
+    /// <summary>
+    /// The game's dictionaries for a drawable's textures (<see cref="GameTextures"/>): the ones its archetypes name and
+    /// their parents, each read when the search reaches it, with a reader of its own, off the UI thread. None outside a
+    /// game, for other files, or for a drawable no archetype names.
+    /// </summary>
+    private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(EntryRecord entry)
+    {
+        if (!ModelFile.IsDrawableName(entry.Name) || LoadedGameOfProvider() is not { } game)
+            return null;
+        return GameTextures.ForGame(game).DictionariesFor(entry.Name).ContinueWith(found => (IReadOnlyList<Rendering.NearbyDictionary>)
+            [.. found.Result.Select(dictionary => new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size,
+                () => ReadGameFile(game, dictionary.Path)))], TaskScheduler.Default);
+    }
+
+    /// <summary>The game while one is open, with its keys; none for an RPF opened on its own.</summary>
+    private LoadedGame? LoadedGameOfProvider() =>
+        Provider.GamePath.Length > 0 && Provider.GameTarget is { } target && Provider.Crypto is { } crypto
+            ? new LoadedGame(Provider.GamePath, target, crypto)
+            : null;
+
+    /// <summary>A file of the game by its path from the game folder, RPFs included, read with a reader of its own.</summary>
+    private static byte[] ReadGameFile(LoadedGame game, string path)
+    {
+        string[] parts = path.Split('/');
+        int first = Array.FindIndex(parts, part => part.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase));
+        if (first < 0 || first == parts.Length - 1)
+            return File.ReadAllBytes(Path.Combine([game.Root, .. parts]));
+        var reader = new RpfProvider();
+        try
+        {
+            reader.ApplyLoadedGame(game);
+            reader.OpenArchive(Path.Combine([game.Root, .. parts[..(first + 1)]]));
+            EntryRecord record = reader.ArchiveEntryFromRoot(string.Join('/', parts[(first + 1)..]))
+                ?? throw new FileNotFoundException($"{parts[^1]} is no longer in {parts[first]}");
+            return reader.ReadEntryBytes(record);
+        }
+        finally
+        {
+            reader.Close();
+        }
     }
 
     /// <summary>
