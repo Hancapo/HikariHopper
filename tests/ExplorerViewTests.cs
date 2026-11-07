@@ -343,6 +343,52 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task TheChangelogIsTheRepositorysAndIsKeptForWhenItCantBeReached()
+    {
+        const string repository = "# Changelog\n\n## [9.9.9] - 2030-01-01\n\n### Fixed\n\n- Read from the repository.\n";
+        Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(repository);
+        Explorer ui = OpenExplorer();
+
+        // At once the built-in copy (nothing was read before), then the repository's, which is kept.
+        var changelog = new ChangelogDialog();
+        Assert.Contains(changelog.Releases, release => release.Version == "0.0.1");
+        changelog.Present(ui.Find<MenuRow>());
+        await changelog.Updated;
+        Pump(100);
+        Assert.Equal(["9.9.9"], changelog.Releases.Select(release => release.Version));
+        Assert.Contains(changelog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "Read from the repository.");
+        Assert.Equal(repository, File.ReadAllText(Infrastructure.ChangelogSource.CachePath));
+        changelog.Close();
+        Pump(250);
+
+        // Offline: the copy kept last time, from the start.
+        Infrastructure.ChangelogSource.Forget();
+        Infrastructure.ChangelogSource.Download = _ => throw new System.Net.Http.HttpRequestException("offline");
+        var offline = new ChangelogDialog();
+        await offline.Updated;
+        Assert.Equal(["9.9.9"], offline.Releases.Select(release => release.Version));
+
+        // Something that isn't a changelog (a proxy's page) is neither shown nor kept.
+        Infrastructure.ChangelogSource.Forget();
+        Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>("<html>Sign in to continue</html>");
+        var page = new ChangelogDialog();
+        await page.Updated;
+        Assert.Equal(["9.9.9"], page.Releases.Select(release => release.Version));
+        Assert.Equal(repository, File.ReadAllText(Infrastructure.ChangelogSource.CachePath));
+
+        // A copy older than the one the app was built with gives way to it, as after an update made offline.
+        string builtIn = File.ReadAllText(Path.Combine(RepositoryRoot(), "CHANGELOG.md"));
+        string old = "## [0.0.1] - 2026-11-02\n\n### Added\n\n- Old.\n";
+        Assert.Same(builtIn, Infrastructure.ChangelogSource.Newer(old, builtIn));
+        Assert.Same(builtIn, Infrastructure.ChangelogSource.Newer("not a changelog", builtIn));
+        Assert.Same(repository, Infrastructure.ChangelogSource.Newer(repository, builtIn));
+    }
+
+    /// <summary>The repository this test file is in: the tests run from a build folder elsewhere.</summary>
+    private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
+        Path.GetDirectoryName(Path.GetDirectoryName(here))!;
+
+    [AvaloniaFact]
     public void TheChangelogScrollsWithTheWheelAnywhereOverIt()
     {
         Explorer ui = OpenExplorer();

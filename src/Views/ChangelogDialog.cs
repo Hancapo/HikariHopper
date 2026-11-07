@@ -12,14 +12,26 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The app's changelog, as a sheet: each version with its date, its groups in the sheets' small caps, and
-/// their entries. It is read from the <c>CHANGELOG.md</c> built into the app, so it is always this build's.
+/// their entries. It is the repository's <c>CHANGELOG.md</c> (see <see cref="Infrastructure.ChangelogSource"/>):
+/// shown at once from the last copy read, or the one built into the app, and brought up to date when the
+/// repository's arrives.
 /// </summary>
 public sealed class ChangelogDialog : ModalSheet
 {
     private static readonly Uri Source = new("avares://HikariHopper/Assets/CHANGELOG.md");
 
-    public ChangelogDialog() : this(ForBuild(Load(), Infrastructure.BuildInfo.IsRelease))
+    private readonly StackPanel list = new();
+    private string shown = "";
+
+    /// <summary>The changelog this build shows, kept up to date from the repository.</summary>
+    public ChangelogDialog() : this(Infrastructure.ChangelogSource.Newer(Infrastructure.ChangelogSource.Cached(), BuiltIn()))
     {
+    }
+
+    private ChangelogDialog(string markdown) : this(ForBuild(Changelog.Parse(markdown), Infrastructure.BuildInfo.IsRelease))
+    {
+        shown = markdown;
+        Updated = Refresh();
     }
 
     public ChangelogDialog(IReadOnlyList<ChangelogRelease> releases)
@@ -29,9 +41,7 @@ public sealed class ChangelogDialog : ModalSheet
         WindowShare = new Size(0.45, 0.8);
         MinSize = new Size(460, 420);
         MaxSize = new Size(620, 760);
-        var list = new StackPanel();
-        for (int index = 0; index < releases.Count; index++)
-            list.Children.Add(Release(releases[index], first: index == 0));
+        Show(releases);
         var scroller = new ScrollViewer
         {
             Theme = Application.Current?.FindResource("QuietScrollViewer") as ControlTheme,
@@ -44,7 +54,28 @@ public sealed class ChangelogDialog : ModalSheet
     }
 
     /// <summary>The versions shown, newest first.</summary>
-    public IReadOnlyList<ChangelogRelease> Releases { get; }
+    public IReadOnlyList<ChangelogRelease> Releases { get; private set; }
+
+    /// <summary>Done once the repository's changelog has been read and, if it says anything new, shown.</summary>
+    internal Task Updated { get; } = Task.CompletedTask;
+
+    /// <summary>Shows the repository's changelog once it is read, if it differs from what is shown.</summary>
+    private async Task Refresh()
+    {
+        string? latest = await Infrastructure.ChangelogSource.LatestAsync();
+        if (latest is null || latest == shown)
+            return;
+        shown = latest;
+        Show(ForBuild(Changelog.Parse(latest), Infrastructure.BuildInfo.IsRelease));
+    }
+
+    private void Show(IReadOnlyList<ChangelogRelease> releases)
+    {
+        Releases = releases;
+        list.Children.Clear();
+        for (int index = 0; index < releases.Count; index++)
+            list.Children.Add(Release(releases[index], first: index == 0));
+    }
 
     /// <summary>
     /// What a build shows: a release build only the versions released, a dev build the Unreleased changes too,
@@ -54,16 +85,19 @@ public sealed class ChangelogDialog : ModalSheet
         release ? [.. releases.Where(entry => !entry.IsUnreleased)] : releases;
 
     /// <summary>The changelog built into the app; empty if it is missing.</summary>
-    public static IReadOnlyList<ChangelogRelease> Load()
+    public static IReadOnlyList<ChangelogRelease> Load() => Changelog.Parse(BuiltIn());
+
+    /// <summary>The text of the changelog built into the app; empty if it is missing.</summary>
+    private static string BuiltIn()
     {
         try
         {
             using var reader = new StreamReader(AssetLoader.Open(Source));
-            return Changelog.Parse(reader.ReadToEnd());
+            return reader.ReadToEnd();
         }
         catch (Exception error) when (error is IOException or FileNotFoundException or InvalidOperationException)
         {
-            return [];
+            return "";
         }
     }
 
