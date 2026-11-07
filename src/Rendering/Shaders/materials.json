@@ -1,11 +1,13 @@
 {
   "version": 1,
-  "about": "What surface.wgsl reads from a GTA V material. Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
+  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured) and vehicle (PS_DeferredVehicleTextured). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
     "specular": ["SpecSampler"],
-    "tint_palette": ["TintPaletteSampler"]
+    "tint_palette": ["TintPaletteSampler"],
+    "dirt": ["DirtSampler"],
+    "diffuse_ramp": ["DiffuseRampTextureSampler"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -14,15 +16,30 @@
     "specular_mask": ["specMapIntMask"],
     "bumpiness": ["bumpiness"],
     "emissive_multiplier": ["emissiveMultiplier"],
-    "tint_palette_selector": ["tintPaletteSelector"]
+    "tint_palette_selector": ["tintPaletteSelector"],
+    "paint_colour": ["matDiffuseColor"],
+    "ramp_enabled": ["matDiffuseSpecularRampEnabled"],
+    "dirt_level": ["dirtLevelMod"],
+    "dirt_colour": ["dirtColor"],
+    "specular2": ["specular2Color_DirLerp"]
   },
   "patterns": [
+    { "contains": "vehicle_paint", "paint": true },
     { "contains": "emissive", "emissive": true },
     { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
     { "contains": "cutout", "alpha_mode": "MASK" },
     { "contains": "alpha", "alpha_mode": "BLEND" }
   ],
   "families": {
+    "vehicle": [
+      "vehicle_basic", "vehicle_cloth", "vehicle_cloth2", "vehicle_dash_emissive_opaque", "vehicle_decal2", "vehicle_detail",
+      "vehicle_detail2", "vehicle_emissive_opaque", "vehicle_generic", "vehicle_interior", "vehicle_interior2", "vehicle_mesh",
+      "vehicle_mesh2_enveff", "vehicle_mesh_enveff", "vehicle_paint1", "vehicle_paint1_enveff", "vehicle_paint2", "vehicle_paint2_enveff",
+      "vehicle_paint3", "vehicle_paint3_enveff", "vehicle_paint3_lvr", "vehicle_paint4", "vehicle_paint4_emissive", "vehicle_paint4_enveff",
+      "vehicle_paint5_enveff", "vehicle_paint6", "vehicle_paint6_enveff", "vehicle_paint7", "vehicle_paint7_enveff", "vehicle_paint8",
+      "vehicle_paint9", "vehicle_shuts", "vehicle_tire", "vehicle_tire_emissive", "vehicle_track", "vehicle_track2",
+      "vehicle_track2_emissive", "vehicle_track_ammo", "vehicle_track_emissive"
+    ],
     "textured": [
       "cloth_default", "cloth_normal_spec", "cloth_normal_spec_tnt", "cubemap_reflect", "cutout_hard", "decal", "decal_amb_only",
       "decal_diff_only_um", "decal_dirt", "decal_emissive_only", "decal_emissivenight_only", "decal_glue", "decal_normal_only",
