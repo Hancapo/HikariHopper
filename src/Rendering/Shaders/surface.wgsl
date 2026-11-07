@@ -4,8 +4,8 @@
 //   - PS_DeferredVehicleTextured: vehicle paint, mesh, shuts, tyres, interiors and the rest.
 // That is then lit with the game's directional pass (PS_directional_just_dir) and the core of its ambient one
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
-// arithmetic. The light is the viewer's sky, after RedFury: the sun through the atmosphere, with its shadow, and the
-// sky's irradiance (light.wgsl). The result is linear HDR with coverage, for tonemap.wgsl.
+// arithmetic. The light is the game's own, from its timecycle (light.wgsl): the directional light with its shadow, the
+// natural ambient hemisphere and the directional ambient. The result is linear HDR with coverage, for tonemap.wgsl.
 // Scene comes from scene.wgsl, the light from light.wgsl.
 
 struct Material {
@@ -240,8 +240,8 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
     return surface;
 }
 
-// The game's directional and ambient passes over what a family wrote. The game's lighting has no 1/pi, so the sun
-// enters it as its illuminance over pi, and the sky as its irradiance over pi, as the harmonics hold it.
+// The game's directional and ambient passes over what a family wrote, with the timecycle's light as it is: the game's
+// lighting has no 1/pi.
 fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {
     let normal = surface.normal;
     // The lighting passes read albedo squared: the maps are gamma 2.
@@ -260,12 +260,15 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     // Diffuse loses what the surface reflects at this angle; specular is normalised Blinn-Phong.
     let kept = 1.0 - fresnel(surface.fresnel, n_dot_v) * spec;
     let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(surface.fresnel, h_dot_l);
-    let sun = light.sun_illuminance.rgb / PI * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
+    let sun = light.sun_colour.rgb * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
 
-    // Ambient: the sky's irradiance for this normal, scaled by the natural ambient (squared as the ambient pass
-    // decodes it). Outdoors in daylight the game's artificial ambient is nothing to speak of, so it is left out.
-    let natural = surface.natural * surface.natural;
-    let ambient = albedo * kept * sky_ambient(normal) * natural;
+    // Ambient: the timecycle's natural and directional ambient for this normal, scaled by the natural ambient scale.
+    // The deferred shaders store it as one less the occlusion multiplier's share of what the vertex leaves out (the
+    // timecycle's, for vehicles or props), and the ambient pass squares it. Outdoors in daylight the game's artificial
+    // ambient is nothing to speak of, so it is left out.
+    let multiplier = select(light.natural_up.w, light.directional_ambient.w, material.extra.w > 0.5);
+    let scale = 1.0 - multiplier * (1.0 - saturate(surface.natural));
+    let ambient = albedo * kept * gta_ambient(normal) * scale * scale;
 
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
@@ -276,5 +279,3 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     }
     return sun + ambient + glow;
 }
-
-const PI: f32 = 3.14159265359;

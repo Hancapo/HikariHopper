@@ -1,12 +1,23 @@
-// The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl and tonemap.wgsl: the key light
-// where it reaches the ground, its shadow map, and the sky's irradiance as order-2 spherical harmonics (sky_luts.wgsl).
-// Put after scene.wgsl, as group 2.
+// The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl and tonemap.wgsl: GTA V's
+// timecycle light at the viewer's time of day (Timecycle.cs), the exposure and filmic curve its post-process settles
+// on, and the directional light's shadow map. Put after scene.wgsl, as group 2.
 
 struct Light {
-    // Unit direction towards the key light, and the exposure multiplier (2^EV) in w.
+    // Unit direction towards the directional light (the sun, or the moon), and the exposure multiplier (2^stops) in w.
     sun_direction: vec4f,
-    // The key light's illuminance at the ground, after the atmosphere: top-of-atmosphere times transmittance.
-    sun_illuminance: vec4f,
+    // The directional light's colour times its multiplier, as the directional pass reads it.
+    sun_colour: vec4f,
+    // The natural ambient's down light (from the sky, on what faces up), with the down wrap in w.
+    natural_down: vec4f,
+    // The natural ambient's up light (from the ground, on what faces down), with the props' occlusion multiplier in w.
+    natural_up: vec4f,
+    // The directional ambient's colour times its intensity, with the vehicles' occlusion multiplier in w.
+    directional_ambient: vec4f,
+    // The way the directional ambient comes from, a unit vector.
+    directional_ambient_direction: vec4f,
+    // The filmic curve: A, B, C, D; then E, F, the white point W and one over the curve at W.
+    filmic0: vec4f,
+    filmic1: vec4f,
     // From origin-relative positions to the shadow map's clip space.
     shadow: mat4x4f,
     // The shadow map's texel in metres, its depth range in metres, its resolution, and whether shadows are on.
@@ -14,20 +25,17 @@ struct Light {
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
-@group(2) @binding(1) var<storage, read> sky_irradiance: array<vec4f, 9>;
-@group(2) @binding(2) var shadow_map: texture_depth_2d;
-@group(2) @binding(3) var shadow_compare: sampler_comparison;
+@group(2) @binding(1) var shadow_map: texture_depth_2d;
+@group(2) @binding(2) var shadow_compare: sampler_comparison;
 
-// Irradiance over pi from the sky's harmonics (RedFury's sky_irradiance), for a unit normal: the Lambert scale that
-// multiplies albedo.
-fn sky_ambient(n: vec3f) -> vec3f {
-    let h = sky_irradiance;
-    let ambient = h[0].rgb * 0.282095
-        + h[1].rgb * 0.488603 * n.y + h[2].rgb * 0.488603 * n.z + h[3].rgb * 0.488603 * n.x
-        + h[4].rgb * 1.092548 * n.x * n.y + h[5].rgb * 1.092548 * n.y * n.z
-        + h[6].rgb * 0.315392 * (3.0 * n.z * n.z - 1.0)
-        + h[7].rgb * 1.092548 * n.x * n.z + h[8].rgb * 0.546274 * (n.x * n.x - n.y * n.y);
-    return max(ambient, vec3f(0.0));
+// PS_directional_ambient's natural ambient for a unit normal: the down light on what faces up, the up light on what
+// faces down, the down light wrapping past the horizon by the down wrap; and the directional ambient on what faces it.
+fn gta_ambient(n: vec3f) -> vec3f {
+    let wrap = light.natural_down.w;
+    let h = max(0.0, (n.z + wrap) / (1.0 + wrap));
+    let natural = mix(light.natural_up.rgb, light.natural_down.rgb, h);
+    let directional = light.directional_ambient.rgb * saturate(dot(light.directional_ambient_direction.xyz, n));
+    return natural + directional;
 }
 
 // The key light's shadow at a point, as RedFury's cascade_pcf for its one map: nine bilinear comparison taps one

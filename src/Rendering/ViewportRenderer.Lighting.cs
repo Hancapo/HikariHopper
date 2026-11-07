@@ -6,21 +6,19 @@ using Texture = WebGpuSharp.Texture;
 
 namespace HikariHopper.Rendering;
 
-// Drawables' light, after RedFury: the day's key light through the atmosphere, its shadow, and the sky's irradiance,
-// with drawables drawn in HDR and tone-mapped over the backdrop. Collisions, navmeshes and the backdrop keep their
-// own flat shading, in the theme's colours.
-//   sky tables (once) -> shadow map -> backdrop and lines to the display -> drawables to HDR -> tone map over them
+// Drawables' light: GTA V's timecycle at the viewer's time of day, the directional light's shadow (after RedFury's),
+// and drawables drawn in HDR, then exposed and tone-mapped as the game's post-process does, over the backdrop.
+// Collisions, navmeshes and the backdrop keep their own flat shading, in the theme's colours.
+//   shadow map -> backdrop and lines to the display -> drawables to HDR -> tone map over them
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const TextureFormat TableFormat = TextureFormat.RGBA16Float;
-    private const int SkyBytes = 48, HarmonicsBytes = 9 * 16, LightBytes = 112, ShadowViewBytes = 64;
+    private const int LightBytes = 208, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
     private BindGroup? lightGroup;
     private Buffer? lightBuffer;
-    private Buffer? harmonics;
     private Texture? shadowMap;
     private TextureView? shadowView;
     private Buffer? shadowViewBuffer;
@@ -34,20 +32,20 @@ internal sealed unsafe partial class ViewportRenderer
     private TextureView? hdrView;
     private BindGroup? tonemapGroup;
     private KeyLight key;
-    private Vector3 groundIlluminance;
+    private TimecycleLight cycle;
+    private float exposureStops;
     private Matrix4x4 shadowMatrix;
     private float shadowTexel, shadowDepth;
 
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
     public float Hours { get; private set; } = DayCycle.DefaultHours;
 
-    /// <summary>The exposure, in stops; RedFury's eye adaptation adds to it at dusk and night.</summary>
+    /// <summary>Stops added to the exposure the game's post-process settles on for this time of day.</summary>
     public float Exposure { get; set; }
 
     private void CreateLighting()
     {
         lightBuffer = device.CreateBuffer(new BufferDescriptor { Size = LightBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        harmonics = device.CreateBuffer(new BufferDescriptor { Size = HarmonicsBytes, Usage = BufferUsage.Storage });
         shadowMap = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
@@ -85,15 +83,9 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Binding = 1,
                     Visibility = ShaderStage.Fragment,
-                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = HarmonicsBytes },
-                },
-                new BindGroupLayoutEntry
-                {
-                    Binding = 2,
-                    Visibility = ShaderStage.Fragment,
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
-                new BindGroupLayoutEntry { Binding = 3, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
+                new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
             ],
         });
         lightGroup = device.CreateBindGroup(new BindGroupDescriptor
@@ -102,9 +94,8 @@ internal sealed unsafe partial class ViewportRenderer
             Entries =
             [
                 new BindGroupEntry { Binding = 0, Buffer = lightBuffer, Size = LightBytes },
-                new BindGroupEntry { Binding = 1, Buffer = harmonics, Size = HarmonicsBytes },
-                new BindGroupEntry { Binding = 2, TextureView = shadowView },
-                new BindGroupEntry { Binding = 3, Sampler = compare },
+                new BindGroupEntry { Binding = 1, TextureView = shadowView },
+                new BindGroupEntry { Binding = 2, Sampler = compare },
             ],
         });
 
@@ -218,141 +209,13 @@ internal sealed unsafe partial class ViewportRenderer
         SetTime(Hours);
     }
 
-    /// <summary>Lights drawables at this time of day: the sun's place and colour, and the sky's irradiance with it.</summary>
+    /// <summary>Lights drawables at this time of day: where the light comes from, and the timecycle's light then.</summary>
     public void SetTime(float hours)
     {
         Hours = hours;
         key = DayCycle.Evaluate(hours);
-        // Direct light at the ground: the sun's or moon's top-of-atmosphere illuminance through the air.
-        groundIlluminance = key.Illuminance * Atmosphere.SunTransmittance(2, key.Direction);
-        ComputeSky();
-    }
-
-    /// <summary>RedFury's sky tables for this key light, and the harmonics of the sky's irradiance from them.</summary>
-    private void ComputeSky()
-    {
-        Texture Table(uint width, uint height) => device.CreateTexture(new TextureDescriptor
-        {
-            Usage = TextureUsage.StorageBinding | TextureUsage.TextureBinding,
-            Dimension = TextureDimension.D2,
-            Size = new Extent3D(width, height, 1),
-            Format = TableFormat,
-            MipLevelCount = 1,
-            SampleCount = 1,
-        });
-        Texture transmittance = Table(256, 64), multiple = Table(32, 32), view = Table(192, 108);
-        Buffer skyBuffer = device.CreateBuffer(new BufferDescriptor { Size = SkyBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        Span<Vector4> sky = stackalloc Vector4[SkyBytes / 16];
-        sky[0] = new Vector4(key.Direction, 0);
-        sky[1] = new Vector4(key.Illuminance, 0);
-        // The eye a couple of metres above the ground.
-        sky[2] = new Vector4(0, 0, 2, 0);
-        queue.WriteBuffer(skyBuffer, 0, (ReadOnlySpan<Vector4>)sky);
-        Sampler clamp = device.CreateSampler(new SamplerDescriptor
-        {
-            AddressModeU = AddressMode.ClampToEdge,
-            AddressModeV = AddressMode.ClampToEdge,
-            AddressModeW = AddressMode.ClampToEdge,
-            MagFilter = FilterMode.Linear,
-            MinFilter = FilterMode.Linear,
-            MipmapFilter = MipmapFilterMode.Nearest,
-            LodMinClamp = 0,
-            LodMaxClamp = 1,
-            MaxAnisotropy = 1,
-        })!;
-
-        BindGroupLayout skyLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
-        {
-            Entries =
-            [
-                new BindGroupLayoutEntry
-                {
-                    Binding = 0,
-                    Visibility = ShaderStage.Compute,
-                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = SkyBytes },
-                },
-            ],
-        });
-        BindGroup skyGroup = device.CreateBindGroup(new BindGroupDescriptor
-        {
-            Layout = skyLayout,
-            Entries = [new BindGroupEntry { Binding = 0, Buffer = skyBuffer, Size = SkyBytes }],
-        });
-        static BindGroupLayoutEntry Sampled(uint binding) => new()
-        {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
-        };
-        static BindGroupLayoutEntry Filtering(uint binding) => new()
-        {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering },
-        };
-        static BindGroupLayoutEntry Output(uint binding) => new()
-        {
-            Binding = binding,
-            Visibility = ShaderStage.Compute,
-            StorageTexture = new StorageTextureBindingLayout { Access = StorageTextureAccess.WriteOnly, Format = TableFormat, ViewDimension = TextureViewDimension.D2 },
-        };
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("sky.wgsl") + "\n" + Read("sky_luts.wgsl") });
-        (ComputePipeline Pipeline, BindGroup Group) Pass(string entry, BindGroupLayoutEntry[] layoutEntries, BindGroupEntry[] entries)
-        {
-            BindGroupLayout layout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = layoutEntries });
-            ComputePipeline pipeline = device.CreateComputePipelineSync(new ComputePipelineDescriptor
-            {
-                Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [skyLayout, layout] }),
-                Compute = new ComputeState { Module = shader, EntryPoint = entry },
-            });
-            return (pipeline, device.CreateBindGroup(new BindGroupDescriptor { Layout = layout, Entries = entries }));
-        }
-        var transmittancePass = Pass("cs_transmittance", [Output(3)], [new BindGroupEntry { Binding = 3, TextureView = transmittance.CreateView() }]);
-        var multiplePass = Pass("cs_multiple_scattering", [Sampled(0), Filtering(2), Output(3)],
-        [
-            new BindGroupEntry { Binding = 0, TextureView = transmittance.CreateView() },
-            new BindGroupEntry { Binding = 2, Sampler = clamp },
-            new BindGroupEntry { Binding = 3, TextureView = multiple.CreateView() },
-        ]);
-        var viewPass = Pass("cs_sky_view", [Sampled(0), Sampled(1), Filtering(2), Output(3)],
-        [
-            new BindGroupEntry { Binding = 0, TextureView = transmittance.CreateView() },
-            new BindGroupEntry { Binding = 1, TextureView = multiple.CreateView() },
-            new BindGroupEntry { Binding = 2, Sampler = clamp },
-            new BindGroupEntry { Binding = 3, TextureView = view.CreateView() },
-        ]);
-        var irradiancePass = Pass("cs_sky_irradiance",
-        [
-            Filtering(2), Sampled(5),
-            new BindGroupLayoutEntry
-            {
-                Binding = 6,
-                Visibility = ShaderStage.Compute,
-                Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage, MinBindingSize = HarmonicsBytes },
-            },
-        ],
-        [
-            new BindGroupEntry { Binding = 2, Sampler = clamp },
-            new BindGroupEntry { Binding = 5, TextureView = view.CreateView() },
-            new BindGroupEntry { Binding = 6, Buffer = harmonics!, Size = HarmonicsBytes },
-        ]);
-
-        CommandEncoder encoder = device.CreateCommandEncoder();
-        ComputePassEncoder pass = encoder.BeginComputePass();
-        void Dispatch((ComputePipeline Pipeline, BindGroup Group) step, uint x, uint y)
-        {
-            pass.SetPipeline(step.Pipeline);
-            pass.SetBindGroup(0, skyGroup);
-            pass.SetBindGroup(1, step.Group);
-            pass.DispatchWorkgroups(x, y, 1);
-        }
-        Dispatch(transmittancePass, 256 / 8, 64 / 8);
-        Dispatch(multiplePass, 32, 32);
-        Dispatch(viewPass, (192 + 7) / 8, (108 + 7) / 8);
-        Dispatch(irradiancePass, 1, 1);
-        pass.End();
-        queue.Submit(encoder.Finish());
-        ThrowIfFailed();
+        cycle = Timecycle.Evaluate(hours);
+        exposureStops = Timecycle.Exposure(cycle, key.Direction);
     }
 
     /// <summary>The HDR target drawables are drawn to, sized to the window, and the tone map's view of it.</summary>
@@ -398,10 +261,18 @@ internal sealed unsafe partial class ViewportRenderer
     {
         Span<float> values = stackalloc float[LightBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
-        vectors[0] = new Vector4(key.Direction, MathF.Pow(2, Exposure));
-        vectors[1] = new Vector4(groundIlluminance, 0);
-        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[8..24]), in shadowMatrix);
-        vectors[6] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        float stops = exposureStops + Exposure;
+        Filmic filmic = Timecycle.FilmicFor(stops);
+        vectors[0] = new Vector4(key.Direction, MathF.Pow(2, stops));
+        vectors[1] = new Vector4(cycle.Directional, 0);
+        vectors[2] = new Vector4(cycle.NaturalDown, cycle.DownWrap);
+        vectors[3] = new Vector4(cycle.NaturalUp, cycle.OcclusionProp);
+        vectors[4] = new Vector4(cycle.DirectionalAmbient, cycle.OcclusionVehicle);
+        vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
+        vectors[6] = new Vector4(filmic.A, filmic.B, filmic.C, filmic.D);
+        vectors[7] = new Vector4(filmic.E, filmic.F, filmic.W, 1 / filmic.Curve(filmic.W));
+        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[32..48]), in shadowMatrix);
+        vectors[12] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -439,6 +310,6 @@ internal sealed unsafe partial class ViewportRenderer
         pass.Draw(3);
     }
 
-    /// <summary>A shader lit by the sky: scene.wgsl, light.wgsl, then its own file.</summary>
+    /// <summary>A shader with the light: scene.wgsl, light.wgsl, then its own file.</summary>
     private static string LitShader(string name) => Read("scene.wgsl") + "\n" + Read("light.wgsl") + "\n" + Read(name);
 }
