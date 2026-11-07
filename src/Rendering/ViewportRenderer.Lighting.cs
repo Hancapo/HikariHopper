@@ -9,11 +9,12 @@ namespace HikariHopper.Rendering;
 // Drawables' light: GTA V's timecycle at the viewer's time of day, the directional light's shadow (after RedFury's),
 // and drawables drawn in HDR, then exposed and tone-mapped as the game's post-process does, over the backdrop.
 // Collisions, navmeshes and the backdrop keep their own flat shading, in the theme's colours.
-//   shadow map -> backdrop and lines to the display -> drawables to HDR -> tone map over them
+//   reflection map (when the time changes) -> shadow map -> backdrop and lines to the display -> drawables to HDR ->
+//   tone map over them
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 208, ShadowViewBytes = 64;
+    private const int LightBytes = 224, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
@@ -69,6 +70,7 @@ internal sealed unsafe partial class ViewportRenderer
             Compare = CompareFunction.LessEqual,
             MaxAnisotropy = 1,
         })!;
+        CreateReflections();
         lightLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -86,6 +88,13 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 3,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
         lightGroup = device.CreateBindGroup(new BindGroupDescriptor
@@ -96,6 +105,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 0, Buffer = lightBuffer, Size = LightBytes },
                 new BindGroupEntry { Binding = 1, TextureView = shadowView },
                 new BindGroupEntry { Binding = 2, Sampler = compare },
+                new BindGroupEntry { Binding = 3, TextureView = reflectionView! },
+                new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
             ],
         });
 
@@ -216,6 +227,7 @@ internal sealed unsafe partial class ViewportRenderer
         key = DayCycle.Evaluate(hours);
         cycle = Timecycle.Evaluate(hours);
         exposureStops = Timecycle.Exposure(cycle, key.Direction);
+        DrawReflections(hours);
     }
 
     /// <summary>The HDR target drawables are drawn to, sized to the window, and the tone map's view of it.</summary>
@@ -271,8 +283,9 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
         vectors[6] = new Vector4(filmic.A, filmic.B, filmic.C, filmic.D);
         vectors[7] = new Vector4(filmic.E, filmic.F, filmic.W, 1 / filmic.Curve(filmic.W));
-        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[32..48]), in shadowMatrix);
-        vectors[12] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        vectors[8] = new Vector4(ReflectionMips, 0, 0, 0);
+        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[36..52]), in shadowMatrix);
+        vectors[13] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 

@@ -1,6 +1,7 @@
 // The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl and tonemap.wgsl: GTA V's
 // timecycle light at the viewer's time of day (Timecycle.cs), the exposure and filmic curve its post-process settles
-// on, and the directional light's shadow map. Put after scene.wgsl, as group 2.
+// on, the directional light's shadow map, and the reflection map (reflection_map.wgsl). Put after scene.wgsl, as
+// group 2.
 
 struct Light {
     // Unit direction towards the directional light (the sun, or the moon), and the exposure multiplier (2^stops) in w.
@@ -18,6 +19,8 @@ struct Light {
     // The filmic curve: A, B, C, D; then E, F, the white point W and one over the curve at W.
     filmic0: vec4f,
     filmic1: vec4f,
+    // The reflection map's mip count (gReflectionMipCount), in x.
+    reflection: vec4f,
     // From origin-relative positions to the shadow map's clip space.
     shadow: mat4x4f,
     // The shadow map's texel in metres, its depth range in metres, its resolution, and whether shadows are on.
@@ -27,6 +30,8 @@ struct Light {
 @group(2) @binding(0) var<uniform> light: Light;
 @group(2) @binding(1) var shadow_map: texture_depth_2d;
 @group(2) @binding(2) var shadow_compare: sampler_comparison;
+@group(2) @binding(3) var reflection_map: texture_2d<f32>;
+@group(2) @binding(4) var reflection_sampler: sampler;
 
 // PS_directional_ambient's natural ambient for a unit normal: the down light on what faces up, the up light on what
 // faces down, the down light wrapping past the horizon by the down wrap; and the directional ambient on what faces it.
@@ -64,4 +69,26 @@ fn sun_shadow(p: vec3f, n: vec3f) -> f32 {
         }
     }
     return sum / 9.0;
+}
+
+// Where PS_directional_ambient looks a direction up in the reflection map: a dual paraboloid, the upper hemisphere on
+// the right half of the map and the lower on the left.
+fn paraboloid_uv(r: vec3f) -> vec2f {
+    let p = r.xy / (abs(r.z) + 1.0);
+    let u = select(0.25 - 0.25 * p.x, 0.75 + 0.25 * p.x, r.z > 0.0);
+    return vec2f(u, 0.5 - 0.5 * p.y);
+}
+
+// PS_directional_ambient's reflection: the map in the reflected direction, at a mip chosen by gloss (the specular
+// exponent over 1500) with the game's curve, times what the surface reflects at this angle (fresnel times specular
+// intensity), and an energy term that runs from 1/pi for dull surfaces to one for glossy ones (the exponent over 563).
+// The caller scales it by the ambient scale, as the game does.
+fn gta_reflection(normal: vec3f, view: vec3f, exponent: f32, reflected_share: f32) -> vec3f {
+    let direction = reflect(-view, normal);
+    let rough = 1.0 - saturate(exponent / 1500.0);
+    let mips = light.reflection.x;
+    let level = select(rough * rough * 5.0 + mips - 5.0, rough * mips - 5.0, rough * mips < mips - 5.0);
+    let environment = textureSampleLevel(reflection_map, reflection_sampler, paraboloid_uv(direction), max(level, 0.0)).rgb;
+    let energy = 0.31830987 + 0.68169010 * saturate(exponent / 563.0);
+    return environment * reflected_share * energy;
 }

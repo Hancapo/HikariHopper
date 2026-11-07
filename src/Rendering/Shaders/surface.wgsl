@@ -270,6 +270,9 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     let scale = 1.0 - multiplier * (1.0 - saturate(surface.natural));
     let ambient = albedo * kept * gta_ambient(normal) * scale * scale;
 
+    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is.
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * scale * scale;
+
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
     var glow = vec3f(0.0);
@@ -277,5 +280,5 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
         let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w);
         glow = albedo * stored * 16.0 * n_dot_v;
     }
-    return sun + ambient + glow;
+    return sun + ambient + reflection + glow;
 }

@@ -56,8 +56,11 @@ internal static class Timecycle
             .ToDictionary(field => field.Name, field => field.Value.EnumerateArray().Select(value => value.GetSingle()).ToArray());
     }
 
-    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
-    internal static TimecycleLight Evaluate(float hours)
+    /// <summary>
+    /// The timecycle at <paramref name="hours"/> after midnight, each field interpolated between the keyframes either
+    /// side, as the game blends them; any finite value wraps to the day.
+    /// </summary>
+    internal static TimecycleSample Sample(float hours)
     {
         if (!float.IsFinite(hours))
             throw new ArgumentOutOfRangeException(nameof(hours));
@@ -70,9 +73,18 @@ internal static class Timecycle
             index--;
         int next = (index + 1) % Hours.Length;
         float end = next == 0 ? 24 : Hours[next];
-        float t = (hours - Hours[index]) / (end - Hours[index]);
-        float Get(string name) => float.Lerp(Values[name][index], Values[name][next], t);
-        Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));
+        return new(index, next, (hours - Hours[index]) / (end - Hours[index]));
+    }
+
+    /// <summary>One field of the timecycle between two keyframes.</summary>
+    internal static float Field(string name, int index, int next, float t) => float.Lerp(Values[name][index], Values[name][next], t);
+
+    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
+    internal static TimecycleLight Evaluate(float hours)
+    {
+        TimecycleSample sample = Sample(hours);
+        float Get(string name) => sample.Get(name);
+        Vector3 Colour(string name) => sample.Colour(name);
 
         float natural = Get("natural_ambient_multiplier");
         float occlusion = Get("light_amb_occ_mult");
@@ -134,6 +146,15 @@ internal static class Timecycle
     internal static Filmic FilmicFor(float stops) => Filmic.Lerp(Bright, Dark, Math.Clamp((stops - BrightExposure) / (DarkExposure - BrightExposure), 0, 1));
 
     internal static float Luminance(Vector3 colour) => Vector3.Dot(colour, new(.2125f, .7154f, .0721f));
+}
+
+/// <summary>The timecycle between two keyframes, a fraction of the way from one to the next.</summary>
+internal readonly record struct TimecycleSample(int Index, int Next, float T)
+{
+    internal float Get(string name) => Timecycle.Field(name, Index, Next, T);
+
+    /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
+    internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));
 }
 
 /// <summary>GTA's filmic tone curve (Hable's), as PS_Composite applies it: A to F shape it, W is the white point.</summary>
