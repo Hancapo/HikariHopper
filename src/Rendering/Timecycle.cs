@@ -32,7 +32,7 @@ internal static class Timecycle
     private static readonly Dictionary<string, float[]> Values;
 
     // visualsettings.dat: the curve from the scene's luminance to an exposure in stops, in both editions.
-    private const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
+    internal const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
 
     /// <summary>
     /// visualsettings.dat's filmic curves, bright and dark, and the exposures they belong to: the timecycle does not
@@ -42,8 +42,8 @@ internal static class Timecycle
     internal const float BrightExposure = -.5f, DarkExposure = 3;
 
     /// <summary>
-    /// The albedo the exposure is measured on: a mid-grey map, squared as GTA's lighting reads it. The game measures
-    /// the whole frame; the viewer has no world around the model, so it measures open ground under this light.
+    /// The albedo of the ground the viewer puts below the horizon, where the game has its world: a mid-grey map,
+    /// squared as GTA's lighting reads it.
     /// </summary>
     internal const float ReferenceAlbedo = .25f;
 
@@ -133,14 +133,20 @@ internal static class Timecycle
         return Math.Clamp(stops, light.ExposureMin, light.ExposureMax);
     }
 
-    /// <summary>The exposure GTA settles on for open ground of the reference albedo under this light.</summary>
-    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight)
+    /// <summary>
+    /// The stand-in ground's radiance: open ground of the reference albedo under this light, lit as GTA lights it
+    /// (the directional light, the natural ambient from above and the directional ambient).
+    /// </summary>
+    internal static Vector3 GroundRadiance(in TimecycleLight light, Vector3 towardsLight)
     {
         Vector3 up = Vector3.UnitZ;
         Vector3 irradiance = light.Directional * MathF.Max(towardsLight.Z, 0) + NaturalAmbient(light, up)
             + light.DirectionalAmbient * MathF.Max(Vector3.Dot(DirectionalAmbientDirection(light, towardsLight), up), 0);
-        return ExposureFor(ReferenceAlbedo * Luminance(irradiance), light);
+        return ReferenceAlbedo * irradiance;
     }
+
+    /// <summary>The exposure GTA settles on for a frame of nothing but that ground.</summary>
+    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight) => ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
 
     /// <summary>The filmic curve for this exposure: bright at or below the bright exposure, dark at or above the dark.</summary>
     internal static Filmic FilmicFor(float stops) => Filmic.Lerp(Bright, Dark, Math.Clamp((stops - BrightExposure) / (DarkExposure - BrightExposure), 0, 1));

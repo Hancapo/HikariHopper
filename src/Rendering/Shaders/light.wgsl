@@ -4,7 +4,7 @@
 // group 2.
 
 struct Light {
-    // Unit direction towards the directional light (the sun, or the moon), and the exposure multiplier (2^stops) in w.
+    // Unit direction towards the directional light (the sun, or the moon).
     sun_direction: vec4f,
     // The directional light's colour times its multiplier, as the directional pass reads it.
     sun_colour: vec4f,
@@ -16,9 +16,15 @@ struct Light {
     directional_ambient: vec4f,
     // The way the directional ambient comes from, a unit vector.
     directional_ambient_direction: vec4f,
-    // The filmic curve: A, B, C, D; then E, F, the white point W and one over the curve at W.
-    filmic0: vec4f,
-    filmic1: vec4f,
+    // The exposure curve: scale, power and offset (visualsettings.dat), and the timecycle's exposure plus the viewer's.
+    exposure_curve: vec4f,
+    // The timecycle's exposure range, then the exposures of the bright and dark filmic curves.
+    exposure_range: vec4f,
+    // The bright and dark filmic curves: A, B, C, D; then E, F and the white point W.
+    filmic_bright0: vec4f,
+    filmic_bright1: vec4f,
+    filmic_dark0: vec4f,
+    filmic_dark1: vec4f,
     // The reflection map's mip count (gReflectionMipCount), in x.
     reflection: vec4f,
     // From origin-relative positions to the shadow map's clip space.

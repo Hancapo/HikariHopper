@@ -119,25 +119,12 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>
     /// Draws the reflection map for this time of day: GTA's sky as its reflection pass draws it, the viewer's ground
-    /// below the horizon, then each mip from the one above.
+    /// below the horizon, then each mip from the one above. Also sets the sky the frame is measured against.
     /// </summary>
     private void DrawReflections(float hours)
     {
-        SkySystem sky = SkySystem.At(hours, reflection: true);
-        Span<Vector4> values = stackalloc Vector4[SkyBytes / 16];
-        values[0] = new Vector4(sky.AzimuthEast, sky.AzimuthTransitionPosition);
-        values[1] = new Vector4(sky.AzimuthWest, sky.HdrIntensity);
-        values[2] = new Vector4(sky.AzimuthTransition, 0);
-        values[3] = new Vector4(sky.Zenith, 0);
-        values[4] = new Vector4(sky.ZenithTransition, 0);
-        values[5] = sky.ZenithConstants;
-        values[6] = new Vector4(sky.SunColourHdr, 0);
-        values[7] = sky.SunConstants;
-        values[8] = new Vector4(DayCycle.SunDirection(hours), 0);
-        // The ground the viewer stands the model on: lit as the timecycle's up light says the ground is.
-        values[9] = new Vector4(cycle.NaturalUp, 0);
-        queue.WriteBuffer(skyBuffer!, 0, (ReadOnlySpan<Vector4>)values);
-
+        WriteSky(frameSkyBuffer!, SkySystem.At(hours), hours);
+        WriteSky(skyBuffer!, SkySystem.At(hours, reflection: true), hours);
         CommandEncoder encoder = device.CreateCommandEncoder();
         for (int level = 0; level < reflectionMips.Length; level++)
         {
@@ -157,5 +144,25 @@ internal sealed unsafe partial class ViewportRenderer
         }
         queue.Submit(encoder.Finish());
         ThrowIfFailed();
+    }
+
+    /// <summary>
+    /// GTA's sky constants for sky_system.wgsl, with where the sun is and the ground the viewer puts below the
+    /// horizon, where the game has its world: mid-grey open ground under the timecycle's light.
+    /// </summary>
+    private void WriteSky(Buffer target, SkySystem sky, float hours)
+    {
+        Span<Vector4> values = stackalloc Vector4[SkyBytes / 16];
+        values[0] = new Vector4(sky.AzimuthEast, sky.AzimuthTransitionPosition);
+        values[1] = new Vector4(sky.AzimuthWest, sky.HdrIntensity);
+        values[2] = new Vector4(sky.AzimuthTransition, 0);
+        values[3] = new Vector4(sky.Zenith, 0);
+        values[4] = new Vector4(sky.ZenithTransition, 0);
+        values[5] = sky.ZenithConstants;
+        values[6] = new Vector4(sky.SunColourHdr, 0);
+        values[7] = sky.SunConstants;
+        values[8] = new Vector4(DayCycle.SunDirection(hours), 0);
+        values[9] = new Vector4(Timecycle.GroundRadiance(cycle, key.Direction), 0);
+        queue.WriteBuffer(target, 0, (ReadOnlySpan<Vector4>)values);
     }
 }

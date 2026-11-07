@@ -89,7 +89,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 new BindGroupLayoutEntry
                 {
                     Binding = 0,
-                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment | ShaderStage.Compute,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = SceneBytes },
                 },
             ],
@@ -370,6 +370,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             lit.SetBindGroup(2, lightGroup!);
             DrawSurfaces(lit);
             lit.End();
+            MeasureFrame(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
