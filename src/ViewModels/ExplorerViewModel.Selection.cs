@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using Avalonia.Threading;
 using HikariHopper.Core;
 using HikariHopper.Core.Search;
 using HikariHopper.Infrastructure;
@@ -430,7 +431,8 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>
     /// The folder's other texture dictionaries, for a drawable's textures that neither it nor the dictionaries named
-    /// for it hold; each is read only when the search reaches it, while the viewer opens the file.
+    /// for it hold; each is read only when the search reaches it, while the viewer reads the file in the background.
+    /// The archive reader is the explorer's, so the read itself happens on the UI thread.
     /// </summary>
     private IReadOnlyList<Rendering.NearbyDictionary> NearbyDictionaries(EntryRecord entry)
     {
@@ -440,7 +442,8 @@ public sealed partial class ExplorerViewModel
         RpfProvider provider = Provider;
         return [.. entries.Select(row => row.Record)
             .Where(sibling => !sibling.IsDirectory && sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) && !named.Contains(sibling.Name))
-            .Select(sibling => new Rendering.NearbyDictionary(sibling.Name, sibling.Size, () => provider.ReadEntryBytes(sibling)))];
+            .Select(sibling => new Rendering.NearbyDictionary(sibling.Name, sibling.Size,
+                () => Dispatcher.UIThread.CheckAccess() ? provider.ReadEntryBytes(sibling) : Dispatcher.UIThread.Invoke(() => provider.ReadEntryBytes(sibling))))];
     }
 
     private void OpenArchiveEntry(EntryRecord entry)

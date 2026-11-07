@@ -149,6 +149,8 @@ public sealed class StartupSequence
     {
         splash?.Close();
         window.Activate();
+        // The 3D viewer's GPU and shaders, ready before a model is opened.
+        Dispatcher.UIThread.Post(() => Rendering.GpuDevice.WarmUp(), DispatcherPriority.ApplicationIdle);
     }
 
     private void Fail(Exception error)
