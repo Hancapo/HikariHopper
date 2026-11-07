@@ -4,8 +4,9 @@
 //   - PS_DeferredVehicleTextured: vehicle paint, mesh, shuts, tyres, interiors and the rest.
 // That is then lit with the game's directional pass (PS_directional_just_dir) and the core of its ambient one
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
-// arithmetic, for one sun and an ambient that doesn't change.
-// Scene, the colour helpers and the dither come from scene.wgsl.
+// arithmetic. The light is the viewer's sky, after RedFury: the sun through the atmosphere, with its shadow, and the
+// sky's irradiance (light.wgsl). The result is linear HDR with coverage, for tonemap.wgsl.
+// Scene comes from scene.wgsl, the light from light.wgsl.
 
 struct Material {
     // specularFresnel, specularFalloffMult, specularIntensityMult, bumpiness.
@@ -130,15 +131,16 @@ fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @loca
     normal = select(-normal, normal, front);
 
     let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
-    let light = normalize(scene.sun.xyz);
+    let to_light = normalize(light.sun_direction.xyz);
     var surface: Surface;
     if (material.extra.w > 0.5) {
-        surface = vehicle_surface(input, diffuse, specular_sample, dirt, normal, view, light);
+        surface = vehicle_surface(input, diffuse, specular_sample, dirt, normal, view, to_light);
     } else {
         surface = textured_surface(input, diffuse, specular_sample, normal);
     }
     surface.alpha = select(1.0, surface.alpha, mode == 2u);
-    return vec4f(dither(lit(input, surface, diffuse, view, light), input.position.xy), surface.alpha);
+    let shadow = sun_shadow(input.place, normalize(input.normal));
+    return vec4f(lit(input, surface, diffuse, view, to_light, shadow), surface.alpha);
 }
 
 // PS_DeferredTextured. Specular intensity, power and fresnel as written to the G-buffer: a specular map's R and G
@@ -168,7 +170,7 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
 // applies (the pixel shader's dirt and ramp terms); its green scales the damage deformation in the vertex shader
 // (VS_VehicleTransformD), which an undamaged vehicle doesn't have.
 fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec4f, normal: vec3f, view: vec3f,
-    light: vec3f) -> Surface {
+    to_light: vec3f) -> Surface {
     var surface: Surface;
     surface.normal = normal;
     let occlusion = input.colour0.r;
@@ -225,7 +227,7 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
 
     // The second lobe, a paint's sheen: lit from the sun swung towards overhead by DirLerp, and kept in the albedo.
     if (material.vehicle.y > 0.5) {
-        let towards = normalize(mix(light, vec3f(0.0, 0.0, 1.0), material.specular2.w));
+        let towards = normalize(mix(to_light, vec3f(0.0, 0.0, 1.0), material.specular2.w));
         let half_vector = normalize(view + towards);
         let sheen = pow(saturate(dot(normal, half_vector) + 1e-8), lobe_exponent + 1e-8);
         base = min(base + material.specular2.rgb * lobe_strength * sheen, vec3f(240.0));
@@ -238,8 +240,9 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
     return surface;
 }
 
-// The game's directional and ambient passes over what a family wrote.
-fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, light: vec3f) -> vec3f {
+// The game's directional and ambient passes over what a family wrote. The game's lighting has no 1/pi, so the sun
+// enters it as its illuminance over pi, and the sky as its irradiance over pi, as the harmonics hold it.
+fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {
     let normal = surface.normal;
     // The lighting passes read albedo squared: the maps are gamma 2.
     let albedo = surface.base * surface.base;
@@ -248,24 +251,21 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, ligh
     let p = max(surface.power, 0.0);
     let exponent = 3.0 * min(p, 500.0) + 558.0 * max(0.0, p - 500.0);
 
-    let half_vector = normalize(light + view);
-    let n_dot_l = saturate(dot(normal, light));
+    let half_vector = normalize(to_light + view);
+    let n_dot_l = saturate(dot(normal, to_light));
     let n_dot_v = saturate(dot(normal, view));
-    let h_dot_l = saturate(dot(half_vector, light));
+    let h_dot_l = saturate(dot(half_vector, to_light));
     let n_dot_h = saturate(dot(normal, half_vector) + 1e-8);
 
     // Diffuse loses what the surface reflects at this angle; specular is normalised Blinn-Phong.
     let kept = 1.0 - fresnel(surface.fresnel, n_dot_v) * spec;
     let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(surface.fresnel, h_dot_l);
-    let sun = scene.sun_colour.rgb * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
+    let sun = light.sun_illuminance.rgb / PI * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
 
-    // Ambient: a hemisphere by how far the normal faces up, scaled by the natural and artificial scales, each squared
-    // as the ambient pass decodes them.
-    let up = saturate(normal.z * 0.5 + 0.5);
+    // Ambient: the sky's irradiance for this normal, scaled by the natural ambient (squared as the ambient pass
+    // decodes it). Outdoors in daylight the game's artificial ambient is nothing to speak of, so it is left out.
     let natural = surface.natural * surface.natural;
-    let artificial = surface.artificial * surface.artificial;
-    let sky = (scene.ambient_down.rgb + scene.ambient_up.rgb * up) * natural + scene.artificial.rgb * artificial;
-    let ambient = albedo * kept * sky;
+    let ambient = albedo * kept * sky_ambient(normal) * natural;
 
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
@@ -274,5 +274,7 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, ligh
         let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w);
         glow = albedo * stored * 16.0 * n_dot_v;
     }
-    return (sun + ambient + glow) * scene.sun.w;
+    return sun + ambient + glow;
 }
+
+const PI: f32 = 3.14159265359;

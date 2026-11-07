@@ -26,14 +26,6 @@ struct Scene {
     origin: vec4f,
     // The viewport's width and height in pixels.
     viewport: vec4f,
-    // The light drawables are shaded in, as GTA's directional and ambient passes take it (surface.wgsl): the
-    // direction towards the sun, and the exposure in w; the sun's colour; natural ambient at the bottom of the
-    // hemisphere and what it gains towards the top; artificial ambient.
-    sun: vec4f,
-    sun_colour: vec4f,
-    ambient_down: vec4f,
-    ambient_up: vec4f,
-    artificial: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> scene: Scene;

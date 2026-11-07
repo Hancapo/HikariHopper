@@ -16,7 +16,7 @@ namespace HikariHopper.Rendering;
 /// <remarks>Single-threaded: create, draw, resize and dispose it on one thread, while its window is alive.</remarks>
 internal sealed unsafe partial class ViewportRenderer : IDisposable
 {
-    private const int SceneBytes = 368;
+    private const int SceneBytes = 288;
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
     private readonly Surface surface;
@@ -179,6 +179,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
         });
+        CreateLighting();
         CreateSurfacePipelines();
         Resize(width, height);
         ThrowIfFailed();
@@ -275,6 +276,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             SampleCount = 1,
         });
         depthView = depth.CreateView();
+        CreateHdr();
     }
 
     /// <summary>Draws and presents a frame.</summary>
@@ -301,6 +303,13 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             Aspect = TextureAspect.All,
         });
         CommandEncoder encoder = device.CreateCommandEncoder();
+        // A drawable's shadow first: the ground under it and the drawable itself both read it.
+        bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
+        if (drawable)
+        {
+            WriteLight(shadows: true);
+            DrawShadow(encoder);
+        }
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
             ColorAttachments =
@@ -325,13 +334,14 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         pass.SetBindGroup(0, sceneGroup);
         pass.SetPipeline(backdrop);
         pass.Draw(3);
+        if (drawable)
+            DrawGroundShadow(pass);
         if (vertexBuffer is not null)
         {
             pass.SetPipeline(meshes);
             pass.SetVertexBuffer(0, vertexBuffer);
             pass.Draw(vertexCount);
         }
-        DrawSurfaces(pass);
         if (segmentBuffer is not null)
         {
             pass.SetPipeline(lines);
@@ -339,6 +349,38 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             pass.Draw(6, segmentCount);
         }
         pass.End();
+        // Drawables in HDR, then tone-mapped over the backdrop.
+        if (drawable)
+        {
+            RenderPassEncoder lit = encoder.BeginRenderPass(new RenderPassDescriptor
+            {
+                ColorAttachments =
+                [
+                    new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Clear, StoreOp = StoreOp.Store, ClearValue = new Color(0, 0, 0, 0) },
+                ],
+                DepthStencilAttachment = new RenderPassDepthStencilAttachment
+                {
+                    View = depthView,
+                    DepthLoadOp = LoadOp.Clear,
+                    DepthStoreOp = StoreOp.Discard,
+                    DepthClearValue = 0,
+                },
+            });
+            lit.SetBindGroup(0, sceneGroup);
+            lit.SetBindGroup(2, lightGroup!);
+            DrawSurfaces(lit);
+            lit.End();
+            RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
+            {
+                ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+            });
+            mapped.SetPipeline(tonemapPipeline!);
+            mapped.SetBindGroup(0, sceneGroup);
+            mapped.SetBindGroup(1, tonemapGroup!);
+            mapped.SetBindGroup(2, lightGroup!);
+            mapped.Draw(3);
+            mapped.End();
+        }
         queue.Submit(encoder.Finish());
         surface.Present();
     }
@@ -359,7 +401,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         ViewportPalette.Linear().CopyTo(vectors[5..]);
         vectors[12] = new Vector4(origin, 0);
         vectors[13] = new Vector4(width, height, 0, 0);
-        WriteLight(vectors[14..]);
         queue.WriteBuffer(sceneBuffer, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -408,6 +449,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         disposed = true;
         // The rest is released with its handles; the swap chain lets go of the window now.
         depth?.Destroy();
+        hdr?.Destroy();
+        shadowMap?.Destroy();
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
         ClearSurfaces();
