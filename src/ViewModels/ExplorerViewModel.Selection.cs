@@ -414,7 +414,7 @@ public sealed partial class ExplorerViewModel
             return [];
         string wanted = Path.ChangeExtension(entry.Name, ".ytd");
         var found = new List<byte[]>();
-        foreach (EntryRecord sibling in entries.Select(row => row.Record))
+        foreach (EntryRecord sibling in FolderRecords())
         {
             if (!string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase) || sibling.Size > ModelFile.MaxSize)
                 continue;
@@ -427,6 +427,22 @@ public sealed partial class ExplorerViewModel
             }
         }
         return found;
+    }
+
+    /// <summary>
+    /// Everything in the open folder, whatever the folder filter shows, in name order: a model's texture dictionaries
+    /// are found there even when the filter hides them.
+    /// </summary>
+    private List<EntryRecord> FolderRecords()
+    {
+        try
+        {
+            return [.. Provider.Entries(currentPath).OrderBy(record => record.Name, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            return [];
+        }
     }
 
     private void OpenArchiveEntry(EntryRecord entry)
