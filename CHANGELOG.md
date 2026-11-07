@@ -21,6 +21,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Models in the 3D viewer reflect themselves and GTA V's sky, as the game draws its reflection map from the camera, and are exposed for what's in view, as the game exposes its frame. ([#97](https://github.com/Hancapo/HikariHopper/pull/97))
 - Each vehicle shader in the 3D viewer writes its specular as its own program does, and liveries and decals lie over the paint. ([#98](https://github.com/Hancapo/HikariHopper/pull/98))
 - The 3D viewer opens models faster: its GPU and shaders are made once, in the background after the app starts, and a model is read while the viewer opens instead of freezing the window. ([#100](https://github.com/Hancapo/HikariHopper/pull/100))
+- Terrain in the 3D viewer is shaded with GTA V's terrain shaders: its four ground layers blended by the vertex colours or a lookup map, with their bumps and tints. ([#101](https://github.com/Hancapo/HikariHopper/pull/101))
 
 ### Changed
 

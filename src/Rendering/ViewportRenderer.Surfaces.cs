@@ -6,8 +6,8 @@ using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
 
-// Drawables: their surfaces drawn with surface.wgsl into the HDR target, solid parts first, then blended ones from
-// far to near; ViewportRenderer.Lighting.cs lights and tone-maps them.
+// Drawables: their surfaces drawn with surface.wgsl (terrain with terrain.wgsl) into the HDR target, solid parts
+// first, then blended ones from far to near; ViewportRenderer.Lighting.cs lights and tone-maps them.
 internal sealed unsafe partial class ViewportRenderer
 {
     private readonly bool compressedTextures;
@@ -16,6 +16,8 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? doubleSidedSurfaces;
     private RenderPipeline? blendedSurfaces;
     private RenderPipeline? solidReflected, doubleSidedReflected, blendedReflected;
+    private BindGroupLayout? terrainLayout;
+    private RenderPipeline? terrainSurfaces, terrainReflected;
     private Sampler? surfaceSampler;
     private Sampler? paletteSampler;
     private TextureView? white;
@@ -26,7 +28,7 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly List<WebGpuSharp.Texture> uploaded = [];
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
-    private (SurfacePart Part, BindGroup Material, AlphaMode Mode)[] surfaceParts = [];
+    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, bool Terrain)[] surfaceParts = [];
     private readonly List<Buffer> materialBuffers = [];
 
     private void CreateSurfacePipelines()
@@ -61,19 +63,49 @@ internal sealed unsafe partial class ViewportRenderer
                 Map(7), Map(8), Map(9),
             ],
         });
-        PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!] });
-        PipelineLayout reflectedLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
+        // Terrain: its four layers' diffuse and bump maps, the lookup map and the tint palette.
+        terrainLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
-            BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!, reflectionViewLayout!],
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = TerrainUniformBytes },
+                },
+                new BindGroupLayoutEntry { Binding = 1, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                Map(2), Map(3), Map(4), Map(5), Map(6), Map(7), Map(8), Map(9), Map(10),
+                new BindGroupLayoutEntry
+                {
+                    Binding = 11,
+                    Visibility = ShaderStage.Vertex,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 12, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+            ],
         });
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
-        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false) => gpu.Pipeline($"surface/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        PipelineLayout Layout(BindGroupLayout material, bool reflected) => device.CreatePipelineLayout(new PipelineLayoutDescriptor
         {
-            Layout = reflected ? reflectedLayout : layout,
+            BindGroupLayouts = reflected ? [sceneLayout, material, lightLayout!, reflectionViewLayout!] : [sceneLayout, material, lightLayout!],
+        });
+        PipelineLayout layout = Layout(materialLayout, false), reflectedLayout = Layout(materialLayout, true);
+        PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
+        Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("terrain.wgsl") }));
+        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false, bool terrain = false) => gpu.Pipeline($"{(terrain ? "terrain" : "surface")}/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = terrain ? (reflected ? terrainReflectedLayout : terrainPipelineLayout) : reflected ? reflectedLayout : layout,
             Vertex = new VertexState
             {
-                Module = shader.Value,
-                EntryPoint = reflected ? "vs_surface_paraboloid" : "vs_surface",
+                Module = terrain ? terrainShader.Value : shader.Value,
+                EntryPoint = (terrain, reflected) switch
+                {
+                    (true, true) => "vs_terrain_paraboloid",
+                    (true, false) => "vs_terrain",
+                    (false, true) => "vs_surface_paraboloid",
+                    _ => "vs_surface",
+                },
                 Buffers = new[]
                 {
                     new VertexBufferLayout
@@ -96,8 +128,14 @@ internal sealed unsafe partial class ViewportRenderer
             Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, FrontFace = FrontFace.CCW, CullMode = cull },
             Fragment = new FragmentState
             {
-                Module = shader.Value,
-                EntryPoint = reflected ? "fs_surface_reflected" : "fs_surface",
+                Module = terrain ? terrainShader.Value : shader.Value,
+                EntryPoint = (terrain, reflected) switch
+                {
+                    (true, true) => "fs_terrain_reflected",
+                    (true, false) => "fs_terrain",
+                    (false, true) => "fs_surface_reflected",
+                    _ => "fs_surface",
+                },
                 Targets = new[]
                 {
                     new ColorTargetState
@@ -128,6 +166,9 @@ internal sealed unsafe partial class ViewportRenderer
         solidReflected = Pipeline(CullMode.None, blend: false, reflected: true);
         doubleSidedReflected = solidReflected;
         blendedReflected = Pipeline(CullMode.None, blend: true, reflected: true);
+        // Terrain is solid ground, its backs culled.
+        terrainSurfaces = Pipeline(CullMode.Back, blend: false, terrain: true);
+        terrainReflected = Pipeline(CullMode.None, blend: false, reflected: true, terrain: true);
         surfaceSampler = device.CreateSampler(new SamplerDescriptor
         {
             AddressModeU = AddressMode.Repeat,
@@ -170,12 +211,13 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
         for (int i = 0; i < groups.Length; i++)
-            groups[i] = MaterialGroup(drawable.Materials[i]);
-        // Decals blend over what they lie on.
+            groups[i] = drawable.Materials[i].Terrain ? TerrainGroup(drawable.Materials[i]) : MaterialGroup(drawable.Materials[i]);
+        // Decals blend over what they lie on; terrain is always solid.
         surfaceParts = [.. drawable.Parts.Select(part =>
         {
             SurfaceMaterial material = drawable.Materials[part.Material];
-            return (part, groups[part.Material], material.Decal ? AlphaMode.Blend : material.AlphaMode);
+            AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
+            return (part, groups[part.Material], mode, material.Terrain);
         })];
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
@@ -222,6 +264,29 @@ internal sealed unsafe partial class ViewportRenderer
         });
     }
 
+    /// <summary>The bytes of terrain.wgsl's Terrain uniform, the start of the material's.</summary>
+    private const int TerrainUniformBytes = 32;
+
+    private BindGroup TerrainGroup(SurfaceMaterial material)
+    {
+        Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        materialBuffers.Add(uniforms);
+        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+        // A missing layer reads white, as a missing diffuse map does elsewhere, and a missing bump map flat; without a
+        // lookup map every weight is nothing, which is all the first layer.
+        var entries = new List<BindGroupEntry>
+        {
+            new() { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+            new() { Binding = 1, Sampler = surfaceSampler! },
+        };
+        for (int i = 0; i < 8; i++)
+            entries.Add(new BindGroupEntry { Binding = (uint)(2 + i), TextureView = View(material.Layers[i]) ?? (i < 4 ? white! : flat!) });
+        entries.Add(new BindGroupEntry { Binding = 10, TextureView = View(material.Lookup) ?? clear! });
+        entries.Add(new BindGroupEntry { Binding = 11, TextureView = View(material.TintPalette) ?? white! });
+        entries.Add(new BindGroupEntry { Binding = 12, Sampler = paletteSampler! });
+        return device.CreateBindGroup(new BindGroupDescriptor { Layout = terrainLayout!, Entries = [.. entries] });
+    }
+
     private void DrawSurfaces(RenderPassEncoder pass, bool reflected = false)
     {
         if (surfaceVertices is null || surfaceIndices is null || surfaceParts.Length == 0)
@@ -229,17 +294,18 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetVertexBuffer(0, surfaceVertices);
         pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
-        foreach (var (part, group, mode) in surfaceParts)
+        foreach (var (part, group, mode, terrain) in surfaceParts)
             if (mode != AlphaMode.Blend)
             {
-                pass.SetPipeline(reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
+                pass.SetPipeline(terrain ? (reflected ? terrainReflected! : terrainSurfaces!)
+                    : reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
                     : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!);
                 pass.SetBindGroup(1, group);
                 pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
             }
         Vector3 eye = Camera.Eye - origin;
         pass.SetPipeline(reflected ? blendedReflected! : blendedSurfaces!);
-        foreach (var (part, group, _) in surfaceParts.Where(p => p.Mode == AlphaMode.Blend).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
+        foreach (var (part, group, _, _) in surfaceParts.Where(p => p.Mode == AlphaMode.Blend).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
         {
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
