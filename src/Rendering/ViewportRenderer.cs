@@ -410,6 +410,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         depth?.Destroy();
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
+        ClearSurfaces();
         surface.Unconfigure();
     }
 }

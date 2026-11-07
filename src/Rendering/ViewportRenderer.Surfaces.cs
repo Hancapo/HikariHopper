@@ -31,6 +31,7 @@ internal sealed unsafe partial class ViewportRenderer
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     private (SurfacePart Part, BindGroup Material, AlphaMode Mode)[] surfaceParts = [];
+    private readonly List<Buffer> materialBuffers = [];
 
     private void CreateSurfacePipelines()
     {
@@ -172,6 +173,12 @@ internal sealed unsafe partial class ViewportRenderer
 
     private void ClearSurfaces()
     {
+        // The GPU memory goes now, not whenever the handles are collected.
+        surfaceVertices?.Destroy();
+        surfaceIndices?.Destroy();
+        foreach (Buffer buffer in materialBuffers)
+            buffer.Destroy();
+        materialBuffers.Clear();
         surfaceVertices = surfaceIndices = null;
         surfaceParts = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
@@ -183,6 +190,7 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroup MaterialGroup(SurfaceMaterial material)
     {
         Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        materialBuffers.Add(uniforms);
         queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
         return device.CreateBindGroup(new BindGroupDescriptor
         {
