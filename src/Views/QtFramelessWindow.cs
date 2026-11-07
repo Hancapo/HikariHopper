@@ -7,7 +7,7 @@ namespace HikariHopper.Views;
 /// <summary>
 /// Gives an Avalonia window the native shape Qt gave <c>Qt.FramelessWindowHint</c> windows on
 /// Windows: a plain <c>WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN</c> window with no caption,
-/// sizing frame or minimize/maximize boxes. On Windows 11 the window manager also rounds its
+/// sizing frame or minimize box, and a maximize box only where it can be resized (for snap layouts). On Windows 11 the window manager also rounds its
 /// corners and draws the blue piping along the curve.
 /// </summary>
 /// <remarks>
@@ -27,6 +27,7 @@ public static class QtFramelessWindow
     private const uint WsMaximize = 0x01000000;
     private const uint WsDisabled = 0x08000000;
     private const uint WsExWindowEdge = 0x00000100;
+    private const uint WsMaximizeBox = 0x00010000;
 
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaBorderColor = 34;
@@ -44,7 +45,10 @@ public static class QtFramelessWindow
         Win32Properties.AddWindowStylesCallback(window, (style, exStyle) =>
         {
             uint state = style & (WsVisible | WsMinimize | WsMaximize | WsDisabled);
-            return (WsPopup | WsClipSiblings | WsClipChildren | state, exStyle & ~WsExWindowEdge);
+            // A window that can be resized says it can be maximized too: Windows 11 offers snap layouts only then.
+            // There is no caption to draw the box on, so nothing shows for it.
+            uint maximize = window.CanResize ? WsMaximizeBox : 0;
+            return (WsPopup | WsClipSiblings | WsClipChildren | maximize | state, exStyle & ~WsExWindowEdge);
         });
         window.Opened += (_, _) =>
         {

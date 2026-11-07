@@ -8,6 +8,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Hovering the maximize button on Windows 11 shows the snap layouts. ([#93](https://github.com/Hancapo/HikariHopper/pull/93))
+
 ### Changed
 
 ### Fixed
