@@ -514,8 +514,8 @@ public sealed class ControlMetricsTests
     {
         // Their share of the window, within their least and most, never closer than 24px to an edge.
         var settings = new SettingsDialog();
-        Assert.Equal(new Size(870, 592), ModalOverlay.SizeFor(settings, new Size(1360, 800)));
-        Assert.Equal(new Size(1040, 760), ModalOverlay.SizeFor(settings, new Size(2560, 1400)));
+        Assert.Equal(new Size(816, 592), ModalOverlay.SizeFor(settings, new Size(1360, 800)));
+        Assert.Equal(new Size(880, 640), ModalOverlay.SizeFor(settings, new Size(2560, 1400)));
         Assert.Equal(new Size(700, 460), ModalOverlay.SizeFor(settings, new Size(940, 540)));
         Assert.Equal(new Size(552, 352), ModalOverlay.SizeFor(settings, new Size(600, 400)));
         var about = new AboutDialog();
@@ -529,15 +529,40 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
+    public void GamePathRowKeepsItsSizeWhateverItsFolder() => UiThread.Run(() =>
+    {
+        // Not set, set and found, set and not found: the same height every time, so the card never moves. In a
+        // window, whose layout rounding is what turned the check's taller line into a pixel.
+        var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
+        var window = new Window { Width = 520, Height = 200, Content = new StackPanel { Children = { row } } };
+        window.Show();
+        double Height()
+        {
+            window.UpdateLayout();
+            return row.Bounds.Height;
+        }
+        double unset = Height();
+        row.GamePath = @"D:\Games\Grand Theft Auto V Enhanced";
+        row.PathValid = true;
+        Assert.Equal(unset, Height());
+        row.PathValid = false;
+        Assert.Equal(unset, Height());
+        window.Close();
+    });
+
+    [AvaloniaFact]
     public void GamePathRowReportsDetection() => UiThread.Run(() =>
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
         Assert.Equal("Not set", row.StatusMessage);
+        Assert.Equal("folder", row.BrowseButton.IconKind);
+        Assert.Equal("Choose folder…", ToolTip.GetTip(row.BrowseButton));
         Assert.False(row.ClearButton.IsVisible);
         Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);
+        Assert.Equal("Change folder…", ToolTip.GetTip(row.BrowseButton));
         Assert.True(row.ClearButton.IsVisible);
         row.PathValid = true;
         Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);

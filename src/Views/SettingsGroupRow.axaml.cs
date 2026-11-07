@@ -1,15 +1,23 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 
 namespace HikariHopper.Views;
 
-/// <summary>A group in the Settings rail (port of <c>SettingsGroupRow.qml</c>).</summary>
+/// <summary>
+/// A group in the Settings rail (port of <c>SettingsGroupRow.qml</c>). An available group lights up under the
+/// pointer and is chosen with a click, or from the keyboard: Tab reaches it, and Enter or Space chooses it.
+/// </summary>
 public partial class SettingsGroupRow : UserControl
 {
     public static readonly StyledProperty<string> LabelProperty =
         AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Label), "");
+
+    /// <summary>The group's Lucide icon.</summary>
+    public static readonly StyledProperty<string> IconProperty =
+        AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Icon), "");
 
     public static readonly StyledProperty<string> NoteProperty =
         AvaloniaProperty.Register<SettingsGroupRow, string>(nameof(Note), "");
@@ -23,10 +31,12 @@ public partial class SettingsGroupRow : UserControl
     private readonly Border surface;
     private readonly TextBlock labelText;
     private readonly TextBlock noteText;
+    private readonly Controls.LucideIcon iconMark;
+    private bool hovered;
 
     static SettingsGroupRow()
     {
-        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(34);
+        HeightProperty.OverrideDefaultValue<SettingsGroupRow>(32);
     }
 
     public SettingsGroupRow()
@@ -35,6 +45,8 @@ public partial class SettingsGroupRow : UserControl
         surface = this.FindControl<Border>("Surface")!;
         labelText = this.FindControl<TextBlock>("LabelText")!;
         noteText = this.FindControl<TextBlock>("NoteText")!;
+        iconMark = this.FindControl<Controls.LucideIcon>("IconMark")!;
+        Focusable = Available;
         Refresh();
     }
 
@@ -42,6 +54,12 @@ public partial class SettingsGroupRow : UserControl
     {
         get => GetValue(LabelProperty);
         set => SetValue(LabelProperty, value);
+    }
+
+    public string Icon
+    {
+        get => GetValue(IconProperty);
+        set => SetValue(IconProperty, value);
     }
 
     public string Note
@@ -62,20 +80,67 @@ public partial class SettingsGroupRow : UserControl
         set => SetValue(AvailableProperty, value);
     }
 
+    /// <summary>Raised when an available group is clicked.</summary>
+    public event EventHandler? Chosen;
+
+    protected override void OnPointerEntered(PointerEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        hovered = true;
+        Refresh();
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        hovered = false;
+        Refresh();
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (Available && e.InitialPressMouseButton == MouseButton.Left && new Rect(Bounds.Size).Contains(e.GetPosition(this)))
+            Choose();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (!e.Handled && e.Key is Key.Enter or Key.Space && Available)
+        {
+            Choose();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>Chooses this group, as a click does; nothing if it isn't available.</summary>
+    internal void Choose()
+    {
+        if (Available)
+            Chosen?.Invoke(this, EventArgs.Empty);
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == LabelProperty || change.Property == NoteProperty
+        if (change.Property == LabelProperty || change.Property == NoteProperty || change.Property == IconProperty
             || change.Property == SelectedProperty || change.Property == AvailableProperty)
             Refresh();
+        // A group still to come isn't a stop for the keyboard.
+        if (change.Property == AvailableProperty)
+            Focusable = Available;
     }
 
     private void Refresh()
     {
         if (surface is null)
             return;
-        surface.Background = Selected ? Ui.Theme.SelectionWash : Brushes.Transparent;
-        surface.BorderBrush = Selected ? Ui.Theme.SelectionRing : Brushes.Transparent;
+        surface.Background = Selected ? Ui.Theme.ChromeRaised : hovered && Available ? Ui.Theme.HoverBg : Brushes.Transparent;
+        surface.BorderBrush = Selected ? Ui.Theme.Bevel : Brushes.Transparent;
+        iconMark.IconName = Icon;
+        iconMark.IsVisible = Icon.Length > 0;
+        iconMark.Stroke = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextDim : Ui.Theme.TextFaint;
         labelText.Text = Label;
         labelText.Foreground = Selected ? Ui.Theme.Text : Available ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
         labelText.FontWeight = Selected ? FontWeight.SemiBold : FontWeight.Normal;

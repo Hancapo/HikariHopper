@@ -252,9 +252,10 @@ public sealed class RenderScenarios
             case "settings_group_rows":
             {
                 var column = new StackPanel { Background = T.SidebarBg };
-                column.Children.Add(new SettingsGroupRow { Label = "Games", Selected = true });
-                column.Children.Add(new SettingsGroupRow { Label = "Explorer", Note = "soon", Available = false });
-                column.Children.Add(new SettingsGroupRow { Label = "Appearance", Note = "soon", Available = false });
+                column.Children.Add(new SettingsGroupRow { Label = "Games", Icon = "box", Selected = true });
+                column.Children.Add(new SettingsGroupRow { Label = "Startup", Icon = "zap" });
+                column.Children.Add(new SettingsGroupRow { Label = "Updates", Icon = "download" });
+                column.Children.Add(new SettingsGroupRow { Label = "Appearance", Icon = "palette", Note = "soon", Available = false });
                 return Host(w, h, column);
             }
             case "gamepath_rows":

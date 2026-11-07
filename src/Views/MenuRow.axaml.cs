@@ -135,7 +135,8 @@ public partial class MenuRow : UserControl
     {
         if (Tabs is not { } tabs)
             return;
-        (settingsDialog ??= new SettingsDialog(tabs)).Present(this);
+        settingsDialog ??= new SettingsDialog(tabs) { CheckForUpdatesNow = over => Updates.CheckByHand(over) };
+        settingsDialog.Present(this);
     }
 
     /// <summary>The sheets this menu row opens, once they have been opened.</summary>

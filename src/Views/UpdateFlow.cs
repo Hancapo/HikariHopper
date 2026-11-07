@@ -49,8 +49,11 @@ internal sealed class UpdateFlow
     /// </summary>
     public Task CheckAtStartup() => Checked = AtStartup();
 
-    /// <summary>Help's check: the sheet shows the check under way, and then what it found.</summary>
-    public Task CheckByHand() => Checked = ByHand();
+    /// <summary>
+    /// A check by hand, from Help or Settings: the sheet shows the check under way, and then what it found. It is
+    /// shown over <paramref name="over"/>, a sheet already up, or else over the window.
+    /// </summary>
+    public Task CheckByHand(Control? over = null) => Checked = ByHand(over ?? anchor);
 
     private async Task AtStartup()
     {
@@ -72,23 +75,23 @@ internal sealed class UpdateFlow
         MakeSheet().Present(anchor);
     }
 
-    private async Task ByHand()
+    private async Task ByHand(Control over)
     {
         UpdateSheet shown = MakeSheet();
         // A download under way is shown as it is.
         if (download is not null)
         {
-            shown.Present(anchor);
+            shown.Present(over);
             return;
         }
         if (!Updates.Source.CanUpdate)
         {
             shown.ShowUnavailable();
-            shown.Present(anchor);
+            shown.Present(over);
             return;
         }
         shown.ShowChecking();
-        shown.Present(anchor);
+        shown.Present(over);
         AvailableUpdate? update;
         try
         {

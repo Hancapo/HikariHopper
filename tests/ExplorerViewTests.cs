@@ -454,7 +454,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void SettingsEditsTheGamesAndTheStartup()
+    public void SettingsEditsTheGamesTheStartupAndTheUpdates()
     {
         string legacy = MakeGame("Legacy");
         HikariHopper.Core.AppSettings.SetStringList(HikariHopper.Core.GameSettings.RecentGameRootsKey, [legacy]);
@@ -470,35 +470,84 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         GamePathRow legacyRow = settings.Rows[1];
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
-        // A folder typed in is saved and checked; the clear mark forgets it.
-        legacyRow.PathField.Text = legacy;
-        legacyRow.PathField.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.Controls.FlatTextField.EditingFinishedEvent));
+        // A folder chosen is saved and checked, and the folder button offers to change it; the clear mark forgets it.
+        Assert.Equal("Choose folder…", legacyRow.BrowseLabel);
+        Dialogs.Folders.Enqueue(legacy);
+        legacyRow.BrowseButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Equal(legacy, ui.Tabs.GamePathSettings.LegacyPath);
         Assert.Equal("✓ GTA5.exe found", legacyRow.StatusMessage);
+        Assert.Equal("Change folder…", legacyRow.BrowseLabel);
         legacyRow.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Equal("", ui.Tabs.GamePathSettings.LegacyPath);
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
-        // Startup: reopening the last game is on until it is turned off, and then nothing reopens.
+        // Each group in the rail shows its page in place of the others'.
+        Assert.Equal(["Games", "Startup", "Updates"], settings.Groups.Select(group => group.Label));
+        Assert.Equal("Games", settings.Group);
+        Assert.True(settings.GamesPage.IsVisible);
+        Assert.False(settings.StartupPage.IsVisible);
+        settings.StartupGroup.Choose();
+        Pump();
+        Assert.Equal("Startup", settings.Group);
+        Assert.True(settings.StartupGroup.Selected);
+        Assert.False(settings.GamesGroup.Selected);
+        Assert.False(settings.GamesPage.IsVisible);
+        Assert.True(settings.StartupPage.IsVisible);
+
+        // The keyboard reaches the groups too: Enter or Space chooses the focused one.
+        Assert.True(settings.UpdatesGroup.Focusable);
+        settings.UpdatesGroup.Focus(NavigationMethod.Tab);
+        Key(ui.Window, PhysicalKey.Enter);
+        Assert.Equal("Updates", settings.Group);
+        settings.GamesGroup.Focus(NavigationMethod.Tab);
+        Key(ui.Window, PhysicalKey.Space);
+        Assert.Equal("Games", settings.Group);
+        settings.StartupGroup.Choose();
+        Pump();
+
+        // Reopening the last game is on until it is turned off, and then nothing reopens.
         HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.LastGameRootKey, legacy);
-        Assert.True(settings.OpenLastGame.IsChecked);
-        settings.OpenLastGame.IsChecked = false;
+        Assert.True(settings.OpenLastGame.IsOn);
+        settings.OpenLastGame.IsOn = false;
         Assert.False(HikariHopper.Core.GameSettings.OpenLastGameOnStartup);
         Assert.Equal("", HikariHopper.Core.GameSettings.GameRootToRestore());
         ui.Bridge.RestoreLastGame();
         Assert.False(ui.Bridge.HasWorkspace);
-        settings.OpenLastGame.IsChecked = true;
+        settings.OpenLastGame.IsOn = true;
         Assert.Equal(legacy, HikariHopper.Core.GameSettings.GameRootToRestore());
 
         // The recents the launcher shows can be cleared.
-        Assert.Equal("1 recent game on the start page", settings.RecentText.Text);
+        Assert.Equal("1 game", settings.RecentRow.Detail);
         settings.ClearRecents.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
         Assert.Empty(ui.Tabs.RecentGames);
-        Assert.Equal("No recent games", settings.RecentText.Text);
+        Assert.Equal("None", settings.RecentRow.Detail);
         Assert.False(settings.ClearRecents.IsEnabled);
+
+        // Updates: the version, the check at startup, and Check now.
+        settings.UpdatesGroup.Choose();
+        Pump();
+        Assert.True(settings.UpdatesPage.IsVisible);
+        Assert.False(settings.StartupPage.IsVisible);
+        Assert.Equal($"HikariHopper {StartPage.AppVersion}", settings.VersionRow.Title);
+        Assert.True(settings.CheckNow.IsEnabled);
+        Assert.True(settings.CheckForUpdates.IsOn);
+        settings.CheckForUpdates.IsOn = false;
+        Assert.False(Infrastructure.Updates.CheckOnStartup);
+        settings.CheckForUpdates.IsOn = true;
+        Assert.True(Infrastructure.Updates.CheckOnStartup);
+        settings.Close();
+        Pump(250);
+
+        // Settings reopens on the group it was left at, up to date: the check at startup turned off elsewhere shows off.
+        Infrastructure.Updates.CheckOnStartup = false;
+        menus.OpenSettings();
+        Pump(200);
+        Assert.Equal("Updates", settings.Group);
+        Assert.False(settings.CheckForUpdates.IsOn);
+        Infrastructure.Updates.CheckOnStartup = true;
         settings.Close();
         Pump(250);
     }
