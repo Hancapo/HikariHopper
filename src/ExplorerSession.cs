@@ -37,6 +37,9 @@ public sealed class ExplorerSession : IStartupSession
     /// <summary>The image viewer while one is open.</summary>
     public ImageViewer? ImageViewer { get; private set; }
 
+    /// <summary>The 3D viewer, while it is open.</summary>
+    public ModelViewer? ModelViewer { get; private set; }
+
     public void RestoreLastGame() => Tabs.RestoreLastGame();
 
     public void Attach(MainWindow mainWindow)
@@ -89,6 +92,7 @@ public sealed class ExplorerSession : IStartupSession
             editor?.Destroy();
             tab.TextFileOpened -= OnTextFileOpened;
             tab.ImageFileOpened -= OnImageFileOpened;
+            tab.ModelFileOpened -= OnModelFileOpened;
         }
         foreach (ExplorerViewModel tab in Tabs.Tabs)
             AddTextureEditor(tab);
@@ -101,6 +105,20 @@ public sealed class ExplorerSession : IStartupSession
         textureEditors[tab] = new TextureEditor(tab.TextureViewer) { Anchor = window?.ExplorerScreenHost };
         tab.TextFileOpened += OnTextFileOpened;
         tab.ImageFileOpened += OnImageFileOpened;
+        tab.ModelFileOpened += OnModelFileOpened;
+    }
+
+    private void OnModelFileOpened(object? sender, ModelFile file)
+    {
+        ModelViewer?.Close();
+        var viewer = new ModelViewer(file) { Anchor = window?.ExplorerScreenHost };
+        ModelViewer = viewer;
+        viewer.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(ModelViewer, viewer))
+                ModelViewer = null;
+        };
+        viewer.Present();
     }
 
     private void OnImageFileOpened(object? sender, ImageViewerViewModel image)
