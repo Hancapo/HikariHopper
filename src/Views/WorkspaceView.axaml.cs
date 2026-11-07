@@ -13,8 +13,11 @@ namespace HikariHopper.Views;
 /// </summary>
 public partial class WorkspaceView : UserControl
 {
-    /// <summary>The 8px gutters around and between the floating panels.</summary>
-    public static readonly Thickness PanelMargin = new(Ui.Theme.PanelGutter);
+    /// <summary>
+    /// The 8px gutters around the floating panels, but for the bottom: the status bar's own height is the gap under
+    /// them, so what it shows sits as far from the panels as from the window's edge, and the panels get the room.
+    /// </summary>
+    public static readonly Thickness PanelMargin = new(Ui.Theme.PanelGutter, Ui.Theme.PanelGutter, Ui.Theme.PanelGutter, 0);
 
     private readonly ExplorerContextMenu contextMenu = new();
     private ExplorerViewModel? bridge;
