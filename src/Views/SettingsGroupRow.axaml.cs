@@ -8,7 +8,7 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// A group in the Settings rail (port of <c>SettingsGroupRow.qml</c>). An available group lights up under the
-/// pointer and is chosen with a click.
+/// pointer and is chosen with a click, or from the keyboard: Tab reaches it, and Enter or Space chooses it.
 /// </summary>
 public partial class SettingsGroupRow : UserControl
 {
@@ -46,6 +46,7 @@ public partial class SettingsGroupRow : UserControl
         labelText = this.FindControl<TextBlock>("LabelText")!;
         noteText = this.FindControl<TextBlock>("NoteText")!;
         iconMark = this.FindControl<Controls.LucideIcon>("IconMark")!;
+        Focusable = Available;
         Refresh();
     }
 
@@ -103,6 +104,16 @@ public partial class SettingsGroupRow : UserControl
             Choose();
     }
 
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (!e.Handled && e.Key is Key.Enter or Key.Space && Available)
+        {
+            Choose();
+            e.Handled = true;
+        }
+    }
+
     /// <summary>Chooses this group, as a click does; nothing if it isn't available.</summary>
     internal void Choose()
     {
@@ -116,6 +127,9 @@ public partial class SettingsGroupRow : UserControl
         if (change.Property == LabelProperty || change.Property == NoteProperty || change.Property == IconProperty
             || change.Property == SelectedProperty || change.Property == AvailableProperty)
             Refresh();
+        // A group still to come isn't a stop for the keyboard.
+        if (change.Property == AvailableProperty)
+            Focusable = Available;
     }
 
     private void Refresh()

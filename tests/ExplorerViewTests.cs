@@ -496,6 +496,17 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.False(settings.GamesPage.IsVisible);
         Assert.True(settings.StartupPage.IsVisible);
 
+        // The keyboard reaches the groups too: Enter or Space chooses the focused one.
+        Assert.True(settings.UpdatesGroup.Focusable);
+        settings.UpdatesGroup.Focus(NavigationMethod.Tab);
+        Key(ui.Window, PhysicalKey.Enter);
+        Assert.Equal("Updates", settings.Group);
+        settings.GamesGroup.Focus(NavigationMethod.Tab);
+        Key(ui.Window, PhysicalKey.Space);
+        Assert.Equal("Games", settings.Group);
+        settings.StartupGroup.Choose();
+        Pump();
+
         // Reopening the last game is on until it is turned off, and then nothing reopens.
         HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.LastGameRootKey, legacy);
         Assert.True(settings.OpenLastGame.IsOn);
