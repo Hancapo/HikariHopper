@@ -190,7 +190,8 @@ internal sealed class SurfaceMaterial
         u[7] = Constant("emissive_multiplier", 1)[0];
         u[8] = result.Normal is not null ? 1 : 0;
         u[9] = Declares("textures", "specular") ? 1 : 0;
-        u[10] = (float)result.AlphaMode;
+        // A decal is drawn blended over what it lies on, whatever its own alpha mode, as the renderer draws it.
+        u[10] = (float)(result.Decal ? AlphaMode.Blend : result.AlphaMode);
         // A tinted shader's vertex blue picks the palette's column, and a vehicle's is its dirt, so neither is an
         // emissive mask there.
         u[11] = Pattern(shader, "emissive") == "true" && result.TintPalette is null && !result.Vehicle ? 1 : 0;
@@ -211,6 +212,8 @@ internal sealed class SurfaceMaterial
             u[71] = shader.Contains("decal", StringComparison.OrdinalIgnoreCase) ? 0 : Constant("parallax_self_shadow", .95f)[0];
             u[72] = 1;
         }
+        // The decals' PS_DeferredTextured blends all four targets by the diffuse map's alpha times the vertex colour's.
+        u[73] = result.Decal ? 1 : 0;
         // Where the specular comes from besides the constants and a specular map: the diffuse map's luminance
         // (emissive_speclum), or an overlay of its colour by SpecDesaturateIntensity and SpecDesaturateExponent (diffspec).
         string? source = Pattern(shader, "specular_source");

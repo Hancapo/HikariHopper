@@ -107,6 +107,24 @@ public sealed class DrawableViewerTests
     }
 
     [Fact]
+    public void A_decal_blends_by_its_diffuse_alpha_times_its_vertex_alpha()
+    {
+        SurfaceMaterial Read(string shader, byte? bucket = null) =>
+            ModelContent.Read("roof.ydr", Quad(GameTarget.Legacy, shader, material => material.RenderBucket = bucket)).Surfaces!.Materials.Single();
+        // surface.wgsl's alpha mode (blend), and whether the vertex alpha weighs the diffuse map's.
+        SurfaceMaterial decal = Read("normal_spec_decal");
+        Assert.True(decal.Decal);
+        Assert.Equal((2f, 1f), (decal.Uniforms[10], decal.Uniforms[73]));
+        // In the decal bucket under another name: drawn as a decal, so blended the same way.
+        SurfaceMaterial bucketed = Read("normal_spec", 2);
+        Assert.True(bucketed.Decal);
+        Assert.Equal((2f, 1f), (bucketed.Uniforms[10], bucketed.Uniforms[73]));
+        SurfaceMaterial solid = Read("normal_spec");
+        Assert.False(solid.Decal);
+        Assert.Equal((0f, 0f), (solid.Uniforms[10], solid.Uniforms[73]));
+    }
+
+    [Fact]
     public void A_diffspec_shader_takes_its_specular_from_the_diffuse_colour_in_either_edition()
     {
         SurfaceMaterial Read(GameTarget target) => ModelContent.Read("wall.ydr", Quad(target, "normal_diffspec", material =>
