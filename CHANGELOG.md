@@ -65,6 +65,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Clicking outside the 3D viewer's time of day dropdown closes it without sending HikariHopper behind other windows. ([#128](https://github.com/Hancapo/HikariHopper/pull/128))
 - Tooltips in the 3D viewer show over the 3D view instead of behind it. ([#129](https://github.com/Hancapo/HikariHopper/pull/129))
 - Decals in the 3D viewer fade out by their vertex alpha as GTA V blends them, instead of covering what they lie on with hard edges. ([#115](https://github.com/Hancapo/HikariHopper/pull/115))
+- The search box shows its subfolders toggle only when searching a folder, not an RPF or the whole game. ([#114](https://github.com/Hancapo/HikariHopper/pull/114))
 
 ### Removed
 
