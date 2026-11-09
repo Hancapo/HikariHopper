@@ -294,12 +294,17 @@ public class FlatComboBoxItem : ComboBoxItem
 
     private FlatComboBox? Owner => ItemsControl.ItemsControlFromItemContainer(this) as FlatComboBox;
 
+    /// <summary>Whether the row shows its note.</summary>
+    internal bool NoteShown => note?.IsVisible == true;
+
     private void Refresh()
     {
         if (background is null || label is null || note is null)
             return;
         background.Background = IsHighlighted && Supported ? Ui.Theme.Accent : Brushes.Transparent;
         label.Foreground = !Supported ? Ui.Theme.TextFaint : IsHighlighted ? Ui.Theme.Text : Ui.Theme.TextRow;
-        note.IsVisible = !Supported && Note.Length > 0;
+        // A note shows for any option that has one: why a disabled one is, or what a supported one costs.
+        note.IsVisible = Note.Length > 0;
+        note.Foreground = IsHighlighted && Supported ? Ui.Theme.Text : Ui.Theme.TextDim;
     }
 }
