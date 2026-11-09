@@ -458,9 +458,14 @@ public partial class NavigationBar : UserControl
         CaseToggle.Raised = model.SearchMatchCase;
         WildcardToggle.Raised = model.SearchWildcards;
         RegexToggle.Raised = model.SearchRegex;
-        // Subfolders only widen a search of the folder: an RPF or the game have everything inside already.
-        SubfoldersToggle.IsEnabled = model.SearchScopeValue == ViewModels.SearchScope.Folder;
-        SubfoldersToggle.Raised = model.SearchSubfolders && SubfoldersToggle.IsEnabled;
+        // Subfolders only widen a search of the folder: an RPF or the game have everything inside already, so the
+        // toggle shows only with Folder, and the query keeps the room it would take.
+        bool folder = model.SearchScopeValue == ViewModels.SearchScope.Folder;
+        SubfoldersToggle.IsVisible = folder;
+        SubfoldersToggle.Raised = model.SearchSubfolders && folder;
+        double trailing = folder ? QueryTrailingSpace : QueryTrailingSpace - SubfoldersRoom;
+        QueryField.TrailingSpace = trailing;
+        QueryError.Margin = new Thickness(0, 0, trailing + 16, 0);
     }
 
     private void OnQueryKeyDown(object? sender, KeyEventArgs e)
@@ -516,6 +521,12 @@ public partial class NavigationBar : UserControl
     private void OnRegexToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchRegex();
 
     private void OnSubfoldersToggle(object? sender, RoutedEventArgs e) => Bridge?.ToggleSearchSubfolders();
+
+    /// <summary>The room the query leaves at its end for its toggles and the scope button, with the subfolders toggle.</summary>
+    private const double QueryTrailingSpace = 154;
+
+    /// <summary>The subfolders toggle and the gap before it.</summary>
+    private const double SubfoldersRoom = 30;
 
     private void OnBack(object? sender, RoutedEventArgs e) => Bridge?.GoBack();
 

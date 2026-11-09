@@ -141,7 +141,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.Equal(SearchScope.Folder, bridge.SearchScopeValue);
         Assert.Equal("folder", navigation.ScopeButton.IconKind);
         Assert.True(navigation.QueryField.IsKeyboardFocusWithin);
-        Assert.True(navigation.SubfoldersToggle.IsEnabled);
+        Assert.True(navigation.SubfoldersToggle.IsVisible);
         Assert.False(navigation.SubfoldersToggle.Raised);
 
         window.KeyTextInput("mo");
@@ -157,10 +157,16 @@ public sealed class SearchViewTests : ExplorerTestBase
         Assert.Equal(["mods/readme.txt"], bridge.EntriesModel.Select(item => item.Path));
         Assert.True(((EntryTable)workspace.EntriesView!).LocationWidth > 0);
 
-        // Only the folder has subfolders to add: with Game the toggle is off.
+        // Only the folder has subfolders to add: with Game the toggle isn't there, and the query takes its room.
+        double withToggle = navigation.QueryField.TrailingSpace;
         bridge.BeginSearch(SearchScope.Everywhere);
         ExplorerStateRenders.Pump(100);
-        Assert.False(navigation.SubfoldersToggle.IsEnabled);
+        Assert.False(navigation.SubfoldersToggle.IsVisible);
+        Assert.True(navigation.QueryField.TrailingSpace < withToggle);
+        bridge.BeginSearch(SearchScope.Folder);
+        ExplorerStateRenders.Pump(100);
+        Assert.True(navigation.SubfoldersToggle.IsVisible);
+        Assert.Equal(withToggle, navigation.QueryField.TrailingSpace);
         window.Close();
     }
 
