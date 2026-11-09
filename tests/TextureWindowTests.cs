@@ -765,6 +765,21 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.Equal((128, 64), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
 
+        // Left at its size, a texture has no result to warn about, however odd it is; a size typed for it has.
+        Assert.True(harness.ViewModel.ResizeSelected(100, 60, "mitchell", 4, true));
+        clock.Restart();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        var plain = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        Assert.Equal(("100 × 60", "100 × 60"), (plain.Outcome.NowValue, plain.Outcome.AfterValue));
+        Assert.Empty(plain.Outcome.Warnings);
+        plain.WidthField.Text = "90";
+        Assert.Equal(["90 × 54 is not a power of two."], plain.Outcome.Warnings);
+        plain.Close();
+        harness.Settle();
+
         // A texture that already is a power of two has nothing to round.
         harness.ViewModel.SelectTexture(1 - odd);
         harness.Settle();

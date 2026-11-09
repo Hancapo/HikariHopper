@@ -308,7 +308,10 @@ public partial class TextureResizeDialog : TextureToolDialog
         FitBody();
     }
 
-    /// <summary>What about the sizes asked for is worth a second look: for one texture in its own numbers, for several by how many.</summary>
+    /// <summary>
+    /// What about the sizes asked for is worth a second look: for one texture in its own numbers, for several by how
+    /// many. Only of the textures that would change.
+    /// </summary>
     private static IReadOnlyList<string> Warnings(TextureViewerViewModel vm, IReadOnlyList<TextureFacts> facts, (int Width, int Height)[] targets)
     {
         var lines = new List<string>();
@@ -316,6 +319,9 @@ public partial class TextureResizeDialog : TextureToolDialog
         for (int index = 0; index < facts.Count; index++)
         {
             (int width, int height) = targets[index];
+            // A texture left at its size isn't touched: there is nothing about its result to point at.
+            if ((width, height) == (facts[index].Width, facts[index].Height))
+                continue;
             if (!TextureDimensions.IsPowerOfTwo(width, height))
                 odd++;
             if (ResizePlan.InBlocks(facts[index].Format) && (width % 4 != 0 || height % 4 != 0))
