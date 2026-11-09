@@ -46,6 +46,9 @@ public static class WindowToolTip
         if (!GetIsEnabled(control) || TextOf(ToolTip.GetTip(control)) is not { Length: > 0 } text
             || TopLevel.GetTopLevel(control) is not Window owner)
             return;
+        // A control in a window over the main one (the viewport's tools) has its tooltip over the main window too.
+        while (owner.Owner is Window above)
+            owner = above;
         e.Cancel = true;
         Show(control, owner, text);
     }

@@ -16,6 +16,9 @@ namespace HikariHopper.Views;
 public partial class ModelViewer : UserControl, IModalContent
 {
     private ModalOverlay? overlay;
+    // The parts arrow and the tool strip, over the viewport.
+    private readonly ViewportOverlay partsTab;
+    private readonly ViewportOverlay toolStrip;
 
     /// <summary>An empty viewer, for the XAML loader and previews.</summary>
     public ModelViewer() : this(new ModelFile("", []))
@@ -27,6 +30,11 @@ public partial class ModelViewer : UserControl, IModalContent
         InitializeComponent();
         // Its tooltips are drawn over the viewport, which covers the app's in-window popups.
         WindowToolTip.SetIsEnabled(this, true);
+        ToolsHolder.Children.Clear();
+        partsTab = new ViewportOverlay(Viewport, PartsTab, top: Ui.Theme.PartsTabTop);
+        toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: Ui.Theme.ToolStripInset);
+        WindowToolTip.SetIsEnabled(PartsTab, true);
+        WindowToolTip.SetIsEnabled(ToolStrip, true);
         TitleText.Text = file.Name;
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
@@ -69,7 +77,6 @@ public partial class ModelViewer : UserControl, IModalContent
         Parts.Changed += ShowParts;
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
-        BoundsButton.Click += (_, _) => SetOverlay(Overlay.Bounds, !boundsShown);
         SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
         LightsButton.Click += (_, _) => SetOverlay(Overlay.Lights, !lightsShown);
         OrbitButton.Click += (_, _) => SetFreeCamera(false);
@@ -109,7 +116,6 @@ public partial class ModelViewer : UserControl, IModalContent
         Set(ShadowsButton, Viewport.Shadows);
         Set(DamagedButton, visibility?.Damaged == true);
         Set(SkeletonButton, skeletonShown);
-        Set(BoundsButton, boundsShown);
         Set(SolidButton, solidShown);
         Set(LightsButton, lightsShown);
         Set(OrbitButton, !Viewport.FreeCamera);
@@ -117,24 +123,23 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>What can be drawn over the model.</summary>
-    internal enum Overlay { Skeleton, Bounds, Lights, Solid }
+    internal enum Overlay { Skeleton, Lights, Solid }
 
-    private bool skeletonShown, boundsShown, lightsShown, solidShown;
+    private bool skeletonShown, lightsShown, solidShown;
     private DrawableOverlays overlays = DrawableOverlays.None;
 
     /// <summary>Whether an overlay is drawn over the model.</summary>
     internal bool OverlayShown(Overlay overlay) => overlay switch
     {
         Overlay.Skeleton => skeletonShown,
-        Overlay.Bounds => boundsShown,
         Overlay.Solid => solidShown,
         _ => lightsShown,
     };
 
-    /// <summary>Draws the model's skeleton, bounds or lights over it, or stops; one it doesn't have stays off.</summary>
+    /// <summary>Draws the model's skeleton, collision or lights over it, or stops; one it doesn't have stays off.</summary>
     internal bool SetOverlay(Overlay overlay, bool on)
     {
-        // The solid collision is the bounds' triangles, drawn filled over the model.
+        // The collision is its triangles in their materials' colours, with their edges, drawn over the model.
         if (overlay == Overlay.Solid)
         {
             if (overlays.Solid.Length == 0)
@@ -147,29 +152,16 @@ public partial class ModelViewer : UserControl, IModalContent
         ViewportSegment[] segments = Segments(overlay);
         if (segments.Length == 0)
             return false;
-        switch (overlay)
-        {
-            case Overlay.Skeleton:
-                skeletonShown = on;
-                break;
-            case Overlay.Bounds:
-                boundsShown = on;
-                break;
-            default:
-                lightsShown = on;
-                break;
-        }
-        Viewport.ShowOverlays([.. (skeletonShown ? overlays.Skeleton : []), .. (boundsShown ? overlays.Bounds : []), .. (lightsShown ? overlays.Lights : [])]);
+        if (overlay == Overlay.Skeleton)
+            skeletonShown = on;
+        else
+            lightsShown = on;
+        Viewport.ShowOverlays([.. (skeletonShown ? overlays.Skeleton : []), .. (lightsShown ? overlays.Lights : [])]);
         RefreshToggles();
         return true;
     }
 
-    private ViewportSegment[] Segments(Overlay overlay) => overlay switch
-    {
-        Overlay.Skeleton => overlays.Skeleton,
-        Overlay.Bounds => overlays.Bounds,
-        _ => overlays.Lights,
-    };
+    private ViewportSegment[] Segments(Overlay overlay) => overlay == Overlay.Skeleton ? overlays.Skeleton : overlays.Lights;
 
     /// <summary>The overlays the model has, each button off when it has none.</summary>
     private void ShowOverlayButtons(DrawableScene scene)
@@ -182,9 +174,8 @@ public partial class ModelViewer : UserControl, IModalContent
             ThemedToolTip.Set(button, has ? $"{name}  ({key})" : $"No {name.ToLowerInvariant()}");
         }
         Offer(SkeletonButton, Overlay.Skeleton, "Skeleton", 'B');
-        Offer(BoundsButton, Overlay.Bounds, "Bounds", 'C');
         SolidButton.IsEnabled = overlays.Solid.Length > 0;
-        ThemedToolTip.Set(SolidButton, SolidButton.IsEnabled ? "Solid collision  (K)" : "No collision");
+        ThemedToolTip.Set(SolidButton, SolidButton.IsEnabled ? "Collision  (K)" : "No collision");
         Offer(LightsButton, Overlay.Lights, "Lights", 'L');
     }
 
@@ -316,7 +307,7 @@ public partial class ModelViewer : UserControl, IModalContent
     internal void SetPartsShown(bool shown)
     {
         partsShown = shown && visibility is not null;
-        PartsHandle.IsVisible = visibility is not null;
+        PartsHandle.IsVisible = partsShown;
         PartsSide.Transitions ??= PartsSlide;
         PartsSide.Width = partsShown ? partsWidth : 0;
         PartsArrow.IconKind = partsShown ? "back" : "forward";
@@ -428,8 +419,6 @@ public partial class ModelViewer : UserControl, IModalContent
                 return SetDamaged(visibility?.Damaged != true);
             case 'B':
                 return SetOverlay(Overlay.Skeleton, !skeletonShown);
-            case 'C':
-                return SetOverlay(Overlay.Bounds, !boundsShown);
             case 'K':
                 return SetOverlay(Overlay.Solid, !solidShown);
             case 'L':
@@ -635,8 +624,8 @@ public partial class ModelViewer : UserControl, IModalContent
         Parts.Parts = visibility;
         ShowParts();
         overlays = after.Overlays;
-        if (skeletonShown || boundsShown || lightsShown)
-            SetOverlay(skeletonShown ? Overlay.Skeleton : boundsShown ? Overlay.Bounds : Overlay.Lights, true);
+        if (skeletonShown || lightsShown)
+            SetOverlay(skeletonShown ? Overlay.Skeleton : Overlay.Lights, true);
         if (solidShown)
             SetOverlay(Overlay.Solid, true);
         ToolTip.SetTip(StatusText, after.Diagnostics.Count > 0 ? string.Join("\n", after.Diagnostics) : null);
@@ -669,6 +658,7 @@ public partial class ModelViewer : UserControl, IModalContent
             Viewport.Show(surfaces);
             // A drawable is lit by the game's light, and has the toolbar; collisions and navmeshes are drawn flat.
             Toolbar.IsVisible = true;
+            partsTab.IsWanted = toolStrip.IsWanted = true;
             ShowStats(surfaces);
             visibility = new PartVisibility(surfaces);
             ShowLevels();
@@ -769,6 +759,12 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public bool IsOpen => overlay?.IsShown == true;
 
+    /// <summary>The parts arrow, drawn over the viewport's top left in a window of its own.</summary>
+    internal ViewportOverlay PartsTabOverlay => partsTab;
+
+    /// <summary>The tool strip, drawn over the viewport's left edge, centred on its height, in a window of its own.</summary>
+    internal ViewportOverlay ToolStripOverlay => toolStrip;
+
     /// <summary>The viewer closed; its GPU resources are let go.</summary>
     public event EventHandler? Closed;
 
@@ -790,6 +786,8 @@ public partial class ModelViewer : UserControl, IModalContent
             overlay.Closed += (_, _) =>
             {
                 ModalOverlay.StackChanged -= OverlaysChanged;
+                partsTab.Close();
+                toolStrip.Close();
                 overlay = null;
                 Closed?.Invoke(this, EventArgs.Empty);
             };

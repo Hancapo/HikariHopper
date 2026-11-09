@@ -1,5 +1,7 @@
 using System.Numerics;
 using Avalonia.Headless;
+using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
 using CommonFury.Numerics;
 using FiveFury.Bounds;
 using FiveFury.Ybn;
@@ -411,6 +413,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         // The toolbar and the stats: one triangle, three corners, three edges.
         Assert.True(viewer.Toolbar.IsVisible);
+        // What is drawn over the model, in the tool strip over the viewport, as in Blender, not in the toolbar: its
+        // skeleton, collision and lights.
+        Assert.True(viewer.ToolStripOverlay.IsWanted);
+        Assert.True(viewer.PartsTabOverlay.IsWanted);
+        Views.Controls.ChromeToolButton[] strip = [.. viewer.ToolStrip.GetLogicalDescendants().OfType<Views.Controls.ChromeToolButton>()];
+        Assert.Equal([viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton], strip);
+        Assert.DoesNotContain(viewer.SkeletonButton, viewer.GetLogicalDescendants());
         Assert.Equal(("1", "3", "3"), (viewer.TrianglesText.Text, viewer.VerticesText.Text, viewer.EdgesText.Text));
         // No material count or size, and nothing missing to say.
         Assert.Equal("", viewer.Location);
@@ -424,12 +433,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.Viewport.Shadows);
         // A key the toolbar doesn't use is left alone.
         Assert.False(viewer.Shortcut('W'));
-        // No skeleton, bounds or lights: their buttons are off, and their keys do nothing.
+        // No skeleton, collision or lights: their buttons are off, and their keys do nothing.
         Assert.False(viewer.SkeletonButton.IsEnabled);
-        Assert.False(viewer.BoundsButton.IsEnabled);
+        Assert.False(viewer.SolidButton.IsEnabled);
         Assert.False(viewer.LightsButton.IsEnabled);
         Assert.False(viewer.Shortcut('B'));
-        Assert.False(viewer.Shortcut('C'));
+        Assert.False(viewer.Shortcut('K'));
         Assert.False(viewer.Shortcut('L'));
         Assert.False(viewer.SolidButton.IsEnabled);
         Assert.False(viewer.Shortcut('K'));
@@ -464,8 +473,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.Equal(["tri", "default"], viewer.Parts.Rows.Select(row => row.Node.Name));
         Assert.True(viewer.Shortcut('P'));
         Assert.False(viewer.PartsShown);
-        // Closed, its edge stays, the arrow pointing the way it would open.
-        Assert.True(viewer.PartsHandle.IsVisible);
+        // Closed, its edge goes, and the arrow over the viewport points the way it would open.
+        Assert.False(viewer.PartsHandle.IsVisible);
         Assert.Equal("forward", viewer.PartsArrow.IconKind);
         viewer.PartsArrow.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         Assert.True(viewer.PartsShown);
@@ -582,7 +591,97 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void A_drawables_bounds_are_drawn_over_it_with_C()
+    public void The_parts_arrow_and_the_tool_strip_are_drawn_over_the_viewports_left_edge()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var window = new Views.MainWindow { Width = 1360, Height = 840 };
+        window.Show();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
+        viewer.Present();
+        Settle(viewer);
+        ExplorerStateRenders.Pump(400);
+
+        // Each in a window of its own, over the main one: the viewport is a native window, which covers what's drawn in it.
+        Assert.True(viewer.ToolStripOverlay.IsShown);
+        Assert.True(viewer.PartsTabOverlay.IsShown);
+        Avalonia.Controls.Window tools = viewer.ToolStripOverlay.Window!, tab = viewer.PartsTabOverlay.Window!;
+        Assert.NotSame(tools, tab);
+        Assert.Same(window, tools.Owner);
+        Assert.Same(window, tab.Owner);
+        Assert.Same(tools, Avalonia.Controls.TopLevel.GetTopLevel(viewer.SkeletonButton));
+        Assert.Same(tab, Avalonia.Controls.TopLevel.GetTopLevel(viewer.PartsArrow));
+        Assert.False(tools.ShowActivated);
+        Assert.False(tab.ShowActivated);
+
+        Views.Controls.ChromeToolButton[] strip = [viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
+        Assert.All(strip, button => Assert.Equal(new Avalonia.Size(26, 26), button.Bounds.Size));
+        // One above the other, two pixels apart, in the strip's well.
+        Assert.Equal(new Avalonia.Point(0, 28), Avalonia.VisualExtensions.TranslatePoint(strip[1], default, strip[0]));
+        Assert.Equal(new Avalonia.Point(0, 28), Avalonia.VisualExtensions.TranslatePoint(strip[2], default, strip[1]));
+        // The arrow on the viewport's left edge, at its top; the strip a little in from the edge, centred on its height.
+        void Centred()
+        {
+            Avalonia.PixelPoint edge = Avalonia.VisualExtensions.PointToScreen(viewer.Viewport, default);
+            double scale = tools.RenderScaling;
+            double middle = edge.Y / scale + viewer.Viewport.Bounds.Height / 2;
+            Avalonia.Rect On(Avalonia.Controls.Control control)
+            {
+                Avalonia.PixelPoint corner = Avalonia.VisualExtensions.PointToScreen(control, default);
+                return new Avalonia.Rect(corner.X / scale, corner.Y / scale, control.Bounds.Width, control.Bounds.Height);
+            }
+            Avalonia.Rect arrow = On(viewer.PartsTab), well = On(viewer.ToolStrip);
+            Assert.Equal(edge.X / scale, arrow.X, 0.5);
+            Assert.Equal(edge.Y / scale + Ui.Theme.PartsTabTop, arrow.Y, 0.5);
+            Assert.Equal(edge.X / scale + Ui.Theme.ToolStripInset, well.X, 0.5);
+            Assert.Equal(middle, well.Center.Y, 1.0);
+            // Apart: the arrow takes nothing from the strip.
+            Assert.True(arrow.Bottom < well.Y);
+        }
+        Centred();
+        // It follows the viewport: closing the parts panel moves the viewport's edge, and the tools with it.
+        viewer.SetPartsShown(false);
+        ExplorerStateRenders.Pump(400);
+        Assert.False(viewer.PartsHandle.IsVisible);
+        Centred();
+        // So does the main window, moved.
+        window.Position = new Avalonia.PixelPoint(window.Position.X + 40, window.Position.Y + 30);
+        ExplorerStateRenders.Pump(100);
+        Centred();
+
+        // The pointer doesn't go through the tab or the strip to the viewport.
+        Avalonia.Point Middle(Avalonia.Controls.Control control, Avalonia.Controls.Window on) =>
+            Avalonia.VisualExtensions.TranslatePoint(control, new Avalonia.Point(control.Bounds.Width / 2, control.Bounds.Height / 2), on)!.Value;
+        Assert.True(viewer.PartsTabOverlay.Covers(Middle(viewer.PartsArrow, tab)));
+        Assert.True(viewer.ToolStripOverlay.Covers(Middle(viewer.SolidButton, tools)));
+
+        // It hides while the viewport does, under another overlay, and shows again after.
+        Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
+        ExplorerStateRenders.Pump(50);
+        Assert.False(viewer.ToolStripOverlay.IsShown);
+        Assert.False(viewer.PartsTabOverlay.IsShown);
+        above.Close();
+        ExplorerStateRenders.Pump(400);
+        Assert.True(viewer.ToolStripOverlay.IsShown);
+        Assert.True(viewer.PartsTabOverlay.IsShown);
+        Centred();
+
+        // And goes with the viewer.
+        viewer.Close();
+        ExplorerStateRenders.Pump(300);
+        Assert.False(viewer.ToolStripOverlay.IsShown);
+        Assert.False(tools.IsVisible);
+        Assert.False(tab.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_drawables_collision_is_drawn_over_it_with_K()
     {
         var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
         var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
@@ -594,20 +693,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(viewer);
-        Assert.True(viewer.BoundsButton.IsEnabled);
         Assert.False(viewer.SkeletonButton.IsEnabled);
-        Assert.False(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
-        Assert.True(viewer.Shortcut('C'));
-        Assert.True(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
-        Assert.True(viewer.BoundsButton.Sunken);
-        Assert.True(viewer.Shortcut('c'));
-        Assert.False(viewer.BoundsButton.Sunken);
-        // The same collision drawn solid, with K, on its own.
+        // C, which drew its edges, does nothing now: the collision is drawn solid, with its edges, with K.
+        Assert.False(viewer.Shortcut('C'));
         Assert.True(viewer.SolidButton.IsEnabled);
+        Assert.False(viewer.OverlayShown(Views.ModelViewer.Overlay.Solid));
         Assert.True(viewer.Shortcut('K'));
         Assert.True(viewer.OverlayShown(Views.ModelViewer.Overlay.Solid));
         Assert.True(viewer.SolidButton.Sunken);
-        Assert.False(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
         Assert.True(viewer.Shortcut('k'));
         Assert.False(viewer.SolidButton.Sunken);
     }
@@ -802,6 +895,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
         Settle(viewer);
         Assert.False(viewer.Toolbar.IsVisible);
+        Assert.False(viewer.ToolStripOverlay.IsWanted);
+        Assert.False(viewer.PartsTabOverlay.IsWanted);
         Assert.False(viewer.StatsPanel.IsVisible);
         Assert.False(viewer.PartsShown);
         Assert.False(viewer.PartsHandle.IsVisible);

@@ -7,19 +7,18 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// What the 3D viewer can draw over a drawable, through it: its skeleton, each bone to its parent with a small cross
-/// at each joint; the edges of its collision bounds; and its lights, a cross where each shines from in its colour,
+/// at each joint; its collision (<see cref="Solid"/>); and its lights, a cross where each shines from in its colour,
 /// with how far it reaches (a sphere's three circles for a point light, a cone for a spot). Segments are relative to
 /// the scene's origin.
 /// </summary>
-internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegment[] Bounds, ViewportSegment[] Lights)
+internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegment[] Lights)
 {
-    public static readonly DrawableOverlays None = new([], [], []);
+    public static readonly DrawableOverlays None = new([], []);
 
     /// <summary>The collision as the collision viewer draws it: its triangles in their materials' colours, with their edges.</summary>
     public ViewportVertex[] Solid { get; init; } = [];
 
     internal static readonly uint BoneColour = ViewportMesh.Pack(150, 200, 255);
-    internal static readonly uint BoundColour = ViewportMesh.Pack(240, 160, 80);
     private const float Width = 1.5f;
     private const int CircleSegments = 32;
 
@@ -28,7 +27,7 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
 
     /// <summary>
     /// The overlays of placed drawables, their crosses sized for a scene of <paramref name="radius"/>. A fragment's
-    /// bounds are its physics composite, <paramref name="fragmentBound"/>, in place of its drawables' own, and its own
+    /// collision is its physics composite, <paramref name="fragmentBound"/>, in place of its drawables' own, and its own
     /// lights, <paramref name="fragmentLights"/>, move with its main drawable's bones. A piece placed at another
     /// drawable's bone (a wheel, in a group) often carries that drawable's skeleton: it is drawn once, by its owner.
     /// </summary>
@@ -37,7 +36,6 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
     {
         var drawn = new HashSet<Skeleton>(ReferenceEqualityComparer.Instance);
         var skeleton = new ViewportMesh(origin);
-        var bounds = new ViewportMesh(origin);
         var lights = new ViewportMesh(origin);
         var solid = new List<ViewportVertex>();
         float joint = Math.Max(radius, .1f) * .012f;
@@ -55,12 +53,12 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
                         skeleton.Line((bones[parent] * model.Transform).Translation, at, BoneColour, Width);
                 }
             if (fragmentBound is null && drawable.Bound is { } bound)
-                Edges(bounds, solid, bound, model.Transform, origin);
+                Collision(solid, bound, model.Transform, origin);
             foreach (DrawableLight light in drawable.Lights)
                 Light(lights, light.Attributes, BoneOf(drawable, bones, light.Attributes.BoneTag) * model.Transform, joint);
         }
         if (fragmentBound is not null)
-            Edges(bounds, solid, fragmentBound, Matrix4x4.Identity, origin);
+            Collision(solid, fragmentBound, Matrix4x4.Identity, origin);
         if (fragmentLights is { Count: > 0 } && models.Count > 0)
         {
             SceneModel main = models[0];
@@ -68,31 +66,19 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
             foreach (DrawableLight light in fragmentLights)
                 Light(lights, light.Attributes, BoneOf(main.Drawable, bones, light.Attributes.BoneTag) * main.Transform, joint);
         }
-        return new(skeleton.SegmentArray(), bounds.SegmentArray(), lights.SegmentArray()) { Solid = [.. solid] };
+        return new(skeleton.SegmentArray(), lights.SegmentArray()) { Solid = [.. solid] };
     }
 
     /// <summary>Where the bone tagged <paramref name="tag"/> is, which a light moves with; the drawable's origin without one.</summary>
     private static Matrix4x4 BoneOf(Drawable drawable, Matrix4x4[]? bones, short tag) =>
         drawable.Skeleton?.FindBone((ushort)tag) is { } bone && bones is not null && bone.Index < bones.Length ? bones[bone.Index] : Matrix4x4.Identity;
 
-    /// <summary>A collision's triangles' edges, each once; and the triangles themselves, relative to the scene's origin.</summary>
-    private static void Edges(ViewportMesh into, List<ViewportVertex> solid, Bound bound, Matrix4x4 transform, Vector3 origin)
+    /// <summary>A collision's triangles, relative to the scene's origin.</summary>
+    private static void Collision(List<ViewportVertex> solid, Bound bound, Matrix4x4 transform, Vector3 origin)
     {
         ViewportMesh triangles = CollisionMesh.Build(bound, transform);
         foreach (ViewportVertex corner in triangles.Vertices)
             solid.Add(corner with { Position = corner.Position + triangles.Origin - origin });
-        var seen = new HashSet<(Vector3, Vector3)>();
-        IReadOnlyList<ViewportVertex> corners = triangles.Vertices;
-        for (int i = 0; i + 2 < corners.Count; i += 3)
-            for (int side = 0; side < 3; side++)
-            {
-                Vector3 a = corners[i + side].Position, b = corners[i + (side + 1) % 3].Position;
-                // Either way round, one edge.
-                if (a.X > b.X || (a.X == b.X && (a.Y > b.Y || (a.Y == b.Y && a.Z > b.Z))))
-                    (a, b) = (b, a);
-                if (seen.Add((a, b)))
-                    into.Line(a + triangles.Origin, b + triangles.Origin, BoundColour, Width);
-            }
     }
 
     private static void Light(ViewportMesh into, LightAttrDef light, Matrix4x4 transform, float size)
