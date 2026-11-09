@@ -617,6 +617,41 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void A_drawable_shows_at_once_and_gets_the_games_textures_when_they_come()
+    {
+        // A triangle whose texture is only in the game's dictionaries, whose tables are still being worked out.
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "sign" };
+        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
+        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference("sign_d");
+        builder.Materials.Add(material);
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
+
+        var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr) { GameDictionaries = tables.Task });
+        Settle(viewer);
+        // Shown without waiting, its texture missing for now; a part hidden meanwhile.
+        Assert.True(viewer.Toolbar.IsVisible);
+        Assert.Equal("1 texture not found", viewer.Location);
+        Assert.False(viewer.GameTexturesAdded.IsCompleted);
+        viewer.Parts.Flip(viewer.Parts.Rows[1].Node);
+
+        // The tables come: the drawable is read again with the game's dictionary, and shown as it was.
+        byte[] dictionary = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("sign_d"));
+        tables.SetResult([new NearbyDictionary("sign_txd.ytd", dictionary.Length, () => dictionary)]);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.GameTexturesAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Assert.True(viewer.GameTexturesAdded.IsCompletedSuccessfully);
+        Assert.Equal("", viewer.Location);
+        Assert.Equal([false], viewer.Visibility!.Mask());
+    }
+
+    [AvaloniaFact]
     public void The_levels_a_drawable_has_are_segments_and_picking_one_shows_it()
     {
         // A triangle at the high level and another at the medium one.

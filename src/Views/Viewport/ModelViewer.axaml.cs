@@ -527,26 +527,72 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (file.Data.Length == 0)
             return;
-        // The game's dictionaries for it, once the game's texture tables are ready (worked out when the game loads).
-        IReadOnlyList<NearbyDictionary> game = [];
-        if (file.GameDictionaries is { } pending)
-        {
-            if (!pending.IsCompleted)
-                StatusText.Text = $"Finding the game's textures for {file.Name}…";
-            try
-            {
-                game = await pending;
-            }
-            catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException
-                or NotSupportedException or UnauthorizedAccessException)
-            {
-            }
-            StatusText.Text = $"Reading {file.Name}…";
-        }
+        // Shown at once with the textures at hand (its own, the ones beside it, and the game's if its texture tables are
+        // ready); while the tables are still being worked out, the game's are added when they come.
+        Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
+        IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, game));
         Location = content is not null ? Locate(content) : failure!;
         if (started)
             StatusText.Text = Location;
+        if (content?.Surfaces is { } first && pending is { IsCompleted: false } && Missing(first) > 0)
+            GameTexturesAdded = AddGameTextures(file, pending);
+    }
+
+    /// <summary>Done once the game's textures have been added to the drawable shown, or there were none to add.</summary>
+    internal Task GameTexturesAdded { get; private set; } = Task.CompletedTask;
+
+    private bool closed;
+
+    /// <summary>
+    /// Waits for the game's dictionaries for the drawable shown, then reads it again with them and shows that in its
+    /// place, as it was: the camera, the level, the damaged state, the parts hidden and the overlays stay.
+    /// </summary>
+    private async Task AddGameTextures(ModelFile file, Task<IReadOnlyList<NearbyDictionary>> pending)
+    {
+        string shown = Location;
+        StatusText.Text = shown.Length > 0 ? $"{shown} · finding the game's textures…" : "Finding the game's textures…";
+        IReadOnlyList<NearbyDictionary> game = [];
+        try
+        {
+            game = await pending;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException
+            or NotSupportedException or UnauthorizedAccessException)
+        {
+        }
+        if (game.Count > 0 && !closed && surfaces is { } before)
+        {
+            (ModelContent? again, _) = await Task.Run(() => Read(file, game));
+            if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+                ShowAgain(after);
+        }
+        if (!closed && started)
+            StatusText.Text = Location;
+    }
+
+    /// <summary>How many of the textures a drawable names weren't found.</summary>
+    private static int Missing(DrawableScene scene) =>
+        scene.Materials.SelectMany(material => material.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+    /// <summary>The same drawable read again (with more of its textures), shown in place of the one shown, as it was.</summary>
+    private void ShowAgain(DrawableScene after)
+    {
+        PartVisibility? before = visibility;
+        Viewport.Show(after);
+        surfaces = after;
+        visibility = new PartVisibility(after);
+        if (before is not null)
+            visibility.KeepFrom(before);
+        Parts.Parts = visibility;
+        ShowParts();
+        overlays = after.Overlays;
+        if (skeletonShown || boundsShown || lightsShown)
+            SetOverlay(skeletonShown ? Overlay.Skeleton : boundsShown ? Overlay.Bounds : Overlay.Lights, true);
+        if (solidShown)
+            SetOverlay(Overlay.Solid, true);
+        ToolTip.SetTip(StatusText, after.Diagnostics.Count > 0 ? string.Join("\n", after.Diagnostics) : null);
+        Location = Describe(after);
     }
 
     private static (ModelContent? Content, string? Failure) Read(ModelFile file, IReadOnlyList<NearbyDictionary> game)
@@ -722,6 +768,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
+        closed = true;
         timeDropdown?.Close();
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;

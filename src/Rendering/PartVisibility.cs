@@ -40,6 +40,18 @@ internal sealed class PartVisibility
     /// <summary>The level of detail picked.</summary>
     public int Lod { get; set; }
 
+    /// <summary>
+    /// Takes over what <paramref name="before"/> shows (its level, its damaged state, the parts it hides) for the same
+    /// drawables read again: parts are kept by name, so they match.
+    /// </summary>
+    public void KeepFrom(PartVisibility before)
+    {
+        Lod = Levels.Contains(before.Lod) ? before.Lod : Lod;
+        Damaged = before.Damaged;
+        hidden.Clear();
+        hidden.UnionWith(before.hidden);
+    }
+
     /// <summary>Whether a fragment shows damaged: its damaged drawables in place of their intact ones.</summary>
     public bool Damaged { get; set; }
 
