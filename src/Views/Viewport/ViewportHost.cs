@@ -10,7 +10,8 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The 3D viewport in the window (after RedFury's WebGpuHost): Avalonia lays out a child window, and WebGPU draws
-/// into its swap chain. A left drag orbits the camera and the wheel zooms.
+/// into its swap chain. A left drag orbits the camera and the wheel zooms; with the free camera, a left or right drag
+/// looks around, W, A, S, D, Q and E fly (Shift faster), and the wheel sets how fast.
 /// </summary>
 /// <remarks>
 /// Frames are drawn on <c>WM_PAINT</c>, which Windows sends only once pending input and posted messages (Avalonia's
@@ -42,6 +43,8 @@ internal sealed partial class ViewportHost : NativeControlHost
     private float hours = DayCycle.DefaultHours;
     private bool shadows = true;
     private bool[]? partsShown;
+    private bool free;
+    private long flown;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -63,6 +66,31 @@ internal sealed partial class ViewportHost : NativeControlHost
             if (renderer is not null)
                 renderer.Shadows = value;
         }
+    }
+
+    /// <summary>Whether the camera flies rather than orbits.</summary>
+    public bool FreeCamera
+    {
+        get => free;
+        set
+        {
+            free = value;
+            if (renderer is not null)
+                renderer.Camera.Free = value;
+        }
+    }
+
+    /// <summary>How fast the free camera flies, in metres a second.</summary>
+    public float FreeSpeed => renderer?.Camera.Speed ?? 0;
+
+    /// <summary>The wheel changed how fast the free camera flies.</summary>
+    public event Action<float>? SpeedChanged;
+
+    /// <summary>Gives the viewport the keyboard, for the free camera's keys.</summary>
+    public void FocusViewport()
+    {
+        if (hwnd != 0 && IsEffectivelyVisible)
+            SetFocus(hwnd);
     }
 
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
@@ -141,6 +169,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             renderer.Frame(framed);
             renderer.SetTime(hours);
             renderer.Shadows = shadows;
+            renderer.Camera.Free = free;
             if (surfaces is not null)
             {
                 renderer.Show(surfaces);
@@ -186,6 +215,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                     renderer.Resize(width, height);
                     (surfaceWidth, surfaceHeight) = (width, height);
                 }
+                Fly(renderer.Camera);
                 renderer.Draw();
             }
         }
@@ -203,6 +233,26 @@ internal sealed partial class ViewportHost : NativeControlHost
         if (chained)
             InvalidateRect(hwnd, 0, 0);
     }
+
+    /// <summary>
+    /// Moves the free camera by the keys held since the last frame, while the viewport has the keyboard: the key state
+    /// is the UI thread's, current here as frames are drawn once its messages are handled.
+    /// </summary>
+    private void Fly(OrbitCamera camera)
+    {
+        long now = Stopwatch.GetTimestamp();
+        // A pause (a hidden viewport, a slow frame) doesn't fly the camera off in one step.
+        float seconds = flown == 0 ? 0 : (float)Math.Min(Stopwatch.GetElapsedTime(flown, now).TotalSeconds, .1);
+        flown = now;
+        if (!camera.Free || GetFocus() != hwnd || seconds <= 0)
+            return;
+        static float Axis(int plus, int minus) => (Held(plus) ? 1 : 0) - (Held(minus) ? 1 : 0);
+        float forward = Axis('W', 'S'), right = Axis('D', 'A'), up = Axis('E', 'Q');
+        if (forward != 0 || right != 0 || up != 0)
+            camera.Fly(forward, right, up, seconds, Held(0x10) ? 4 : 1);
+    }
+
+    private static bool Held(int key) => GetKeyState(key) < 0;
 
     private void Stop()
     {
@@ -256,6 +306,8 @@ internal sealed partial class ViewportHost : NativeControlHost
     private const uint MouseMove = 0x0200;
     private const uint LeftDown = 0x0201;
     private const uint LeftUp = 0x0202;
+    private const uint RightDown = 0x0204;
+    private const uint RightUp = 0x0205;
     private const uint Wheel = 0x020A;
     private const uint KeyPressed = 0x0100;
     private const uint CaptureChanged = 0x0215;
@@ -277,6 +329,7 @@ internal sealed partial class ViewportHost : NativeControlHost
         switch (message)
         {
             case LeftDown:
+            case RightDown when r.Camera.Free:
                 (mouseX, mouseY) = Point(lParam);
                 dragging = true;
                 SetFocus(window);
@@ -284,16 +337,25 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case MouseMove when dragging:
                 (int x, int y) = Point(lParam);
-                r.Camera.Orbit(x - mouseX, y - mouseY);
+                if (r.Camera.Free)
+                    r.Camera.Look(x - mouseX, y - mouseY);
+                else
+                    r.Camera.Orbit(x - mouseX, y - mouseY);
                 (mouseX, mouseY) = (x, y);
                 return 0;
             case LeftUp:
+            case RightUp when dragging:
                 dragging = false;
                 ReleaseCapture();
                 return 0;
             case CaptureChanged:
                 dragging = false;
                 return null;
+            case Wheel when r.Camera.Free:
+                r.Camera.Accelerate((short)((wParam >> 16) & 0xffff) / 120f);
+                float speed = r.Camera.Speed;
+                Dispatcher.UIThread.Post(() => SpeedChanged?.Invoke(speed));
+                return 0;
             case Wheel:
                 r.Camera.Zoom((short)((wParam >> 16) & 0xffff) / 120f);
                 return 0;
@@ -343,6 +405,9 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     [LibraryImport("user32.dll")]
     private static partial nint SetFocus(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetFocus();
 
     [LibraryImport("user32.dll")]
     private static partial nint SetCapture(nint hwnd);

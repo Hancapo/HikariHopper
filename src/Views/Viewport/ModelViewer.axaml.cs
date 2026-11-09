@@ -55,9 +55,15 @@ public partial class ModelViewer : UserControl, IModalContent
         Parts.Changed += ShowParts;
         ThemedToolTip.Set(PartsButton, "Parts  (P)");
         ThemedToolTip.Set(LodButton, "Level of detail  (1-4)");
-        FrameButton.Click += (_, _) => Viewport.Reframe();
+        FrameButton.Click += (_, _) => Reframe();
+        OrbitButton.Click += (_, _) => SetFreeCamera(false);
+        FreeButton.Click += (_, _) => SetFreeCamera(true);
+        Viewport.SpeedChanged += ShowSpeed;
+        ThemedToolTip.Set(OrbitButton, "Orbit camera  (V)");
+        ThemedToolTip.Set(FreeButton, "Free camera  (V)\nW A S D to move, Q and E down and up, Shift faster\nDrag to look, wheel for speed");
+        ThemedToolTip.Set(SpeedStat, "Free camera speed");
         ThemedToolTip.Set(ShadowsButton, "Shadows  (H)");
-        ThemedToolTip.Set(FrameButton, "Frame the model  (F)");
+        ThemedToolTip.Set(FrameButton, "Frame the model, orbiting it  (F)");
         ThemedToolTip.Set(TrianglesStat, "Triangles");
         ThemedToolTip.Set(VerticesStat, "Vertices");
         ThemedToolTip.Set(EdgesStat, "Edges");
@@ -82,7 +88,35 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         Set(ShadowsButton, Viewport.Shadows);
         Set(PartsButton, PartsSide.IsVisible);
+        Set(OrbitButton, !Viewport.FreeCamera);
+        Set(FreeButton, Viewport.FreeCamera);
     }
+
+    /// <summary>
+    /// Orbits the model or flies: flying, the viewport takes the keyboard for W, A, S, D, Q and E, and the status bar
+    /// says how fast it goes.
+    /// </summary>
+    internal void SetFreeCamera(bool on)
+    {
+        Viewport.FreeCamera = on;
+        SpeedStat.IsVisible = on;
+        if (on)
+        {
+            ShowSpeed(Viewport.FreeSpeed);
+            Viewport.FocusViewport();
+        }
+        RefreshToggles();
+    }
+
+    /// <summary>Points the camera back at the model, orbiting it.</summary>
+    internal void Reframe()
+    {
+        Viewport.Reframe();
+        SetFreeCamera(false);
+    }
+
+    private void ShowSpeed(float speed) =>
+        SpeedText.Text = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{speed:0.#} m/s");
 
     private readonly ModelFile file;
     private PartVisibility? visibility;
@@ -168,7 +202,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -180,7 +214,10 @@ public partial class ModelViewer : UserControl, IModalContent
                 SetShadows(!Viewport.Shadows);
                 return true;
             case 'F':
-                Viewport.Reframe();
+                Reframe();
+                return true;
+            case 'V':
+                SetFreeCamera(!Viewport.FreeCamera);
                 return true;
             case 'P':
                 SetPartsShown(!PartsSide.IsVisible);

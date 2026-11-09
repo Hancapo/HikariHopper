@@ -251,6 +251,9 @@ public sealed class ViewportTests
         Assert.Equal(0, clip.X / clip.W, 0.0001);
         Assert.Equal(0, clip.Y / clip.W, 0.0001);
         Assert.InRange(clip.Z / clip.W, 0f, 1f);
+        // However big what is framed, a surface a centimetre in front of the camera isn't cut off by the near plane.
+        Vector4 close = Vector4.Transform(new Vector4(camera.Eye + camera.Forward * .01f, 1), camera.ViewProjection(16f / 9));
+        Assert.InRange(close.Z / close.W, 0f, 1f);
 
         // Orbiting keeps the distance; it stops short of the poles; zooming stays within the size's limits.
         camera.Orbit(400, 10000);
@@ -260,6 +263,49 @@ public sealed class ViewportTests
         Assert.Equal(150 * .02f, camera.Distance, 0.001);
         camera.Zoom(-1000);
         Assert.Equal(150 * 200f, camera.Distance, 0.1);
+    }
+
+    [Fact]
+    public void The_free_camera_looks_about_its_eye_and_flies()
+    {
+        var camera = new OrbitCamera();
+        camera.Frame(new Vector3(10, 20, 5), 2);
+        Assert.Equal(3, camera.Speed, 0.001);
+
+        // Looking turns about the eye: it stays put, the view turns, and the centre stays the distance ahead.
+        Vector3 eye = camera.Eye, forward = camera.Forward;
+        camera.Look(120, -40);
+        Assert.Equal(0, Vector3.Distance(eye, camera.Eye), 0.001);
+        Assert.NotEqual(forward, camera.Forward);
+        Assert.Equal(camera.Distance, Vector3.Distance(camera.Eye, camera.Center), 0.001);
+        // Dragging up looks up, and dragging right looks right, as orbiting turns the same way.
+        float before = camera.Forward.Z;
+        camera.Look(0, -50);
+        Assert.True(camera.Forward.Z > before);
+        Vector3 right = camera.Right;
+        forward = camera.Forward;
+        camera.Look(30, 0);
+        Assert.True(Vector3.Dot(camera.Forward - forward, right) > 0);
+
+        // Flying a second forward moves the eye its speed along the view; diagonals are no faster; Shift's boost is.
+        eye = camera.Eye;
+        forward = camera.Forward;
+        camera.Fly(1, 0, 0, 1);
+        Assert.Equal(0, Vector3.Distance(eye + forward * 3, camera.Eye), 0.001);
+        eye = camera.Eye;
+        camera.Fly(1, 1, 1, 1);
+        Assert.Equal(3, Vector3.Distance(eye, camera.Eye), 0.001);
+        eye = camera.Eye;
+        camera.Fly(0, 0, -1, .5f, 4);
+        Assert.Equal(0, Vector3.Distance(eye - Vector3.UnitZ * 6, camera.Eye), 0.001);
+
+        // The wheel sets the speed, within limits from what is framed.
+        camera.Accelerate(1);
+        Assert.Equal(3 * MathF.Exp(.2f), camera.Speed, 0.001);
+        camera.Accelerate(-1000);
+        Assert.Equal(2 * .02f, camera.Speed, 0.0001);
+        camera.Accelerate(1000);
+        Assert.Equal(2 * 200f, camera.Speed, 0.01);
     }
 
     [Fact]
@@ -376,6 +422,22 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.Viewport.Shadows);
         // A key the toolbar doesn't use is left alone.
         Assert.False(viewer.Shortcut('W'));
+        // The camera orbits to start with; V flies it, with its speed in the status bar, and F frames the model and
+        // orbits again.
+        Assert.False(viewer.Viewport.FreeCamera);
+        Assert.True(viewer.OrbitButton.Sunken);
+        Assert.False(viewer.SpeedStat.IsVisible);
+        Assert.True(viewer.Shortcut('V'));
+        Assert.True(viewer.Viewport.FreeCamera);
+        Assert.True(viewer.FreeButton.Sunken);
+        Assert.False(viewer.OrbitButton.Sunken);
+        Assert.True(viewer.SpeedStat.IsVisible);
+        Assert.True(viewer.Shortcut('F'));
+        Assert.False(viewer.Viewport.FreeCamera);
+        Assert.False(viewer.SpeedStat.IsVisible);
+        Assert.True(viewer.Shortcut('v'));
+        Assert.True(viewer.Shortcut('V'));
+        Assert.False(viewer.Viewport.FreeCamera);
         // The parts panel shows the drawable, and P hides and shows it; the drawable has only the high level, so 2
         // changes nothing.
         Assert.True(viewer.PartsSide.IsVisible);

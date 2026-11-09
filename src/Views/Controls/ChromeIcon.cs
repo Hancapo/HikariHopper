@@ -54,6 +54,8 @@ public class ChromeIcon : Control
         ["sun"] = "sun",
         ["parts"] = "panel-left",
         ["frame"] = "focus",
+        ["orbit"] = "orbit",
+        ["free"] = "move-3d",
     };
 
     static ChromeIcon()
