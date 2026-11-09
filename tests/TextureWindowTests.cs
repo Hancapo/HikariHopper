@@ -865,6 +865,15 @@ public sealed class TextureWindowTests
         Assert.Equal("8 bpp · alpha", options["BC7"]);
         Assert.Equal("32 bpp · alpha", options["A8R8G8B8"]);
         Assert.Equal("32 bpp · alpha", dialog.FormatCombo.CurrentNote);
+        // Open, every row shows its own.
+        dialog.FormatCombo.IsDropDownOpen = true;
+        harness.Settle();
+        FlatComboBoxItem[] rows = [.. dialog.FormatCombo.GetRealizedContainers().OfType<FlatComboBoxItem>()];
+        Assert.Equal(7, rows.Length);
+        Assert.All(rows, row => Assert.True(row.NoteShown, row.Label));
+        Assert.Equal("4 bpp · no alpha", rows.Single(row => row.Label == "DXT1 (BC1)").Note);
+        dialog.FormatCombo.IsDropDownOpen = false;
+        harness.Settle();
         // An uncompressed format has no quality to pick.
         Assert.False(dialog.QualitySwitch.IsVisible);
         double plain = dialog.BodyHeight;
