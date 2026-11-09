@@ -1,7 +1,7 @@
-// The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl and tonemap.wgsl: GTA V's
-// timecycle light at the viewer's time of day (Timecycle.cs), the exposure and filmic curve its post-process settles
-// on, the directional light's shadow map, and the reflection map (reflection_map.wgsl). Put after scene.wgsl, as
-// group 2.
+// The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl, bloom.wgsl and tonemap.wgsl:
+// GTA V's timecycle light at the viewer's time of day (Timecycle.cs), the exposure, bloom and filmic curve its
+// post-process settles on, the directional light's shadow map, and the reflection map (reflection_map.wgsl). Put
+// after scene.wgsl, as group 2.
 
 struct Light {
     // Unit direction towards the directional light (the sun, or the moon).
@@ -31,6 +31,9 @@ struct Light {
     shadow: mat4x4f,
     // The shadow map's texel in metres, its depth range in metres, its resolution, and whether shadows are on.
     shadow_parameters: vec4f,
+    // The bloom (BloomParams): the exposed luminance its bright pass starts at, the timecycle's bloom intensity, and
+    // one over the luminance range it fades in over.
+    bloom: vec4f,
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
@@ -38,6 +41,20 @@ struct Light {
 @group(2) @binding(2) var shadow_compare: sampler_comparison;
 @group(2) @binding(3) var reflection_map: texture_2d<f32>;
 @group(2) @binding(4) var reflection_sampler: sampler;
+
+// The exposure in stops for the frame's measured mean luminance (exposure.wgsl), as PS_CalculateExposure works it
+// out: scale * L^power + offset + the timecycle's exposure, kept in the timecycle's range.
+fn exposure_stops(mean: f32) -> f32 {
+    let curve = light.exposure_curve;
+    let range = light.exposure_range;
+    return clamp(curve.x * pow(max(mean, 1e-6), curve.y) + curve.z + curve.w, range.x, range.y);
+}
+
+// How far the filmic curve has moved from the bright one to the dark one at this exposure.
+fn filmic_blend(stops: f32) -> f32 {
+    let range = light.exposure_range;
+    return saturate((stops - range.z) / (range.w - range.z));
+}
 
 // PS_directional_ambient's natural ambient for a unit normal: the down light on what faces up, the up light on what
 // faces down, the down light wrapping past the horizon by the down wrap; and the directional ambient on what faces it.

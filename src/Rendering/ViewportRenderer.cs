@@ -451,6 +451,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DrawSurfaces(lit);
             lit.End();
             MeasureFrame(encoder);
+            DrawBloom(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
@@ -549,6 +550,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // The rest is released with its handles; the swap chain lets go of the window now.
         depth?.Destroy();
         hdr?.Destroy();
+        bloom?.Destroy();
+        bloomUnfiltered?.Destroy();
         shadowMap?.Destroy();
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
