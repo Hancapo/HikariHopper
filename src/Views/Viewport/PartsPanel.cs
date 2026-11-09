@@ -16,7 +16,9 @@ namespace HikariHopper.Views;
 /// with dotted guides. Each row has an eye that shows or hides it (dimmed while only some of what is under it shows), a
 /// badge for what it is, and its triangles. Rows are selected apart from what is shown: click, Ctrl and Shift; the
 /// keyboard moves through them and shows, hides and frames what is selected; a right click offers the same. A filter
-/// over the rows narrows them by name.
+/// over the rows narrows them by name. Rows come in sections: a fragment's body, its groups of drawables and its extras
+/// (toggles numbered as the game numbers them); a drawable dictionary's drawables by what they are, which can show one
+/// of each at a time.
 /// </summary>
 internal sealed class PartsPanel : UserControl
 {
@@ -34,6 +36,11 @@ internal sealed class PartsPanel : UserControl
     // Where the keyboard is, and where a Shift range starts from.
     private string? cursor, anchor;
     private DropdownWindow? menu;
+    // The rows as listed, for finding the one under the pointer while sweeping: section headings sit between them.
+    private readonly List<(Control Row, int Index)> rowControls = [];
+    private IReadOnlyList<PartSection> sections = [];
+    // For a drawable dictionary: one drawable of each section shown at a time, or all of them.
+    private bool oneAtATime = true;
 
     public PartsPanel()
     {
@@ -79,14 +86,35 @@ internal sealed class PartsPanel : UserControl
         ShowAllButton.Click += (_, _) => ShowAll();
         ThemedToolTip.Set(ShowAllButton, "Show all");
         AutomationProperties.SetName(ShowAllButton, "Show all");
+        ModeSwitch.Sides.Add(new SwitchSide { Text = "One", Width = 38, Label = "One of each", ToolTip = "One drawable of each kind at a time" });
+        ModeSwitch.Sides.Add(new SwitchSide { Text = "All", Width = 34, Label = "All", ToolTip = "Every drawable, one over another" });
+        ModeSwitch.SelectedIndex = 0;
+        ModeSwitch.VerticalAlignment = VerticalAlignment.Center;
+        ModeSwitch.HorizontalAlignment = HorizontalAlignment.Right;
+        ModeSwitch.SideRequested += (_, index) => SetOneAtATime(index == 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(6, 0, 0, 0), Children = { ExpandButton, ShowAllButton } };
+        // A drawable dictionary's row under the filter: one drawable of each kind shown, or all of them.
+        ModeRow.Margin = new Thickness(0, 6, 0, 0);
+        ModeRow.IsVisible = false;
+        ModeRow.Children.Add(new TextBlock
+        {
+            Text = "SHOW",
+            FontFamily = Ui.Theme.MonoFont,
+            FontSize = Ui.Theme.CapsFontSize,
+            FontWeight = FontWeight.Bold,
+            LetterSpacing = 1.2,
+            Foreground = Ui.Theme.TextFaint,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(2, 0, 0, 0),
+        });
+        ModeRow.Children.Add(ModeSwitch);
         DockPanel.SetDock(buttons, Dock.Right);
         var tools = new Border
         {
             Padding = new Thickness(8, 6, 8, 6),
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = new DockPanel { Children = { buttons, Filter } },
+            Child = new StackPanel { Children = { new DockPanel { Children = { buttons, Filter } }, ModeRow } },
         };
         DockPanel.SetDock(tools, Dock.Top);
 
@@ -94,8 +122,15 @@ internal sealed class PartsPanel : UserControl
         rows.Background = Brushes.Transparent;
         rows.PointerMoved += (_, e) =>
         {
-            if (sweepTo is not null)
-                SweepOver((int)Math.Floor(e.GetPosition(rows).Y / RowHeight));
+            if (sweepTo is null)
+                return;
+            double y = e.GetPosition(rows).Y;
+            foreach ((Control row, int index) in rowControls)
+                if (y >= row.Bounds.Top && y < row.Bounds.Bottom)
+                {
+                    SweepOver(index);
+                    break;
+                }
         };
         rows.PointerReleased += (_, e) =>
         {
@@ -148,7 +183,22 @@ internal sealed class PartsPanel : UserControl
     /// <summary>Shows every part.</summary>
     internal ChromeToolButton ShowAllButton { get; } = ToolButton("show-all");
 
-    /// <summary>The parts shown, or none; the panel lists them, the top rows open, nothing selected.</summary>
+    /// <summary>A drawable dictionary's switch: one drawable of each section shown at a time, or all of them.</summary>
+    internal SegmentedSwitch ModeSwitch { get; } = new();
+
+    /// <summary>The row the switch sits in, shown for a drawable dictionary only.</summary>
+    internal Panel ModeRow { get; } = new();
+
+    /// <summary>The sections listed.</summary>
+    internal IReadOnlyList<PartSection> Sections => sections;
+
+    /// <summary>Whether a drawable dictionary shows one drawable of each section at a time.</summary>
+    internal bool OneAtATime => oneAtATime;
+
+    /// <summary>
+    /// The parts shown, or none; the panel lists them, the body's rows open, nothing selected. A drawable dictionary
+    /// shows one drawable of each section until All is picked.
+    /// </summary>
     public PartVisibility? Parts
     {
         get => parts;
@@ -158,11 +208,70 @@ internal sealed class PartsPanel : UserControl
             expanded.Clear();
             selected.Clear();
             cursor = anchor = null;
-            if (value is not null)
-                foreach (PartNode node in value.Tree())
-                    expanded.Add(node.Key);
+            sections = value?.Sections() ?? [];
+            foreach (PartSection section in sections)
+                if (section.Kind == PartSectionKind.Tree && section.Title is "" or "Body")
+                    foreach (PartNode node in section.Nodes)
+                        expanded.Add(node.Key);
+            ModeRow.IsVisible = HasVariants;
+            if (HasVariants && oneAtATime)
+                ApplyOneAtATime();
             Refresh();
         }
+    }
+
+    private bool HasVariants => sections.Any(section => section.Kind == PartSectionKind.Variants);
+
+    /// <summary>The rows of the sections listed as trees, every level down, for opening and closing them all.</summary>
+    private IEnumerable<PartNode> TreeNodes()
+    {
+        IEnumerable<PartNode> All(PartNode node) => [node, .. node.Children.SelectMany(All)];
+        return sections.Where(section => section.Kind != PartSectionKind.Extras).SelectMany(section => section.Nodes).SelectMany(All);
+    }
+
+    /// <summary>Shows one drawable of each section at a time, or all of them.</summary>
+    internal void SetOneAtATime(bool one)
+    {
+        oneAtATime = one;
+        ModeSwitch.SelectedIndex = one ? 0 : 1;
+        if (parts is null || !HasVariants)
+            return;
+        if (one)
+            ApplyOneAtATime();
+        else
+            parts.ShowAll();
+        Changed?.Invoke();
+        Refresh();
+    }
+
+    // Each section keeps one drawable shown: the first that already is, or its first.
+    private void ApplyOneAtATime()
+    {
+        if (parts is null)
+            return;
+        foreach (PartSection section in sections.Where(section => section.Kind == PartSectionKind.Variants))
+        {
+            PartNode keep = section.Nodes.FirstOrDefault(node => parts.State(node) == true) ?? section.Nodes[0];
+            foreach (PartNode node in section.Nodes)
+                parts.Show(node, ReferenceEquals(node, keep));
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>The variant section a row is in, while one of each shows at a time; none otherwise.</summary>
+    private PartSection? RadioSection(PartNode node) => oneAtATime
+        ? sections.FirstOrDefault(section => section.Kind == PartSectionKind.Variants && section.Nodes.Any(each => each.Key == node.Key))
+        : null;
+
+    /// <summary>Shows a drawable of a variant section in place of the one shown.</summary>
+    internal void Pick(PartNode node)
+    {
+        if (parts is null || RadioSection(node) is not { } section)
+            return;
+        foreach (PartNode each in section.Nodes)
+            parts.Show(each, each.Key == node.Key);
+        Changed?.Invoke();
+        Refresh();
     }
 
     /// <summary>The rows shown, in order, for tests: each a node and whether it is open.</summary>
@@ -183,8 +292,7 @@ internal sealed class PartsPanel : UserControl
         {
             if (parts is null)
                 return false;
-            IEnumerable<PartNode> Branches(PartNode node) => node.Children.Count == 0 ? [] : [node, .. node.Children.SelectMany(Branches)];
-            return parts.Tree().SelectMany(Branches).All(node => expanded.Contains(node.Key));
+            return TreeNodes().Where(node => node.Children.Count > 0).All(node => expanded.Contains(node.Key));
         }
     }
 
@@ -201,19 +309,11 @@ internal sealed class PartsPanel : UserControl
     {
         if (parts is null)
             return;
-        void Visit(PartNode node)
-        {
-            if (node.Children.Count == 0)
-                return;
+        foreach (PartNode node in TreeNodes().Where(node => node.Children.Count > 0))
             if (open)
                 expanded.Add(node.Key);
             else
                 expanded.Remove(node.Key);
-            foreach (PartNode child in node.Children)
-                Visit(child);
-        }
-        foreach (PartNode node in parts.Tree())
-            Visit(node);
         Refresh();
     }
 
@@ -258,11 +358,16 @@ internal sealed class PartsPanel : UserControl
         Refresh();
     }
 
-    /// <summary>Shows every part.</summary>
+    /// <summary>Shows every part; a drawable dictionary showing one of each switches to All.</summary>
     internal void ShowAll()
     {
         if (parts is null)
             return;
+        if (HasVariants && oneAtATime)
+        {
+            SetOneAtATime(false);
+            return;
+        }
         parts.ShowAll();
         Changed?.Invoke();
         Refresh();
@@ -310,6 +415,12 @@ internal sealed class PartsPanel : UserControl
             anchor = node.Key;
         }
         cursor = node.Key;
+        // One of each at a time: the drawable picked is the one its section shows.
+        if (modifiers == KeyModifiers.None && RadioSection(node) is not null)
+        {
+            Pick(node);
+            return;
+        }
         Refresh();
     }
 
@@ -363,6 +474,7 @@ internal sealed class PartsPanel : UserControl
     public void Refresh()
     {
         rows.Children.Clear();
+        rowControls.Clear();
         var listed = new List<(PartNode, bool)>();
         string filter = (Filter.Text ?? "").Trim();
         if (parts is not null)
@@ -374,8 +486,10 @@ internal sealed class PartsPanel : UserControl
                 // A filter opens the rows its matches are under.
                 bool open = node.Children.Count > 0 && (expanded.Contains(node.Key)
                     || (filter.Length > 0 && !node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)));
+                Control row = Row(node, open, lastAtDepth);
+                rowControls.Add((row, listed.Count));
                 listed.Add((node, open));
-                rows.Children.Add(Row(node, open, lastAtDepth));
+                rows.Children.Add(row);
                 if (open)
                 {
                     PartNode[] children = [.. node.Children.Where(child => filter.Length == 0 || Matches(child, filter))];
@@ -383,9 +497,27 @@ internal sealed class PartsPanel : UserControl
                         Add(children[i], [.. lastAtDepth, i == children.Length - 1]);
                 }
             }
-            IReadOnlyList<PartNode> tree = parts.Tree();
-            foreach (PartNode node in tree)
-                Add(node, []);
+            foreach (PartSection section in sections)
+            {
+                if (section.Kind == PartSectionKind.Extras)
+                {
+                    PartNode[] extras = [.. section.Nodes.Where(node => filter.Length == 0 || node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))];
+                    if (extras.Length == 0)
+                        continue;
+                    rows.Children.Add(Heading(section.Title, $"{extras.Count(node => parts.State(node) == true)} / {extras.Length}"));
+                    rows.Children.Add(Chips(extras));
+                    continue;
+                }
+                int before = rows.Children.Count;
+                if (section.Title.Length > 0)
+                    rows.Children.Add(Heading(section.Title, section.Kind == PartSectionKind.Variants ? section.Nodes.Count.ToString(CultureInfo.InvariantCulture) : ""));
+                int listedBefore = listed.Count;
+                foreach (PartNode node in section.Nodes)
+                    Add(node, []);
+                // A section the filter leaves empty goes, heading and all.
+                if (listed.Count == listedBefore && rows.Children.Count > before)
+                    rows.Children.RemoveRange(before, rows.Children.Count - before);
+            }
             (int shown, int total) = parts.Counts();
             counts.Text = $"{shown} / {total}";
             if (listed.Count == 0 && filter.Length > 0)
@@ -409,6 +541,80 @@ internal sealed class PartsPanel : UserControl
         ThemedToolTip.Set(ExpandButton, allOpen ? "Collapse all" : "Expand all");
         AutomationProperties.SetName(ExpandButton, allOpen ? "Collapse all" : "Expand all");
     }
+
+    // A section's heading, in the sheets' small caps, with a count beside it.
+    private static Control Heading(string title, string count) => new DockPanel
+    {
+        Margin = new Thickness(12, 10, 12, 3),
+        Children =
+        {
+            new TextBlock
+            {
+                [DockPanel.DockProperty] = Dock.Right,
+                Text = count,
+                FontFamily = Ui.Theme.MonoFont,
+                FontSize = Ui.Theme.CapsFontSize,
+                Foreground = Ui.Theme.TextFaint,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+            new TextBlock
+            {
+                Text = title.ToUpperInvariant(),
+                FontFamily = Ui.Theme.MonoFont,
+                FontSize = Ui.Theme.CapsFontSize,
+                FontWeight = FontWeight.Bold,
+                LetterSpacing = 1.2,
+                Foreground = Ui.Theme.TextFaint,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        },
+    };
+
+    /// <summary>The extras as toggles, numbered as the game numbers them: lit while shown.</summary>
+    private Control Chips(IReadOnlyList<PartNode> extras)
+    {
+        var chips = new WrapPanel { Margin = new Thickness(12, 2, 12, 6), ItemSpacing = 4, LineSpacing = 4 };
+        foreach (PartNode extra in extras)
+        {
+            bool on = parts?.State(extra) == true;
+            int number = PartVisibility.ExtraNumber(extra.Name) ?? 0;
+            var chip = new Border
+            {
+                Name = extra.Name,
+                MinWidth = 26,
+                Height = 22,
+                Padding = new Thickness(6, 0),
+                CornerRadius = Ui.Theme.InnerCorner,
+                BorderThickness = new Thickness(1),
+                Background = on ? new ImmutableSolidColorBrush(Ui.Theme.WithAlpha(Ui.Theme.Accent.Color, .22)) : Ui.Theme.InsetBg,
+                BorderBrush = on ? Ui.Theme.Accent : Ui.Theme.BorderHard,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                Child = new TextBlock
+                {
+                    Text = number.ToString(CultureInfo.InvariantCulture),
+                    FontFamily = Ui.Theme.MonoFont,
+                    FontSize = Ui.Theme.SmallFontSize,
+                    Foreground = on ? Ui.Theme.Text : Ui.Theme.TextFaint,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            ThemedToolTip.Set(chip, $"{extra.Name} · {extra.Triangles.ToString("N0", CultureInfo.InvariantCulture)} triangles\n{(on ? "Shown: click to hide" : "Hidden: click to show")}");
+            AutomationProperties.SetName(chip, $"Extra {number}");
+            chip.PointerPressed += (_, e) =>
+            {
+                if (!e.GetCurrentPoint(chip).Properties.IsLeftButtonPressed)
+                    return;
+                e.Handled = true;
+                ToggleExtra(extra);
+            };
+            chips.Children.Add(chip);
+        }
+        return chips;
+    }
+
+    /// <summary>Shows or hides an extra, as a click on its toggle does.</summary>
+    internal void ToggleExtra(PartNode extra) => Flip(extra);
 
     // A row's badge: its kind's letter in its kind's ink.
     private static (string Letter, IImmutableSolidColorBrush Ink, string Kind) Badge(PartKind kind) => kind switch
@@ -502,6 +708,11 @@ internal sealed class PartsPanel : UserControl
             if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
             {
                 ShowOnly([node]);
+                return;
+            }
+            if (RadioSection(node) is not null)
+            {
+                Pick(node);
                 return;
             }
             BeginSweep(node);

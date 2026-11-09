@@ -196,3 +196,81 @@ public sealed class PartsPanelTests
         }
     }
 }
+
+/// <summary>The parts panel's sections over a drawable dictionary: one of each kind at a time, or all.</summary>
+public sealed class PartsPanelVariantTests
+{
+    // A ped's drawables: two heads and a torso, each a triangle.
+    private static DrawableScene Ped()
+    {
+        var dictionary = new FiveFury.Ydd.Ydd(FiveFury.GameTarget.Legacy);
+        foreach (string name in new[] { "head_000_r", "head_001_r", "uppr_000_u" })
+        {
+            var builder = new FiveFury.Drawables.DrawableBuilder { Name = name };
+            builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "skin", Shader = "ped" });
+            var model = new FiveFury.Drawables.DrawableModelInput();
+            model.Meshes.Add(new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "skin"));
+            builder.Models.Add(model);
+            dictionary.Drawables.Add(new FiveFury.Ydd.YddEntry(new CommonFury.Hashing.Hash32(name), builder.Build(FiveFury.GameTarget.Legacy)));
+        }
+        return ModelContent.Read("ped.ydd", dictionary.Write()).Surfaces!;
+    }
+
+    private static bool[] Shown(Views.PartsPanel panel) => panel.Parts!.Mask();
+
+    [AvaloniaFact]
+    public void A_drawable_dictionary_shows_one_drawable_of_each_kind_and_picking_one_shows_it_instead()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(Ped()) };
+        Assert.Equal(["Head", "Torso"], panel.Sections.Select(section => section.Title));
+        Assert.True(panel.ModeRow.IsVisible);
+        Assert.True(panel.OneAtATime);
+        Assert.Equal(["head_000_r", "head_001_r", "uppr_000_u"], panel.Rows.Select(row => row.Node.Name));
+        // The first head and the torso.
+        Assert.Equal([true, false, true], Shown(panel));
+
+        // Clicking the second head shows it in place of the first; the torso stays.
+        panel.Select(panel.Rows[1].Node);
+        Assert.Equal([false, true, true], Shown(panel));
+        // Up steps back to the first head.
+        panel.HandleKey(Avalonia.Input.Key.Up, Avalonia.Input.KeyModifiers.None);
+        Assert.Equal([true, false, true], Shown(panel));
+        // Ctrl+click only selects.
+        panel.Select(panel.Rows[1].Node, Avalonia.Input.KeyModifiers.Control);
+        Assert.Equal([true, false, true], Shown(panel));
+    }
+
+    [AvaloniaFact]
+    public void All_shows_every_drawable_and_one_brings_back_one_of_each()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(Ped()) };
+        panel.Select(panel.Rows[1].Node);
+        panel.SetOneAtATime(false);
+        Assert.Equal(1, panel.ModeSwitch.SelectedIndex);
+        Assert.Equal([true, true, true], Shown(panel));
+        // In All, a click only selects.
+        panel.Select(panel.Rows[0].Node);
+        Assert.Equal([true, true, true], Shown(panel));
+
+        // Back to one of each: the first shown of each kind.
+        panel.SetOneAtATime(true);
+        Assert.Equal([true, false, true], Shown(panel));
+        // Show all, while one of each shows, switches to All.
+        panel.ShowAllButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Assert.False(panel.OneAtATime);
+        Assert.Equal([true, true, true], Shown(panel));
+        // The drawables read again (their textures found, say): still All.
+        panel.Parts = new PartVisibility(Ped());
+        Assert.False(panel.OneAtATime);
+        Assert.Equal([true, true, true], Shown(panel));
+    }
+
+    [AvaloniaFact]
+    public void A_single_drawable_has_no_headings_and_no_switch()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
+        Assert.False(panel.ModeRow.IsVisible);
+        PartSection section = Assert.Single(panel.Sections);
+        Assert.Equal("", section.Title);
+    }
+}
