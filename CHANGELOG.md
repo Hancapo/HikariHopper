@@ -26,6 +26,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A toolbar in the 3D viewer for models, to turn shadows on or off and frame the model, and the model's triangle, vertex and edge counts in its status bar. ([#108](https://github.com/Hancapo/HikariHopper/pull/108))
 - A parts panel in the 3D viewer, to show or hide a model's drawables, parts and materials, and a level of detail picker to look at its lower-detail versions. ([#109](https://github.com/Hancapo/HikariHopper/pull/109))
 - A textures button in the 3D viewer's toolbar that opens a model's embedded textures in the texture viewer. ([#110](https://github.com/Hancapo/HikariHopper/pull/110))
+- A free camera in the 3D viewer for models, to fly around and into a model with W, A, S, D, Q and E, look by dragging, and set its speed with the wheel. ([#111](https://github.com/Hancapo/HikariHopper/pull/111))
 
 ### Changed
 

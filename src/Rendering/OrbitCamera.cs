@@ -3,7 +3,8 @@ using System.Numerics;
 namespace HikariHopper.Rendering;
 
 /// <summary>
-/// A Z-up camera that orbits a centre and zooms towards it (after RedFury's). System.Numerics matrices are row-vector
+/// A Z-up camera that orbits a centre and zooms towards it (after RedFury's), or flies freely: then it turns about
+/// its eye and moves, and its centre is the point a fixed distance ahead, which it orbits again once back. System.Numerics matrices are row-vector
 /// and upload as-is: WGSL reads them column-major, so <c>matrix * vector</c> there is <c>vector * matrix</c> here.
 /// </summary>
 internal sealed class OrbitCamera
@@ -12,9 +13,12 @@ internal sealed class OrbitCamera
 
     public static readonly float TanHalf = MathF.Tan(FieldOfView / 2);
 
+    /// <summary>The furthest the near plane is, in metres.</summary>
+    public const float NearPlane = .005f;
+
     public Vector3 Center { get; private set; }
 
-    /// <summary>The size of what is framed, which sets the zoom limits and the near plane.</summary>
+    /// <summary>The size of what is framed, which sets the zoom limits and how fast the free camera flies.</summary>
     public float Radius { get; private set; } = 1;
 
     public float Distance { get; private set; } = 3;
@@ -33,6 +37,12 @@ internal sealed class OrbitCamera
 
     public Vector3 Up => Vector3.Cross(Right, Forward);
 
+    /// <summary>Whether it flies: a drag turns it about its eye, and it moves at <see cref="Speed"/>.</summary>
+    public bool Free { get; set; }
+
+    /// <summary>How fast it flies, in metres a second; set from what is framed, and by the wheel while it flies.</summary>
+    public float Speed { get; private set; } = 2;
+
     /// <summary>Looks at a sphere around <paramref name="center"/> from a distance that shows it whole.</summary>
     public void Frame(Vector3 center, float radius)
     {
@@ -41,7 +51,31 @@ internal sealed class OrbitCamera
         Center = center;
         Radius = radius;
         Distance = radius * 2.8f;
+        Speed = Math.Max(radius, .5f) * 1.5f;
     }
+
+    /// <summary>Turns about the eye by a drag in pixels, as <see cref="Orbit"/> turns about the centre: dragging right looks right.</summary>
+    public void Look(float dx, float dy)
+    {
+        Vector3 eye = Eye;
+        Orbit(dx, dy);
+        Center += eye - Eye;
+    }
+
+    /// <summary>
+    /// Flies for <paramref name="seconds"/> at <see cref="Speed"/> (times <paramref name="boost"/>): forward along the
+    /// view, right, and up in the world, each -1 to 1.
+    /// </summary>
+    public void Fly(float forward, float right, float up, float seconds, float boost = 1)
+    {
+        Vector3 direction = Forward * forward + Right * right + Vector3.UnitZ * up;
+        if (direction.LengthSquared() > 1)
+            direction = Vector3.Normalize(direction);
+        Center += direction * (Speed * boost * seconds);
+    }
+
+    /// <summary>Flies faster for positive wheel steps, slower for negative.</summary>
+    public void Accelerate(float steps) => Speed = Math.Clamp(Speed * MathF.Exp(steps * .2f), Radius * .02f, Math.Max(Radius, 1) * 200);
 
     /// <summary>Turns around the centre by a drag in pixels; dragging up raises the camera.</summary>
     public void Orbit(float dx, float dy)
@@ -55,12 +89,14 @@ internal sealed class OrbitCamera
 
     /// <summary>
     /// The view and an infinite reversed-Z projection (depth is near over distance, zero at infinity), for positions
-    /// relative to <paramref name="origin"/>: content far out in the world stays precise.
+    /// relative to <paramref name="origin"/>: content far out in the world stays precise. The near plane is a few
+    /// millimetres whatever the size of what is framed, so the camera can come right up to a surface; reversed Z in a
+    /// 32-bit float depth keeps the rest precise. It is closer still when the camera is that close to the centre.
     /// </summary>
     public Matrix4x4 ViewProjection(float aspect, Vector3 origin = default)
     {
         Vector3 eye = Eye - origin;
-        float near = Math.Max(.0001f, Math.Min(Distance * .01f, Radius * .005f));
+        float near = Math.Clamp(Distance * .002f, .0001f, NearPlane);
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(FieldOfView, aspect, near, near * 2);
         projection.M33 = 0;
         projection.M43 = near;
