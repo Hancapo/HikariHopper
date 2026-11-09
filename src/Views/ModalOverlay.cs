@@ -97,6 +97,9 @@ public sealed class ModalOverlay : Panel
     /// <summary>Raised whenever a window gains its first modal or loses its last one.</summary>
     public static event EventHandler<TopLevel>? StateChanged;
 
+    /// <summary>An overlay opened or closed over a window, whichever it is: which one is on top may have changed.</summary>
+    public static event EventHandler<TopLevel>? StackChanged;
+
     public bool IsShown { get; private set; }
 
     /// <summary>The dialog this overlay shows.</summary>
@@ -150,6 +153,7 @@ public sealed class ModalOverlay : Panel
             Blur(backdrop, true);
             StateChanged?.Invoke(null, host);
         }
+        StackChanged?.Invoke(null, host);
         // The title bar stays usable, so focus can land there (a click on Maximize); the keys still belong
         // to the modal then.
         host.AddHandler(KeyDownEvent, overlay.OnHostKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -181,6 +185,7 @@ public sealed class ModalOverlay : Panel
             Blur(backdrop, false);
             StateChanged?.Invoke(null, host);
         }
+        StackChanged?.Invoke(null, host);
         if (previousFocus is InputElement element && TopLevel.GetTopLevel(element) == host)
             element.Focus();
         Closed?.Invoke(this, EventArgs.Empty);
@@ -224,7 +229,8 @@ public sealed class ModalOverlay : Panel
     }
 
     /// <summary>Whether this is the modal on top, the one the keys are for.</summary>
-    private bool IsTopmost => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0 && list[^1] == this;
+    /// <summary>Whether it is the top one of its window's open overlays.</summary>
+    public bool IsTopmost => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0 && list[^1] == this;
 
     private void MoveFocus(bool back)
     {

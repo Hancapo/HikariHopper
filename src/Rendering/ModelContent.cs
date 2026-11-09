@@ -1,5 +1,6 @@
 using System.Numerics;
 using CommonFury.Numerics;
+using FiveFury;
 using FiveFury.Textures;
 using FiveFury.Drawables;
 using FiveFury.Ybn;
@@ -25,6 +26,41 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     /// in order), and then from <paramref name="nearby"/> (the other .ytd files beside it), which are read only for a
     /// texture still missing. Dictionaries that can't be read are left out.
     /// </summary>
+    /// <summary>
+    /// The textures a .ydr, .ydd or .yft carries in its drawables' own dictionaries, each name once, and its edition:
+    /// what its viewer's textures button shows.
+    /// </summary>
+    /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
+    public static (IReadOnlyList<Texture> Textures, GameTarget Target) EmbeddedTextures(string name, ReadOnlySpan<byte> data)
+    {
+        IEnumerable<Drawable> drawables;
+        GameTarget target;
+        switch (Path.GetExtension(name).ToLowerInvariant())
+        {
+            case ".ydr":
+                Ydr ydr = Ydr.Read(data);
+                (drawables, target) = ([ydr.Drawable], ydr.Target);
+                break;
+            case ".ydd":
+                Ydd ydd = Ydd.Read(data);
+                (drawables, target) = ([.. ydd.Drawables.Select(entry => entry.Drawable)], ydd.Target);
+                break;
+            case ".yft":
+                Yft yft = Yft.Read(data);
+                (drawables, target) = ([.. FragmentModels.Of(yft, name).Select(model => model.Drawable)], yft.Target);
+                break;
+            default:
+                throw new InvalidDataException($"{name} isn't a drawable.");
+        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var textures = new List<Texture>();
+        foreach (TextureDictionary dictionary in drawables.Select(d => d.TextureDictionary).OfType<TextureDictionary>().Distinct())
+            foreach (Texture texture in dictionary.Textures)
+                if (texture.Name is { } own && seen.Add(own))
+                    textures.Add(texture);
+        return (textures, target);
+    }
+
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
     public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
         IReadOnlyList<NearbyDictionary>? nearby = null)

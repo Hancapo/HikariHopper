@@ -405,6 +405,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry),
+            OpenTextures = () => OpenEmbeddedTextures(entry, data),
             Nearby = NearbyDictionaries(entry),
         });
         SetStatus($"Opened {entry.Name}");
@@ -424,6 +425,35 @@ public sealed partial class ExplorerViewModel
         static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
             [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
                 new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path)))];
+    }
+
+    /// <summary>
+    /// A drawable's embedded textures in the texture viewer: a .ydr as it opens from the explorer, edited and saved back
+    /// into it; a .yft's or .ydd's as a dictionary of their own, to look at and save elsewhere, as their textures can't
+    /// be written back yet.
+    /// </summary>
+    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data)
+    {
+        if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenTextureDictionary(entry);
+            return;
+        }
+        byte[] dictionary;
+        try
+        {
+            (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(entry.Name, data);
+            var own = new FiveFury.Textures.TextureDictionary();
+            own.Textures.AddRange(textures);
+            dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
+        }
+        catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            SetStatus($"Could not open the textures of {entry.Name}: {error.Message}");
+            return;
+        }
+        TextureViewer.OpenDictionary($"{entry.Name} textures", "", dictionary);
+        SetStatus($"Opening the textures of {entry.Name}");
     }
 
     /// <summary>The game while one is open, with its keys; none for an RPF opened on its own.</summary>

@@ -182,6 +182,23 @@ public sealed class DrawableViewerTests
     }
 
     [Fact]
+    public void A_drawables_embedded_textures_are_counted_and_read_each_once()
+    {
+        byte[] ydr = Quad(GameTarget.Enhanced, "normal_spec", material =>
+        {
+            material.Textures["DiffuseSampler"] = new TextureReference(Map("sign_d"));
+            material.Textures["BumpSampler"] = new TextureReference(Map("sign_n"));
+            material.Textures["SpecSampler"] = new TextureReference("shared_s");
+        });
+        // Two embedded; the third is only named, found elsewhere.
+        Assert.Equal(2, ModelContent.Read("sign.ydr", ydr).Surfaces!.EmbeddedTextureCount);
+        (IReadOnlyList<Texture> textures, GameTarget target) = ModelContent.EmbeddedTextures("sign.ydr", ydr);
+        Assert.Equal(["sign_d", "sign_n"], textures.Select(t => t.Name).Order());
+        Assert.Equal(GameTarget.Enhanced, target);
+        Assert.Throws<InvalidDataException>(() => ModelContent.EmbeddedTextures("sign.ybn", ydr));
+    }
+
+    [Fact]
     public void A_shader_without_specular_constants_writes_none()
     {
         SurfaceMaterial material = ModelContent.Read("quad.ydr", Quad(GameTarget.Enhanced, "default")).Surfaces!.Materials.Single();

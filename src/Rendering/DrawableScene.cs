@@ -40,6 +40,9 @@ internal sealed class DrawableScene
     public required IReadOnlyList<SurfacePart> Parts { get; init; }
     public required IReadOnlyList<SurfaceMaterial> Materials { get; init; }
 
+    /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
+    public int EmbeddedTextureCount { get; init; }
+
     /// <summary>The drawables placed, by name and group, as <see cref="SurfacePart.Model"/> counts them.</summary>
     public IReadOnlyList<(string Name, string? Group)> Models { get; init; } = [];
 
@@ -166,6 +169,7 @@ internal sealed class DrawableScene
             Indices = [.. indices],
             Parts = parts,
             Models = [.. models.Select(m => (m.Name, m.Group))],
+            EmbeddedTextureCount = own.Count,
             Materials = [.. materials],
             Diagnostics = diagnostics,
         };
