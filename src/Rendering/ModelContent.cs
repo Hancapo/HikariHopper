@@ -65,12 +65,14 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
         IReadOnlyList<NearbyDictionary>? nearby = null)
     {
-        IReadOnlyList<SceneModel>? models = Path.GetExtension(name).ToLowerInvariant() switch
+        string extension = Path.GetExtension(name).ToLowerInvariant();
+        Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
+        IReadOnlyList<SceneModel>? models = extension switch
         {
             ".ydr" => [new SceneModel(Path.GetFileNameWithoutExtension(name), Ydr.Read(data).Drawable, Matrix4x4.Identity)],
             ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel(entry.Drawable.Name is { Length: > 0 } own ? own : $"0x{entry.Name.Value:X8}",
                 entry.Drawable, Matrix4x4.Identity))],
-            ".yft" => FragmentModels.Of(Yft.Read(data), Path.GetFileNameWithoutExtension(name)),
+            ".yft" => FragmentModels.Of(fragment!, Path.GetFileNameWithoutExtension(name)),
             _ => null,
         };
         if (models is not null)
@@ -86,7 +88,8 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
                 {
                 }
             }
-            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? []));
+            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? []),
+                fragment?.PhysicsLods.FirstOrDefault(lod => lod is not null)?.CompositeBound, fragment?.Lights);
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);
         }
         if (name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase))

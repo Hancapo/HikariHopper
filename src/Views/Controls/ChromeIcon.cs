@@ -55,6 +55,9 @@ public class ChromeIcon : Control
         ["parts"] = "panel-left",
         ["frame"] = "focus",
         ["orbit"] = "orbit",
+        ["skeleton"] = "bone",
+        ["bounds"] = "box",
+        ["lights"] = "lightbulb",
         ["free"] = "move-3d",
     };
 

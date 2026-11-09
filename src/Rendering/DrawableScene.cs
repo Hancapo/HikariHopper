@@ -43,6 +43,9 @@ internal sealed class DrawableScene
     /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
     public int EmbeddedTextureCount { get; init; }
 
+    /// <summary>What can be drawn over the drawables: their skeletons, bounds and lights.</summary>
+    public DrawableOverlays Overlays { get; init; } = DrawableOverlays.None;
+
     /// <summary>The drawables placed, by name and group, as <see cref="SurfacePart.Model"/> counts them.</summary>
     public IReadOnlyList<(string Name, string? Group)> Models { get; init; } = [];
 
@@ -65,9 +68,11 @@ internal sealed class DrawableScene
     /// <summary>
     /// Builds one scene of placed drawables, finding textures in the drawables' own dictionaries and then through
     /// <paramref name="lookup"/>. A drawable placed more than once (a wheel at each of its bones) shares its materials,
-    /// as does one using another's (a fragment's wheel, its main drawable's).
+    /// as does one using another's (a fragment's wheel, its main drawable's). A fragment's bounds are its physics
+    /// composite, <paramref name="fragmentBound"/>, and its lights its own, <paramref name="fragmentLights"/>.
     /// </summary>
-    public static DrawableScene Build(IReadOnlyList<SceneModel> models, TextureLookup lookup)
+    public static DrawableScene Build(IReadOnlyList<SceneModel> models, TextureLookup lookup, FiveFury.Bounds.Bound? fragmentBound = null,
+        IReadOnlyList<DrawableLight>? fragmentLights = null)
     {
         var own = new Dictionary<string, Texture>(StringComparer.OrdinalIgnoreCase);
         foreach (TextureDictionary dictionary in models.Select(m => m.Drawable.TextureDictionary).OfType<TextureDictionary>())
@@ -170,6 +175,7 @@ internal sealed class DrawableScene
             Parts = parts,
             Models = [.. models.Select(m => (m.Name, m.Group))],
             EmbeddedTextureCount = own.Count,
+            Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
             Materials = [.. materials],
             Diagnostics = diagnostics,
         };

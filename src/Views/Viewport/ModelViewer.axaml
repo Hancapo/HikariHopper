@@ -67,7 +67,7 @@
           </Panel>
 
           <!-- A drawable's toolbar: the parts panel and the level of detail; whether the sun casts shadows, and the
-               embedded textures; and, on the right, whether the camera orbits or flies, and the camera back on the model. -->
+               embedded textures; what is drawn over the model: its skeleton, bounds and lights; and, on the right, whether the camera orbits or flies, and the camera back on the model. -->
           <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
                  IsVisible="False">
             <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
@@ -120,6 +120,15 @@
                                   HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
                                   Stroke="{x:Static ui:Theme.TextDim}" />
                   </Panel>
+                </Border>
+                <Border Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" Background="{x:Static ui:Theme.BorderHard}" />
+                <!-- What is drawn over the model, through it. -->
+                <Border Classes="well">
+                  <StackPanel>
+                    <c:ChromeToolButton Name="SkeletonButton" Classes="tool" IconKind="skeleton" AutomationProperties.Name="Skeleton" />
+                    <c:ChromeToolButton Name="BoundsButton" Classes="tool" IconKind="bounds" AutomationProperties.Name="Bounds" />
+                    <c:ChromeToolButton Name="LightsButton" Classes="tool" IconKind="lights" AutomationProperties.Name="Lights" />
+                  </StackPanel>
                 </Border>
               </StackPanel>
             </DockPanel>

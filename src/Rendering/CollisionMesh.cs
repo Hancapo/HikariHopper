@@ -31,6 +31,14 @@ internal sealed class CollisionMesh
         return builder.mesh;
     }
 
+    /// <summary>A bound's triangles where <paramref name="transform"/> puts it, at their own positions (an origin of zero).</summary>
+    public static ViewportMesh Build(Bound bound, Matrix4x4 transform)
+    {
+        var builder = new CollisionMesh(new ViewportMesh(Vector3.Zero));
+        builder.Add(bound, transform);
+        return builder.mesh;
+    }
+
     /// <summary>The material's display colour from FiveFury's catalogue, or the default's.</summary>
     internal static uint Colour(BoundMaterialType type) =>
         BoundMaterialLibrary.Default.Entries.TryGetValue(type, out BoundMaterialInfo info) && info.DisplayColor is { } rgb

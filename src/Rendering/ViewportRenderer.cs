@@ -35,6 +35,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private RenderPipeline backdrop= null!;
     private RenderPipeline meshes= null!;
     private RenderPipeline lines= null!;
+    private RenderPipeline overlayLines = null!;
+    private Buffer? overlayBuffer;
+    private uint overlayCount;
     // The swap chain's format, and the sRGB view of it that frames are drawn through.
     private readonly TextureFormat surfaceFormat;
     private readonly TextureFormat viewFormat;
@@ -174,7 +177,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }));
         // Lines over the meshes: tested against them, writing no depth. Each segment is one instance of six corners.
         Lazy<ShaderModule> lineShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("lines.wgsl") }));
-        lines = gpu.Pipeline($"lines/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        RenderPipelineDescriptor Lines(bool depth) => new()
         {
             Layout = pipelineLayout,
             Vertex = new VertexState
@@ -203,8 +206,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 EntryPoint = "fs_line",
                 Targets = new[] { new ColorTargetState { Format = viewFormat } },
             },
-            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
-        }));
+            DepthStencil = depth ? new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual } : null,
+        };
+        lines = gpu.Pipeline($"lines/{viewFormat}", () => device.CreateRenderPipelineSync(Lines(depth: true)));
+        // A drawable's overlays (its skeleton, bounds and lights): over everything, seen through the model.
+        overlayLines = gpu.Pipeline($"overlay-lines/{viewFormat}", () => device.CreateRenderPipelineSync(Lines(depth: false)));
         CreateLighting();
         CreateSurfacePipelines();
         Resize(width, height);
@@ -258,6 +264,18 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             segmentBuffer = Upload((ReadOnlySpan<ViewportSegment>)segments, ViewportSegment.Size);
             segmentCount = (uint)segments.Length;
         }
+    }
+
+    /// <summary>Draws these lines over a drawable, relative to its origin, in place of any before; none draws none.</summary>
+    public void ShowOverlays(ReadOnlySpan<ViewportSegment> segments)
+    {
+        overlayBuffer?.Destroy();
+        overlayBuffer = null;
+        overlayCount = 0;
+        if (segments.Length == 0)
+            return;
+        overlayBuffer = Upload(segments, ViewportSegment.Size);
+        overlayCount = (uint)segments.Length;
     }
 
     private Buffer Upload<T>(ReadOnlySpan<T> items, int size, BufferUsage usage = BufferUsage.Vertex) where T : unmanaged
@@ -408,6 +426,12 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.SetBindGroup(1, tonemapGroup!);
             mapped.SetBindGroup(2, lightGroup!);
             mapped.Draw(3);
+            if (overlayBuffer is not null)
+            {
+                mapped.SetPipeline(overlayLines);
+                mapped.SetVertexBuffer(0, overlayBuffer);
+                mapped.Draw(6, overlayCount);
+            }
             mapped.End();
         }
         queue.Submit(encoder.Finish());

@@ -56,6 +56,9 @@ public partial class ModelViewer : UserControl, IModalContent
         ThemedToolTip.Set(PartsButton, "Parts  (P)");
         ThemedToolTip.Set(LodButton, "Level of detail  (1-4)");
         FrameButton.Click += (_, _) => Reframe();
+        SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
+        BoundsButton.Click += (_, _) => SetOverlay(Overlay.Bounds, !boundsShown);
+        LightsButton.Click += (_, _) => SetOverlay(Overlay.Lights, !lightsShown);
         OrbitButton.Click += (_, _) => SetFreeCamera(false);
         FreeButton.Click += (_, _) => SetFreeCamera(true);
         Viewport.SpeedChanged += ShowSpeed;
@@ -88,8 +91,70 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         Set(ShadowsButton, Viewport.Shadows);
         Set(PartsButton, PartsSide.IsVisible);
+        Set(SkeletonButton, skeletonShown);
+        Set(BoundsButton, boundsShown);
+        Set(LightsButton, lightsShown);
         Set(OrbitButton, !Viewport.FreeCamera);
         Set(FreeButton, Viewport.FreeCamera);
+    }
+
+    /// <summary>What can be drawn over the model.</summary>
+    internal enum Overlay { Skeleton, Bounds, Lights }
+
+    private bool skeletonShown, boundsShown, lightsShown;
+    private DrawableOverlays overlays = DrawableOverlays.None;
+
+    /// <summary>Whether an overlay is drawn over the model.</summary>
+    internal bool OverlayShown(Overlay overlay) => overlay switch
+    {
+        Overlay.Skeleton => skeletonShown,
+        Overlay.Bounds => boundsShown,
+        _ => lightsShown,
+    };
+
+    /// <summary>Draws the model's skeleton, bounds or lights over it, or stops; one it doesn't have stays off.</summary>
+    internal bool SetOverlay(Overlay overlay, bool on)
+    {
+        ViewportSegment[] segments = Segments(overlay);
+        if (segments.Length == 0)
+            return false;
+        switch (overlay)
+        {
+            case Overlay.Skeleton:
+                skeletonShown = on;
+                break;
+            case Overlay.Bounds:
+                boundsShown = on;
+                break;
+            default:
+                lightsShown = on;
+                break;
+        }
+        Viewport.ShowOverlays([.. (skeletonShown ? overlays.Skeleton : []), .. (boundsShown ? overlays.Bounds : []), .. (lightsShown ? overlays.Lights : [])]);
+        RefreshToggles();
+        return true;
+    }
+
+    private ViewportSegment[] Segments(Overlay overlay) => overlay switch
+    {
+        Overlay.Skeleton => overlays.Skeleton,
+        Overlay.Bounds => overlays.Bounds,
+        _ => overlays.Lights,
+    };
+
+    /// <summary>The overlays the model has, each button off when it has none.</summary>
+    private void ShowOverlayButtons(DrawableScene scene)
+    {
+        overlays = scene.Overlays;
+        void Offer(ChromeToolButton button, Overlay overlay, string name, char key)
+        {
+            bool has = Segments(overlay).Length > 0;
+            button.IsEnabled = has;
+            ThemedToolTip.Set(button, has ? $"{name}  ({key})" : $"No {name.ToLowerInvariant()}");
+        }
+        Offer(SkeletonButton, Overlay.Skeleton, "Skeleton", 'B');
+        Offer(BoundsButton, Overlay.Bounds, "Bounds", 'C');
+        Offer(LightsButton, Overlay.Lights, "Lights", 'L');
     }
 
     /// <summary>
@@ -202,7 +267,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// B skeleton, C bounds, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -216,6 +281,12 @@ public partial class ModelViewer : UserControl, IModalContent
             case 'F':
                 Reframe();
                 return true;
+            case 'B':
+                return SetOverlay(Overlay.Skeleton, !skeletonShown);
+            case 'C':
+                return SetOverlay(Overlay.Bounds, !boundsShown);
+            case 'L':
+                return SetOverlay(Overlay.Lights, !lightsShown);
             case 'V':
                 SetFreeCamera(!Viewport.FreeCamera);
                 return true;
@@ -329,6 +400,7 @@ public partial class ModelViewer : UserControl, IModalContent
             Parts.Parts = visibility;
             SetPartsShown(true);
             ShowTextures(surfaces);
+            ShowOverlayButtons(surfaces);
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
