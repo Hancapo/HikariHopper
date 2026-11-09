@@ -100,15 +100,11 @@
                 </Border>
               </StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="PartsButton" Classes="tool" IconKind="parts" AutomationProperties.Name="Parts" />
-                  </StackPanel>
-                </Border>
                 <!-- The levels of detail the drawable has, as segments like the texture editor's channels; none when it
                      has only the one. -->
                 <c:SegmentedSwitch Name="LodSwitch" IsVisible="False" />
-                <Border Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" Background="{x:Static ui:Theme.BorderHard}" />
+                <Border Name="LodSeparator" Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" IsVisible="False"
+                        Background="{x:Static ui:Theme.BorderHard}" />
                 <Border Classes="well">
                   <StackPanel>
                     <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
@@ -166,11 +162,18 @@
             <WrapPanel Name="LegendPanel" ItemSpacing="14" LineSpacing="4" />
           </Border>
 
-          <!-- The parts panel, beside the viewport. -->
-          <Border Name="PartsSide" DockPanel.Dock="Left" Width="236" IsVisible="False"
-                  BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,1,0">
-            <v:PartsPanel Name="Parts" />
+          <!-- The parts panel, beside the viewport: it slides open and closed, its content clipped as it does. -->
+          <Border Name="PartsSide" DockPanel.Dock="Left" Width="0" ClipToBounds="True">
+            <v:PartsPanel Name="Parts" HorizontalAlignment="Left" />
           </Border>
+          <!-- Its edge: dragged, it resizes the panel; its arrow, in the middle, shows or hides it. -->
+          <Panel Name="PartsHandle" DockPanel.Dock="Left" Width="12" IsVisible="False" Background="{x:Static ui:Theme.ChromeBg}"
+                 Cursor="SizeWestEast">
+            <Border Width="1" HorizontalAlignment="Right" Background="{x:Static ui:Theme.BorderHard}" />
+            <c:ChromeToolButton Name="PartsArrow" Width="11" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="back" IconSize="10"
+                                IconThickness="1.7" Cursor="Hand" AutomationProperties.Name="Parts" />
+          </Panel>
 
           <v:ViewportHost Name="Viewport" />
         </DockPanel>

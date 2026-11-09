@@ -21,7 +21,10 @@ internal sealed class PartsPanel : UserControl
     private readonly StackPanel rows = new();
     private readonly TextBlock counts = new();
     private readonly HashSet<string> expanded = [];
+    private readonly HashSet<string> swept = [];
     private PartVisibility? parts;
+    // While a press on a box sweeps over the rows: what each is set to.
+    private bool? sweepTo;
 
     public PartsPanel()
     {
@@ -50,6 +53,18 @@ internal sealed class PartsPanel : UserControl
         };
         DockPanel.SetDock(header, Dock.Top);
         rows.Margin = new Thickness(0, 4, 0, 4);
+        rows.Background = Brushes.Transparent;
+        rows.PointerMoved += (_, e) =>
+        {
+            if (sweepTo is not null)
+                SweepOver((int)Math.Floor(e.GetPosition(rows).Y / RowHeight));
+        };
+        rows.PointerReleased += (_, e) =>
+        {
+            e.Pointer.Capture(null);
+            EndSweep();
+        };
+        rows.PointerCaptureLost += (_, _) => EndSweep();
         Content = new DockPanel
         {
             Children = { header, new ScrollViewer { Content = rows, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled } },
@@ -94,6 +109,40 @@ internal sealed class PartsPanel : UserControl
         if (parts is null)
             return;
         parts.Show(node, parts.State(node) != true);
+        Refresh();
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// A press on a row's box: it is shown, or hidden if it all showed, and the rows the pointer then passes over while
+    /// held are set the same way.
+    /// </summary>
+    internal void BeginSweep(PartNode node)
+    {
+        if (parts is null)
+            return;
+        sweepTo = parts.State(node) != true;
+        swept.Clear();
+        Set(node);
+    }
+
+    /// <summary>The held pointer is over the row at <paramref name="index"/>: it is set as the sweep's first was.</summary>
+    internal void SweepOver(int index)
+    {
+        if (sweepTo is not null && index >= 0 && index < Rows.Count)
+            Set(Rows[index].Node);
+    }
+
+    /// <summary>The pointer let go: the sweep is over.</summary>
+    internal void EndSweep() => sweepTo = null;
+
+    private void Set(PartNode node)
+    {
+        if (parts is null || sweepTo is not { } to || !swept.Add(node.Key))
+            return;
+        if (parts.State(node) == to)
+            return;
+        parts.Show(node, to);
         Refresh();
         Changed?.Invoke();
     }
@@ -164,11 +213,15 @@ internal sealed class PartsPanel : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Focusable = false,
         };
-        box.Click += (_, e) =>
+        // Handled before the box toggles itself: the panel sets it, and any the press then sweeps over.
+        box.AddHandler(PointerPressedEvent, (_, e) =>
         {
-            Flip(node);
+            if (!e.GetCurrentPoint(box).Properties.IsLeftButtonPressed)
+                return;
+            BeginSweep(node);
+            e.Pointer.Capture(rows);
             e.Handled = true;
-        };
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Grid.SetColumn(box, 2);
         grid.Children.Add(box);
         var name = new TextBlock

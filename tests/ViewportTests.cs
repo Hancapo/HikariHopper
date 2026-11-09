@@ -449,14 +449,27 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Viewport.FreeCamera);
         // The parts panel shows the drawable, and P hides and shows it; the drawable has only the high level, so 2
         // changes nothing.
-        Assert.True(viewer.PartsSide.IsVisible);
+        Assert.True(viewer.PartsShown);
+        Assert.True(viewer.PartsHandle.IsVisible);
         Assert.Equal("1 / 1", viewer.Parts.CountText);
         // The drawable, open, and its one geometry under it.
         Assert.Equal(["tri", "default"], viewer.Parts.Rows.Select(row => row.Node.Name));
         Assert.True(viewer.Shortcut('P'));
-        Assert.False(viewer.PartsSide.IsVisible);
-        Assert.True(viewer.Shortcut('P'));
-        Assert.True(viewer.PartsSide.IsVisible);
+        Assert.False(viewer.PartsShown);
+        // Closed, its edge stays, the arrow pointing the way it would open.
+        Assert.True(viewer.PartsHandle.IsVisible);
+        Assert.Equal("forward", viewer.PartsArrow.IconKind);
+        viewer.PartsArrow.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Assert.True(viewer.PartsShown);
+        Assert.Equal("back", viewer.PartsArrow.IconKind);
+        // Its edge resizes it, within limits.
+        double width = Views.ModelViewer.PartsWidth;
+        viewer.ResizeParts(300);
+        Assert.Equal(300, Views.ModelViewer.PartsWidth);
+        Assert.Equal(300, viewer.Parts.Width);
+        viewer.ResizeParts(5000);
+        Assert.Equal(520, Views.ModelViewer.PartsWidth);
+        viewer.ResizeParts(width);
         // Only the high level: no level segments, and 2 changes nothing.
         Assert.False(viewer.LodSwitch.IsVisible);
         viewer.Shortcut('2');
@@ -622,7 +635,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Settle(viewer);
         Assert.False(viewer.Toolbar.IsVisible);
         Assert.False(viewer.StatsPanel.IsVisible);
-        Assert.False(viewer.PartsSide.IsVisible);
+        Assert.False(viewer.PartsShown);
+        Assert.False(viewer.PartsHandle.IsVisible);
         Assert.False(viewer.Shortcut('H'));
     }
 

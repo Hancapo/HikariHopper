@@ -33,6 +33,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - Double-clicking a drawable (.ydr) opens it in the 3D viewer instead of the texture editor. ([#91](https://github.com/Hancapo/HikariHopper/pull/91))
 - The 3D viewer picks a model's level of detail from segments, shown only when it has more than one, and its time of day from a dropdown on the toolbar; its textures button is a plain icon, and its status bar no longer shows the GPU, the material count or the size. ([#116](https://github.com/Hancapo/HikariHopper/pull/116))
+- The 3D viewer's parts panel slides open and closed from an arrow on its edge, which also resizes it, and its boxes can be set by pressing one and dragging over the rest. ([#117](https://github.com/Hancapo/HikariHopper/pull/117))
 
 ### Fixed
 

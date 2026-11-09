@@ -50,7 +50,12 @@ public partial class ModelViewer : UserControl, IModalContent
         TimeButton.Click += (_, _) => ToggleTime();
         ThemedToolTip.Set(TimeButton, "Time of day");
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
-        PartsButton.Click += (_, _) => SetPartsShown(!PartsSide.IsVisible);
+        PartsArrow.Click += (_, _) => SetPartsShown(!PartsShown);
+        PartsHandle.PointerPressed += OnHandlePressed;
+        PartsHandle.PointerMoved += OnHandleMoved;
+        PartsHandle.PointerReleased += (_, e) => EndResize(e.Pointer);
+        PartsHandle.PointerCaptureLost += (_, _) => EndResize(null);
+        Parts.Width = partsWidth;
         LodSwitch.SideRequested += (_, index) =>
         {
             if (visibility is { } shown && index >= 0 && index < shown.Levels.Count)
@@ -59,7 +64,6 @@ public partial class ModelViewer : UserControl, IModalContent
         TexturesButton.Click += (_, _) => OpenTextures();
         this.file = file;
         Parts.Changed += ShowParts;
-        ThemedToolTip.Set(PartsButton, "Parts  (P)");
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         BoundsButton.Click += (_, _) => SetOverlay(Overlay.Bounds, !boundsShown);
@@ -95,7 +99,6 @@ public partial class ModelViewer : UserControl, IModalContent
             button.Foreground = on ? Ui.Theme.Text : Ui.Theme.TextDim;
         }
         Set(ShadowsButton, Viewport.Shadows);
-        Set(PartsButton, PartsSide.IsVisible);
         Set(SkeletonButton, skeletonShown);
         Set(BoundsButton, boundsShown);
         Set(LightsButton, lightsShown);
@@ -216,11 +219,69 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
     internal PartVisibility? Visibility => visibility;
 
-    /// <summary>Shows or hides the parts panel.</summary>
+    // How wide the parts panel is, kept for the next viewer; and how far it can be dragged.
+    private static double partsWidth = 236;
+    private const double MinPartsWidth = 160, MaxPartsWidth = 520;
+    private readonly Avalonia.Animation.Transitions PartsSlide =
+    [
+        new Avalonia.Animation.DoubleTransition { Property = WidthProperty, Duration = TimeSpan.FromMilliseconds(180), Easing = new Avalonia.Animation.Easings.CubicEaseOut() },
+    ];
+    private bool partsShown;
+    private Point? resizeFrom;
+    private double resizeWidth;
+
+    /// <summary>Whether the parts panel is open.</summary>
+    internal bool PartsShown => partsShown;
+
+    /// <summary>The parts panel's width when open.</summary>
+    internal static double PartsWidth => partsWidth;
+
+    /// <summary>Slides the parts panel open or closed; its edge's arrow points the way it would go.</summary>
     internal void SetPartsShown(bool shown)
     {
-        PartsSide.IsVisible = shown && visibility is not null;
+        partsShown = shown && visibility is not null;
+        PartsHandle.IsVisible = visibility is not null;
+        PartsSide.Transitions ??= PartsSlide;
+        PartsSide.Width = partsShown ? partsWidth : 0;
+        PartsArrow.IconKind = partsShown ? "back" : "forward";
+        ThemedToolTip.Set(PartsArrow, partsShown ? "Hide the parts  (P)" : "Show the parts  (P)");
         RefreshToggles();
+    }
+
+    /// <summary>Sets the open parts panel's width, as dragging its edge does, within its limits.</summary>
+    internal void ResizeParts(double width)
+    {
+        partsWidth = Math.Clamp(width, MinPartsWidth, MaxPartsWidth);
+        Parts.Width = partsWidth;
+        if (partsShown)
+            PartsSide.Width = partsWidth;
+    }
+
+    // A drag on the edge, off its arrow, resizes the open panel; it follows the pointer, without the slide.
+    private void OnHandlePressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (!partsShown || !e.GetCurrentPoint(PartsHandle).Properties.IsLeftButtonPressed)
+            return;
+        resizeFrom = e.GetPosition(this);
+        resizeWidth = partsWidth;
+        PartsSide.Transitions = null;
+        e.Pointer.Capture(PartsHandle);
+        e.Handled = true;
+    }
+
+    private void OnHandleMoved(object? sender, Avalonia.Input.PointerEventArgs e)
+    {
+        if (resizeFrom is { } from)
+            ResizeParts(resizeWidth + e.GetPosition(this).X - from.X);
+    }
+
+    private void EndResize(Avalonia.Input.IPointer? pointer)
+    {
+        if (resizeFrom is null)
+            return;
+        resizeFrom = null;
+        pointer?.Capture(null);
+        PartsSide.Transitions = PartsSlide;
     }
 
     /// <summary>Shows a level of detail the drawable has.</summary>
@@ -246,7 +307,7 @@ public partial class ModelViewer : UserControl, IModalContent
             LodSwitch.Sides.Add(new SwitchSide { Text = shortName, Width = 14 + 7 * shortName.Length, Label = name, ToolTip = $"{name} detail  ({lod + 1})" });
         }
         LodSwitch.RefreshSides();
-        LodSwitch.IsVisible = levels.Count > 1;
+        LodSwitch.IsVisible = LodSeparator.IsVisible = levels.Count > 1;
         LodSwitch.SelectedIndex = visibility is null ? -1 : IndexOf(levels, visibility.Lod);
     }
 
@@ -297,7 +358,7 @@ public partial class ModelViewer : UserControl, IModalContent
                 SetFreeCamera(!Viewport.FreeCamera);
                 return true;
             case 'P':
-                SetPartsShown(!PartsSide.IsVisible);
+                SetPartsShown(!PartsShown);
                 return true;
             case 'T':
                 return OpenTextures();
