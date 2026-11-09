@@ -10,7 +10,12 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Removing a texture in the texture editor asks with a red Remove button, like deleting a file. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+
 ### Fixed
+
+- Text fields in the texture editor's dialogs are as tall as the dropdowns beside them, and line up from one dialog to the next. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- The texture editor says "1 mip", not "1 mips", and shows no mip slider for a texture with only one. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
 
 ### Removed
 

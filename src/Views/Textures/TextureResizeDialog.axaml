@@ -14,10 +14,10 @@
           RowDefinitions="Auto,8,Auto,8,Auto,8,Auto,8,Auto,8,Auto,8,Auto">
       <TextBlock Name="ResolutionLabel" Classes="label" Text="Resolution" />
       <v:QtGrid Name="ResolutionRow" Grid.Column="2" ColumnDefinitions="*,8,Auto,8,*">
-        <c:FlatTextField Name="WidthField" Grid.Column="0" VerticalAlignment="Center" />
+        <c:FlatTextField Name="WidthField" Grid.Column="0" Height="28" VerticalAlignment="Center" />
         <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-        <c:FlatTextField Name="HeightField" Grid.Column="4" VerticalAlignment="Center" />
+        <c:FlatTextField Name="HeightField" Grid.Column="4" Height="28" VerticalAlignment="Center" />
       </v:QtGrid>
 
       <Panel Name="LockSpacer" Grid.Row="2" Width="112" Height="1" HorizontalAlignment="Left" VerticalAlignment="Center" />

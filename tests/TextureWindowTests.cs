@@ -128,7 +128,19 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.Null(harness.Window.ToolDialog);
         harness.Key(Key.Delete);
-        Assert.IsType<TextureRemoveDialog>(harness.Window.ToolDialog);
+        var remove = Assert.IsType<TextureRemoveDialog>(harness.Window.ToolDialog);
+        harness.Settle();
+        // Removing wears the error colour, as the explorer's Delete does; the other tools' apply is the green one.
+        Assert.True(remove.ApplyButton!.Destructive);
+        Assert.False(remove.ApplyButton.Primary);
+        harness.Key(Key.Escape);
+        harness.Settle();
+        var rename = (TextureRenameDialog)harness.Window.OpenToolDialog(TextureTool.Rename);
+        harness.Settle();
+        Assert.True(rename.ApplyButton!.Primary);
+        Assert.False(rename.ApplyButton.Destructive);
+        // Its field is as tall as the dropdowns of the other tools.
+        Assert.Equal(28, rename.NameField.Bounds.Height);
     }
 
     [AvaloniaFact]
@@ -421,6 +433,19 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ATextureWithOneMipSaysSoWithoutASlider()
+    {
+        TextureWindowHarness harness = Opened();
+        Assert.Equal(1, harness.ViewModel.MipCount);
+        Assert.Equal("1 MIP", harness.Window.Preview.MipBar.MipText.Text);
+        Assert.False(harness.Window.Preview.MipBar.Slider.IsVisible);
+        // In the list and in the dialogs' summary too: one mip, not "1 mips".
+        Assert.Equal("1 MIP", harness.ViewModel.TexturesModel[0].MipLabel);
+        Assert.Equal("1 mip", ViewModels.TextureItem.Mips(1));
+        Assert.Equal("7 mips", ViewModels.TextureItem.Mips(7));
+    }
+
+    [AvaloniaFact]
     public void MipSliderJumpsToAPressOffTheHandle()
     {
         Texture mipped = new("mips", 64, 64, TextureFormat.B8G8R8A8Unorm, 3,
@@ -622,7 +647,7 @@ public sealed class TextureWindowTests
         Assert.Equal("128", dialog.WidthField.Text);
         dialog.WidthField.Text = "";
         Assert.False(dialog.ApplyEnabled);
-        Assert.Equal("256 × 64  →  — × 32  ·  1 mips  ·  last none", dialog.ResultText.Text);
+        Assert.Equal("256 × 64  →  — × 32  ·  1 mip  ·  last none", dialog.ResultText.Text);
         dialog.MipCheck.IsChecked = false;
         Assert.False(dialog.MipSizeCombo.IsVisible);
     }

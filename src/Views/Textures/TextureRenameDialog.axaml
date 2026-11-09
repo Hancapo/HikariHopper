@@ -10,7 +10,7 @@
     <Border Classes="rule" />
     <v:QtGrid ColumnDefinitions="112,12,*">
       <TextBlock Classes="label" Text="Texture name" />
-      <c:FlatTextField Name="NameField" Grid.Column="2" MaxLength="255" />
+      <c:FlatTextField Name="NameField" Grid.Column="2" Height="28" MaxLength="255" />
     </v:QtGrid>
     <Panel c:QtColumnLayout.FillHeight="True" />
   </c:QtColumnLayout>

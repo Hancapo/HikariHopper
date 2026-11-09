@@ -166,10 +166,10 @@ public partial class TextureResizeDialog : TextureToolDialog
                 : $"All selected textures → {width} × {height}";
         else
         {
-            string mipCount = mipmaps && valid ? vm.EstimatedMipCount(width, height, minimum).ToString() : "1";
+            string mips = ViewModels.TextureItem.Mips(mipmaps && valid ? vm.EstimatedMipCount(width, height, minimum) : 1);
             string last = mipmaps && valid ? vm.EstimatedSmallestMipDimensions(width, height, minimum) : "none";
             ResultText.Text = $"{vm.SelectedWidth} × {vm.SelectedHeight}  →  {(width != 0 ? width : "—")} × "
-                + $"{(height != 0 ? height : "—")}  ·  {mipCount} mips  ·  last {last}";
+                + $"{(height != 0 ? height : "—")}  ·  {mips}  ·  last {last}";
         }
     }
 

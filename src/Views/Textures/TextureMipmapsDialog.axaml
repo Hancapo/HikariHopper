@@ -8,7 +8,7 @@
   <c:QtColumnLayout Margin="12" Spacing="10">
     <v:TextureDialogSummary />
     <Border Classes="rule" />
-    <v:QtGrid ColumnDefinitions="Auto,12,*" RowDefinitions="Auto,8,Auto">
+    <v:QtGrid ColumnDefinitions="112,12,*" RowDefinitions="Auto,8,Auto">
       <TextBlock Classes="label" Text="Downsampling" />
       <v:TextureFilterCombo Name="FilterCombo" Grid.Column="2" />
       <TextBlock Classes="label" Grid.Row="2" Text="Smallest level" />

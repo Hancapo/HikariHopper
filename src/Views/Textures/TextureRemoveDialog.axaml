@@ -3,7 +3,7 @@
                      xmlns:v="using:HikariHopper.Views"
                      xmlns:c="using:HikariHopper.Views.Controls"
                      x:Class="HikariHopper.Views.TextureRemoveDialog"
-                     BodyHeight="160" ApplyLabel="Remove">
+                     BodyHeight="160" ApplyLabel="Remove" Destructive="True">
   <!-- Port of TextureRemoveDialog.qml. -->
   <c:QtColumnLayout Margin="12" Spacing="10">
     <v:TextureDialogSummary />
