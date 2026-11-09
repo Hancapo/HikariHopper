@@ -141,6 +141,9 @@ public sealed class ImageViewerTests : ExplorerTestBase
         Assert.Equal("photo.png", viewer.TitleText.Text);
         Assert.Equal(("image", "asset"), viewer.TitleGlyph.Resolved);
         Assert.False(viewer.Preview.MipBar.IsVisible);
+        // The status bar says how to move around it, as the texture editor's does.
+        Assert.Equal(["Wheel", "Zoom", "Drag", "Pan", "F", "Fit", "1", "Actual size"],
+            Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(viewer.Hints).OfType<Avalonia.Controls.TextBlock>().Select(text => text.Text));
 
         // Escape closes it and the session lets it go.
         window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);

@@ -9,7 +9,8 @@
               Heading="ABOUT"
               FooterText="FiveFury · Avalonia · Archivo, Space Mono, Inter">
   <!-- The app's own lockup, centred: the icon over the wordmark, what it is, the version in a
-       sunken chip, and links to the project and its changes. The credits sit in the footer line. -->
+       sunken chip, and links to the project, its changes and the notices of the code it includes. The
+       credits sit in the footer line. -->
   <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
     <Image Name="AppIcon" Width="56" Height="56" HorizontalAlignment="Center"
            Source="avares://HikariHopper/Assets/Branding/icon-256.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -31,6 +32,8 @@
                           AutomationProperties.Name="Open HikariHopper on GitHub" />
       <c:ChromeToolButton Name="ChangelogButton" Width="104" Height="28" Raised="True" Text="Changelog"
                           AutomationProperties.Name="Open the changelog" />
+      <c:ChromeToolButton Name="LicencesButton" Width="104" Height="28" Raised="True" Text="Licences"
+                          AutomationProperties.Name="Open the third-party notices" />
     </StackPanel>
   </StackPanel>
 </v:ModalSheet>

@@ -8,9 +8,19 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- The image viewer's status bar says how to zoom, pan and fit the image, as the texture editor's does. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- A Licences button in About, which opens the notices of the code HikariHopper includes. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+
 ### Changed
 
+- The keyboard shortcuts list covers the 3D viewer, the texture editor and the text and image viewers too, in columns. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The Properties sheet is as tall as what it shows, where a file's few rows left it mostly empty. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The address bar names the game or RPF at its root, where it was empty. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+
 ### Fixed
+
+- The keyboard shortcuts list was missing Rename, Properties, Paste and typing an address. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The start page said Settings twice when no game was set up. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
 
 ### Removed
 

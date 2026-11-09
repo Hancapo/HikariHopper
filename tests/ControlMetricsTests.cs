@@ -567,10 +567,64 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Size(540, 440), ModalOverlay.SizeFor(about, new Size(1360, 800)));
         Assert.Equal(new Size(440, 380), ModalOverlay.SizeFor(about, new Size(940, 540)));
         var shortcuts = new ShortcutsDialog();
-        Assert.Equal(new Size(544, 640), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        Assert.Equal(new Size(1033, 720), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        // One that fits its content is as tall as that, and no taller than its share when it holds more.
+        Assert.True(shortcuts.FitsContent);
+        shortcuts.FittedHeight = 500;
+        Assert.Equal(new Size(1033, 500), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        shortcuts.FittedHeight = 2000;
+        Assert.Equal(new Size(1033, 720), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        // The others keep their share whatever they hold.
+        about.FittedHeight = 200;
+        Assert.Equal(new Size(540, 440), ModalOverlay.SizeFor(about, new Size(1360, 800)));
         // A small dialog keeps its own size.
         var fixedDialog = new Border { Width = 300, Height = 200 };
         Assert.Equal(new Size(300, 200), ModalOverlay.SizeFor(fixedDialog, new Size(1360, 800)));
+    });
+
+    [AvaloniaFact]
+    public void TheKeyboardReferenceListsEveryAreaInColumnsThatStartWhereOneDoes() => UiThread.Run(() =>
+    {
+        var shortcuts = new ShortcutsDialog();
+        Assert.Equal(["FILE", "GO", "EDIT", "3D VIEWER", "TEXTURE EDITOR", "TEXT VIEWER", "IMAGE VIEWER"], shortcuts.Groups.Select(group => group.Name));
+        // The explorer's own, the ones the list lacked, and the viewers' and the editor's.
+        (string Key, string Action)[] In(string name) => [.. shortcuts.Groups.Single(group => group.Name == name).Keys.Select(entry => (entry.Key, entry.Action))];
+        Assert.Contains(("F2", "Rename"), In("EDIT"));
+        Assert.Contains(("Alt+Enter", "Properties"), In("EDIT"));
+        Assert.Contains(("Ctrl+V", "Paste"), In("EDIT"));
+        Assert.Contains(("Ctrl+L · Alt+D", "Type or paste an address"), In("GO"));
+        Assert.Equal(["P", "1 – 4", "H", "T", "X", "B", "K", "L", "V", "F", "W A S D · Q E"], In("3D VIEWER").Select(entry => entry.Key));
+        Assert.Contains(("Ctrl+E", "Extract as DDS"), In("TEXTURE EDITOR"));
+        Assert.Contains(("Alt+Z", "Word wrap"), In("TEXT VIEWER"));
+        Assert.Contains(("1", "Actual size"), In("IMAGE VIEWER"));
+
+        // Three columns where there is room, fewer in a narrower sheet, each starting where a part of the app does.
+        Assert.Equal(3, ShortcutColumns.ColumnsFor(1000));
+        Assert.Equal(2, ShortcutColumns.ColumnsFor(700));
+        Assert.Equal(1, ShortcutColumns.ColumnsFor(500));
+        double[] heights = [128, 172, 216, 260, 282, 150, 84];
+        bool[] starts = [false, false, false, true, false, true, false];
+        Assert.Equal([3, 2, 2], ShortcutColumns.Partition(heights, starts, 3, 25));
+        Assert.Equal([3, 4], ShortcutColumns.Partition(heights, starts, 2, 25));
+        Assert.Equal([7], ShortcutColumns.Partition(heights, starts, 1, 25));
+        // No more columns than there are places to start one.
+        Assert.Equal([3, 2, 2], ShortcutColumns.Partition(heights, starts, 5, 25));
+
+        // Laid out: the explorer's groups, then the 3D viewer's and the texture editor's, then the text and image viewers'.
+        Window window = Show(shortcuts, 1040, 760);
+        Assert.Equal([3, 2, 2], shortcuts.Columns.Split);
+        Control[] groups = [.. shortcuts.Columns.Children.Where(child => child is StackPanel)];
+        Assert.Equal(7, groups.Length);
+        Assert.Equal(0, groups[0].Bounds.Y);
+        Assert.Equal(0, groups[3].Bounds.Y);
+        Assert.Equal(0, groups[5].Bounds.Y);
+        Assert.True(groups[3].Bounds.X >= groups[0].Bounds.Right + ShortcutColumns.ColumnGap);
+        Assert.True(groups[5].Bounds.X >= groups[3].Bounds.Right + ShortcutColumns.ColumnGap);
+        // A rule between two groups of a column, none over a column's first.
+        DottedRule[] rules = [.. shortcuts.Columns.Children.OfType<DottedRule>()];
+        Assert.Equal(6, rules.Length);
+        Assert.Equal([true, true, false, true, false, true], rules.Select(rule => rule.Bounds.Width > 0));
+        window.Close();
     });
 
     [AvaloniaFact]

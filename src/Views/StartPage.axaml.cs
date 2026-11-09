@@ -95,6 +95,8 @@ public partial class StartPage : UserControl
             foreach (LauncherEntry entry in entries)
                 Groups.Children.Add(new LauncherRow(entry, Activate));
         }
+        // A game that isn't set up already says "Settings…", and goes there: the button under it would say it twice.
+        SettingsButton.IsVisible = Entries.All(group => group.Entries.All(entry => entry.SetUp));
     }
 
     private void Activate(LauncherEntry entry)
