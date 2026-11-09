@@ -61,6 +61,8 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // A vehicle's dirt and its paint's ramp.
+                Map(7), Map(8),
             ],
         });
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, materialLayout] });
@@ -204,6 +206,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 4, TextureView = View(material.Specular) ?? white! },
                 new BindGroupEntry { Binding = 5, TextureView = View(material.TintPalette) ?? white! },
                 new BindGroupEntry { Binding = 6, Sampler = paletteSampler! },
+                new BindGroupEntry { Binding = 7, TextureView = View(material.Dirt) ?? white! },
+                new BindGroupEntry { Binding = 8, TextureView = View(material.DiffuseRamp) ?? white! },
             ],
         });
     }
