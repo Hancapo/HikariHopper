@@ -208,6 +208,9 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         Viewport.FreeCamera = on;
         SpeedStat.IsVisible = on;
+        // A collision or a navmesh has no counts beside the status line: the speed is there alone, while it flies.
+        if (surfaces is null)
+            StatsPanel.IsVisible = on;
         if (on)
         {
             ShowSpeed(Viewport.FreeSpeed);
@@ -711,6 +714,7 @@ public partial class ModelViewer : UserControl, IModalContent
         // Collisions and navmeshes are drawn flat, with no parts: of the toolbar, they have the camera's buttons.
         Toolbar.IsVisible = true;
         ModelTools.IsVisible = TimeWell.IsVisible = false;
+        TrianglesStat.IsVisible = VerticesStat.IsVisible = EdgesStat.IsVisible = false;
         RefreshToggles();
         ShowLegend(content.Mesh.Legend);
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();

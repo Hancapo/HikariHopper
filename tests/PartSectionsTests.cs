@@ -84,6 +84,12 @@ public sealed class PartSectionsTests
         Assert.Equal(["Head", "Hair", "Torso", "Legs", "Accessories", "Head prop", "Eyes prop", "crate"], sections.Select(section => section.Title));
         Assert.Equal(["hair_000_r", "hair_001_u", "hair_002_u"], sections[1].Nodes.Select(node => node.Name));
         Assert.Equal(["lowr_000_u", "lowr_001_u"], sections[3].Nodes.Select(node => node.Name));
+
+        // What isn't a ped's keeps the file's order after it, a name that says nothing among them.
+        PartNode[] mixed = [.. new[] { "lamp", "head_000_r", "crate_000" }.Select(name => Branch(name, 0, PartKind.Drawable, Leaf("mesh", 1)))];
+        IReadOnlyList<PartSection> other = PartVisibility.SectionsOf(mixed);
+        Assert.Equal(["Head", PartVisibility.VariantTitle(""), "crate"], other.Select(section => section.Title));
+        Assert.Equal(["lamp"], other[1].Nodes.Select(node => node.Name));
     }
 
     [Fact]

@@ -253,15 +253,14 @@ internal sealed class PartVisibility
 
     /// <summary>
     /// Where a variant section goes: a ped's components in the game's order (head, mask, hair, torso, legs…), then its
-    /// props in theirs, then any other name, and last the drawables whose names say nothing.
+    /// props in theirs, then everything else, which shares one place so it keeps the file's order: any other name, and
+    /// the drawables whose names say nothing.
     /// </summary>
     internal static int VariantOrder(string prefix)
     {
-        if (prefix.Length == 0)
-            return int.MaxValue;
         bool prop = prefix.StartsWith("p_", StringComparison.Ordinal);
         int index = Array.IndexOf(prop ? Props : Components, prop ? prefix[2..] : prefix);
-        return index < 0 ? int.MaxValue - 1 : prop ? Components.Length + index : index;
+        return index < 0 ? int.MaxValue : prop ? Components.Length + index : index;
     }
 
     /// <summary>A variant section's heading: a ped component's name for its prefix, the prefix itself otherwise.</summary>

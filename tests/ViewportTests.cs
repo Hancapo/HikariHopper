@@ -954,9 +954,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.ModelTools.IsVisible);
         Assert.False(viewer.TimeWell.IsVisible);
         Assert.True(viewer.OrbitButton.Sunken);
+        Assert.False(viewer.StatsPanel.IsVisible);
         Assert.True(viewer.Shortcut('V'));
         Assert.True(viewer.Viewport.FreeCamera);
         Assert.True(viewer.FreeButton.Sunken);
+        // Flying, the status bar says how fast, without a drawable's counts.
+        Assert.True(viewer.StatsPanel.IsVisible);
+        Assert.True(viewer.SpeedStat.IsVisible);
+        Assert.False(viewer.TrianglesStat.IsVisible);
+        Assert.False(viewer.VerticesStat.IsVisible);
+        Assert.False(viewer.EdgesStat.IsVisible);
         Assert.True(viewer.Shortcut('f'));
         Assert.False(viewer.Viewport.FreeCamera);
         Assert.False(viewer.Shortcut('T'));
