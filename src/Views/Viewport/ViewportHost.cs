@@ -41,6 +41,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private ViewportMesh? shown;
     private DrawableScene? surfaces;
     private float hours = DayCycle.DefaultHours;
+    private SkyPath sky = SkyPath.Game;
     private bool shadows = true;
     private bool[]? partsShown;
     private ViewportSegment[] overlays = [];
@@ -129,6 +130,18 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.SetTime(value);
     }
 
+    /// <summary>The sun's and moon's paths across the sky, the game's <c>time.xml</c>'s.</summary>
+    public SkyPath Sky
+    {
+        get => sky;
+        set
+        {
+            sky = value;
+            renderer?.SetSky(value);
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>Shows these triangles in place of anything before.</summary>
     public void Show(ViewportMesh? mesh)
     {
@@ -185,6 +198,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             (surfaceWidth, surfaceHeight) = ClientSize();
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
+            renderer.SetSky(sky);
             renderer.SetTime(hours);
             renderer.Shadows = shadows;
             renderer.Camera.Free = free;

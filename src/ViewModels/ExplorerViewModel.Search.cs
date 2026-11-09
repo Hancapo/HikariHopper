@@ -614,6 +614,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = named,
             GameDictionaries = GameDictionaries(name),
+            GameSky = game is not null ? SkyOf(game) : null,
             Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>
             {
                 // Where it lives is worked out here, on the UI thread; the read runs on the viewer's, with a reader of its own.

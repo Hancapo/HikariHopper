@@ -41,6 +41,8 @@ public partial class ModelViewer : UserControl, IModalContent
         StatusText.Text = file.Data.Length > 0 ? $"Reading {file.Name}…" : "Starting the GPU…";
         // Read in the background while the window opens and the GPU starts, then shown.
         Reading = Load(file);
+        // The sun and moon move along the game's own paths, once its time.xml is read.
+        SkyRead = file.GameSky is { } sky ? ShowSky(sky) : Task.CompletedTask;
         Viewport.Started += adapter =>
         {
             started = true;
@@ -92,6 +94,24 @@ public partial class ModelViewer : UserControl, IModalContent
         ThemedToolTip.Set(EdgesStat, "Edges");
         RefreshToggles();
         Viewport.ShortcutPressed += key => Shortcut(key);
+    }
+
+    /// <summary>The game's sky paths being read and put on the viewport; done at once outside a game.</summary>
+    internal Task SkyRead { get; }
+
+    private async Task ShowSky(Task<SkyPath> pending)
+    {
+        SkyPath sky;
+        try
+        {
+            sky = await pending;
+        }
+        catch (Exception error) when (ViewModels.OperationErrors.IsExpected(error))
+        {
+            return;
+        }
+        if (!closed)
+            Viewport.Sky = sky;
     }
 
     /// <summary>Whether the sun casts shadows on the model and the ground.</summary>
