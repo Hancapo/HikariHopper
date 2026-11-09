@@ -10,11 +10,11 @@ namespace HikariHopper.Rendering;
 // and drawables drawn in HDR, then exposed and tone-mapped as the game's post-process does, over the backdrop.
 // Collisions, navmeshes and the backdrop keep their own flat shading, in the theme's colours.
 //   reflection map (when the time changes) -> shadow map -> backdrop and lines to the display -> drawables to HDR ->
-//   the frame's mean luminance -> tone map over them, exposed for it
+//   the frame's mean luminance -> their bloom -> tone map over them, exposed for it
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 288, ShadowViewBytes = 64;
+    private const int LightBytes = 304, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
@@ -205,9 +205,17 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = MeasuredBytes },
                 },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 2,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 3, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
         CreateExposure();
+        CreateBloom();
         Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("tonemap.wgsl") }));
         tonemapPipeline = gpu.Pipeline($"tonemap/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
@@ -248,7 +256,7 @@ internal sealed unsafe partial class ViewportRenderer
         DrawReflections(hours);
     }
 
-    /// <summary>The HDR target drawables are drawn to, sized to the window, and the tone map's view of it.</summary>
+    /// <summary>The HDR target drawables are drawn to, sized to the window, its bloom, and the tone map's view of them.</summary>
     private void CreateHdr()
     {
         hdr?.Destroy();
@@ -262,6 +270,7 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
         });
         hdrView = hdr.CreateView();
+        CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = tonemapLayout!,
@@ -269,6 +278,8 @@ internal sealed unsafe partial class ViewportRenderer
             [
                 new BindGroupEntry { Binding = 0, TextureView = hdrView },
                 new BindGroupEntry { Binding = 1, Buffer = measured!, Size = MeasuredBytes },
+                new BindGroupEntry { Binding = 2, TextureView = bloomViews[0] },
+                new BindGroupEntry { Binding = 3, Sampler = bloomSampler! },
             ],
         });
         CreateExposureGroup();
@@ -312,6 +323,7 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[12] = new Vector4(ReflectionMips, 0, 0, 0);
         MemoryMarshal.Write(MemoryMarshal.AsBytes(values[52..68]), in shadowMatrix);
         vectors[17] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        vectors[18] = Timecycle.BloomParameters(cycle);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 

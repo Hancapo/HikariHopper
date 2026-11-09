@@ -22,7 +22,8 @@ public sealed class GpuDeviceTests
         // A window's usual format: the pipelines a viewport needs are ready before one opens.
         foreach (string key in new[] { "backdrop", "meshes", "lines", "shadow", "ground-shadow", "tonemap", "luminance",
             "luminance-mean", "reflection-map/fs_reflection_map", "surface/Back/False/False", "surface/None/True/True",
-            "terrain/Back/False/False", "terrain/None/False/True" })
+            "terrain/Back/False/False", "terrain/None/False/True", "bloom/fs_bloom_bright", "bloom/fs_bloom_downsample_karis",
+            "bloom/fs_bloom_downsample", "bloom/fs_bloom_upsample" })
             Assert.True(gpu.Compiled($"{key}/{WebGpuSharp.TextureFormat.BGRA8UnormSrgb}"), key);
         // Warming up again does nothing more, and viewports share the device.
         Assert.Same(GpuDevice.WarmUp(), GpuDevice.WarmUp());

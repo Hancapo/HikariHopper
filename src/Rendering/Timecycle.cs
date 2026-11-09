@@ -5,8 +5,9 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// GTA V's light at one time of day, from its timecycle: the directional light (the sun, or the moon at night), the
-/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the ambient occlusion multipliers and the
-/// exposure range. Colours are already multiplied by their intensities.
+/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the ambient occlusion multipliers, the
+/// exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
+/// its intensity. Colours are already multiplied by their intensities.
 /// </summary>
 internal readonly record struct TimecycleLight(
     Vector3 Directional,
@@ -19,7 +20,10 @@ internal readonly record struct TimecycleLight(
     float OcclusionProp,
     float Exposure,
     float ExposureMin,
-    float ExposureMax);
+    float ExposureMax,
+    float BloomThreshold,
+    float BloomWidth,
+    float BloomIntensity);
 
 /// <summary>
 /// GTA V's timecycle for clear weather (EXTRASUNNY, its global region, the same in both editions), interpolated
@@ -99,7 +103,24 @@ internal static class Timecycle
             occlusion * Get("light_amb_occ_mult_prop"),
             Get("postfx_exposure"),
             Get("postfx_exposure_min"),
-            Get("postfx_exposure_max"));
+            Get("postfx_exposure_max"),
+            Get("postfx_bright_pass_thresh"),
+            Get("postfx_bright_pass_thresh_width"),
+            Get("postfx_intensity_bloom"));
+    }
+
+    /// <summary>
+    /// BloomParams, as the game sets it for the bright pass and the composite: the exposed luminance the bright pass
+    /// starts at (the threshold less half the width), the bloom's intensity, and one over the width it fades in over;
+    /// with no width, it starts at the threshold, at once.
+    /// </summary>
+    internal static Vector4 BloomParameters(in TimecycleLight light)
+    {
+        if (light.BloomWidth <= 0)
+            return new(light.BloomThreshold, light.BloomIntensity, 1, 0);
+        float low = MathF.Max(0, light.BloomThreshold - light.BloomWidth / 2);
+        float high = MathF.Max(0, light.BloomThreshold + light.BloomWidth / 2);
+        return new(low, light.BloomIntensity, 1 / (high - low), 0);
     }
 
     /// <summary>

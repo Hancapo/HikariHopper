@@ -89,6 +89,29 @@ public sealed class SunlightTests
         Assert.Equal(Timecycle.Dark, Timecycle.FilmicFor(Timecycle.DarkExposure + 1));
     }
 
+    [Fact]
+    public void The_bloom_starts_lower_and_is_stronger_at_night_as_the_timecycle_says()
+    {
+        // 13:00: a threshold of 1.7979 and a width of 1.5, so the bright pass fades in from 1.0479 over 1.5.
+        Vector4 day = Timecycle.BloomParameters(Timecycle.Evaluate(13));
+        AssertClose(new Vector3(1.0479f, .1f, 1 / 1.5f), new Vector3(day.X, day.Y, day.Z));
+        // 22:00: 0.05 and 0.25, whose lower end would be below zero, so it starts at zero; full intensity.
+        Vector4 night = Timecycle.BloomParameters(Timecycle.Evaluate(22));
+        AssertClose(new Vector3(0, 1, 1 / .175f), new Vector3(night.X, night.Y, night.Z));
+        // No width: it starts at the threshold, at once.
+        Vector4 sharp = Timecycle.BloomParameters(Timecycle.Evaluate(13) with { BloomWidth = 0 });
+        AssertClose(new Vector3(1.7979f, .1f, 1), new Vector3(sharp.X, sharp.Y, sharp.Z));
+    }
+
+    [Fact]
+    public void The_bloom_chain_has_the_games_eight_levels_fewer_in_a_small_window()
+    {
+        Assert.Equal(8, ViewportRenderer.BloomLevelsFor(1920, 1080));
+        // Half of 64 is 32: 32, 16, 8, 4, 2 and 1.
+        Assert.Equal(6, ViewportRenderer.BloomLevelsFor(64, 200));
+        Assert.Equal(1, ViewportRenderer.BloomLevelsFor(1, 1));
+    }
+
     private static void AssertClose(Vector3 expected, Vector3 actual)
     {
         Assert.True(Vector3.Distance(expected, actual) < 1e-3f * MathF.Max(1, expected.Length()), $"expected {expected}, got {actual}");
