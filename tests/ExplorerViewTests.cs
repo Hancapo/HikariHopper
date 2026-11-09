@@ -152,6 +152,18 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Contains("Settings", string.Concat(lone.Detail.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(run => run.Text)));
         // The row is the way to Settings: the button under the list doesn't say it a second time.
         Assert.False(start.SettingsButton.IsVisible);
+        // A screen reader has the row as a button it can invoke, named for where it leads.
+        var peer = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(lone);
+        Assert.Equal(Avalonia.Automation.Peers.AutomationControlType.Button, peer.GetAutomationControlType());
+        Assert.Equal("Set up Grand Theft Auto V in Settings", peer.GetName());
+        int asked = 0;
+        EventHandler count = (_, _) => asked++;
+        start.SettingsRequested += count;
+        Assert.IsAssignableFrom<Avalonia.Automation.Provider.IInvokeProvider>(peer).Invoke();
+        start.SettingsRequested -= count;
+        Assert.Equal(1, asked);
+        ui.Find<MenuRow>().Settings!.Close();
+        Pump(250);
         bool settings = false;
         start.SettingsRequested += (_, _) => settings = true;
         start.Focus();
