@@ -634,6 +634,53 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void The_viewers_tooltips_open_in_windows_of_their_own_over_the_viewport()
+    {
+        var window = new Views.MainWindow { Width = 1360, Height = 840 };
+        window.Show();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", [])) { Anchor = window.ExplorerScreenHost };
+        viewer.Present();
+        ExplorerStateRenders.Pump(300);
+
+        // In the viewer: drawn in a window of its own, in place of the in-window tooltip the viewport would cover.
+        Avalonia.Controls.ToolTip.SetIsOpen(viewer.ShadowsButton, true);
+        Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.ShadowsButton));
+        Assert.Equal("Shadows  (H)", Views.Controls.WindowToolTip.ShownText);
+        Assert.Contains(window.OwnedWindows, owned => owned.Content is Avalonia.Controls.Border);
+        // A tooltip that changes, as the parts arrow's does when it's pressed, closes it.
+        Avalonia.Controls.ToolTip.SetTip(viewer.ShadowsButton, "Changed");
+        Assert.Null(Views.Controls.WindowToolTip.ShownText);
+        // So does the viewer closing.
+        Avalonia.Controls.ToolTip.SetIsOpen(viewer.TimeButton, true);
+        Assert.Equal("Time of day", Views.Controls.WindowToolTip.ShownText);
+        viewer.Close();
+        ExplorerStateRenders.Pump(300);
+        Assert.Null(Views.Controls.WindowToolTip.ShownText);
+
+        // Outside it, tooltips are drawn in the window as before.
+        var outside = new Avalonia.Controls.Button();
+        Views.Controls.ThemedToolTip.Set(outside, "Elsewhere");
+        window.ExplorerScreenHost.Content = outside;
+        ExplorerStateRenders.Pump(100);
+        Avalonia.Controls.ToolTip.SetIsOpen(outside, true);
+        Assert.True(Avalonia.Controls.ToolTip.GetIsOpen(outside));
+        Assert.Null(Views.Controls.WindowToolTip.ShownText);
+        Avalonia.Controls.ToolTip.SetIsOpen(outside, false);
+        window.Close();
+    }
+
+    [Fact]
+    public void A_window_tooltip_reads_text_tips_only()
+    {
+        Assert.Equal("a", Views.Controls.WindowToolTip.TextOf("a"));
+        Assert.Equal("b", Views.Controls.WindowToolTip.TextOf(new Avalonia.Controls.TextBlock { Text = "b" }));
+        Assert.Equal("c", Views.Controls.WindowToolTip.TextOf(new Avalonia.Controls.ToolTip { Content = "c" }));
+        Assert.Equal("d", Views.Controls.WindowToolTip.TextOf(new Avalonia.Controls.ToolTip { Content = new Avalonia.Controls.TextBlock { Text = "d" } }));
+        Assert.Null(Views.Controls.WindowToolTip.TextOf(new Avalonia.Controls.Border()));
+        Assert.Null(Views.Controls.WindowToolTip.TextOf(null));
+    }
+
+    [AvaloniaFact]
     public void A_drawable_shows_at_once_and_gets_the_games_textures_when_they_come()
     {
         // A triangle whose texture is only in the game's dictionaries, whose tables are still being worked out.

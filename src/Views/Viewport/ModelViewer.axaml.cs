@@ -25,6 +25,8 @@ public partial class ModelViewer : UserControl, IModalContent
     public ModelViewer(ModelFile file)
     {
         InitializeComponent();
+        // Its tooltips are drawn over the viewport, which covers the app's in-window popups.
+        WindowToolTip.SetIsEnabled(this, true);
         TitleText.Text = file.Name;
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
