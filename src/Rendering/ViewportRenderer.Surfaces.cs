@@ -29,7 +29,8 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly List<WebGpuSharp.Texture> uploaded = [];
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
-    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, bool Terrain)[] surfaceParts = [];
+    // Fringe: cut-out hair's material again, blended, for its second pass.
+    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, bool Terrain, BindGroup? Fringe)[] surfaceParts = [];
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
     private readonly List<Buffer> materialBuffers = [];
@@ -62,8 +63,9 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
-                // A vehicle's dirt, its paint's ramp and its second diffuse layer; a _detail shader's detail map.
-                Map(7), Map(8), Map(9), Map(10), Map(11),
+                // A vehicle's dirt, its paint's ramp and its second diffuse layer; a _detail shader's detail map; a
+                // _pxm shader's height map; hair's noise map and mask.
+                Map(7), Map(8), Map(9), Map(10), Map(11), Map(12), Map(13),
             ],
         });
         // Terrain: its four layers' diffuse and bump maps, the lookup map, the tint palette and the layers' height maps.
@@ -205,6 +207,34 @@ internal sealed unsafe partial class ViewportRenderer
         missing = Checker();
         flat = Solid(128, 128, 255, 255);
         clear = Solid(0, 0, 0, 0);
+
+        // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
+        // their material (shadow.wgsl).
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
+        maskedShadowPipeline = gpu.Pipeline($"shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, materialLayout] }),
+            Vertex = new VertexState
+            {
+                Module = shadowShader.Value,
+                EntryPoint = "vs_shadow_masked",
+                Buffers = new[]
+                {
+                    new VertexBufferLayout
+                    {
+                        ArrayStride = SurfaceVertex.Size,
+                        Attributes = new[]
+                        {
+                            new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                        },
+                    },
+                },
+            },
+            Fragment = new FragmentState { Module = shadowShader.Value, EntryPoint = "fs_shadow_masked", Targets = [] },
+            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Less },
+        }));
     }
 
     /// <summary>Draws only the drawable's parts marked true, one flag per <see cref="DrawableScene.Parts"/>.</summary>
@@ -225,14 +255,25 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceVertices = Upload((ReadOnlySpan<SurfaceVertex>)drawable.Vertices, SurfaceVertex.Size);
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
+        var fringes = new BindGroup?[drawable.Materials.Count];
         for (int i = 0; i < groups.Length; i++)
-            groups[i] = drawable.Materials[i].Terrain ? TerrainGroup(drawable.Materials[i]) : MaterialGroup(drawable.Materials[i]);
+        {
+            SurfaceMaterial material = drawable.Materials[i];
+            groups[i] = material.Terrain ? TerrainGroup(material) : MaterialGroup(material, material.Uniforms);
+            // Hair is drawn again, blended, for what isn't solid (SurfaceMaterial.HairFringe).
+            if (material.HairFringe)
+            {
+                float[] blended = [.. material.Uniforms];
+                blended[10] = (float)AlphaMode.Blend;
+                fringes[i] = MaterialGroup(material, blended);
+            }
+        }
         // Decals blend over what they lie on; terrain is always solid.
         surfaceParts = [.. drawable.Parts.Select(part =>
         {
             SurfaceMaterial material = drawable.Materials[part.Material];
             AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
-            return (part, groups[part.Material], mode, material.Terrain);
+            return (part, groups[part.Material], mode, material.Terrain, fringes[part.Material]);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
@@ -259,11 +300,11 @@ internal sealed unsafe partial class ViewportRenderer
         textures.Clear();
     }
 
-    private BindGroup MaterialGroup(SurfaceMaterial material)
+    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values)
     {
         Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         materialBuffers.Add(uniforms);
-        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)values);
         return device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = materialLayout!,
@@ -281,6 +322,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 9, TextureView = View(material.DiffuseLayer) ?? clear! },
                 new BindGroupEntry { Binding = 10, TextureView = View(material.Detail) ?? white! },
                 new BindGroupEntry { Binding = 11, TextureView = View(material.Height) ?? white! },
+                new BindGroupEntry { Binding = 12, TextureView = View(material.HairNoise) ?? white! },
+                new BindGroupEntry { Binding = 13, TextureView = View(material.DiffuseMask) ?? white! },
             ],
         });
     }
@@ -323,7 +366,7 @@ internal sealed unsafe partial class ViewportRenderer
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
         for (int i = 0; i < surfaceParts.Length; i++)
         {
-            var (part, group, mode, terrain) = surfaceParts[i];
+            var (part, group, mode, terrain, _) = surfaceParts[i];
             if (mode != AlphaMode.Blend && partsShown[i])
             {
                 pass.SetPipeline(terrain ? (reflected ? terrainReflected! : terrainSurfaces!)
@@ -333,9 +376,13 @@ internal sealed unsafe partial class ViewportRenderer
                 pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
             }
         }
+        // Then what blends, furthest first: blended parts, and hair's second pass, which keeps the depth its first wrote
+        // where it is solid and blends the rest in by its alpha, so hair covers a pixel as much as its alpha says, as the
+        // game's noise-dropped hair does once its TAA has averaged it.
         Vector3 eye = Camera.Eye - origin;
         pass.SetPipeline(reflected ? blendedReflected! : blendedSurfaces!);
-        foreach (var (part, group, _, _) in surfaceParts.Where((p, i) => p.Mode == AlphaMode.Blend && partsShown[i]).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
+        foreach (var (part, group) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i])
+            .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material)))
         {
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);

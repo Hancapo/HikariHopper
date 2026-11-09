@@ -66,6 +66,18 @@ public sealed class GameTexturesTests : IDisposable
     }
 
     [Fact]
+    public void A_drawable_dictionary_or_fragment_looks_in_the_peds_resident_dictionary_last()
+    {
+        var tables = new GameTextures.Tables();
+        foreach (string name in new[] { "mapdetail", "comp_peds_generic" })
+            tables.Files[H(name)] = ($"x64e.rpf/{name}.ytd", 100);
+        // Peds are drawable dictionaries (or fragments): their hair's noise maps are in the resident dictionary.
+        Assert.Equal(["mapdetail", "comp_peds_generic"], tables.For("a_m_y_hipster_01.ydd").Select(d => Path.GetFileNameWithoutExtension(d.Path)));
+        Assert.Equal(["mapdetail", "comp_peds_generic"], tables.For("a_c_chop.yft").Select(d => Path.GetFileNameWithoutExtension(d.Path)));
+        Assert.Equal(["mapdetail"], tables.For("prop_bench_01a.ydr").Select(d => Path.GetFileNameWithoutExtension(d.Path)));
+    }
+
+    [Fact]
     public void A_vehicle_high_detail_model_shares_its_vehicle_archetype()
     {
         var tables = new GameTextures.Tables();

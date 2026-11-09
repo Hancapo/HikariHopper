@@ -148,8 +148,10 @@ internal sealed class DrawableScene
         }
         foreach (string texture in materials.SelectMany(m => m.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             diagnostics.Add($"Texture not found: {texture}");
-        foreach (string shader in materials.Where(m => !m.Rebuilt && !m.Terrain).Select(m => m.Shader).Distinct().Order())
+        foreach (string shader in materials.Where(m => !m.Rebuilt && !m.Terrain && !m.Ped).Select(m => m.Shader).Distinct().Order())
             diagnostics.Add($"Not rebuilt yet, drawn with the default material: {shader}");
+        foreach (string shader in materials.Where(m => !m.Rebuilt && m.Ped).Select(m => m.Shader).Distinct().Order())
+            diagnostics.Add($"Not rebuilt yet, drawn as the closest ped shader: {shader}");
         foreach (string shader in materials.Where(m => !m.Rebuilt && m.Terrain).Select(m => m.Shader).Distinct().Order())
             diagnostics.Add($"Not rebuilt yet, drawn as the closest terrain shader: {shader}");
         if (skinned)

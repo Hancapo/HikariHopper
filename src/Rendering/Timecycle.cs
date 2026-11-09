@@ -6,7 +6,7 @@ namespace HikariHopper.Rendering;
 /// <summary>
 /// GTA V's light at one time of day, from its timecycle: the directional light (the sun, or the moon at night), the
 /// natural ambient as a sky-to-ground hemisphere, the directional ambient, the ambient occlusion multipliers, the
-/// exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
+/// peds' rim light, the exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
 /// its intensity. Colours are already multiplied by their intensities.
 /// </summary>
 internal readonly record struct TimecycleLight(
@@ -18,6 +18,8 @@ internal readonly record struct TimecycleLight(
     float Bounce,
     float OcclusionVehicle,
     float OcclusionProp,
+    float OcclusionPed,
+    float PedRim,
     float Exposure,
     float ExposureMin,
     float ExposureMax,
@@ -111,6 +113,8 @@ internal static class Timecycle
             Get("light_directional_amb_bounce_enabled"),
             occlusion * Get("light_amb_occ_mult_veh"),
             occlusion * Get("light_amb_occ_mult_prop"),
+            occlusion * Get("light_amb_occ_mult_ped"),
+            Get("light_ped_rim_mult"),
             Get("postfx_exposure"),
             Get("postfx_exposure_min"),
             Get("postfx_exposure_max"),

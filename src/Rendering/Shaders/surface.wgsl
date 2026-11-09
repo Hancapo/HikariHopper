@@ -1,7 +1,9 @@
-// Drawables, shaded as GTA V shades them. Two families of the game's deferred pixel shaders are rebuilt here, each
+// Drawables, shaded as GTA V shades them. Three families of the game's deferred pixel shaders are rebuilt here, each
 // writing what the game writes to its G-buffer (albedo, normal, specular intensity, power and fresnel, ambient scales):
 //   - PS_DeferredTextured: default, normal, spec, normal_spec, emissive, decal, _tnt, _detail and the rest;
-//   - PS_DeferredVehicleTextured: vehicle paint, mesh, shuts, tyres, interiors and the rest.
+//   - PS_DeferredVehicleTextured: vehicle paint, mesh, shuts, tyres, interiors and the rest;
+//   - PS_DeferredPedTextured: the peds' skin and clothes (ped, _wrinkle, _emissive…), their diffuse-only parts
+//     (ped_default…) and their hair (ped_hair_spiked, ped_hair_cutout_alpha…), at rest: dry, undamaged, unwrinkled.
 // That is then lit with the game's directional pass (PS_directional_just_dir) and the core of its ambient one
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
 // arithmetic. The light is the game's own, from its timecycle (light.wgsl): the directional light with its shadow, the
@@ -51,6 +53,16 @@ struct Material {
     parallax: vec4f,
     // globalHeightScale; whether it is a decal, whose alpha is the diffuse map's times the vertex colour's.
     parallax_global: vec4f,
+    // Peds: which of PS_DeferredPedTextured's programs (0 not a ped, 1 skin and clothes, 2 diffuse only, 3 hair),
+    // whether it has the rim light and the bend towards the view (all but the forward ped_alpha), whether the diffuse
+    // alpha is a palette index (_palette), whether hair has a diffuse mask (_mask).
+    ped: vec4f,
+    // Hair: anisotropicSpecularIntensity and anisotropicSpecularExponent, the two highlights' strengths and exponents.
+    hair: vec4f,
+    // Hair: anisotropicSpecularColour, and AnisotropicAlphaBias.
+    hair_colour: vec4f,
+    // Hair: specularNoiseMapUVScaleFactor, the noise map's tiling for each highlight.
+    hair_noise: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -65,6 +77,9 @@ struct Material {
 @group(1) @binding(9) var diffuse_layer: texture_2d<f32>;
 @group(1) @binding(10) var detail_map: texture_2d<f32>;
 @group(1) @binding(11) var height_map: texture_2d<f32>;
+// Hair: the noise map that breaks up its highlights and its alpha, and the _mask shaders' mask, on the second UV set.
+@group(1) @binding(12) var hair_noise_map: texture_2d<f32>;
+@group(1) @binding(13) var diffuse_mask: texture_2d<f32>;
 
 struct SurfaceInput {
     @location(0) position: vec3f,
@@ -151,15 +166,16 @@ fn surface_vertex(input: SurfaceInput) -> SurfaceOutput {
 }
 
 // What a family's deferred pixel shader writes, before lighting: albedo as stored (gamma 2), normal, specular
-// intensity, power and fresnel, the natural and artificial ambient scales, and alpha.
+// intensity, power and fresnel, the natural ambient scale as stored (the lighting squares it), the reflection's
+// scale, and alpha.
 struct Surface {
     base: vec3f,
     normal: vec3f,
     intensity: f32,
     power: f32,
     fresnel: f32,
-    natural: f32,
-    artificial: f32,
+    ambient: f32,
+    reflection: f32,
     alpha: f32,
 };
 
@@ -201,9 +217,15 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     // The detail map, read at its tiling and at 3.17 times that.
     let fine = textureSample(detail_map, surface_sampler, input.uv0 * material.detail.zw);
     let finer = textureSample(detail_map, surface_sampler, input.uv0 * 3.17 * material.detail.zw);
+    // Hair's noise, at each highlight's tiling, and its mask.
+    let noise1 = textureSample(hair_noise_map, surface_sampler, input.uv0 * 0.5 * material.hair_noise.xy);
+    let noise2 = textureSample(hair_noise_map, surface_sampler, input.uv0 * 0.5 * material.hair_noise.zw);
+    let hair_mask = textureSample(diffuse_mask, surface_sampler, input.uv1);
 
+    let ped = u32(material.ped.x + 0.5);
     let mode = u32(material.options.z + 0.5);
-    if (mode == 1u && diffuse.a < material.extra.x) {
+    let alpha = select(diffuse.a, ped_alpha(input, diffuse, noise1, hair_mask), ped != 0u);
+    if (mode == 1u && alpha < material.extra.x) {
         discard;
     }
 
@@ -238,7 +260,10 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
     let to_light = normalize(light.sun_direction.xyz);
     var surface: Surface;
-    if (material.extra.w > 0.5) {
+    if (ped != 0u) {
+        surface = ped_surface(input, ped, diffuse, specular_sample, noise1, noise2, normal, view);
+        surface.alpha = alpha;
+    } else if (material.extra.w > 0.5) {
         surface = vehicle_surface(input, diffuse, specular_sample, dirt, layer, normal, view, to_light);
     } else {
         surface = textured_surface(input, diffuse, specular_sample, normal);
@@ -280,9 +305,9 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     surface.fresnel = material.specular.x;
     // Tinted shaders multiply the diffuse map by the palette's colour.
     surface.base = diffuse.rgb * input.tint;
-    // The vertex colour's red is the natural ambient, its green the artificial.
-    surface.natural = input.colour0.r;
-    surface.artificial = input.colour0.g;
+    // The vertex colour's red is the natural ambient (its green the artificial, which the viewer leaves out).
+    surface.ambient = occluded(input.colour0.r, light.natural_up.w);
+    surface.reflection = 1.0;
     surface.alpha = diffuse.a * select(1.0, input.colour0.a, material.parallax_global.y > 0.5);
     return surface;
 }
@@ -448,19 +473,134 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
     }
 
     surface.base = base;
-    surface.natural = occlusion;
-    surface.artificial = occlusion;
+    surface.ambient = occluded(occlusion, light.directional_ambient.w);
+    surface.reflection = 1.0;
     surface.alpha = diffuse.a * input.colour0.a;
     return surface;
 }
 
+// The natural ambient scale a deferred shader stores, gLightArtificialIntAmbient0.w plus globalScalars.z times the
+// vertex's occlusion: taken as one less the timecycle's occlusion multiplier for the kind of thing it is, plus the
+// multiplier times the occlusion, so the multiplier is the occlusion's share.
+fn occluded(occlusion: f32, multiplier: f32) -> f32 {
+    return 1.0 - multiplier * (1.0 - saturate(occlusion));
+}
+
+// PS_DeferredPedTextured's alpha: the diffuse map's; the diffuse-only programs' by the vertex alpha; hair's by its
+// noise and AnisotropicAlphaBias, and the _mask shaders' mask. The _palette shaders' alpha is the palette index, and
+// solid where it is one.
+fn ped_alpha(input: SurfaceOutput, diffuse: vec4f, noise: vec4f, mask: vec4f) -> f32 {
+    let ped = u32(material.ped.x + 0.5);
+    var alpha = diffuse.a;
+    if (ped == 2u) {
+        alpha *= input.colour0.a;
+    } else if (ped == 3u) {
+        alpha *= saturate(material.hair_colour.w + 2.0 * noise.w);
+        if (material.ped.w > 0.5) {
+            alpha *= mask.x;
+        }
+    }
+    if (material.ped.z > 0.5) {
+        let index = floor(diffuse.a * 255.01);
+        if (index >= 32.0 && index <= 160.0) {
+            alpha = 1.0;
+        }
+    }
+    return alpha;
+}
+
+// PS_DeferredPedTextured at rest, as the ped programs compile it, without what the game sets as a ped lives: no
+// damage, blood or tattoos, dry, its wrinkles relaxed, no snow, fat or sweat, its colour scales at one, the dynamic
+// bake at the timecycle's default (0.5, 1). The vertex colour's red is ambient occlusion; its green weighs the rim
+// light, bends the normal towards the view where it is darkest, and sets the reflection's scale.
+fn ped_surface(input: SurfaceOutput, ped: u32, diffuse: vec4f, specular_sample: vec4f, noise1: vec4f, noise2: vec4f,
+    bumped: vec3f, view: vec3f) -> Surface {
+    var surface: Surface;
+    let green = input.colour0.g;
+    // The diffuse-only programs read neither the bump map nor the specular map: the vertex normal, on the side seen.
+    let side = select(-1.0, 1.0, dot(bumped, input.normal) >= 0.0);
+    let normal = select(bumped, normalize(input.normal) * side, ped == 2u);
+    let n_dot_v = saturate(dot(view, normal));
+
+    // The rim light: light_ped_rim_mult times the vertex green above 10, towards the silhouette and away from the
+    // ground; hair's is broader. The diffuse-only programs and the forward ped_alpha have none.
+    let rims = material.ped.y > 0.5 && ped != 2u;
+    let rim_weight = select(0.0, saturate((green - 10.0 / 255.0) * (245.0 / 255.0) * light.ped.y), rims);
+    let upward = saturate(0.5 * normal.z + 0.2) / 0.7;
+    let t = saturate(2.5 * (0.5 - n_dot_v));
+    var rim = t * t * (3.0 - 2.0 * t) * upward * rim_weight;
+    if (ped == 3u) {
+        rim = (0.5 + 0.4 * (1.0 - n_dot_v)) * upward * rim_weight;
+    }
+    surface.base = diffuse.rgb * (1.0 + rim);
+
+    // Specular: the map's red squared by specularIntensityMult, its green squared by specularFalloffMult, and
+    // specularFresnel; the diffuse-only programs write none, and a fresnel of 0.98.
+    surface.intensity = specular_sample.r * specular_sample.r * material.specular.z;
+    surface.power = specular_sample.g * specular_sample.g * material.specular.y;
+    surface.fresnel = material.specular.x;
+    if (ped == 2u) {
+        surface.intensity = 0.0;
+        surface.power = 0.0;
+        surface.fresnel = 0.98;
+    }
+
+    // Skin and clothes: the normal bent towards the view by one less 25.5 times the vertex green, so only the darkest
+    // greens bend it.
+    surface.normal = normal;
+    if (rims && ped == 1u) {
+        surface.normal = normalize(mix(normal, view, saturate(1.0 - 25.5 * green)));
+    }
+
+    // Hair: two highlights along the strands (the binormal), each nudged off it by the noise, lit from the camera's
+    // axis rather than the sun. Where the specular map's blue marks hair they scale the specular intensity, and the
+    // second tints the albedo in anisotropicSpecularColour.
+    if (ped == 3u) {
+        let strand = normalize(input.binormal);
+        let across = normalize(input.normal);
+        let axis = -scene.forward.xyz;
+        let s1 = kajiya(axis, view, normalize(strand + (0.2 * noise2.x - 0.1) * across));
+        let s2 = kajiya(axis, view, normalize(strand + (0.2 * noise2.y - 0.1) * across));
+        let second = pow(s2, material.hair.w + 16.0);
+        let aniso = material.hair.x * pow(s1, material.hair.z + 8.0) + material.hair.y * second;
+        if (specular_sample.b < 1.0 / 32.0) {
+            surface.base += 0.5 * second * material.hair_colour.rgb;
+            surface.intensity *= aniso * noise1.x;
+        }
+    }
+
+    // The natural ambient: the ped occlusion multiplier's share of the vertex occlusion, times the dynamic bake, which
+    // lights what faces up more (one and a half straight up, a half straight down).
+    let bake = 0.5 + (0.5 * normal.z + 0.5);
+    surface.ambient = 1.0 - light.ped.x + light.ped.x * saturate(input.colour0.r) * bake;
+
+    // The reflection's scale: the vertex green plus 135, cubed, stored with the specular map's blue marking skin
+    // (13 to 15 sixteenths) in the G-buffer's last channel, which the lighting decodes and squares.
+    var scale = 1.0;
+    if (ped == 1u) {
+        let x = saturate(pow(green + 135.0 / 255.0, 3.0));
+        let skin = abs(16.0 * specular_sample.b - 14.0) <= 1.0;
+        scale = select(saturate(2.0 * ((x + 260.0 / 255.0) * 127.0 / 255.0 - 0.5)), saturate(2.0 * x * 127.0 / 255.0), skin);
+    }
+    surface.reflection = scale * scale;
+    return surface;
+}
+
+// The hair programs' highlight for a strand's direction: the sine between the strand and the light times that between
+// the strand and the view, less the cosines' product.
+fn kajiya(towards: vec3f, view: vec3f, strand: vec3f) -> f32 {
+    let l = dot(towards, strand);
+    let v = dot(view, strand);
+    return abs(sqrt(saturate(1.0 - l * l)) * sqrt(saturate(1.0 - v * v)) - l * v);
+}
+
 // The game's lighting passes (light.wgsl's gta_lit) over what a family wrote, with the ambient scale the family's
-// deferred shader stores: one less the occlusion multiplier's share of what the vertex leaves out (the timecycle's,
-// for vehicles or props), which the ambient pass squares. Then emissive, which the game adds in its ambient pass.
+// deferred shader stores, which the ambient pass squares (the G-buffer holds up to two). Then emissive, which the game
+// adds in its ambient pass.
 fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {
-    let multiplier = select(light.natural_up.w, light.directional_ambient.w, material.extra.w > 0.5);
-    let scale = 1.0 - multiplier * (1.0 - saturate(surface.natural));
-    let colour = gta_lit(surface.base, surface.normal, view, surface.intensity, surface.power, surface.fresnel, scale * scale, shadow);
+    let scale = clamp(surface.ambient, 0.0, 2.0);
+    let colour = gta_lit(surface.base, surface.normal, view, surface.intensity, surface.power, surface.fresnel, scale * scale, shadow,
+        surface.reflection);
 
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.

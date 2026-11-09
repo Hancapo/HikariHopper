@@ -32,6 +32,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The sun and moon in the 3D viewer cross the sky on the game's own path, read from the game's time.xml: the sun rises due east at 06:00, is highest at 13:00 and sets due west at 20:00, and the moon lights the night from 21:45 to 04:45. ([#134](https://github.com/Hancapo/HikariHopper/pull/134))
 - The 3D viewer is anti-aliased with CMAA2: the stair steps along a model's edges and the grid's lines are smoothed. ([#136](https://github.com/Hancapo/HikariHopper/pull/136))
 - Textures edited from the 3D viewer's textures button show on the model as soon as the texture editor closes after saving, a .ydr's saved into it and a fragment's or drawable dictionary's over its own. ([#131](https://github.com/Hancapo/HikariHopper/pull/131))
+- Peds in the 3D viewer are shaded with GTA V's ped shaders: skin and clothes with the game's rim light, specular and ambient occlusion, their simpler lower-detail parts, and hair with its highlights along the strands, covering what's behind it as much as its alpha says, as the game's hair does. Cut-out surfaces, such as hair, leaves and fences, cast shadows only where they're solid. ([#139](https://github.com/Hancapo/HikariHopper/pull/139))
 
 ### Changed
 

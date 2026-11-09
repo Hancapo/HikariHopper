@@ -74,7 +74,8 @@ public sealed class GameTextures
 
     /// <summary>
     /// The dictionaries the game looks in for <paramref name="modelName"/>'s textures (a .ydr, .yft or .ydd name), in
-    /// the order it looks: the ones its archetypes name, then their parents, nearest first, then mapdetail.ytd; each as
+    /// the order it looks: the ones its archetypes name, then their parents, nearest first, then mapdetail.ytd, and for
+    /// drawable dictionaries and fragments the peds' comp_peds_generic.ytd; each as
     /// a path from the game folder, RPFs included. Waits for the tables; none when they couldn't be made, whatever stopped them: the tables
     /// only add places to look, so they never stop a model from opening. A failed attempt is kept, not repeated per model.
     /// </summary>
@@ -175,10 +176,15 @@ public sealed class GameTextures
             // Last, the dictionary the game keeps loaded for every drawable's detail maps (ENV_NOISE_*, ENV_SMOOTH_*...):
             // platform:/textures/mapdetail.ytd, on no archetype's parent chain.
             order.Add(MapDetail);
+            // And for drawable dictionaries and fragments, which peds are, the peds' resident dictionary (peds.ymt's
+            // residentTxd), which the game keeps loaded from startup: the hair's noise maps and the dummy maps are there.
+            if (Path.GetExtension(modelName).ToLowerInvariant() is ".ydd" or ".yft")
+                order.Add(PedResident);
             return [.. order.Distinct().Where(Files.ContainsKey).Select(hash => new GameDictionary(Files[hash].Path, Files[hash].Size))];
         }
 
         private static readonly uint MapDetail = new Hash32("mapdetail").Value;
+        private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
         public static Tables Build(string root, GameTarget target, GameCrypto crypto)
         {

@@ -20,7 +20,7 @@ public sealed class GpuDeviceTests
         }
         await GpuDevice.WarmUp();
         // A window's usual format: the pipelines a viewport needs are ready before one opens.
-        foreach (string key in new[] { "backdrop", "meshes", "lines", "shadow", "ground-shadow", "tonemap", "luminance",
+        foreach (string key in new[] { "backdrop", "meshes", "lines", "shadow", "shadow-masked", "ground-shadow", "tonemap", "luminance",
             "luminance-mean", "reflection-map/fs_reflection_map", "surface/Back/False/False", "surface/None/True/True",
             "terrain/Back/False/False", "terrain/None/False/True", "bloom/fs_bloom_bright", "bloom/fs_bloom_downsample_karis",
             "bloom/fs_bloom_downsample", "bloom/fs_bloom_upsample" })
