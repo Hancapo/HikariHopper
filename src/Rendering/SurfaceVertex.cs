@@ -11,8 +11,9 @@ namespace HikariHopper.Rendering;
 /// <param name="Colour0">RGBA, R first: natural ambient, artificial ambient, emissive mask, alpha.</param>
 /// <param name="Colour1">RGBA, R first; tints and blends for the shaders that use it.</param>
 /// <param name="Uv2">
-/// The vertex's TexCoord3, which the terrain shaders with parallax (_pxm) read as their parallax controls: the set after
-/// the ones they map textures with, as the game binds a layout's sets in order.
+/// The vertex's TexCoord3, or TexCoord2 without it, which the shaders with parallax (_pxm) read as their parallax
+/// controls: the set after the ones they map textures with, as the game binds a layout's sets in order (terrain's
+/// layouts skip TexCoord2, the other surfaces' end there).
 /// </param>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
 internal readonly record struct SurfaceVertex(Vector3 Position, Vector3 Normal, Vector4 Tangent, Vector2 Uv0, Vector2 Uv1, uint Colour0, uint Colour1,

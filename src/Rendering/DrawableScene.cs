@@ -161,6 +161,6 @@ internal sealed class DrawableScene
             Element(VertexSemantic.TexCoord1, default).AsVector2(),
             SurfaceVertex.Pack(Element(VertexSemantic.Color0, Vector4.One)),
             SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.Zero)),
-            Element(VertexSemantic.TexCoord3, default).AsVector2());
+            (layout.TryFind(VertexSemantic.TexCoord3, out _) ? Element(VertexSemantic.TexCoord3, default) : Element(VertexSemantic.TexCoord2, default)).AsVector2());
     }
 }

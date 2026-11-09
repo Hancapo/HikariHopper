@@ -22,7 +22,8 @@
     "layer_height2": ["heightMapSamplerLayer2"],
     "layer_height3": ["heightMapSamplerLayer3"],
     "lookup": ["lookupSampler"],
-    "detail": ["DetailSampler"]
+    "detail": ["DetailSampler"],
+    "height": ["heightSampler"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -44,6 +45,8 @@
     "spec_desaturate_exponent": ["SpecDesaturateExponent"],
     "bump_self_shadow": ["bumpSelfShadowAmount"],
     "parallax_self_shadow": ["parallaxSelfShadowAmount"],
+    "height_scale": ["heightScale"],
+    "height_bias": ["heightBias"],
     "height_scale0": ["heightScale0"],
     "height_scale1": ["heightScale1"],
     "height_scale2": ["heightScale2"],
@@ -62,7 +65,7 @@
     { "contains": "speclum", "specular_source": "luminance" },
     { "contains": "_2tex_blend", "terrain_layers": "first" },
     { "contains": "_2tex", "terrain_layers": "second" },
-    { "contains": "_pxm", "terrain_parallax": true },
+    { "contains": "_pxm", "parallax": true },
     { "contains": "_spm", "terrain_spec_map": true },
     { "contains": "_cm", "terrain_weights": "map" },
     { "contains": "_blend", "terrain_weights": "blend" },

@@ -60,7 +60,7 @@ internal sealed unsafe partial class ViewportRenderer
                 },
                 new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
                 // A vehicle's dirt, its paint's ramp and its second diffuse layer; a _detail shader's detail map.
-                Map(7), Map(8), Map(9), Map(10),
+                Map(7), Map(8), Map(9), Map(10), Map(11),
             ],
         });
         // Terrain: its four layers' diffuse and bump maps, the lookup map, the tint palette and the layers' height maps.
@@ -263,6 +263,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 8, TextureView = View(material.DiffuseRamp) ?? white! },
                 new BindGroupEntry { Binding = 9, TextureView = View(material.DiffuseLayer) ?? clear! },
                 new BindGroupEntry { Binding = 10, TextureView = View(material.Detail) ?? white! },
+                new BindGroupEntry { Binding = 11, TextureView = View(material.Height) ?? white! },
             ],
         });
     }
