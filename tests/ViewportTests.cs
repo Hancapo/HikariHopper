@@ -431,6 +431,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Shortcut('B'));
         Assert.False(viewer.Shortcut('C'));
         Assert.False(viewer.Shortcut('L'));
+        // Not a fragment with a damaged state: its button is off, and X does nothing.
+        Assert.False(viewer.DamagedButton.IsEnabled);
+        Assert.False(viewer.Shortcut('X'));
+        // Off, the toggles keep the button's own faint ink.
+        Assert.False(viewer.DamagedButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
+        Assert.False(viewer.SkeletonButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
         // The camera orbits to start with; V flies it, with its speed in the status bar, and F frames the model and
         // orbits again.
         Assert.False(viewer.Viewport.FreeCamera);

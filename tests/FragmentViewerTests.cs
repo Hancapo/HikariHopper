@@ -72,6 +72,96 @@ public sealed class FragmentViewerTests
         Assert.Equal(5 * 2, scene.TriangleCount);
     }
 
+    // A skeleton: the chassis, a door under it with a handle under the door, and an extra; the chassis and the door are
+    // physics children.
+    private static (Skeleton Skeleton, PhysicsLod Physics) Rig()
+    {
+        var skeleton = new Skeleton();
+        (string Name, ushort Tag, short Parent)[] bones = [("chassis", 0, -1), ("door_dside_f", 1, 0), ("handle_dside_f", 2, 1), ("extra_1", 3, 0)];
+        for (int i = 0; i < bones.Length; i++)
+            skeleton.Bones.Add(new Bone { Name = bones[i].Name, Tag = bones[i].Tag, Index = (ushort)i, ParentIndex = bones[i].Parent });
+        var physics = new PhysicsLod();
+        physics.Children.Add(new PhysicsChild { BoneId = 0 });
+        physics.Children.Add(new PhysicsChild { BoneId = 1 });
+        return (skeleton, physics);
+    }
+
+    // A skinned drawable of four triangles, each bound to one of the rig's bones, as vehicles bind them.
+    private static Drawable Skinned(Skeleton skeleton, int triangles = 4)
+    {
+        var positions = new List<Vector3>();
+        var indices = new List<int>();
+        var blend = new List<Vector4>();
+        for (int t = 0; t < triangles; t++)
+        {
+            positions.AddRange([new(t, 0, 0), new(t + 1, 0, 0), new(t, 1, 0)]);
+            indices.AddRange([3 * t, 3 * t + 1, 3 * t + 2]);
+            blend.AddRange(Enumerable.Repeat(new Vector4(t % 4, 0, 0, 0), 3));
+        }
+        var mesh = new DrawableMeshInput([.. positions], [.. indices], "body");
+        mesh.SetChannel(VertexSemantic.BlendIndices, [.. blend]);
+        mesh.SetChannel(VertexSemantic.BlendWeights, [.. Enumerable.Repeat(new Vector4(1, 0, 0, 0), positions.Count)]);
+        var builder = new DrawableBuilder { Name = "body", Skeleton = skeleton };
+        builder.Materials.Add(new DrawableMaterialInput { Name = "body", Shader = "default" });
+        var model = new DrawableModelInput { SkeletonBinding = new SkeletonBinding(0, 1, 0, 0) };
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        return builder.Build(GameTarget.Legacy);
+    }
+
+    [Fact]
+    public void A_fragments_bones_belong_to_the_physics_child_above_them_or_are_extras()
+    {
+        var (skeleton, physics) = Rig();
+        IReadOnlyDictionary<int, string> parts = FragmentModels.PartsOf(skeleton, physics);
+        Assert.Equal(["chassis", "door_dside_f", "door_dside_f", "extra_1"], Enumerable.Range(0, 4).Select(bone => parts[bone]));
+    }
+
+    [Fact]
+    public void A_skinned_fragment_is_split_into_its_children_by_the_bones_its_triangles_are_bound_to()
+    {
+        var (skeleton, physics) = Rig();
+        var fragment = new Yft { MainDrawable = new FragmentDrawable(Skinned(skeleton)) };
+        fragment.PhysicsLods[0] = physics;
+
+        DrawableScene scene = DrawableScene.Build(FragmentModels.Of(fragment, "car"), TextureLookup.None);
+        // The door's triangle and its handle's are the door's; the extra is a part of its own.
+        Assert.Equal(["chassis", "door_dside_f", "extra_1"], scene.Parts.Select(part => part.Group));
+        Assert.Equal([1, 2, 1], scene.Parts.Select(part => part.TriangleCount));
+        Assert.Equal(4, scene.TriangleCount);
+
+        var visibility = new PartVisibility(scene);
+        PartNode car = Assert.Single(visibility.Tree());
+        Assert.Equal(["chassis", "door_dside_f", "extra_1"], car.Children.Select(child => child.Name));
+        visibility.Show(car.Children[1], false);
+        Assert.Equal([true, false, true], visibility.Mask());
+        Assert.False(scene.HasDamaged);
+    }
+
+    [Fact]
+    public void A_fragments_damaged_drawable_is_drawn_in_place_of_its_intact_one_while_damaged()
+    {
+        var (skeleton, physics) = Rig();
+        var fragment = new Yft { MainDrawable = new FragmentDrawable(Skinned(skeleton)) };
+        fragment.Drawables.Add(new FragmentDrawableEntry("damaged", new FragmentDrawable(Skinned(skeleton, 2))));
+        fragment.DamagedDrawableIndex = 0;
+        fragment.PhysicsLods[0] = physics;
+
+        IReadOnlyList<SceneModel> models = FragmentModels.Of(fragment, "sign");
+        Assert.Equal([ModelVariant.Intact, ModelVariant.Damaged], models.Select(model => model.Variant));
+        DrawableScene scene = DrawableScene.Build(models, TextureLookup.None);
+        Assert.True(scene.HasDamaged);
+        // At first, intact: the damaged drawable isn't counted.
+        Assert.Equal(4, scene.TriangleCount);
+
+        var visibility = new PartVisibility(scene);
+        Assert.Equal((4, 12, 12), visibility.Stats());
+        visibility.Damaged = true;
+        Assert.Equal((2, 6, 6), visibility.Stats());
+        // One row for the sign either way, named for it.
+        Assert.Equal("sign", Assert.Single(visibility.Tree()).Name);
+    }
+
     [Fact]
     public void AVehiclesTexturesAreLookedForInItsOwnDictionariesAndTheOnesVehiclesShare()
     {

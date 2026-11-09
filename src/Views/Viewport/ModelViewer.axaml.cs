@@ -62,6 +62,7 @@ public partial class ModelViewer : UserControl, IModalContent
                 SetLevel(shown.Levels[index]);
         };
         TexturesButton.Click += (_, _) => OpenTextures();
+        DamagedButton.Click += (_, _) => SetDamaged(visibility?.Damaged != true);
         this.file = file;
         Parts.Changed += ShowParts;
         FrameButton.Click += (_, _) => Reframe();
@@ -93,12 +94,17 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>A toggle that is on sits raised in its well in full ink; one that is off is flat and dimmer.</summary>
     private void RefreshToggles()
     {
+        // One that's off (nothing to show) keeps the button's own faint ink.
         static void Set(ChromeToolButton button, bool on)
         {
-            button.Sunken = on;
-            button.Foreground = on ? Ui.Theme.Text : Ui.Theme.TextDim;
+            button.Sunken = on && button.IsEnabled;
+            if (button.IsEnabled)
+                button.Foreground = on ? Ui.Theme.Text : Ui.Theme.TextDim;
+            else
+                button.ClearValue(ForegroundProperty);
         }
         Set(ShadowsButton, Viewport.Shadows);
+        Set(DamagedButton, visibility?.Damaged == true);
         Set(SkeletonButton, skeletonShown);
         Set(BoundsButton, boundsShown);
         Set(LightsButton, lightsShown);
@@ -202,6 +208,20 @@ public partial class ModelViewer : UserControl, IModalContent
         open();
         return true;
     }
+
+    /// <summary>Shows a fragment damaged, its damaged drawables in place of their intact ones, or intact; one with no damaged state stays intact.</summary>
+    internal bool SetDamaged(bool damaged)
+    {
+        if (visibility is null || surfaces is not { HasDamaged: true })
+            return false;
+        visibility.Damaged = damaged;
+        Parts.Refresh();
+        ShowParts();
+        RefreshToggles();
+        return true;
+    }
+
+    private DrawableScene? surfaces;
 
     /// <summary>The textures button, off when there are none or they can't be opened; its tooltip says how many.</summary>
     private void ShowTextures(DrawableScene scene)
@@ -334,7 +354,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// B skeleton, C bounds, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// X damaged, B skeleton, C bounds, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -348,6 +368,8 @@ public partial class ModelViewer : UserControl, IModalContent
             case 'F':
                 Reframe();
                 return true;
+            case 'X':
+                return SetDamaged(visibility?.Damaged != true);
             case 'B':
                 return SetOverlay(Overlay.Skeleton, !skeletonShown);
             case 'C':
@@ -542,6 +564,10 @@ public partial class ModelViewer : UserControl, IModalContent
             SetPartsShown(true);
             ShowTextures(surfaces);
             ShowOverlayButtons(surfaces);
+            this.surfaces = surfaces;
+            DamagedButton.IsEnabled = surfaces.HasDamaged;
+            ThemedToolTip.Set(DamagedButton, surfaces.HasDamaged ? "Damaged  (X)" : "No damaged state");
+            RefreshToggles();
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
