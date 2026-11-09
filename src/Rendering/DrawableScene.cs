@@ -87,8 +87,10 @@ internal sealed class DrawableScene
         }
         foreach (string texture in materials.SelectMany(m => m.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             diagnostics.Add($"Texture not found: {texture}");
-        foreach (string shader in materials.Where(m => !m.Rebuilt).Select(m => m.Shader).Distinct().Order())
+        foreach (string shader in materials.Where(m => !m.Rebuilt && !m.Terrain).Select(m => m.Shader).Distinct().Order())
             diagnostics.Add($"Not rebuilt yet, drawn with the default material: {shader}");
+        foreach (string shader in materials.Where(m => !m.Rebuilt && m.Terrain).Select(m => m.Shader).Distinct().Order())
+            diagnostics.Add($"Not rebuilt yet, drawn as the closest terrain shader: {shader}");
         if (skinned)
             diagnostics.Add("Skinned parts are shown in their bind pose.");
         diagnostics.AddRange(lookup.Diagnostics);
@@ -147,7 +149,8 @@ internal sealed class DrawableScene
         Vector3 normal = Vector3.TransformNormal(Element(VertexSemantic.Normal, Vector4.UnitZ).AsVector3(), transform);
         Vector4 tangent = Element(VertexSemantic.Tangent, Vector4.UnitX + Vector4.UnitW);
         var direction = Vector3.TransformNormal(tangent.AsVector3(), transform);
-        // A missing colour reads as white: full natural and artificial ambient, emissive where the shader is.
+        // A missing first colour reads as white: full natural and artificial ambient, emissive where the shader is. A
+        // missing second colour reads as nothing, so terrain weighted by it draws its first layer (or its lookup map).
         return new SurfaceVertex(
             position,
             normal,
@@ -155,6 +158,6 @@ internal sealed class DrawableScene
             Element(VertexSemantic.TexCoord0, default).AsVector2(),
             Element(VertexSemantic.TexCoord1, default).AsVector2(),
             SurfaceVertex.Pack(Element(VertexSemantic.Color0, Vector4.One)),
-            SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.One)));
+            SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.Zero)));
     }
 }

@@ -87,6 +87,64 @@ public sealed class DrawableViewerTests
         Assert.Equal(0, material.Uniforms[11]);
     }
 
+    [Theory]
+    [InlineData("terrain_cb_w_4lyr", 0f, 1f)]
+    [InlineData("terrain_cb_w_4lyr_2tex_blend", 1f, 1f)]
+    [InlineData("terrain_cb_w_4lyr_cm", 2f, 1f)]
+    [InlineData("terrain_cb_w_4lyr_lod", 0f, 0f)]
+    public void A_terrain_shader_reads_its_four_layers_from_either_edition(string shader, float weights, float bumps)
+    {
+        bool lod = bumps == 0;
+        SurfaceMaterial Read(GameTarget target) => ModelContent.Read("ground.ydr", Quad(target, shader, material =>
+        {
+            material.Parameters["specularIntensityMult"] = [.3f];
+            material.Parameters["specularFalloffMult"] = [20];
+            if (!lod)
+                material.Parameters["bumpiness"] = [.7f];
+            for (int i = 0; i < 4; i++)
+            {
+                material.Textures[$"TextureSampler_layer{i}"] = new TextureReference(Map($"ground_{i}"));
+                if (!lod)
+                    material.Textures[$"BumpSampler_layer{i}"] = new TextureReference(Map($"ground_{i}_n"));
+            }
+            if (weights > 0)
+                material.Textures["lookupSampler"] = new TextureReference(Map("ground_lookup"));
+        })).Surfaces!.Materials.Single();
+
+        SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
+        foreach (SurfaceMaterial material in new[] { legacy, enhanced })
+        {
+            Assert.True(material.Terrain);
+            Assert.True(material.Rebuilt);
+            Assert.Equal(["ground_0", "ground_1", "ground_2", "ground_3"], material.Layers[..4].Select(t => t?.Name));
+            Assert.Equal(lod ? [null, null, null, null] : ["ground_0_n", "ground_1_n", "ground_2_n", "ground_3_n"], material.Layers[4..].Select(t => t?.Name));
+            Assert.Equal(weights > 0 ? "ground_lookup" : null, material.Lookup?.Name);
+            // terrain.wgsl's Terrain uniform: specularIntensityMult (squared there), the falloff, bumpiness, the program's
+            // fixed fresnel; where the weights come from and whether there are bump maps.
+            Assert.Equal([.3f, 20, lod ? 1 : .7f, .98f, weights, bumps], material.Uniforms[..6]);
+        }
+        Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Fact]
+    public void A_mesh_without_a_second_vertex_colour_reads_it_as_nothing()
+    {
+        // The default shader's layout has no second colour. Read as nothing, terrain weights draw the first layer (or
+        // the lookup map); the terrain shaders' own layouts always carry it.
+        DrawableScene scene = ModelContent.Read("bench.ydr", Quad(GameTarget.Legacy, "default")).Surfaces!;
+        Assert.All(scene.Vertices, vertex => Assert.Equal(0u, vertex.Colour1));
+    }
+
+    [Fact]
+    public void A_terrain_shader_not_rebuilt_yet_is_drawn_as_the_closest_terrain()
+    {
+        DrawableScene scene = ModelContent.Read("ground.ydr", Quad(GameTarget.Legacy, "terrain_cb_w_4lyr_pxm")).Surfaces!;
+        SurfaceMaterial material = scene.Materials.Single();
+        Assert.True(material.Terrain);
+        Assert.False(material.Rebuilt);
+        Assert.Contains("Not rebuilt yet, drawn as the closest terrain shader: terrain_cb_w_4lyr_pxm", scene.Diagnostics);
+    }
+
     [Fact]
     public void Textures_missing_from_the_drawable_come_from_the_dictionary_beside_it()
     {

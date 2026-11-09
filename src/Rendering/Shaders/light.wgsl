@@ -98,3 +98,43 @@ fn gta_reflection(normal: vec3f, view: vec3f, exponent: f32, reflected_share: f3
     let energy = 0.31830987 + 0.68169010 * saturate(exponent / 563.0);
     return environment * reflected_share * energy;
 }
+
+// Schlick's approximation as GTA writes it: the fresnel constant is how much of the light it lets through, so F0
+// is one less it.
+fn fresnel(fresnel_value: f32, cosine: f32) -> f32 {
+    let m = 1.0 - cosine;
+    let m2 = m * m;
+    return (1.0 - fresnel_value) + fresnel_value * m * m2 * m2;
+}
+
+// GTA's directional pass (PS_directional_just_dir) and the core of its ambient one (PS_directional_ambient) over what
+// a deferred shader wrote to its G-buffer: albedo as stored (gamma 2, squared here as the passes read it), normal,
+// specular intensity, power and fresnel, and the ambient scale. The game's lighting has no 1/pi.
+fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32, fresnel_value: f32, ambient_scale: f32,
+    shadow: f32) -> vec3f {
+    let to_light = normalize(light.sun_direction.xyz);
+    let albedo = stored * stored;
+    let spec = saturate(intensity);
+    // GTA's exponent from the stored power: three times it up to 500, steeply beyond.
+    let p = max(power, 0.0);
+    let exponent = 3.0 * min(p, 500.0) + 558.0 * max(0.0, p - 500.0);
+
+    let half_vector = normalize(to_light + view);
+    let n_dot_l = saturate(dot(normal, to_light));
+    let n_dot_v = saturate(dot(normal, view));
+    let h_dot_l = saturate(dot(half_vector, to_light));
+    let n_dot_h = saturate(dot(normal, half_vector) + 1e-8);
+
+    // Diffuse loses what the surface reflects at this angle; specular is normalised Blinn-Phong.
+    let kept = 1.0 - fresnel(fresnel_value, n_dot_v) * spec;
+    let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(fresnel_value, h_dot_l);
+    let sun = light.sun_colour.rgb * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
+
+    // Ambient: the timecycle's natural and directional ambient for this normal, by the ambient scale. Outdoors in
+    // daylight the game's artificial ambient is nothing to speak of, so it is left out.
+    let ambient = albedo * kept * gta_ambient(normal) * ambient_scale;
+
+    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is.
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale;
+    return sun + ambient + reflection;
+}

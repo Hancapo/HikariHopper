@@ -128,14 +128,6 @@ fn surface_vertex(input: SurfaceInput) -> SurfaceOutput {
     return output;
 }
 
-// Schlick's approximation as GTA writes it: the fresnel constant is how much of the light it lets through, so F0
-// is one less it.
-fn fresnel(fresnel_value: f32, cosine: f32) -> f32 {
-    let m = 1.0 - cosine;
-    let m2 = m * m;
-    return (1.0 - fresnel_value) + fresnel_value * m * m2 * m2;
-}
-
 // What a family's deferred pixel shader writes, before lighting: albedo as stored (gamma 2), normal, specular
 // intensity, power and fresnel, the natural and artificial ambient scales, and alpha.
 struct Surface {
@@ -322,45 +314,21 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
     return surface;
 }
 
-// The game's directional and ambient passes over what a family wrote, with the timecycle's light as it is: the game's
-// lighting has no 1/pi.
+// The game's lighting passes (light.wgsl's gta_lit) over what a family wrote, with the ambient scale the family's
+// deferred shader stores: one less the occlusion multiplier's share of what the vertex leaves out (the timecycle's,
+// for vehicles or props), which the ambient pass squares. Then emissive, which the game adds in its ambient pass.
 fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {
-    let normal = surface.normal;
-    // The lighting passes read albedo squared: the maps are gamma 2.
-    let albedo = surface.base * surface.base;
-    let spec = saturate(surface.intensity);
-    // GTA's exponent from the stored power: three times it up to 500, steeply beyond.
-    let p = max(surface.power, 0.0);
-    let exponent = 3.0 * min(p, 500.0) + 558.0 * max(0.0, p - 500.0);
-
-    let half_vector = normalize(to_light + view);
-    let n_dot_l = saturate(dot(normal, to_light));
-    let n_dot_v = saturate(dot(normal, view));
-    let h_dot_l = saturate(dot(half_vector, to_light));
-    let n_dot_h = saturate(dot(normal, half_vector) + 1e-8);
-
-    // Diffuse loses what the surface reflects at this angle; specular is normalised Blinn-Phong.
-    let kept = 1.0 - fresnel(surface.fresnel, n_dot_v) * spec;
-    let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(surface.fresnel, h_dot_l);
-    let sun = light.sun_colour.rgb * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
-
-    // Ambient: the timecycle's natural and directional ambient for this normal, scaled by the natural ambient scale.
-    // The deferred shaders store it as one less the occlusion multiplier's share of what the vertex leaves out (the
-    // timecycle's, for vehicles or props), and the ambient pass squares it. Outdoors in daylight the game's artificial
-    // ambient is nothing to speak of, so it is left out.
     let multiplier = select(light.natural_up.w, light.directional_ambient.w, material.extra.w > 0.5);
     let scale = 1.0 - multiplier * (1.0 - saturate(surface.natural));
-    let ambient = albedo * kept * gta_ambient(normal) * scale * scale;
-
-    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is.
-    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * scale * scale;
+    let colour = gta_lit(surface.base, surface.normal, view, surface.intensity, surface.power, surface.fresnel, scale * scale, shadow);
 
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
     var glow = vec3f(0.0);
     if (material.options.w > 0.5) {
+        let albedo = surface.base * surface.base;
         let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w);
-        glow = albedo * stored * 16.0 * n_dot_v;
+        glow = albedo * stored * 16.0 * saturate(dot(surface.normal, view));
     }
-    return sun + ambient + reflection + glow;
+    return colour + glow;
 }
