@@ -48,30 +48,25 @@ public sealed class DrawableOverlayTests
     }
 
     [Fact]
-    public void Bounds_draw_their_triangles_edges_once()
+    public void A_collision_is_its_triangles_where_the_drawable_is_placed()
     {
-        ViewportSegment[] bounds = Build().Bounds;
-        // A box of twelve triangles: its twelve edges and a diagonal across each face.
-        Assert.Equal(18, bounds.Length);
-        // And the same twelve triangles, solid, where the drawable is placed.
+        // A box: twelve triangles.
         ViewportVertex[] solid = Build().Solid;
         Assert.Equal(12 * 3, solid.Length);
-        Assert.All(solid, corner => Assert.InRange(corner.Position.X + Origin.X, 4 - 1e-4f, 6 + 1e-4f));
-        Assert.All(bounds, segment =>
+        Assert.All(solid, corner =>
         {
-            Assert.Equal(DrawableOverlays.BoundColour, segment.Colour);
-            Assert.InRange(segment.A.X + Origin.X, 4 - 1e-4f, 6 + 1e-4f);
-            Assert.InRange(segment.B.Z + Origin.Z, -1 - 1e-4f, 1 + 1e-4f);
+            Assert.InRange(corner.Position.X + Origin.X, 4 - 1e-4f, 6 + 1e-4f);
+            Assert.InRange(corner.Position.Z + Origin.Z, -1 - 1e-4f, 1 + 1e-4f);
         });
     }
 
     [Fact]
     public void A_fragments_physics_bounds_are_drawn_in_place_of_its_drawables()
     {
-        ViewportSegment[] bounds = Build(new BoundBox(new Aabb3(new Vector3(-.5f), new Vector3(.5f)))).Bounds;
-        Assert.Equal(18, bounds.Length);
+        ViewportVertex[] solid = Build(new BoundBox(new Aabb3(new Vector3(-.5f), new Vector3(.5f)))).Solid;
+        Assert.Equal(12 * 3, solid.Length);
         // The fragment's composite is where the fragment is, not moved with a drawable.
-        Assert.All(bounds, segment => Assert.InRange(segment.A.X + Origin.X, -.5f - 1e-4f, .5f + 1e-4f));
+        Assert.All(solid, corner => Assert.InRange(corner.Position.X + Origin.X, -.5f - 1e-4f, .5f + 1e-4f));
     }
 
     [Fact]
@@ -118,7 +113,7 @@ public sealed class DrawableOverlayTests
     {
         DrawableOverlays overlays = DrawableOverlays.Build([new SceneModel("plain", new Drawable(), Matrix4x4.Identity)], null, Vector3.Zero, 1);
         Assert.Empty(overlays.Skeleton);
-        Assert.Empty(overlays.Bounds);
+        Assert.Empty(overlays.Solid);
         Assert.Empty(overlays.Lights);
     }
 }

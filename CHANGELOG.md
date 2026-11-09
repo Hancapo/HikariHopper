@@ -41,6 +41,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer finds a model's textures through mods too: RPFs in the game folder that the game doesn't load itself, such as fix/touhou.rpf, over the game's own. ([#122](https://github.com/Hancapo/HikariHopper/pull/122))
 - The 3D viewer shows a model at once, without waiting for the game's textures to be found, and adds them when they are. ([#123](https://github.com/Hancapo/HikariHopper/pull/123))
 - The 3D viewer draws a colour map that a model names but that isn't found as a magenta and black checkerboard, so missing textures stand out. ([#124](https://github.com/Hancapo/HikariHopper/pull/124))
+- The 3D viewer's skeleton, collision and lights buttons float over the 3D view in a tool strip on its left edge, and the parts panel's arrow floats at its top left; the collision is drawn only solid, with its edges, without a separate bounds wireframe. ([#132](https://github.com/Hancapo/HikariHopper/pull/132))
 
 ### Fixed
 

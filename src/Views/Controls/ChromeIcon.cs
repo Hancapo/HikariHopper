@@ -57,7 +57,6 @@ public class ChromeIcon : Control
         ["orbit"] = "orbit",
         ["damaged"] = "hammer",
         ["skeleton"] = "bone",
-        ["bounds"] = "box",
         ["collision"] = "brick-wall",
         ["lights"] = "lightbulb",
         ["free"] = "move-3d",
