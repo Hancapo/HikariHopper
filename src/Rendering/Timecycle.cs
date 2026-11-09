@@ -46,6 +46,16 @@ internal static class Timecycle
     internal const float BrightExposure = -.5f, DarkExposure = 3;
 
     /// <summary>
+    /// The gamma PS_Composite encodes with: it raises the tone-mapped colour to its Gamma, one over this, itself, and
+    /// writes it to a plain 8-bit target. The game sets it from the Brightness slider, 1.4 + 1.6 × slider / 30, which is
+    /// 2.2 at the slider's middle; one of its paths uses 2.2 whatever the slider says.
+    /// </summary>
+    internal const float DisplayGamma = 2.2f;
+
+    /// <summary>A tone-mapped colour channel as the game writes it, 0 to 1.</summary>
+    internal static float Display(float mapped) => MathF.Pow(Math.Clamp(mapped, 0, 1), 1 / DisplayGamma);
+
+    /// <summary>
     /// The albedo of the ground the viewer puts below the horizon, where the game has its world: a mid-grey map,
     /// squared as GTA's lighting reads it.
     /// </summary>
