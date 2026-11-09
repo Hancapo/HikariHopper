@@ -149,12 +149,13 @@ internal sealed partial class ViewportHost : NativeControlHost
         }
     }
 
-    /// <summary>Shows these triangles in place of anything before.</summary>
+    /// <summary>Shows these triangles in place of anything before; again, after the marks it shows changed.</summary>
     public void Show(ViewportMesh? mesh)
     {
         shown = mesh;
         surfaces = null;
         renderer?.Show(mesh);
+        InvalidateVisual();
     }
 
     /// <summary>Shows a drawable's surfaces in place of anything before.</summary>

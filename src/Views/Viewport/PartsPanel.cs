@@ -18,7 +18,8 @@ namespace HikariHopper.Views;
 /// keyboard moves through them and shows, hides and frames what is selected; a right click offers the same. A filter
 /// over the rows narrows them by name. Rows come in sections: a fragment's body, its groups of drawables and its extras
 /// (toggles numbered as the game numbers them); a drawable dictionary's drawables by what they are, which can show one
-/// of each at a time.
+/// of each at a time. A collision or a navmesh lists what its colours mean instead: its materials, or its kinds of
+/// ground, edges, links and cover points, each row with its colour in place of the badge and how many wear it.
 /// </summary>
 internal sealed class PartsPanel : UserControl
 {
@@ -30,7 +31,7 @@ internal sealed class PartsPanel : UserControl
     private readonly HashSet<string> expanded = [];
     private readonly HashSet<string> swept = [];
     private readonly HashSet<string> selected = [];
-    private PartVisibility? parts;
+    private IPartList? parts;
     // While a press on an eye sweeps over the rows: what each is set to.
     private bool? sweepTo;
     // Where the keyboard is, and where a Shift range starts from.
@@ -199,7 +200,7 @@ internal sealed class PartsPanel : UserControl
     /// The parts shown, or none; the panel lists them, the body's rows open, nothing selected. A drawable dictionary
     /// shows one drawable of each section until All is picked.
     /// </summary>
-    public PartVisibility? Parts
+    public IPartList? Parts
     {
         get => parts;
         set
@@ -722,7 +723,18 @@ internal sealed class PartsPanel : UserControl
         grid.Children.Add(eye);
 
         (string letter, IImmutableSolidColorBrush badgeInk, string kind) = Badge(node.Kind);
-        var badge = new Border
+        // A mark wears the colour it is drawn in: the row is the legend's entry.
+        Control badge = node.Colour is { } colour ? new Border
+        {
+            Width = 10,
+            Height = 10,
+            CornerRadius = new CornerRadius(2),
+            Background = new ImmutableSolidColorBrush(ViewportMesh.Unpack(colour)),
+            Opacity = state == false ? .4 : 1,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        }
+        : new Border
         {
             Width = 14,
             Height = 14,
@@ -767,7 +779,9 @@ internal sealed class PartsPanel : UserControl
         };
         Grid.SetColumn(triangles, 5);
         grid.Children.Add(triangles);
-        ThemedToolTip.Set(grid, $"{node.Name}\n{kind} · {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)} triangles");
+        ThemedToolTip.Set(grid, node.Kind == PartKind.Mark
+            ? $"{node.Name}: {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)}"
+            : $"{node.Name}\n{kind} · {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)} triangles");
 
         IBrush rest = isSelected ? (focused ? Ui.Theme.Selection : Ui.Theme.SelectionWash) : Brushes.Transparent;
         var row = new Border { CornerRadius = Ui.Theme.ItemCorner, Child = grid, Background = rest, Margin = new Thickness(4, 0, 4, 0) };

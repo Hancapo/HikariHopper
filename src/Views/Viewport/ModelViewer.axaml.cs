@@ -231,6 +231,8 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private readonly ModelFile file;
     private PartVisibility? visibility;
+    // A collision's or a navmesh's marks, which the parts panel lists in place of a drawable's parts.
+    private MeshParts? marks;
     // What the drawable is read from: the file's bytes, until its embedded textures are saved into it; the textures
     // saved for a fragment or dictionary, which can't take them back, over its own; and the game's dictionaries, once found.
     private byte[] data = [];
@@ -330,7 +332,7 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Slides the parts panel open or closed; its edge's arrow points the way it would go.</summary>
     internal void SetPartsShown(bool shown)
     {
-        partsShown = shown && visibility is not null;
+        partsShown = shown && Parts.Parts is not null;
         PartsHandle.IsVisible = partsShown;
         PartsSide.Transitions ??= PartsSlide;
         PartsSide.Width = partsShown ? partsWidth : 0;
@@ -378,7 +380,7 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
     internal void FrameParts(IReadOnlyList<PartNode> nodes)
     {
-        if (visibility?.Bounds(nodes) is { } box)
+        if (Parts.Parts?.Bounds(nodes) is { } box)
             Viewport.Focus(box);
     }
 
@@ -420,6 +422,9 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Draws what the parts panel and the level say, and counts it.</summary>
     private void ShowParts()
     {
+        // A collision or a navmesh is drawn again without the marks hidden; the camera stays where it is.
+        if (marks is not null)
+            Viewport.Show(marks.Mesh);
         if (visibility is null)
             return;
         Viewport.ShowParts(visibility.Mask());
@@ -438,8 +443,8 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (!Toolbar.IsVisible)
             return false;
-        // A collision or a navmesh has only the camera's keys.
-        if (surfaces is null && char.ToUpperInvariant(key) is not ('V' or 'F'))
+        // A collision or a navmesh has the camera's keys, and the parts panel's when it has something to list.
+        if (surfaces is null && char.ToUpperInvariant(key) is not ('V' or 'F') && !(marks is not null && char.ToUpperInvariant(key) == 'P'))
             return false;
         switch (char.ToUpperInvariant(key))
         {
@@ -705,18 +710,22 @@ public partial class ModelViewer : UserControl, IModalContent
             DamagedButton.IsEnabled = surfaces.HasDamaged;
             ThemedToolTip.Set(DamagedButton, surfaces.HasDamaged ? "Damaged  (X)" : "No damaged state");
             RefreshToggles();
-            ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
             return Describe(surfaces);
         }
         Viewport.Show(content.Mesh);
-        // Collisions and navmeshes are drawn flat, with no parts: of the toolbar, they have the camera's buttons.
+        // Collisions and navmeshes are drawn flat: of the toolbar, they have the camera's buttons, and the parts panel
+        // lists what their colours mean (a collision's materials), to show, hide and find each.
         Toolbar.IsVisible = true;
         ModelTools.IsVisible = TimeWell.IsVisible = false;
         TrianglesStat.IsVisible = VerticesStat.IsVisible = EdgesStat.IsVisible = false;
+        var listed = new MeshParts(content.Mesh);
+        marks = listed.Any ? listed : null;
+        Parts.Parts = marks;
+        partsTab.IsWanted = marks is not null;
+        SetPartsShown(marks is not null);
         RefreshToggles();
-        ShowLegend(content.Mesh.Legend);
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")}{(skipped > 0 ? $" ({skipped:N0} shapes not drawn)" : "")} · "
@@ -748,51 +757,8 @@ public partial class ModelViewer : UserControl, IModalContent
         };
     }
 
-    /// <summary>The most entries the legend lists; the rest are counted.</summary>
-    private const int LegendLength = 14;
-
-    /// <summary>The legend's entries as shown, most used first.</summary>
-    internal IReadOnlyList<LegendEntry> LegendShown { get; private set; } = [];
-
-    private void ShowLegend(IReadOnlyList<LegendEntry> legend)
-    {
-        LegendEntry[] ordered = [.. legend.OrderByDescending(entry => entry.Count)];
-        LegendShown = [.. ordered.Take(LegendLength)];
-        LegendHidden = [.. ordered.Skip(LegendLength)];
-        LegendPanel.Children.Clear();
-        foreach (LegendEntry entry in LegendShown)
-        {
-            Control item = LegendItem(entry);
-            ToolTip.SetTip(item, $"{entry.Name}: {entry.Count:N0}");
-            LegendPanel.Children.Add(item);
-        }
-        if (LegendHidden.Count > 0)
-        {
-            // The rest, swatches and all, in the tooltip of their count.
-            var rest = new StackPanel { Spacing = 4 };
-            foreach (LegendEntry entry in LegendHidden)
-                rest.Children.Add(LegendItem(entry, $"{entry.Name}: {entry.Count:N0}"));
-            var more = new TextBlock { Text = $"+{LegendHidden.Count} more", Classes = { "status" }, Foreground = Ui.Theme.TextFaint };
-            ToolTip.SetTip(more, rest);
-            LegendPanel.Children.Add(more);
-        }
-        LegendBar.IsVisible = LegendShown.Count > 0;
-    }
-
-    /// <summary>The legend's entries left out of the bar, listed in the tooltip of its "+N more".</summary>
-    internal IReadOnlyList<LegendEntry> LegendHidden { get; private set; } = [];
-
-    private static Control LegendItem(LegendEntry entry, string? text = null)
-    {
-        var item = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
-        item.Children.Add(new Border
-        {
-            Width = 10, Height = 10, CornerRadius = new CornerRadius(2), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Background = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(ViewportMesh.Unpack(entry.Colour)),
-        });
-        item.Children.Add(new TextBlock { Text = text ?? entry.Name, Classes = { "status" } });
-        return item;
-    }
+    /// <summary>What the parts panel lists for a collision or a navmesh: what its colours mean. None for a drawable.</summary>
+    internal MeshParts? Marks => marks;
 
     /// <summary>The control the viewer opens over, in the main window.</summary>
     public Control? Anchor { get; set; }

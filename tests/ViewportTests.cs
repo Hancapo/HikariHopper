@@ -96,6 +96,19 @@ public sealed class ViewportTests
         string[] names = [.. mesh.Legend.Select(entry => entry.Name)];
         Assert.Contains("Water", names);
         Assert.Contains("Low climb", names);
+        // The parts panel lists them under what they are: the ground, and the edges drawn on it.
+        MeshMark water = mesh.Marks.Single(mark => mark.Name == "Water"), lowClimb = mesh.Marks.Single(mark => mark.Name == "Low climb");
+        Assert.Equal((NavmeshMesh.GroundSection, NavmeshMesh.EdgeSection), (water.Section, lowClimb.Section));
+        // Hiding the climb takes its band away and leaves the polygons and their outlines; hiding the water takes those.
+        int all = mesh.ToArray().Length, lines = mesh.SegmentArray().Length;
+        mesh.Show(lowClimb.Index, false);
+        Assert.Equal(all - 6, mesh.ToArray().Length);
+        Assert.Equal(lines, mesh.SegmentArray().Length);
+        mesh.Show(water.Index, false);
+        Assert.True(mesh.ToArray().Length < all - 6);
+        Assert.True(mesh.SegmentArray().Length < lines);
+        mesh.ShowAll();
+        Assert.Equal(all, mesh.ToArray().Length);
         // Polygons are drawn whole: the triangles they were split into show no edges of their own.
         Assert.All(mesh.Vertices, vertex => Assert.Equal(0u, vertex.Colour >> 24));
         // Every polygon edge has its outline; the climb also gets a band in its colour, lying on the polygon.
@@ -967,13 +980,33 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.Shortcut('f'));
         Assert.False(viewer.Viewport.FreeCamera);
         Assert.False(viewer.Shortcut('T'));
-        Assert.False(viewer.Shortcut('P'));
         Assert.False(viewer.ToolStripOverlay.IsWanted);
-        Assert.False(viewer.PartsTabOverlay.IsWanted);
         Assert.False(viewer.StatsPanel.IsVisible);
-        Assert.False(viewer.PartsShown);
-        Assert.False(viewer.PartsHandle.IsVisible);
         Assert.False(viewer.Shortcut('H'));
+
+        // Its materials are in the parts panel, open, each with its colour: the box's one, the default.
+        Assert.True(viewer.PartsTabOverlay.IsWanted);
+        Assert.True(viewer.PartsShown);
+        Assert.True(viewer.PartsHandle.IsVisible);
+        MeshParts marks = Assert.IsType<MeshParts>(viewer.Parts.Parts);
+        Assert.Same(marks, viewer.Marks);
+        Assert.Equal(CollisionMesh.Section, Assert.Single(viewer.Parts.Sections).Title);
+        PartNode material = Assert.Single(viewer.Parts.Rows).Node;
+        Assert.Equal(("Default", PartKind.Mark), (material.Name, material.Kind));
+        Assert.NotNull(material.Colour);
+        Assert.Equal("1 / 1", viewer.Parts.CountText);
+        // Hidden from the panel, it isn't drawn; the panel closes and opens with P, as a drawable's does.
+        viewer.Parts.Flip(material);
+        Assert.Empty(marks.Mesh.ToArray());
+        Assert.Equal("0 / 1", viewer.Parts.CountText);
+        viewer.Parts.ShowAll();
+        Assert.Equal(36, marks.Mesh.ToArray().Length);
+        Assert.True(viewer.Shortcut('P'));
+        Assert.False(viewer.PartsShown);
+        Assert.True(viewer.Shortcut('p'));
+        Assert.True(viewer.PartsShown);
+        // Framing it asks the viewport to turn to its box, which has none to turn yet without a GPU.
+        viewer.FrameParts([material]);
     }
 
     /// <summary>Waits for a viewer's background read to finish and be shown.</summary>
