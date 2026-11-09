@@ -50,7 +50,7 @@ public sealed class TextureViewerTests
             Assert.EndsWith(item == viewer.TexturesModel[0] ? "/thumbnail/0" : "/thumbnail/1", item.ThumbnailUrl);
             Assert.Equal(new Avalonia.PixelSize(96, 96), item.Thumbnail!.PixelSize);
         });
-        Assert.Equal([0, 0, 255, 255], FirstPixel(preview)); // Premultiplied BGRA red.
+        Assert.Equal([255, 0, 0, 255], FirstPixel(preview)); // Red, as RGBA.
         viewer.SetChannel("G");
         Settle(viewer);
         Assert.Equal("g", viewer.Channel);
@@ -82,6 +82,61 @@ public sealed class TextureViewerTests
         Assert.Equal([255, 255, 255, 255], FirstPixel(Assert.IsAssignableFrom<Bitmap>(viewer.PreviewImage)));
         Settle(viewer);
         Assert.Equal(0, decodes); // Every view came from the RGBA decoded once.
+    });
+
+    /// <summary>A BGRA texture of one colour with its full mip chain.</summary>
+    private static Texture Mipped(string name, int width, int height)
+    {
+        int mips = 1, pixels = width * height;
+        for (int w = width, h = height; w > 1 || h > 1; mips++)
+        {
+            w = Math.Max(1, w / 2);
+            h = Math.Max(1, h / 2);
+            pixels += w * h;
+        }
+        return new Texture(name, width, height, TextureFormat.B8G8R8A8Unorm, mips, Repeat([0, 0, 255, 255], pixels));
+    }
+
+    [Fact]
+    public void A_thumbnail_is_made_from_the_smallest_mip_that_covers_it()
+    {
+        // 96 across: 2048 halves to 128 four times; 256×128 (a 96×48 thumbnail) once; one without mips is its only one.
+        Assert.Equal(4, TextureBitmaps.ThumbnailMip(2048, 2048, 12));
+        Assert.Equal(1, TextureBitmaps.ThumbnailMip(256, 128, 9));
+        Assert.Equal(0, TextureBitmaps.ThumbnailMip(100, 70, 1));
+        Assert.Equal(0, TextureBitmaps.ThumbnailMip(4, 4, 3));
+        Assert.Equal((96, 48), TextureBitmaps.ThumbnailDimensions(256, 128));
+        Assert.Equal((24, 96), TextureBitmaps.ThumbnailDimensions(16, 64));
+    }
+
+    [AvaloniaFact]
+    public Task Thumbnails_decode_a_small_mip_rather_than_the_whole_texture() => Headless.Run(() =>
+    {
+        TextureViewerViewModel viewer = Viewer();
+        var decoded = new List<(string Name, int Mip)>();
+        viewer.DecodeImage = (texture, mode, mip) =>
+        {
+            lock (decoded)
+                decoded.Add((texture.Name, mip));
+            return TextureOperations.DecodeImage(texture, mode, mip);
+        };
+        viewer.OpenDictionary("textures.ytd", "", Bytes(new TextureSet([Mipped("big", 512, 512), Mipped("wide", 256, 128)], GameTarget.Legacy)));
+        Settle(viewer);
+        Assert.Contains(("big", 2), decoded);
+        Assert.Contains(("wide", 1), decoded);
+        Assert.DoesNotContain(("wide", 0), decoded); // The first is the one previewed, at its full size.
+        Assert.Equal(new Avalonia.PixelSize(96, 96), viewer.TexturesModel[0].Thumbnail!.PixelSize);
+        Assert.Equal(new Avalonia.PixelSize(96, 48), viewer.TexturesModel[1].Thumbnail!.PixelSize);
+    });
+
+    [AvaloniaFact]
+    public Task A_preview_bitmap_holds_the_textures_RGBA_as_it_is() => Headless.Run(() =>
+    {
+        // Copied, not worked out per pixel: unpremultiplied RGBA, the alpha kept apart.
+        using var bitmap = TextureBitmaps.Create(new RgbaImage(2, 1, [10, 20, 30, 64, 200, 100, 50, 255]));
+        Assert.Equal(Avalonia.Platform.PixelFormat.Rgba8888, bitmap.Format);
+        Assert.Equal(Avalonia.Platform.AlphaFormat.Unpremul, bitmap.AlphaFormat);
+        Assert.Equal([10, 20, 30, 64], FirstPixel(bitmap));
     });
 
     [AvaloniaFact]

@@ -47,6 +47,11 @@ public partial class TextureViewport : UserControl
     private Point? pressPoint;
     private Point lastDragPoint;
     private bool dragActive;
+    // While the next texture decodes, the last one stays up a moment rather than flashing "Decoding texture…",
+    // which shows only when the decode takes longer.
+    private const int PlaceholderDelay = 250;
+    private Avalonia.Threading.DispatcherTimer? placeholderTimer;
+    private bool placeholderDue;
 
     public TextureViewport()
     {
@@ -290,6 +295,37 @@ public partial class TextureViewport : UserControl
             Refresh();
     }
 
+    /// <summary>
+    /// Whether the last image stays up, its frame too, while the next decodes: for a moment after the decode starts,
+    /// and only when there is one up.
+    /// </summary>
+    private bool HoldsLastImage()
+    {
+        if (viewModel is not { PreviewLoading: true, SelectedIndex: >= 0 })
+        {
+            placeholderTimer?.Stop();
+            placeholderDue = false;
+            return false;
+        }
+        if (placeholderDue || ImageFrame.Source is null)
+            return false;
+        if (placeholderTimer is not { IsEnabled: true })
+        {
+            placeholderTimer ??= new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PlaceholderDelay) };
+            placeholderTimer.Tick -= OnPlaceholderDue;
+            placeholderTimer.Tick += OnPlaceholderDue;
+            placeholderTimer.Start();
+        }
+        return true;
+    }
+
+    private void OnPlaceholderDue(object? sender, EventArgs e)
+    {
+        placeholderTimer?.Stop();
+        placeholderDue = true;
+        Refresh();
+    }
+
     private void Refresh()
     {
         DisplayScale = fitMode ? FittedScale : manualScale;
@@ -300,10 +336,14 @@ public partial class TextureViewport : UserControl
         Checkerboard.IsVisible = CheckerboardVisible;
         PlainBackground.IsVisible = !CheckerboardVisible;
         ImageFrame.FrameVisible = hasSelection;
-        ImageFrame.Frame = ImageFrameRect;
-        ImageFrame.Source = viewModel is { HasPreview: true } ? viewModel.PreviewImage : null;
+        bool holding = HoldsLastImage();
+        if (!holding)
+        {
+            ImageFrame.Frame = ImageFrameRect;
+            ImageFrame.Source = viewModel is { HasPreview: true } ? viewModel.PreviewImage : null;
+        }
         ImageFrame.Filtered = FilteredPreview;
-        MessageText.IsVisible = viewModel is null || viewModel.PreviewLoading || viewModel.SelectedIndex < 0;
+        MessageText.IsVisible = !holding && (viewModel is null || viewModel.PreviewLoading || viewModel.SelectedIndex < 0);
         MessageText.Text = viewModel is null ? "" : viewModel.PreviewLoading ? "Decoding texture…" : viewModel.Status;
         MessageText.Foreground = viewModel is null || viewModel.Error.Length == 0 ? Ui.Theme.TextFaint : Ui.Theme.Error;
         // The panning cursor shows only while a drag is active.

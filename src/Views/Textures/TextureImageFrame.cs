@@ -92,7 +92,7 @@ public class TextureImageFrame : Control
         ReleaseImage();
     }
 
-    /// <summary>A Skia copy of <see cref="Source"/> (premultiplied BGRA), made once per bitmap.</summary>
+    /// <summary>A Skia copy of <see cref="Source"/>, in its own pixel format, made once per bitmap.</summary>
     private SKImage? Image()
     {
         Bitmap? source = Source;
@@ -100,12 +100,22 @@ public class TextureImageFrame : Control
             return image;
         ReleaseImage();
         imageSource = source;
-        if (source is null || source.PixelSize.Width <= 0 || source.PixelSize.Height <= 0)
+        if (source is null)
             return null;
+        // A bitmap already released (the last texture's, kept up while the next decodes) shows nothing.
         try
         {
             PixelSize size = source.PixelSize;
-            var info = new SKImageInfo(size.Width, size.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            if (size.Width <= 0 || size.Height <= 0)
+                return null;
+            SKColorType colours = source.Format == Avalonia.Platform.PixelFormat.Rgba8888 ? SKColorType.Rgba8888 : SKColorType.Bgra8888;
+            SKAlphaType alpha = source.AlphaFormat switch
+            {
+                Avalonia.Platform.AlphaFormat.Unpremul => SKAlphaType.Unpremul,
+                Avalonia.Platform.AlphaFormat.Opaque => SKAlphaType.Opaque,
+                _ => SKAlphaType.Premul,
+            };
+            var info = new SKImageInfo(size.Width, size.Height, colours, alpha);
             using var pixels = new SKBitmap(info);
             source.CopyPixels(new PixelRect(size), pixels.GetPixels(), pixels.ByteCount, pixels.RowBytes);
             pixels.SetImmutable();

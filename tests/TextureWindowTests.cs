@@ -237,6 +237,45 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void TheLastTextureStaysUpWhileTheNextDecodesThenTheMessageShows()
+    {
+        TextureWindowHarness harness = Opened(Solid("first", 64, 64), Solid("second", 32, 32));
+        Avalonia.Media.Imaging.Bitmap? first = harness.Viewport.ImageFrame.Source;
+        Assert.NotNull(first);
+        using var release = new ManualResetEventSlim();
+        Func<Texture, string, int, RgbaImage> decode = harness.ViewModel.DecodeImage;
+        harness.ViewModel.DecodeImage = (texture, mode, mip) =>
+        {
+            Assert.True(release.Wait(10_000));
+            return decode(texture, mode, mip);
+        };
+        try
+        {
+            // At once: the last texture, its frame as it was, and no "Decoding texture…" flash.
+            Rect frame = harness.Viewport.ImageFrame.Frame;
+            harness.ViewModel.SelectTexture(1);
+            TextureWindowHarness.Pump();
+            Assert.True(harness.ViewModel.PreviewLoading);
+            Assert.Same(first, harness.Viewport.ImageFrame.Source);
+            Assert.Equal(frame, harness.Viewport.ImageFrame.Frame);
+            Assert.False(harness.Viewport.MessageText.IsVisible);
+            // A decode that takes longer shows the message.
+            ExplorerStateRenders.Pump(350);
+            Assert.True(harness.Viewport.MessageText.IsVisible);
+            Assert.Equal("Decoding texture…", harness.Viewport.MessageText.Text);
+            Assert.Null(harness.Viewport.ImageFrame.Source);
+        }
+        finally
+        {
+            release.Set();
+        }
+        harness.Settle();
+        Assert.False(harness.ViewModel.PreviewLoading);
+        Assert.Same(harness.ViewModel.PreviewImage, harness.Viewport.ImageFrame.Source);
+        Assert.False(harness.Viewport.MessageText.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void RightClickKeepsTheSelectionAndOpensTheContextMenu()
     {
         TextureWindowHarness harness = Opened(Solid("a", 4, 4), Solid("b", 4, 4), Solid("c", 4, 4));
