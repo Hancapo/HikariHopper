@@ -611,6 +611,23 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.TimeOpen);
         Assert.False(viewer.TimeButton.Sunken);
 
+        // Another window taking the keyboard closes it, once the change of window is over, not in the middle of it
+        // (Windows then gave the keyboard to another app, and the main window went behind it). Past the moment in which a
+        // press that closed it doesn't open it again.
+        ExplorerStateRenders.Pump(450);
+        viewer.ToggleTime();
+        Assert.True(viewer.TimeOpen);
+        var dropdown = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.SunSlider).OfType<Avalonia.Controls.Window>().Single();
+        // As the platform says it lost the keyboard (the headless one doesn't move it between windows itself).
+        object platform = dropdown.PlatformImpl!;
+        var deactivated = (Action?)platform.GetType().GetInterfaces().Append(platform.GetType())
+            .Select(type => type.GetProperty("Deactivated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            .First(property => property is not null)!.GetValue(platform);
+        deactivated!();
+        Assert.True(viewer.TimeOpen);
+        ExplorerStateRenders.Pump(100);
+        Assert.False(viewer.TimeOpen);
+
         viewer.Close();
         ExplorerStateRenders.Pump(300);
         window.Close();

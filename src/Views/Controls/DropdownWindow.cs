@@ -31,7 +31,7 @@ internal sealed class DropdownWindow : Window
             Margin = Ui.Theme.MenuShadowMargin,
             Children = { new RetroMenuFrame { ConnectionWidth = 0 }, body },
         };
-        Deactivated += (_, _) => Close();
+        Deactivated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (IsVisible) Close(); });
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
