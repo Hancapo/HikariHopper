@@ -44,21 +44,21 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             ],
         });
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
             Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("exposure.wgsl"),
-        });
+        }));
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, exposureLayout] });
-        luminancePipeline = device.CreateComputePipelineSync(new ComputePipelineDescriptor
+        luminancePipeline = gpu.Compute($"luminance/{viewFormat}", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
             Layout = layout,
-            Compute = new ComputeState { Module = shader, EntryPoint = "cs_luminance" },
-        });
-        meanPipeline = device.CreateComputePipelineSync(new ComputePipelineDescriptor
+            Compute = new ComputeState { Module = shader.Value, EntryPoint = "cs_luminance" },
+        }));
+        meanPipeline = gpu.Compute($"luminance-mean/{viewFormat}", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
             Layout = layout,
-            Compute = new ComputeState { Module = shader, EntryPoint = "cs_luminance_mean" },
-        });
+            Compute = new ComputeState { Module = shader.Value, EntryPoint = "cs_luminance_mean" },
+        }));
     }
 
     private (uint X, uint Y) LuminanceTiles => (((uint)width + LuminanceTile - 1) / LuminanceTile, ((uint)height + LuminanceTile - 1) / LuminanceTile);

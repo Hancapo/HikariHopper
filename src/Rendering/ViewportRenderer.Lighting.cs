@@ -133,13 +133,13 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = shadowViewLayout,
             Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffer, Size = ShadowViewBytes }],
         });
-        ShaderModule shadowShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") });
-        shadowPipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
+        shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout] }),
             Vertex = new VertexState
             {
-                Module = shadowShader,
+                Module = shadowShader.Value,
                 EntryPoint = "vs_shadow",
                 Buffers = new[]
                 {
@@ -153,19 +153,19 @@ internal sealed unsafe partial class ViewportRenderer
             // Both sides cast: a model's one-sided panels still shadow what is behind them.
             Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Less },
-        });
+        }));
 
         // The drawable's shadow on the backdrop's ground, multiplied over it. Group 1 is unused.
         BindGroupLayout none = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = [] });
         noGroup = device.CreateBindGroup(new BindGroupDescriptor { Layout = none, Entries = [] });
-        ShaderModule groundShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("ground_shadow.wgsl") });
-        groundShadowPipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> groundShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("ground_shadow.wgsl") }));
+        groundShadowPipeline = gpu.Pipeline($"ground-shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, none, lightLayout] }),
-            Vertex = new VertexState { Module = groundShader, EntryPoint = "vs_ground_shadow" },
+            Vertex = new VertexState { Module = groundShader.Value, EntryPoint = "vs_ground_shadow" },
             Fragment = new FragmentState
             {
-                Module = groundShader,
+                Module = groundShader.Value,
                 EntryPoint = "fs_ground_shadow",
                 Targets = new[]
                 {
@@ -182,7 +182,7 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
-        });
+        }));
 
         // The tone map, blended premultiplied over the backdrop.
         tonemapLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -204,14 +204,14 @@ internal sealed unsafe partial class ViewportRenderer
             ],
         });
         CreateExposure();
-        ShaderModule tonemapShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("tonemap.wgsl") });
-        tonemapPipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("tonemap.wgsl") }));
+        tonemapPipeline = gpu.Pipeline($"tonemap/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, tonemapLayout, lightLayout] }),
-            Vertex = new VertexState { Module = tonemapShader, EntryPoint = "vs_tonemap" },
+            Vertex = new VertexState { Module = tonemapShader.Value, EntryPoint = "vs_tonemap" },
             Fragment = new FragmentState
             {
-                Module = tonemapShader,
+                Module = tonemapShader.Value,
                 EntryPoint = "fs_tonemap",
                 Targets = new[]
                 {
@@ -227,7 +227,7 @@ internal sealed unsafe partial class ViewportRenderer
                     },
                 },
             },
-        });
+        }));
         SetTime(Hours);
     }
 
