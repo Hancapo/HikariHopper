@@ -20,7 +20,8 @@ struct Light {
     exposure_curve: vec4f,
     // The timecycle's exposure range, then the exposures of the bright and dark filmic curves.
     exposure_range: vec4f,
-    // The bright and dark filmic curves: A, B, C, D; then E, F and the white point W.
+    // The bright and dark filmic curves: A, B, C, D; then E, F and the white point W. The bright one's w is
+    // PS_Composite's Gamma, which the tone-mapped colour is raised to: one over the display gamma.
     filmic_bright0: vec4f,
     filmic_bright1: vec4f,
     filmic_dark0: vec4f,

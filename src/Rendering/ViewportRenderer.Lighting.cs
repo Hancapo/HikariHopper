@@ -327,7 +327,7 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, Timecycle.BrightExposure, Timecycle.DarkExposure);
         Filmic bright = Timecycle.Bright, dark = Timecycle.Dark;
         vectors[8] = new Vector4(bright.A, bright.B, bright.C, bright.D);
-        vectors[9] = new Vector4(bright.E, bright.F, bright.W, 0);
+        vectors[9] = new Vector4(bright.E, bright.F, bright.W, 1 / Timecycle.DisplayGamma);
         vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
         vectors[11] = new Vector4(dark.E, dark.F, dark.W, 0);
         vectors[12] = new Vector4(ReflectionMips, 0, 0, 0);

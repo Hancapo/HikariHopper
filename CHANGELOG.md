@@ -49,6 +49,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The 3D viewer's darkest shades are as bright as in the game: the tone-mapped colour is written with the game's gamma (1/2.2) instead of the sRGB curve. ([#135](https://github.com/Hancapo/HikariHopper/pull/135))
 - The explorer's status bar says "1 item", not "1 items". ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The keyboard shortcuts list says Ctrl+C copies the selection, as it does. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The text viewer's toolbar buttons brighten on hover like the other toolbars'. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))

@@ -90,6 +90,24 @@ public sealed class SunlightTests
     }
 
     [Fact]
+    public void The_game_writes_the_tone_mapped_colour_raised_to_one_over_2_2()
+    {
+        // The Brightness slider's middle: 1.4 + 1.6 × 15 / 30.
+        Assert.Equal(1.4f + 1.6f * 15 / 30, Timecycle.DisplayGamma, 5);
+        Assert.Equal(0, Timecycle.Display(0));
+        Assert.Equal(1, Timecycle.Display(1), 5);
+        Assert.Equal(MathF.Pow(.18f, 1 / 2.2f), Timecycle.Display(.18f), 5);
+        // Brighter than the sRGB curve near black: a hundredth of white is 31 of 255, not sRGB's 25 ...
+        Assert.Equal(31.4f, Timecycle.Display(.01f) * 255, 1);
+        Assert.True(Timecycle.Display(.01f) > Srgb(.01f) + .02f);
+        // ... and within a step of it from a tenth of white up.
+        foreach (float mapped in new[] { .1f, .2f, .5f, .8f })
+            Assert.True(MathF.Abs(Timecycle.Display(mapped) - Srgb(mapped)) * 255 < 1.5f, $"{mapped}");
+
+        static float Srgb(float c) => c <= .0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1 / 2.4f) - .055f;
+    }
+
+    [Fact]
     public void The_bloom_starts_lower_and_is_stronger_at_night_as_the_timecycle_says()
     {
         // 13:00: a threshold of 1.7979 and a width of 1.5, so the bright pass fades in from 1.0479 over 1.5.
