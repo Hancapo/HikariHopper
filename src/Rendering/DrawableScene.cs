@@ -34,6 +34,11 @@ internal sealed class DrawableScene
 
     public int TriangleCount => Indices.Length / 3;
 
+    public int VertexCount => Vertices.Length;
+
+    /// <summary>The triangles' distinct edges, a shared edge once, as modelling tools count them.</summary>
+    public int EdgeCount { get; init; }
+
     /// <summary>Builds a drawable's scene, finding textures in its own dictionary and then in <paramref name="dictionaries"/>.</summary>
     public static DrawableScene Build(Drawable drawable, IReadOnlyList<TextureDictionary> dictionaries) =>
         Build([new SceneModel(drawable.Name ?? "drawable", drawable, Matrix4x4.Identity)], new TextureLookup(dictionaries, []));
@@ -136,9 +141,26 @@ internal sealed class DrawableScene
             Vertices = [.. vertices],
             Indices = [.. indices],
             Parts = parts,
+            EdgeCount = CountEdges(indices, parts),
             Materials = [.. materials],
             Diagnostics = diagnostics,
         };
+    }
+
+    private static int CountEdges(List<uint> indices, List<SurfacePart> parts)
+    {
+        var edges = new HashSet<ulong>();
+        foreach (SurfacePart part in parts)
+            for (int i = (int)part.FirstIndex; i + 2 < part.FirstIndex + part.IndexCount; i += 3)
+            {
+                uint a = indices[i] + (uint)part.BaseVertex, b = indices[i + 1] + (uint)part.BaseVertex, c = indices[i + 2] + (uint)part.BaseVertex;
+                edges.Add(Edge(a, b));
+                edges.Add(Edge(b, c));
+                edges.Add(Edge(c, a));
+            }
+        return edges.Count;
+
+        static ulong Edge(uint a, uint b) => a < b ? (ulong)a << 32 | b : (ulong)b << 32 | a;
     }
 
     private static SurfaceVertex Read(VertexBuffer buffer, int i, Matrix4x4 transform, Vector3 origin)

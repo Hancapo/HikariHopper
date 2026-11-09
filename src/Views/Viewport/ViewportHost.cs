@@ -40,6 +40,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private ViewportMesh? shown;
     private DrawableScene? surfaces;
     private float hours = DayCycle.DefaultHours;
+    private bool shadows = true;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -50,6 +51,21 @@ internal sealed partial class ViewportHost : NativeControlHost
         framed = box;
         renderer?.Frame(box);
     }
+
+    /// <summary>Whether the sun casts shadows.</summary>
+    public bool Shadows
+    {
+        get => shadows;
+        set
+        {
+            shadows = value;
+            if (renderer is not null)
+                renderer.Shadows = value;
+        }
+    }
+
+    /// <summary>Points the camera back at what was framed last.</summary>
+    public void Reframe() => renderer?.Frame(framed);
 
     /// <summary>The time of day the light is the game's at, 0 to 24 hours.</summary>
     public float Hours => hours;
@@ -86,6 +102,9 @@ internal sealed partial class ViewportHost : NativeControlHost
     /// <summary>Escape was pressed while the viewport had the keyboard.</summary>
     public event Action? EscapePressed;
 
+    /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
+    public event Action<char>? ShortcutPressed;
+
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
         if (!OperatingSystem.IsWindows())
@@ -112,6 +131,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
             renderer.SetTime(hours);
+            renderer.Shadows = shadows;
             if (surfaces is not null)
                 renderer.Show(surfaces);
             else
@@ -267,6 +287,10 @@ internal sealed partial class ViewportHost : NativeControlHost
             case KeyPressed when wParam == 0x1B:
                 Dispatcher.UIThread.Post(() => EscapePressed?.Invoke());
                 return 0;
+            case KeyPressed when (uint)wParam is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A && GetKeyState(0x11) >= 0 && GetKeyState(0x12) >= 0:
+                char key = (char)wParam;
+                Dispatcher.UIThread.Post(() => ShortcutPressed?.Invoke(key));
+                return 0;
         }
         return null;
     }
@@ -288,6 +312,9 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     [LibraryImport("user32.dll")]
     private static partial nint DefWindowProcW(nint hwnd, uint message, nuint wParam, nint lParam);
+
+    [LibraryImport("user32.dll")]
+    private static partial short GetKeyState(int key);
 
     [LibraryImport("user32.dll")]
     private static partial int GetClientRect(nint hwnd, out ClientRect rect);

@@ -356,6 +356,21 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.Equal(58, viewer.SunSlider.Value);
         Assert.Equal(14.5f, viewer.Hours);
 
+        // The toolbar and the stats: one triangle, three corners, three edges.
+        Assert.True(viewer.Toolbar.IsVisible);
+        Assert.Equal(("1", "3", "3"), (viewer.TrianglesText.Text, viewer.VerticesText.Text, viewer.EdgesText.Text));
+        Assert.Equal("1 material · 1 × 1 × 0 m", viewer.Location);
+        // Shadows are on, and H turns them off and on; the button sits raised while they're on.
+        Assert.True(viewer.Viewport.Shadows);
+        Assert.True(viewer.ShadowsButton.Sunken);
+        Assert.True(viewer.Shortcut('h'));
+        Assert.False(viewer.Viewport.Shadows);
+        Assert.False(viewer.ShadowsButton.Sunken);
+        Assert.True(viewer.Shortcut('H'));
+        Assert.True(viewer.Viewport.Shadows);
+        // A key the toolbar doesn't use is left alone.
+        Assert.False(viewer.Shortcut('W'));
+
         viewer.SetHours(18.25f);
         Assert.Equal(18.25f, viewer.Hours);
         Assert.Equal("18:15", viewer.SunText.Text);
@@ -372,6 +387,9 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
         Settle(viewer);
         Assert.False(viewer.SunBar.IsVisible);
+        Assert.False(viewer.Toolbar.IsVisible);
+        Assert.False(viewer.StatsPanel.IsVisible);
+        Assert.False(viewer.Shortcut('H'));
     }
 
     /// <summary>Waits for a viewer's background read to finish and be shown.</summary>

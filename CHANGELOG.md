@@ -23,6 +23,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A time-of-day slider in the 3D viewer's status bar, to see a model in the game's light at any hour. ([#105](https://github.com/Hancapo/HikariHopper/pull/105))
 - The 3D viewer shades surfaces whose shine comes from their colour as GTA V does, such as tree bark and some lit signs. ([#106](https://github.com/Hancapo/HikariHopper/pull/106))
 - The 3D viewer draws the parallax of walls, floors and decals that have it, with its self-shadow, as GTA V does. ([#107](https://github.com/Hancapo/HikariHopper/pull/107))
+- A toolbar in the 3D viewer for models, to turn shadows on or off and frame the model, and the model's triangle, vertex and edge counts in its status bar. ([#108](https://github.com/Hancapo/HikariHopper/pull/108))
 
 ### Changed
 

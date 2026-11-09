@@ -47,6 +47,57 @@ public partial class ModelViewer : UserControl, IModalContent
         SunSlider.Value = Math.Round(DayCycle.DefaultHours * 4);
         SunText.Text = Clock(DayCycle.DefaultHours);
         SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
+        ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
+        FrameButton.Click += (_, _) => Viewport.Reframe();
+        ThemedToolTip.Set(ShadowsButton, "Shadows  (H)");
+        ThemedToolTip.Set(FrameButton, "Frame the model  (F)");
+        ThemedToolTip.Set(TrianglesStat, "Triangles");
+        ThemedToolTip.Set(VerticesStat, "Vertices");
+        ThemedToolTip.Set(EdgesStat, "Edges");
+        RefreshToggles();
+        Viewport.ShortcutPressed += key => Shortcut(key);
+    }
+
+    /// <summary>Whether the sun casts shadows on the model and the ground.</summary>
+    internal void SetShadows(bool on)
+    {
+        Viewport.Shadows = on;
+        RefreshToggles();
+    }
+
+    /// <summary>A toggle that is on sits raised in its well in full ink; one that is off is flat and dimmer.</summary>
+    private void RefreshToggles()
+    {
+        ShadowsButton.Sunken = Viewport.Shadows;
+        ShadowsButton.Foreground = Viewport.Shadows ? Ui.Theme.Text : Ui.Theme.TextDim;
+    }
+
+    /// <summary>
+    /// The toolbar's keys, from the viewport or the viewer: H shadows, F frame. None is W, A, S, D, Q or E, which the
+    /// free camera moves with.
+    /// </summary>
+    internal bool Shortcut(char key)
+    {
+        if (!Toolbar.IsVisible)
+            return false;
+        switch (char.ToUpperInvariant(key))
+        {
+            case 'H':
+                SetShadows(!Viewport.Shadows);
+                return true;
+            case 'F':
+                Viewport.Reframe();
+                return true;
+        }
+        return false;
+    }
+
+    protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (!e.Handled && e.KeyModifiers == Avalonia.Input.KeyModifiers.None && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z
+            && Shortcut((char)('A' + (e.Key - Avalonia.Input.Key.A))))
+            e.Handled = true;
     }
 
     /// <summary>Lights the model as the game does at <paramref name="hours"/>, 0 to 24.</summary>
@@ -123,8 +174,10 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Surfaces is { } surfaces)
         {
             Viewport.Show(surfaces);
-            // A drawable is lit by the game's light; collisions and navmeshes are drawn flat.
+            // A drawable is lit by the game's light, and has the toolbar; collisions and navmeshes are drawn flat.
             SunBar.IsVisible = true;
+            Toolbar.IsVisible = true;
+            ShowStats(surfaces);
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
@@ -138,17 +191,27 @@ public partial class ModelViewer : UserControl, IModalContent
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
     }
 
+    /// <summary>A drawable's triangles, vertices and edges, beside the status line.</summary>
+    private void ShowStats(DrawableScene scene)
+    {
+        static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        TrianglesText.Text = Count(scene.TriangleCount);
+        VerticesText.Text = Count(scene.VertexCount);
+        EdgesText.Text = Count(scene.EdgeCount);
+        StatsPanel.IsVisible = true;
+    }
+
     /// <summary>
-    /// A drawable's line: its triangles, materials and size, and the textures it names that weren't found; the status
-    /// line's tooltip lists those and the rest of <see cref="DrawableScene.Diagnostics"/>.
+    /// A drawable's line, after its triangles, vertices and edges: its materials and size, and the textures it names that
+    /// weren't found; the status line's tooltip lists those and the rest of <see cref="DrawableScene.Diagnostics"/>.
     /// </summary>
     private static string Describe(DrawableScene scene, System.Numerics.Vector3 size)
     {
-        int triangles = scene.TriangleCount, materials = scene.Materials.Count;
+        int materials = scene.Materials.Count;
         int missing = scene.Materials.SelectMany(material => material.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         string found = missing > 0 ? $" · {missing} {(missing == 1 ? "texture" : "textures")} not found" : "";
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")} · {materials} {(materials == 1 ? "material" : "materials")} · {size.X:0.##} × {size.Y:0.##} × {size.Z:0.##} m{found}");
+            $"{materials} {(materials == 1 ? "material" : "materials")} · {size.X:0.##} × {size.Y:0.##} × {size.Z:0.##} m{found}");
     }
 
     /// <summary>The most entries the legend lists; the rest are counted.</summary>
