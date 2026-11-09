@@ -14,7 +14,7 @@
     <c:RetroMenuItem Name="ResizeItem" Text="To a size…" IsEnabled="{Binding CanEditSelection}" />
     <c:RetroMenuItem Name="PowerOfTwoItem" Text="To power of 2…" IsEnabled="{Binding CanResizeToPowerOfTwo}" />
   </c:RetroMenuItem>
-  <c:RetroMenuItem Name="MipmapsItem" Text="Mipmaps…" IconName="layers" IsEnabled="{Binding CanEditSelection}" />
+  <c:RetroMenuItem Name="MipmapsItem" Text="Recalculate mipmaps…" IconName="layers" IsEnabled="{Binding CanEditSelection}" />
   <c:RetroMenuItem Name="FormatMenu" Text="Format" IconName="file-cog" IsEnabled="{Binding CanEditSelection}">
     <c:RetroMenuItem Name="FormatItem" Text="Change format…" IsEnabled="{Binding CanEditSelection}" />
     <c:RetroMenuItem Name="OptimizeItem" Text="Optimize compression" IconName="zap" IsEnabled="{Binding CanOptimizeSelection}" />

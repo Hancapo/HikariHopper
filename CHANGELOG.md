@@ -42,9 +42,15 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer shows a model at once, without waiting for the game's textures to be found, and adds them when they are. ([#123](https://github.com/Hancapo/HikariHopper/pull/123))
 - The 3D viewer draws a colour map that a model names but that isn't found as a magenta and black checkerboard, so missing textures stand out. ([#124](https://github.com/Hancapo/HikariHopper/pull/124))
 - The 3D viewer's skeleton, collision and lights buttons float over the 3D view in a tool strip on its left edge, and the parts panel's arrow floats at its top left; the collision is drawn only solid, with its edges, without a separate bounds wireframe. ([#132](https://github.com/Hancapo/HikariHopper/pull/132))
+- The delete, new folder, rename and unsaved changes dialogs and the texture editor's tool dialogs look like the app's other sheets: rounded with a shadow, a close button in the header, and the same header and footer. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
+- The 3D viewer's status bar is as tall as the other viewers', and its parts panel's header matches the explorer's list header. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
+- The keyboard shortcuts list and the start page name actions as the menus do. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 
 ### Fixed
 
+- The explorer's status bar says "1 item", not "1 items". ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
+- The keyboard shortcuts list says Ctrl+C copies the selection, as it does. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
+- The text viewer's toolbar buttons brighten on hover like the other toolbars'. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - A model opened from search results in the 3D viewer finds its textures as it does from its folder, and its textures button works. ([#113](https://github.com/Hancapo/HikariHopper/pull/113))
 - In the 3D viewer, bumps on the side of a surface facing away from the sun no longer catch sunlight. ([#126](https://github.com/Hancapo/HikariHopper/pull/126))
 - Clicking outside the 3D viewer's time of day dropdown closes it without sending HikariHopper behind other windows. ([#128](https://github.com/Hancapo/HikariHopper/pull/128))

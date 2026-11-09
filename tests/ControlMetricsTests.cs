@@ -504,7 +504,7 @@ public sealed class ControlMetricsTests
 
         var splash = new SplashScreen();
         Assert.Equal((720.0, 400.0), (splash.Width, splash.Height));
-        Assert.Equal(("Starting Qt interface…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
+        Assert.Equal(("Starting…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
         Assert.True(splash.Topmost);
 
     });

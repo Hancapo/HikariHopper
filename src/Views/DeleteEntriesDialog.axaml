@@ -5,19 +5,22 @@
              x:Class="HikariHopper.Views.DeleteEntriesDialog"
              Width="410">
   <!-- Port of DeleteEntriesDialog.qml: the modal confirmation before entries are deleted. -->
-  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
-  <Panel>
+  <Border Background="{x:Static ui:Theme.AppBg}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+  <c:RoundedClip Radius="{x:Static ui:Theme.SheetInnerRadius}">
     <DockPanel>
-      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.SheetHeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
         <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-        <TextBlock Margin="10,0" VerticalAlignment="Center" Text="DELETION" Foreground="{x:Static ui:Theme.TextDim}"
+        <TextBlock Text="DELETE" Margin="16,0,44,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                   FontWeight="Bold" LetterSpacing="1" />
+                   FontWeight="Bold" LetterSpacing="1.2" TextTrimming="CharacterEllipsis" />
+        <c:ChromeToolButton Name="CloseMark" Width="26" Height="26" Margin="0,0,8,0" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                            IconKind="close" IconSize="12" IconThickness="1.4" IsTabStop="False" AutomationProperties.Name="Cancel" Click="OnCancel" />
       </Panel>
 
-      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+      <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.DialogFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
                     HorizontalAlignment="Right" VerticalAlignment="Center">
           <c:ChromeToolButton Width="88" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
@@ -29,7 +32,6 @@
                  Foreground="{x:Static ui:Theme.Text}" FontFamily="{x:Static ui:Theme.UiFont}"
                  FontSize="{x:Static ui:Theme.FontSize}" FontWeight="Bold" />
     </DockPanel>
-    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
-  </Panel>
+  </c:RoundedClip>
   </Border>
 </UserControl>

@@ -50,7 +50,7 @@
           <c:ChromeToolButton Classes="segment nav" IconKind="forward" IsEnabled="{Binding CanGoForward}"
                               AutomationProperties.Name="Forward" Click="OnForward" />
           <c:ChromeToolButton Classes="segment nav" IconKind="up" IconSize="15" IsEnabled="{Binding CanGoUp}"
-                              AutomationProperties.Name="Up one folder" Click="OnUp" />
+                              AutomationProperties.Name="Up one level" Click="OnUp" />
         </StackPanel>
       </Border>
 

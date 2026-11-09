@@ -28,7 +28,7 @@
                                     CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="close" IconSize="12" IconThickness="1.4"
                                     AutomationProperties.Name="Close" />
               </Panel>
-              <Border DockPanel.Dock="Bottom" Height="48" Background="{x:Static ui:Theme.ChromeBg}">
+              <Border DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.DialogFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
                 <Panel>
                   <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
                   <TextBlock Margin="16,0,0,0" Text="{TemplateBinding FooterText}"
@@ -36,7 +36,7 @@
                              FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                              HorizontalAlignment="Left" VerticalAlignment="Center"
                              IsVisible="{TemplateBinding Footer, Converter={x:Static ObjectConverters.IsNull}}" />
-                  <c:ChromeToolButton Name="PART_CloseButton" Width="92" Height="28" Margin="0,0,12,0"
+                  <c:ChromeToolButton Name="PART_CloseButton" Width="88" Height="28" Margin="0,0,12,0"
                                       HorizontalAlignment="Right" VerticalAlignment="Center"
                                       Raised="True" Text="Close"
                                       IsVisible="{TemplateBinding Footer, Converter={x:Static ObjectConverters.IsNull}}" />

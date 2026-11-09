@@ -31,9 +31,11 @@ internal sealed class PartsPanel : UserControl
         Background = Ui.Theme.AppBg;
         var title = new TextBlock
         {
-            Text = "Parts",
-            FontFamily = Ui.Theme.UiFont,
+            Text = "PARTS",
+            FontFamily = Ui.Theme.MonoFont,
             FontSize = Ui.Theme.SmallFontSize,
+            FontWeight = FontWeight.Bold,
+            LetterSpacing = 1.4,
             Foreground = Ui.Theme.TextDim,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -44,7 +46,7 @@ internal sealed class PartsPanel : UserControl
         counts.HorizontalAlignment = HorizontalAlignment.Right;
         var header = new Border
         {
-            Height = 26,
+            Height = Ui.Theme.ListHeaderHeight,
             Background = Ui.Theme.ListHeaderBg,
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, 0, 0, 1),
@@ -67,8 +69,17 @@ internal sealed class PartsPanel : UserControl
         rows.PointerCaptureLost += (_, _) => EndSweep();
         Content = new DockPanel
         {
-            Children = { header, new ScrollViewer { Content = rows, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled } },
+            Children = { header, Scroller(rows) },
         };
+    }
+
+    // The app's quiet scroller, its bar over the rows while it's used.
+    private static ScrollViewer Scroller(Control rows)
+    {
+        var scroller = new ScrollViewer { Content = rows, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+        if (Application.Current?.TryFindResource("QuietOverlayScrollViewer", out object? theme) == true && theme is Avalonia.Styling.ControlTheme quiet)
+            scroller.Theme = quiet;
+        return scroller;
     }
 
     /// <summary>Raised when the user shows or hides parts.</summary>

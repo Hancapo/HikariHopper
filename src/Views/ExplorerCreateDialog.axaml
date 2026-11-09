@@ -4,21 +4,34 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.ExplorerCreateDialog"
              Width="480">
+  <UserControl.Styles>
+    <!-- Its field labels, as the sheets' small-caps headings. -->
+    <Style Selector="TextBlock.caps">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.CapsFontSize}" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="1.2" />
+    </Style>
+  </UserControl.Styles>
   <!-- Port of ExplorerCreateDialog.qml: a modal Qt Quick Dialog (header, content, footer) that
        names a new folder, texture dictionary or RPF. Hosted in a ModalOverlay. -->
-  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
-  <Panel>
+  <Border Background="{x:Static ui:Theme.AppBg}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+  <c:RoundedClip Radius="{x:Static ui:Theme.SheetInnerRadius}">
     <DockPanel>
-      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.SheetHeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
         <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-        <TextBlock Name="HeadingText" Margin="10,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
+        <TextBlock Name="HeadingText" Margin="16,0,44,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
                    FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                   FontWeight="Bold" LetterSpacing="1" />
+                   FontWeight="Bold" LetterSpacing="1.2" TextTrimming="CharacterEllipsis" />
+        <c:ChromeToolButton Name="CloseMark" Width="26" Height="26" Margin="0,0,8,0" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                            IconKind="close" IconSize="12" IconThickness="1.4" IsTabStop="False" AutomationProperties.Name="Cancel" Click="OnCancel" />
       </Panel>
 
-      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
-        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+      <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.DialogFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
                     HorizontalAlignment="Right" VerticalAlignment="Center">
           <c:ChromeToolButton Width="88" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
@@ -27,24 +40,19 @@
       </Panel>
 
       <c:QtColumnLayout Spacing="6">
-        <TextBlock Margin="16,14,16,0" Text="NAME" Foreground="{x:Static ui:Theme.TextDim}"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                   FontWeight="Bold" LetterSpacing="1" />
+        <TextBlock Margin="16,14,16,0" Text="NAME" Classes="caps" />
         <c:FlatTextField Name="NameField" Margin="16,0" Height="32" AutomationProperties.Name="Entry name" />
         <TextBlock Name="NameErrorText" Margin="16,0" Foreground="{x:Static ui:Theme.Error}" TextWrapping="Wrap"
                    FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-        <TextBlock Name="SourceLabel" Margin="16,7,16,0" Text="SOURCE" Foreground="{x:Static ui:Theme.TextDim}"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                   FontWeight="Bold" LetterSpacing="1" />
+        <TextBlock Name="SourceLabel" Margin="16,7,16,0" Text="SOURCE" Classes="caps" />
         <Border Name="SourceBox" Margin="16,0" Height="30" Background="{x:Static ui:Theme.InsetBg}"
-                BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1">
+                BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.ControlCorner}">
           <TextBlock Name="SourceText" Margin="8,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
                      FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
         </Border>
         <Panel c:QtColumnLayout.FillHeight="True" />
       </c:QtColumnLayout>
     </DockPanel>
-    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
-  </Panel>
+  </c:RoundedClip>
   </Border>
 </UserControl>

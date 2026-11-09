@@ -27,10 +27,10 @@ public partial class ShortcutsDialog : ModalSheet
     [
         new("FILE",
         [
-            new("Ctrl+T", "New explorer tab"),
-            new("Ctrl+W", "Close current tab"),
-            new("Ctrl+O", "Open the configured game"),
-            new("Ctrl+Shift+O", "Open a standalone RPF"),
+            new("Ctrl+T", "New tab"),
+            new("Ctrl+W", "Close tab"),
+            new("Ctrl+O", "Open configured game"),
+            new("Ctrl+Shift+O", "Open RPF archive"),
             new("Alt+F4", "Exit"),
         ], IsFirst: true),
         new("GO",
@@ -45,9 +45,9 @@ public partial class ShortcutsDialog : ModalSheet
         new("EDIT",
         [
             new("Ctrl+A", "Select all visible entries"),
-            new("Ctrl+C", "Copy name"),
+            new("Ctrl+C", "Copy"),
             new("Ctrl+Shift+C", "Copy path"),
-            new("Delete", "Delete selected files"),
+            new("Del", "Delete the selected items"),
             new("F3 · Ctrl+F", "Search this folder"),
             new("Esc", "Leave the search"),
         ]),

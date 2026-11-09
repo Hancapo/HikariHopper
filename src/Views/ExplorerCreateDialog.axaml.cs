@@ -128,7 +128,7 @@ public partial class ExplorerCreateDialog : UserControl
         NameErrorText.Text = nameError;
         NameErrorText.IsVisible = nameError.Length > 0;
         NameField.Invalid = nameError.Length > 0;
-        Height = Ui.Theme.HeaderHeight + (HasSource ? 164 : 112) + (nameError.Length == 0 ? 0 : 22) + 58;
+        Height = Ui.Theme.SheetHeaderHeight + (HasSource ? 164 : 112) + (nameError.Length == 0 ? 0 : 22) + Ui.Theme.DialogFooterHeight;
         RefreshConfirm();
     }
 
