@@ -889,6 +889,40 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void Typing_in_the_parts_filter_is_not_a_shortcut_and_a_framed_part_turns_the_camera()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        // In a window, so a key bubbles from the panel up through the viewer.
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
+        Settle(viewer);
+        ExplorerStateRenders.Pump(100);
+        Assert.True(viewer.Viewport.Shadows);
+        Avalonia.Input.KeyEventArgs Press(Avalonia.Interactivity.Interactive source) => new()
+        {
+            RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+            Key = Avalonia.Input.Key.H,
+            Source = source,
+        };
+        // H in the filter is a letter of its text, not the shadows' key.
+        viewer.Parts.Filter.RaiseEvent(Press(viewer.Parts.Filter));
+        Assert.True(viewer.Viewport.Shadows);
+        // In the panel itself, it is still the viewer's.
+        viewer.Parts.RaiseEvent(Press(viewer.Parts));
+        Assert.False(viewer.Viewport.Shadows);
+        // Framing a part asks the viewport to turn to its box, which has none to turn yet without a GPU.
+        viewer.FrameParts([viewer.Parts.Rows[0].Node]);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_collision_has_no_time_of_day()
     {
         var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));

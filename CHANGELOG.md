@@ -47,6 +47,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The delete, new folder, rename and unsaved changes dialogs and the texture editor's tool dialogs look like the app's other sheets: rounded with a shadow, a close button in the header, and the same header and footer. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The 3D viewer's status bar is as tall as the other viewers', and its parts panel's header matches the explorer's list header. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The keyboard shortcuts list and the start page name actions as the menus do. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
+- The 3D viewer's parts panel is a tree with dotted guides, an eye to show or hide each row and a badge for what it is; rows are selected apart from what is shown, with the mouse or the keyboard, narrowed by a filter, and a right click shows only, hides, frames or copies what is selected. ([#137](https://github.com/Hancapo/HikariHopper/pull/137))
 
 ### Fixed
 

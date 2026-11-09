@@ -1,10 +1,28 @@
+using System.Numerics;
+using CommonFury.Numerics;
+
 namespace HikariHopper.Rendering;
 
 /// <summary>A row of the parts panel: a drawable (or a group of them), one of its models, or one of their geometries.</summary>
 /// <param name="Key">What the row is, the same at every level of detail where it exists: parts hidden by name stay hidden.</param>
 /// <param name="Triangles">The triangles under it, at the level shown.</param>
 /// <param name="Parts">The scene parts under it (<see cref="DrawableScene.Parts"/>), at the level shown.</param>
-internal sealed record PartNode(string Key, string Name, int Depth, int Triangles, IReadOnlyList<int> Parts, IReadOnlyList<PartNode> Children);
+/// <param name="Kind">What the row is: a group of drawables, a drawable, one of its bone-bound models, or a geometry.</param>
+internal sealed record PartNode(string Key, string Name, int Depth, int Triangles, IReadOnlyList<int> Parts, IReadOnlyList<PartNode> Children,
+    PartKind Kind = PartKind.Drawable);
+
+/// <summary>What a parts panel row is.</summary>
+internal enum PartKind
+{
+    /// <summary>Drawables gathered under one name: a vehicle's wheels.</summary>
+    Group,
+    /// <summary>A drawable.</summary>
+    Drawable,
+    /// <summary>One of a drawable's models, bound to a bone: a fragment's door, say.</summary>
+    Child,
+    /// <summary>A geometry, named by its shader.</summary>
+    Geometry,
+}
 
 /// <summary>
 /// Which of a drawable scene's parts are shown: those at the level of detail picked (a drawable without it shows the
@@ -111,15 +129,15 @@ internal sealed class PartVisibility
     {
         int[] at = [.. AtLevel()];
         PartNode Geometry(int part, int depth) =>
-            new(keys[part], scene.Materials[scene.Parts[part].Material].Shader, depth, scene.Parts[part].TriangleCount, [part], []);
+            new(keys[part], scene.Materials[scene.Parts[part].Material].Shader, depth, scene.Parts[part].TriangleCount, [part], [], PartKind.Geometry);
         PartNode Drawable(int model, int depth)
         {
             int[] own = [.. at.Where(i => scene.Parts[i].Model == model)];
             var groups = own.GroupBy(i => scene.Parts[i].Group).ToList();
             IReadOnlyList<PartNode> children = groups.Count == 1 && groups[0].Key == ""
                 ? [.. own.Select(i => Geometry(i, depth + 1))]
-                : [.. groups.Select(g => Node($"{model}/{g.Key}", g.Key == "" ? "unbound" : g.Key, depth + 1, [.. g.Select(i => Geometry(i, depth + 2))]))];
-            return Node($"{model}", scene.Models[model].Name, depth, children);
+                : [.. groups.Select(g => Node($"{model}/{g.Key}", g.Key == "" ? "unbound" : g.Key, depth + 1, [.. g.Select(i => Geometry(i, depth + 2))], PartKind.Child))];
+            return Node($"{model}", scene.Models[model].Name, depth, children, PartKind.Drawable);
         }
         var rows = new List<PartNode>();
         foreach (var group in Enumerable.Range(0, scene.Models.Count).Where(m => at.Any(i => scene.Parts[i].Model == m)).GroupBy(m => scene.Models[m].Group))
@@ -127,7 +145,7 @@ internal sealed class PartVisibility
             if (group.Key is null)
                 rows.AddRange(group.Select(m => Drawable(m, 0)));
             else
-                rows.Add(Node($"group/{group.Key}", group.Key, 0, [.. group.Select(m => Drawable(m, 1))]));
+                rows.Add(Node($"group/{group.Key}", group.Key, 0, [.. group.Select(m => Drawable(m, 1))], PartKind.Group));
         }
         return rows;
     }
@@ -137,6 +155,43 @@ internal sealed class PartVisibility
     {
         int shown = node.Parts.Count(i => !hidden.Contains(keys[i]));
         return shown == node.Parts.Count ? true : shown == 0 ? false : null;
+    }
+
+    /// <summary>Shows every part, at every level.</summary>
+    public void ShowAll() => hidden.Clear();
+
+    /// <summary>Shows the parts under these rows and hides the rest at the level shown.</summary>
+    public void ShowOnly(IEnumerable<PartNode> nodes)
+    {
+        var keep = new HashSet<int>(nodes.SelectMany(node => node.Parts));
+        foreach (int part in AtLevel())
+            if (keep.Contains(part))
+                hidden.Remove(keys[part]);
+            else
+                hidden.Add(keys[part]);
+    }
+
+    /// <summary>The box around the parts under these rows, in the world; none when they have no triangles.</summary>
+    public Aabb3? Bounds(IEnumerable<PartNode> nodes)
+    {
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        bool any = false;
+        foreach (int index in nodes.SelectMany(node => node.Parts).Distinct())
+        {
+            SurfacePart part = scene.Parts[index];
+            for (uint i = part.FirstIndex; i < part.FirstIndex + part.IndexCount && i < scene.Indices.Length; i++)
+            {
+                long vertex = part.BaseVertex + scene.Indices[i];
+                if (vertex < 0 || vertex >= scene.Vertices.Length)
+                    continue;
+                Vector3 position = scene.Vertices[vertex].Position;
+                min = Vector3.Min(min, position);
+                max = Vector3.Max(max, position);
+                any = true;
+            }
+        }
+        return any ? new Aabb3(min + scene.Origin, max + scene.Origin) : null;
     }
 
     /// <summary>Shows or hides every part under a row.</summary>
@@ -156,6 +211,6 @@ internal sealed class PartVisibility
             && Active(scene.Parts[i].Model));
     }
 
-    private static PartNode Node(string key, string name, int depth, IReadOnlyList<PartNode> children) =>
-        new(key, name, depth, children.Sum(child => child.Triangles), [.. children.SelectMany(child => child.Parts)], children);
+    private static PartNode Node(string key, string name, int depth, IReadOnlyList<PartNode> children, PartKind kind) =>
+        new(key, name, depth, children.Sum(child => child.Triangles), [.. children.SelectMany(child => child.Parts)], children, kind);
 }

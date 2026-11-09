@@ -77,6 +77,7 @@ public partial class ModelViewer : UserControl, IModalContent
         DamagedButton.Click += (_, _) => SetDamaged(visibility?.Damaged != true);
         this.file = file;
         Parts.Changed += ShowParts;
+        Parts.FrameRequested += FrameParts;
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
@@ -371,6 +372,13 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsSide.Transitions = PartsSlide;
     }
 
+    /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
+    internal void FrameParts(IReadOnlyList<PartNode> nodes)
+    {
+        if (visibility?.Bounds(nodes) is { } box)
+            Viewport.Focus(box);
+    }
+
     /// <summary>Shows a level of detail the drawable has.</summary>
     internal void SetLevel(int lod)
     {
@@ -461,7 +469,8 @@ public partial class ModelViewer : UserControl, IModalContent
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None)
+        // Typing in a field (the parts filter) isn't a shortcut.
+        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None || e.Source is TextBox)
             return;
         char? key = e.Key switch
         {

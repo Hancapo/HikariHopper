@@ -117,6 +117,13 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.ShowParts(shown);
     }
 
+    /// <summary>Turns the camera to a box (a part of what is shown), leaving what was framed, and the ground, as they are.</summary>
+    public void Focus(CommonFury.Numerics.Aabb3 box)
+    {
+        renderer?.Focus(box);
+        InvalidateVisual();
+    }
+
     /// <summary>Points the camera back at what was framed last.</summary>
     public void Reframe() => renderer?.Frame(framed);
 

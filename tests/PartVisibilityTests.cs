@@ -11,7 +11,7 @@ public sealed class PartVisibilityTests
 {
     // A drawable with two models at the high level (a quad in default, a triangle in normal_spec) and one at the
     // medium level (a triangle in default), and no low or very low level.
-    private static DrawableScene Scene()
+    internal static DrawableScene Scene()
     {
         var builder = new DrawableBuilder { Name = "sign" };
         builder.Materials.Add(new DrawableMaterialInput { Name = "a", Shader = "default" });
