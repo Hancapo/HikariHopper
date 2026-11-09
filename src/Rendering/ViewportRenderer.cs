@@ -10,12 +10,13 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// Draws the 3D viewport into a window's swap chain with WebGPU (Dawn, on Direct3D 12): the backdrop, a sky and the
-/// ground grid, and a mesh of triangles in front of it, seen through the <see cref="Camera"/>.
+/// ground grid, and in front of it a mesh of triangles or a drawable's textured surfaces, seen through the
+/// <see cref="Camera"/>.
 /// </summary>
 /// <remarks>Single-threaded: create, draw, resize and dispose it on one thread, while its window is alive.</remarks>
-internal sealed unsafe class ViewportRenderer : IDisposable
+internal sealed unsafe partial class ViewportRenderer : IDisposable
 {
-    private const int SceneBytes = 288;
+    private const int SceneBytes = 368;
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
     private readonly Surface surface;
@@ -23,6 +24,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
     private readonly Device device;
     private readonly Queue queue;
     private readonly Buffer sceneBuffer;
+    private readonly BindGroupLayout sceneLayout;
     private readonly BindGroup sceneGroup;
     private readonly RenderPipeline backdrop;
     private readonly RenderPipeline meshes;
@@ -59,7 +61,9 @@ internal sealed unsafe class ViewportRenderer : IDisposable
             BackendType = BackendType.D3D12,
             PowerPreference = PowerPreference.HighPerformance,
         });
-        device = RequestDevice(adapter, message => error ??= message);
+        // Game textures are block-compressed; without BC support they are drawn as plain white.
+        compressedTextures = adapter.HasFeature(FeatureName.TextureCompressionBC);
+        device = RequestDevice(adapter, compressedTextures, message => error ??= message);
         queue = device.GetQueue();
 
         // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is drawn
@@ -78,7 +82,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         };
 
         sceneBuffer = device.CreateBuffer(new BufferDescriptor { Size = SceneBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        BindGroupLayout layout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        BindGroupLayout layout = sceneLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
             [
@@ -175,6 +179,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
         });
+        CreateSurfacePipelines();
         Resize(width, height);
         ThrowIfFailed();
     }
@@ -202,7 +207,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         Ground = box.Minimum.Z;
     }
 
-    /// <summary>Shows these triangles and lines in place of any before; null shows none.</summary>
+    /// <summary>Shows these triangles and lines in place of anything before; null shows none.</summary>
     public void Show(ViewportMesh? mesh)
     {
         // The GPU memory goes now, not whenever the handles are collected.
@@ -210,6 +215,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         segmentBuffer?.Destroy();
         vertexBuffer = segmentBuffer = null;
         vertexCount = segmentCount = 0;
+        ClearSurfaces();
         if (mesh is null)
             return;
         origin = mesh.Origin;
@@ -227,12 +233,13 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         }
     }
 
-    private Buffer Upload<T>(ReadOnlySpan<T> items, int size) where T : unmanaged
+    private Buffer Upload<T>(ReadOnlySpan<T> items, int size, BufferUsage usage = BufferUsage.Vertex) where T : unmanaged
     {
         Buffer buffer = device.CreateBuffer(new BufferDescriptor
         {
-            Size = (ulong)items.Length * (ulong)size,
-            Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
+            // Writes go in multiples of four bytes.
+            Size = ((ulong)items.Length * (ulong)size + 3) & ~3UL,
+            Usage = usage | BufferUsage.CopyDst,
         });
         queue.WriteBuffer(buffer, 0, items);
         return buffer;
@@ -324,6 +331,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
             pass.SetVertexBuffer(0, vertexBuffer);
             pass.Draw(vertexCount);
         }
+        DrawSurfaces(pass);
         if (segmentBuffer is not null)
         {
             pass.SetPipeline(lines);
@@ -351,6 +359,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         ViewportPalette.Linear().CopyTo(vectors[5..]);
         vectors[12] = new Vector4(origin, 0);
         vectors[13] = new Vector4(width, height, 0, 0);
+        WriteLight(vectors[14..]);
         queue.WriteBuffer(sceneBuffer, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -366,11 +375,12 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         }
     }
 
-    private static Device RequestDevice(Adapter adapter, Action<string> failed)
+    private static Device RequestDevice(Adapter adapter, bool compressedTextures, Action<string> failed)
     {
         // The descriptor is a ref struct, so it is built where the request is made, off the UI thread's context.
         return Task.Run(() => adapter.RequestDeviceAsync(new DeviceDescriptor
         {
+            RequiredFeatures = compressedTextures ? new[] { FeatureName.TextureCompressionBC } : [],
             UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {Encoding.UTF8.GetString(message)}"),
             DeviceLostCallback = (reason, message) =>
             {
@@ -383,7 +393,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
     /// <summary>A shader's source: its own file, after scene.wgsl, which every shader shares (WGSL has no includes).</summary>
     private static string Shader(string name) => Read("scene.wgsl") + "\n" + Read(name);
 
-    private static string Read(string name)
+    internal static string Read(string name)
     {
         using Stream stream = typeof(ViewportRenderer).Assembly.GetManifestResourceStream("HikariHopper.Shaders." + name)
             ?? throw new FileNotFoundException(name);
@@ -400,6 +410,7 @@ internal sealed unsafe class ViewportRenderer : IDisposable
         depth?.Destroy();
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
+        ClearSurfaces();
         surface.Unconfigure();
     }
 }

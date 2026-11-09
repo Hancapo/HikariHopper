@@ -8,7 +8,11 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- The 3D viewer opens drawables (.ydr), textured and shaded as GTA V shades them, from Legacy and Enhanced. ([#91](https://github.com/Hancapo/HikariHopper/pull/91))
+
 ### Changed
+
+- Double-clicking a drawable (.ydr) opens it in the 3D viewer instead of the texture editor. ([#91](https://github.com/Hancapo/HikariHopper/pull/91))
 
 ### Fixed
 

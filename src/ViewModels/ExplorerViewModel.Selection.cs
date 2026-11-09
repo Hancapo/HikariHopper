@@ -272,19 +272,18 @@ public sealed partial class ExplorerViewModel
     public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry);
 
     /// <summary>
-    /// What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD/YDR texture dictionaries, text files, images, and the
-    /// 3D viewer's collisions and navmeshes.
+    /// What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD texture dictionaries, text files, images, and the 3D
+    /// viewer's collisions, navmeshes and drawables.
     /// </summary>
     internal static bool Opens(EntryRecord entry) =>
         entry.IsDirectory
         || entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)
         || entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase)
-        || entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase)
         || TextDocument.IsTextName(entry.Name)
         || Textures.TextureImport.IsImagePath(entry.Name)
         || IsModelName(entry.Name);
 
-    /// <summary>Enter/double-click: opens folders, RPFs, YTD/YDR texture dictionaries, text files, images and 3D files.</summary>
+    /// <summary>Enter/double-click: opens folders, RPFs, YTD texture dictionaries, text files, images and 3D files.</summary>
     public void ActivateEntry(int row)
     {
         if (EntryOperationBusy)
@@ -309,8 +308,7 @@ public sealed partial class ExplorerViewModel
             Navigate(Provider.InArchive ? RpfProvider.EntryLocalPath(entry) : entry.Path);
             return;
         }
-        if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase)
-            || entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
         {
             OpenTextureDictionary(entry);
             return;
@@ -384,7 +382,7 @@ public sealed partial class ExplorerViewModel
         SetStatus($"Opened {entry.Name}");
     }
 
-    /// <summary>Reads a collision or navmesh file and hands it to the 3D viewer; unless it is too big.</summary>
+    /// <summary>Reads a collision, navmesh or drawable file and hands it to the 3D viewer; unless it is too big.</summary>
     private void OpenModelFile(EntryRecord entry)
     {
         if (entry.Size > ModelFile.MaxSize)
@@ -402,8 +400,49 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open {entry.Name}: {error.Message}");
             return;
         }
-        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data));
+        ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data) { Dictionaries = DictionariesBeside(entry) });
         SetStatus($"Opened {entry.Name}");
+    }
+
+    /// <summary>
+    /// The texture dictionary a drawable shares its name with, in the same folder, where its textures usually are when
+    /// it doesn't embed them; none for other files, or when it can't be read.
+    /// </summary>
+    private IReadOnlyList<byte[]> DictionariesBeside(EntryRecord entry)
+    {
+        if (!entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+            return [];
+        string wanted = Path.ChangeExtension(entry.Name, ".ytd");
+        var found = new List<byte[]>();
+        foreach (EntryRecord sibling in FolderRecords())
+        {
+            if (!string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase) || sibling.Size > ModelFile.MaxSize)
+                continue;
+            try
+            {
+                found.Add(Provider.ReadEntryBytes(sibling));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Everything in the open folder, whatever the folder filter shows, in name order: a model's texture dictionaries
+    /// are found there even when the filter hides them.
+    /// </summary>
+    private List<EntryRecord> FolderRecords()
+    {
+        try
+        {
+            return [.. Provider.Entries(currentPath).OrderBy(record => record.Name, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            return [];
+        }
     }
 
     private void OpenArchiveEntry(EntryRecord entry)
