@@ -2,6 +2,11 @@ using FiveFury.Textures;
 
 namespace HikariHopper.ViewModels;
 
+/// <summary>
+/// What a texture document saved: its textures, and its file as written (a .ytd, or a .ydr with its textures in it).
+/// </summary>
+public sealed record SavedDocument(IReadOnlyList<Texture> Textures, byte[] Data);
+
 /// <summary>Result of writing an edited document back into its source file or RPF.</summary>
 public sealed record SourceWriteResult(string RootPath, bool Success);
 

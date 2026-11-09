@@ -63,7 +63,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
 
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
     public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
-        IReadOnlyList<NearbyDictionary>? nearby = null)
+        IReadOnlyList<NearbyDictionary>? nearby = null, IReadOnlyList<FiveFury.Textures.Texture>? overrides = null)
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
         Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
@@ -88,7 +88,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
                 {
                 }
             }
-            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? []),
+            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? [], overrides),
                 fragment?.PhysicsLods.FirstOrDefault(lod => lod is not null)?.CompositeBound, fragment?.Lights);
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);
         }

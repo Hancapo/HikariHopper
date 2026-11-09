@@ -19,8 +19,11 @@ public sealed record ModelFile(string Name, byte[] Data)
     /// </summary>
     internal Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries { get; init; }
 
-    /// <summary>Opens the file's embedded textures in the texture viewer, or none for a file that can't.</summary>
-    internal Action? OpenTextures { get; init; }
+    /// <summary>
+    /// Opens the file's embedded textures in the texture viewer, or none for a file that can't; the action given is
+    /// told what was saved, once the editor closes after saving.
+    /// </summary>
+    internal Action<Action<SavedDocument>>? OpenTextures { get; init; }
 
     /// <summary>
     /// The other .ytd files beside a drawable, read only if a texture is still missing: a vehicle's parent dictionary

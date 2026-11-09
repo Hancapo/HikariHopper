@@ -216,14 +216,50 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private readonly ModelFile file;
     private PartVisibility? visibility;
+    // What the drawable is read from: the file's bytes, until its embedded textures are saved into it; the textures
+    // saved for a fragment or dictionary, which can't take them back, over its own; and the game's dictionaries, once found.
+    private byte[] data = [];
+    private IReadOnlyList<FiveFury.Textures.Texture>? savedTextures;
+    private IReadOnlyList<NearbyDictionary> gameDictionaries = [];
 
-    /// <summary>Opens the drawable's embedded textures in the texture viewer, over this viewer.</summary>
+    /// <summary>
+    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; once it closes after saving,
+    /// the drawable is shown with them as saved.
+    /// </summary>
     internal bool OpenTextures()
     {
         if (!TexturesButton.IsEnabled || file.OpenTextures is not { } open)
             return false;
-        open();
+        open(saved => TexturesSaved = ShowSaved(saved));
         return true;
+    }
+
+    /// <summary>Done once the drawable is shown with the textures last saved in the texture viewer.</summary>
+    internal Task TexturesSaved { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
+    /// the file it was saved as; a fragment's or dictionary's textures over its own.
+    /// </summary>
+    private async Task ShowSaved(SavedDocument saved)
+    {
+        if (closed || surfaces is null)
+            return;
+        if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+            data = saved.Data;
+        else
+            savedTextures = saved.Textures;
+        (ModelContent? again, string? failure) = await Task.Run(() => Read(file, data, gameDictionaries, savedTextures));
+        if (closed)
+            return;
+        if (again?.Surfaces is { } after)
+        {
+            ShowAgain(after);
+            ShowTextures(after);
+            ShowStats(after);
+        }
+        if (started)
+            StatusText.Text = again?.Surfaces is not null ? Location : failure ?? Location;
     }
 
     /// <summary>Shows a fragment damaged, its damaged drawables in place of their intact ones, or intact; one with no damaged state stays intact.</summary>
@@ -239,6 +275,9 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     private DrawableScene? surfaces;
+
+    /// <summary>The drawable shown, once read.</summary>
+    internal DrawableScene? Surfaces => surfaces;
 
     /// <summary>The textures button, off when there are none or they can't be opened; its tooltip says how many.</summary>
     private void ShowTextures(DrawableScene scene)
@@ -533,7 +572,9 @@ public partial class ModelViewer : UserControl, IModalContent
         // ready); while the tables are still being worked out, the game's are added when they come.
         Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
         IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
-        (ModelContent? content, string? failure) = await Task.Run(() => Read(file, game));
+        data = file.Data;
+        gameDictionaries = game;
+        (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
         Location = content is not null ? Locate(content) : failure!;
         if (started)
             StatusText.Text = Location;
@@ -565,9 +606,14 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         if (game.Count > 0 && !closed && surfaces is { } before)
         {
-            (ModelContent? again, _) = await Task.Run(() => Read(file, game));
+            byte[] current = data;
+            IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
+            (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
             if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+            {
+                gameDictionaries = game;
                 ShowAgain(after);
+            }
         }
         if (!closed && started)
             StatusText.Text = Location;
@@ -597,11 +643,12 @@ public partial class ModelViewer : UserControl, IModalContent
         Location = Describe(after);
     }
 
-    private static (ModelContent? Content, string? Failure) Read(ModelFile file, IReadOnlyList<NearbyDictionary> game)
+    private static (ModelContent? Content, string? Failure) Read(ModelFile file, byte[] data, IReadOnlyList<NearbyDictionary> game,
+        IReadOnlyList<FiveFury.Textures.Texture>? savedTextures)
     {
         try
         {
-            return (ModelContent.Read(file.Name, file.Data, file.Dictionaries, [.. game, .. file.Nearby]), null);
+            return (ModelContent.Read(file.Name, data, file.Dictionaries, [.. game, .. file.Nearby], savedTextures), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)

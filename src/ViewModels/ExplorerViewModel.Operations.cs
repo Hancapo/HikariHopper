@@ -422,7 +422,7 @@ public sealed partial class ExplorerViewModel
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), StringComparison.OrdinalIgnoreCase);
     }
 
-    private void OpenTextureDictionary(EntryRecord entry)
+    private void OpenTextureDictionary(EntryRecord entry, Action<SavedDocument>? closedAfterSave = null)
     {
         byte[] data;
         string sourcePath;
@@ -441,7 +441,7 @@ public sealed partial class ExplorerViewModel
         TextureViewer.OpenDictionary(entry.Name, sourcePath, data,
             sourceSaver: sourceTarget is not null ? sourceTarget.Save : null,
             sourcePrepare: sourceTarget is not null ? () => PrepareTextureWrite(sourceTarget) : null,
-            sourceRootPath: sourceTarget?.RootPath ?? "");
+            sourceRootPath: sourceTarget?.RootPath ?? "", closedAfterSave: closedAfterSave);
         SetStatus($"Opening {entry.Name}");
     }
 

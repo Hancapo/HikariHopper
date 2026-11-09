@@ -395,7 +395,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
 
         int opened = 0;
-        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
         Settle(viewer);
         // No embedded textures: the button (an icon, no count) is off, and T does nothing.
         Assert.False(viewer.TexturesButton.IsEnabled);
@@ -515,7 +515,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
 
         int opened = 0;
-        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
         Settle(viewer);
         Assert.True(viewer.TexturesButton.IsEnabled);
         Assert.True(viewer.Shortcut('T'));
@@ -526,6 +526,59 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var lone = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(lone);
         Assert.False(lone.TexturesButton.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void Textures_saved_in_the_editor_show_on_the_model_once_it_closes()
+    {
+        byte[] Triangle(int size)
+        {
+            var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+            var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+            var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
+            material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
+                new FiveFury.Textures.Texture("tri_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+            builder.Materials.Add(material);
+            var model = new FiveFury.Drawables.DrawableModelInput();
+            model.Meshes.Add(mesh);
+            builder.Models.Add(model);
+            return new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        }
+        void Wait(Task task)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+                ExplorerStateRenders.Pump(10);
+            Assert.True(task.IsCompletedSuccessfully);
+        }
+
+        // A .ydr: read again from the file as saved, its texture now 8 across.
+        Action<SavedDocument>? tell = null;
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", Triangle(4)) { OpenTextures = saved => tell = saved });
+        Settle(viewer);
+        viewer.Viewport.SetTime(20);
+        Assert.Equal(4, viewer.Surfaces!.Materials.Single().Diffuse!.Width);
+        Assert.True(viewer.OpenTextures());
+        byte[] saved = Triangle(8);
+        tell!(new SavedDocument([.. Rendering.ModelContent.EmbeddedTextures("tri.ydr", saved).Textures], saved));
+        Wait(viewer.TexturesSaved);
+        Assert.Equal(8, viewer.Surfaces!.Materials.Single().Diffuse!.Width);
+        // As it was: the time of day stays.
+        Assert.Equal(20, viewer.Viewport.Hours);
+
+        // A drawable dictionary or fragment can't take them back: they're shown over its own.
+        Action<SavedDocument>? tellOther = null;
+        var dictionary = new FiveFury.Ydd.Ydd(FiveFury.GameTarget.Legacy);
+        dictionary.Drawables.Add(new FiveFury.Ydd.YddEntry(new CommonFury.Hashing.Hash32("tri"), FiveFury.Ydr.Ydr.Read(Triangle(4)).Drawable));
+        byte[] ydd = dictionary.Write();
+        var other = new Views.ModelViewer(new ModelFile("tri.ydd", ydd) { OpenTextures = saved => tellOther = saved });
+        Settle(other);
+        Assert.True(other.OpenTextures());
+        var edited = new FiveFury.Textures.Texture("tri_d", 16, 16, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[128]);
+        tellOther!(new SavedDocument([edited], []));
+        Wait(other.TexturesSaved);
+        Assert.Same(edited, other.Surfaces!.Materials.Single().Diffuse);
     }
 
     [AvaloniaFact]
