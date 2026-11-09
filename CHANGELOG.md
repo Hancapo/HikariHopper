@@ -21,6 +21,10 @@ All notable changes to HikariHopper are documented here. The format follows
 - Change format says what each format costs and keeps, and when the one picked loses the alpha or colour a texture has. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
 - Change format and Mipmaps show the texture now and after side by side, with the memory each takes. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
 - Change format has no resampling choice: it uses the filter last applied in Resize or Mipmaps. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Renaming a texture says what is wrong with a name as you type it. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Removing textures names them and shows what the dictionary holds now and after. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Pasting an image shows its size, and a switch between replacing the selected texture and adding a new one. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Importing images whose names clash lists which are new and which replace a texture. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
 
 ### Fixed
 

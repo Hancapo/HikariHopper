@@ -4,22 +4,16 @@
              xmlns:c="using:HikariHopper.Views.Controls"
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.TextureDialogSummary">
-  <!-- The texture glyph beside the selection's name. With a Fact, one line: the name, and at the right the one thing
-       about it the tool changes (its size, its format, its mips). Without one, the name over its dimensions, format
-       and mip count. -->
-  <v:QtGrid ColumnDefinitions="20,10,*,Auto">
-    <c:LucideIcon Name="Glyph" Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center" IconName="image"
+  <!-- One line: the texture glyph, the selection's name, and at the right the one thing about it the tool changes
+       (its size, its format, its mips). -->
+  <v:QtGrid ColumnDefinitions="16,10,*,Auto">
+    <c:LucideIcon Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center" IconName="image"
                   Stroke="{x:Static ui:Theme.InkAsset}" />
-    <TextBlock Name="FactText" Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center" IsVisible="False"
+    <TextBlock Name="NameText" Grid.Column="2" Foreground="{x:Static ui:Theme.Text}" FontWeight="Bold"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
+               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    <TextBlock Name="FactText" Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center"
                Foreground="{x:Static ui:Theme.TextDim}"
                FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
-    <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
-      <TextBlock Name="NameText" Foreground="{x:Static ui:Theme.Text}" FontWeight="Bold"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
-                 TextTrimming="CharacterEllipsis" />
-      <TextBlock Name="DetailText" Foreground="{x:Static ui:Theme.TextDim}"
-                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
-                 TextTrimming="CharacterEllipsis" />
-    </StackPanel>
   </v:QtGrid>
 </UserControl>

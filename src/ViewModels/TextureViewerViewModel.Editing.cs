@@ -253,6 +253,23 @@ public sealed partial class TextureViewerViewModel
         return StartImageImport(pending.Paths);
     }
 
+    /// <summary>
+    /// What is wrong with a new name for the single selected texture, or empty when it can take it: its own name in
+    /// another case is fine, another texture's is not.
+    /// </summary>
+    public string RenameError(string name)
+    {
+        string normalized = name.Trim();
+        if (normalized.Length == 0)
+            return "Enter a texture name";
+        if (normalized.Length > 255 || normalized.Any(character => character < 32 || character == 127))
+            return "Use up to 255 characters without control characters";
+        return TexturesModel.Where((_, row) => row != selectedIndex)
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, normalized, StringComparison.OrdinalIgnoreCase)) is { } taken
+            ? $"This dictionary already has a {taken.Name}."
+            : "";
+    }
+
     /// <summary>Renames the single selected texture; names are unique ignoring case.</summary>
     public bool RenameSelected(string name)
     {
