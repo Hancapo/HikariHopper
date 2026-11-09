@@ -20,12 +20,12 @@ public sealed partial class TextureViewerViewModel
         Func<TextureSet, byte[]> serialize = Serializer();
         TextureSet snapshot = dictionary;
         if (sourceSaver is { } saver)
-            return StartSave(sourceName, () => saver(serialize(snapshot)), prepare: sourcePrepare, rootPath: sourceRootPath);
+            return StartSave(sourceName, () => saver(Serialized(snapshot, serialize)), prepare: sourcePrepare, rootPath: sourceRootPath);
         if (!CanSaveSource)
             return false;
         string destination = sourcePath;
         Action<string, byte[]> write = WriteFile;
-        return StartSave(Path.GetFileName(destination), () => write(destination, serialize(snapshot)));
+        return StartSave(Path.GetFileName(destination), () => write(destination, Serialized(snapshot, serialize)));
     }
 
     /// <summary>Asks for a destination and saves a loose copy there, which then becomes the document's source.</summary>
@@ -45,8 +45,17 @@ public sealed partial class TextureViewerViewModel
         Func<TextureSet, byte[]> serialize = Serializer();
         TextureSet snapshot = dictionary;
         Action<string, byte[]> write = WriteFile;
-        return StartSave(Path.GetFileName(destination), () => write(destination, serialize(snapshot)),
+        return StartSave(Path.GetFileName(destination), () => write(destination, Serialized(snapshot, serialize)),
             sourceUpdate: (destination, Path.GetFileName(destination)));
+    }
+
+    /// <summary>The document's file as a save writes it, kept as what it saved once the write succeeds.</summary>
+    private byte[] Serialized(TextureSet snapshot, Func<TextureSet, byte[]> serialize)
+    {
+        savedNow = null;
+        byte[] data = serialize(snapshot);
+        savedNow = new SavedDocument(snapshot.Textures, data);
+        return data;
     }
 
     /// <summary>Extracts the selection: one texture to a chosen DDS file, several to DDS files in a chosen folder.</summary>
@@ -170,6 +179,9 @@ public sealed partial class TextureViewerViewModel
             sourceRootPath = "";
         }
         savedRevision = revision;
+        if (savedNow is { } saved)
+            lastSave = saved;
+        savedNow = null;
         SetStatus($"Saved {label}");
         EmitStateChanged();
         SaveFinished?.Invoke(this, true);

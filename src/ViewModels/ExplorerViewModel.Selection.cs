@@ -405,7 +405,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
-            OpenTextures = () => OpenEmbeddedTextures(entry, data),
+            OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
             Nearby = NearbyDictionaries(entry),
         });
         SetStatus($"Opened {entry.Name}");
@@ -432,18 +432,18 @@ public sealed partial class ExplorerViewModel
     /// into it; a .yft's or .ydd's as a dictionary of their own, to look at and save elsewhere, as their textures can't
     /// be written back yet.
     /// </summary>
-    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data)
+    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? closedAfterSave = null)
     {
         if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
         {
-            OpenTextureDictionary(entry);
+            OpenTextureDictionary(entry, closedAfterSave);
             return;
         }
-        OpenEmbeddedDictionary(entry.Name, data);
+        OpenEmbeddedDictionary(entry.Name, data, closedAfterSave);
     }
 
     /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>
-    private void OpenEmbeddedDictionary(string name, byte[] data)
+    private void OpenEmbeddedDictionary(string name, byte[] data, Action<SavedDocument>? closedAfterSave = null)
     {
         byte[] dictionary;
         try
@@ -458,7 +458,7 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open the textures of {name}: {error.Message}");
             return;
         }
-        TextureViewer.OpenDictionary($"{name} textures", "", dictionary);
+        TextureViewer.OpenDictionary($"{name} textures", "", dictionary, closedAfterSave: closedAfterSave);
         SetStatus($"Opening the textures of {name}");
     }
 

@@ -18,6 +18,7 @@ internal sealed class TextureLookup
     public const long SearchLimit = 512L * 1024 * 1024;
 
     private readonly Dictionary<string, Texture> textures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Texture> overrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyList<NearbyDictionary> nearby;
     private readonly List<string> diagnostics = [];
     private int next;
@@ -28,12 +29,22 @@ internal sealed class TextureLookup
 
     /// <param name="named">The dictionaries named for the model, read already, in the order they're looked in.</param>
     /// <param name="nearby">The other dictionaries beside it, searched in this order when a texture is still missing.</param>
-    public TextureLookup(IReadOnlyList<TextureDictionary> named, IReadOnlyList<NearbyDictionary> nearby)
+    /// <param name="overrides">
+    /// Textures that take the place of those of their names, even the model's own: a fragment's embedded textures as
+    /// edited and saved in the texture editor, which can't write them back into it.
+    /// </param>
+    public TextureLookup(IReadOnlyList<TextureDictionary> named, IReadOnlyList<NearbyDictionary> nearby, IReadOnlyList<Texture>? overrides = null)
     {
         foreach (TextureDictionary dictionary in named)
             Add(dictionary);
         this.nearby = nearby;
+        foreach (Texture texture in overrides ?? [])
+            if (texture.Name is { } name)
+                this.overrides.TryAdd(name, texture);
     }
+
+    /// <summary>The texture taking the place of this name's, even a model's own, if there is one.</summary>
+    public Texture? Override(string name) => overrides.GetValueOrDefault(name);
 
     /// <summary>What the search ran into: dictionaries that couldn't be read, or the limit.</summary>
     public IReadOnlyList<string> Diagnostics => diagnostics;

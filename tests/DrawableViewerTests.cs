@@ -231,6 +231,24 @@ public sealed class DrawableViewerTests
     }
 
     [Fact]
+    public void Textures_saved_for_a_model_take_the_place_of_its_own()
+    {
+        byte[] ydr = Quad(GameTarget.Enhanced, "normal_spec", material =>
+        {
+            material.Textures["DiffuseSampler"] = new TextureReference(Map("sign_d"));
+            material.Textures["SpecSampler"] = new TextureReference("shared_s");
+        });
+        Texture edited = new("sign_d", 8, 8, GameFormat.BC1Unorm, 1, new byte[32]);
+        Texture shared = new("shared_s", 4, 4, GameFormat.BC1Unorm, 1, new byte[8]);
+        // Over the embedded one, and over one found by name.
+        SurfaceMaterial material = ModelContent.Read("sign.ydr", ydr, overrides: [edited, shared]).Surfaces!.Materials.Single();
+        Assert.Same(edited, material.Diffuse);
+        Assert.Same(shared, material.Specular);
+        // Without them, its own.
+        Assert.Equal(4, ModelContent.Read("sign.ydr", ydr).Surfaces!.Materials.Single().Diffuse!.Width);
+    }
+
+    [Fact]
     public void A_drawables_embedded_textures_are_counted_and_read_each_once()
     {
         byte[] ydr = Quad(GameTarget.Enhanced, "normal_spec", material =>

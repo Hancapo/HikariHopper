@@ -100,7 +100,8 @@ internal sealed class DrawableScene
                 if (texture.Name is { } name)
                     own.TryAdd(name, texture);
         Texture? Resolve(TextureReference reference) =>
-            reference.EmbeddedTexture ?? (reference.Name is { } name ? own.GetValueOrDefault(name) ?? lookup.Find(name) : null);
+            (reference.Name ?? reference.EmbeddedTexture?.Name) is { } key && lookup.Override(key) is { } edited ? edited
+                : reference.EmbeddedTexture ?? (reference.Name is { } name ? own.GetValueOrDefault(name) ?? lookup.Find(name) : null);
 
         var diagnostics = new List<string>();
         var materials = new List<SurfaceMaterial>();
