@@ -73,6 +73,19 @@
             <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
             <DockPanel Margin="6,0,6,1">
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                <!-- The time of day the model is lit at, which opens its slider. -->
+                <Border Classes="well">
+                  <Panel>
+                    <c:ChromeToolButton Name="TimeButton" Classes="tool" Width="80" Padding="14,0,10,0"
+                                        AutomationProperties.Name="Time of day" />
+                    <c:LucideIcon IconName="clock" Width="13" Height="13" Margin="8,0,0,0" Weight="1.6"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                    <c:LucideIcon IconName="chevron-down" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                  </Panel>
+                </Border>
                 <!-- The camera: orbiting the model, or flying. -->
                 <Border Classes="well">
                   <StackPanel>
@@ -92,34 +105,20 @@
                     <c:ChromeToolButton Name="PartsButton" Classes="tool" IconKind="parts" AutomationProperties.Name="Parts" />
                   </StackPanel>
                 </Border>
-                <!-- The level of detail, which opens the levels the drawable has. -->
-                <Border Classes="well">
-                  <Panel>
-                    <c:ChromeToolButton Name="LodButton" Classes="tool" Width="92" Padding="16,0,12,0"
-                                        AutomationProperties.Name="Level of detail" />
-                    <c:LucideIcon IconName="layers" Width="12" Height="12" Margin="8,0,0,0" Weight="1.6"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
-                    <c:LucideIcon IconName="chevron-down" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
-                                  HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
-                  </Panel>
-                </Border>
+                <!-- The levels of detail the drawable has, as segments like the texture editor's channels; none when it
+                     has only the one. -->
+                <c:SegmentedSwitch Name="LodSwitch" IsVisible="False" />
                 <Border Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" Background="{x:Static ui:Theme.BorderHard}" />
                 <Border Classes="well">
                   <StackPanel>
                     <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
                   </StackPanel>
                 </Border>
-                <!-- The drawable's embedded textures, how many, in the texture viewer. -->
+                <!-- The drawable's embedded textures, in the texture viewer. -->
                 <Border Classes="well">
-                  <Panel>
-                    <c:ChromeToolButton Name="TexturesButton" Classes="tool" Width="52" Padding="18,0,6,0"
-                                        AutomationProperties.Name="Embedded textures" />
-                    <c:LucideIcon Name="TexturesIcon" IconName="image" Width="14" Height="14" Margin="7,0,0,0" Weight="1.5"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
-                  </Panel>
+                  <StackPanel>
+                    <c:ChromeToolButton Name="TexturesButton" Classes="tool" IconKind="image" AutomationProperties.Name="Embedded textures" />
+                  </StackPanel>
                 </Border>
                 <Border Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" Background="{x:Static ui:Theme.BorderHard}" />
                 <!-- What is drawn over the model, through it. -->
@@ -136,7 +135,7 @@
 
           <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ExplorerStatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
             <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,*">
               <!-- A drawable's triangles, vertices and edges. -->
               <StackPanel Name="StatsPanel" Grid.Column="0" Orientation="Horizontal" Spacing="12" Margin="10,0,0,0" IsVisible="False">
                 <StackPanel Name="TrianglesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
@@ -159,15 +158,6 @@
               </StackPanel>
               <TextBlock Name="StatusText" Grid.Column="1" Classes="status" Margin="10,0,0,0"
                          Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
-              <!-- The time of day, which sets where the sun is and the rest of the game's light: quarter hours, with
-                   marks every six hours. -->
-              <StackPanel Name="SunBar" Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0" IsVisible="False"
-                          ToolTip.Tip="The time of day the model is lit at">
-                <TextBlock Name="SunText" Classes="status" />
-                <v:TextureMipSlider Name="SunSlider" Width="132" Maximum="96" TickCount="5" VerticalAlignment="Center"
-                                    AutomationProperties.Name="Time of day" />
-              </StackPanel>
-              <TextBlock Name="AdapterText" Grid.Column="3" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
             </Grid>
           </Panel>
 

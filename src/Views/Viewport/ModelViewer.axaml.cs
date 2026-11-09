@@ -36,7 +36,6 @@ public partial class ModelViewer : UserControl, IModalContent
             started = true;
             if (Reading.IsCompleted)
                 StatusText.Text = Location;
-            AdapterText.Text = adapter;
         };
         Viewport.Failed += error =>
         {
@@ -45,16 +44,22 @@ public partial class ModelViewer : UserControl, IModalContent
         };
         Viewport.EscapePressed += Close;
         SunSlider.Value = Math.Round(DayCycle.DefaultHours * 4);
-        SunText.Text = Clock(DayCycle.DefaultHours);
+        SunText.Text = TimeButton.Text = Clock(DayCycle.DefaultHours);
         SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
+        timeBody = TimeBody();
+        TimeButton.Click += (_, _) => ToggleTime();
+        ThemedToolTip.Set(TimeButton, "Time of day");
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
         PartsButton.Click += (_, _) => SetPartsShown(!PartsSide.IsVisible);
-        LodButton.Click += (_, _) => OpenLevels();
+        LodSwitch.SideRequested += (_, index) =>
+        {
+            if (visibility is { } shown && index >= 0 && index < shown.Levels.Count)
+                SetLevel(shown.Levels[index]);
+        };
         TexturesButton.Click += (_, _) => OpenTextures();
         this.file = file;
         Parts.Changed += ShowParts;
         ThemedToolTip.Set(PartsButton, "Parts  (P)");
-        ThemedToolTip.Set(LodButton, "Level of detail  (1-4)");
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         BoundsButton.Click += (_, _) => SetOverlay(Overlay.Bounds, !boundsShown);
@@ -195,16 +200,18 @@ public partial class ModelViewer : UserControl, IModalContent
         return true;
     }
 
-    /// <summary>How many embedded textures, on the button; off when there are none or they can't be opened.</summary>
+    /// <summary>The textures button, off when there are none or they can't be opened; its tooltip says how many.</summary>
     private void ShowTextures(DrawableScene scene)
     {
         int count = scene.EmbeddedTextureCount;
-        TexturesButton.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         TexturesButton.IsEnabled = count > 0 && file.OpenTextures is not null;
-        TexturesIcon.Opacity = TexturesButton.IsEnabled ? 1 : .45;
-        ThemedToolTip.Set(TexturesButton, count > 0 ? "Embedded textures  (T)" : "No embedded textures");
+        ThemedToolTip.Set(TexturesButton, count switch
+        {
+            0 => "No embedded textures",
+            1 => "1 embedded texture  (T)",
+            _ => $"{count} embedded textures  (T)",
+        });
     }
-    private RetroMenu? levels;
 
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
     internal PartVisibility? Visibility => visibility;
@@ -222,34 +229,33 @@ public partial class ModelViewer : UserControl, IModalContent
         if (visibility is null || !visibility.Levels.Contains(lod))
             return;
         visibility.Lod = lod;
-        LodButton.Text = PartVisibility.LevelName(lod);
+        LodSwitch.SelectedIndex = IndexOf(visibility.Levels, lod);
         Parts.Refresh();
         ShowParts();
     }
 
-    /// <summary>Opens the levels of detail under their button, the one shown checked and the ones the drawable lacks off.</summary>
-    internal void OpenLevels()
+    /// <summary>The levels the drawable has as segments, the one shown raised; none when it has only the one.</summary>
+    private void ShowLevels()
     {
-        if (visibility is null)
-            return;
-        if (levels is null)
+        LodSwitch.Sides.Clear();
+        IReadOnlyList<int> levels = visibility?.Levels ?? [];
+        foreach (int lod in levels)
         {
-            levels = new RetroMenu { Width = 132 + 2 * Ui.Theme.MenuPadding };
-            for (int lod = 0; lod < 4; lod++)
-            {
-                int level = lod;
-                var item = new RetroMenuItem { Text = PartVisibility.LevelName(lod), Tag = lod, Checkable = true, ShortcutText = $"{lod + 1}", MinWidth = 0 };
-                item.Triggered += (_, _) => SetLevel(level);
-                levels.Items.Add(item);
-            }
+            string name = PartVisibility.LevelName(lod);
+            string shortName = PartVisibility.ShortLevelName(lod);
+            LodSwitch.Sides.Add(new SwitchSide { Text = shortName, Width = 14 + 7 * shortName.Length, Label = name, ToolTip = $"{name} detail  ({lod + 1})" });
         }
-        foreach (RetroMenuItem item in levels.Items.OfType<RetroMenuItem>())
-        {
-            int lod = (int)item.Tag!;
-            item.IsChecked = lod == visibility.Lod;
-            item.IsEnabled = visibility.Levels.Contains(lod);
-        }
-        levels.OpenUnder(LodButton, 4);
+        LodSwitch.RefreshSides();
+        LodSwitch.IsVisible = levels.Count > 1;
+        LodSwitch.SelectedIndex = visibility is null ? -1 : IndexOf(levels, visibility.Lod);
+    }
+
+    private static int IndexOf(IReadOnlyList<int> levels, int lod)
+    {
+        for (int i = 0; i < levels.Count; i++)
+            if (levels[i] == lod)
+                return i;
+        return -1;
     }
 
     /// <summary>Draws what the parts panel and the level say, and counts it.</summary>
@@ -317,11 +323,86 @@ public partial class ModelViewer : UserControl, IModalContent
             e.Handled = true;
     }
 
+    /// <summary>The time of day in its dropdown: quarter hours, with marks every six hours.</summary>
+    internal TextureMipSlider SunSlider { get; } = new() { Maximum = 96, TickCount = 5, Width = 212 };
+
+    /// <summary>The time of day the slider is at, in the dropdown's corner.</summary>
+    internal TextBlock SunText { get; } = new()
+    {
+        FontFamily = Ui.Theme.MonoFont,
+        FontSize = Ui.Theme.SmallFontSize,
+        Foreground = Ui.Theme.Text,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+    };
+
+    private readonly Control timeBody;
+    private DropdownWindow? timeDropdown;
+    private long timeClosedAt;
+
+    /// <summary>Whether the time of day's dropdown is open.</summary>
+    internal bool TimeOpen => timeDropdown is not null;
+
+    private Control TimeBody()
+    {
+        Avalonia.Automation.AutomationProperties.SetName(SunSlider, "Time of day");
+        DockPanel.SetDock(SunText, Dock.Right);
+        return new StackPanel
+        {
+            Margin = new Thickness(12, 10, 12, 12),
+            Spacing = 10,
+            Children =
+            {
+                new DockPanel
+                {
+                    Children =
+                    {
+                        SunText,
+                        new TextBlock
+                        {
+                            Text = "Time of day",
+                            FontFamily = Ui.Theme.UiFont,
+                            FontSize = Ui.Theme.SmallFontSize,
+                            Foreground = Ui.Theme.TextDim,
+                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                        },
+                    },
+                },
+                SunSlider,
+            },
+        };
+    }
+
+    /// <summary>
+    /// Opens the time of day's slider under its button, a window of its own so the viewport doesn't cover it, or closes
+    /// it; the button sits raised while it is open.
+    /// </summary>
+    internal void ToggleTime()
+    {
+        if (timeDropdown is not null)
+        {
+            timeDropdown.Close();
+            return;
+        }
+        // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
+        if (Environment.TickCount64 - timeClosedAt < 400)
+            return;
+        timeDropdown = DropdownWindow.OpenUnder(TimeButton, timeBody, 2);
+        if (timeDropdown is null)
+            return;
+        TimeButton.Sunken = true;
+        timeDropdown.Closed += (_, _) =>
+        {
+            timeDropdown = null;
+            timeClosedAt = Environment.TickCount64;
+            TimeButton.Sunken = false;
+        };
+    }
+
     /// <summary>Lights the model as the game does at <paramref name="hours"/>, 0 to 24.</summary>
     internal void SetHours(float hours)
     {
         Viewport.SetTime(hours);
-        SunText.Text = Clock(hours);
+        SunText.Text = TimeButton.Text = Clock(hours);
         SunSlider.SyncValue((int)Math.Round(hours * 4));
     }
 
@@ -392,11 +473,10 @@ public partial class ModelViewer : UserControl, IModalContent
         {
             Viewport.Show(surfaces);
             // A drawable is lit by the game's light, and has the toolbar; collisions and navmeshes are drawn flat.
-            SunBar.IsVisible = true;
             Toolbar.IsVisible = true;
             ShowStats(surfaces);
             visibility = new PartVisibility(surfaces);
-            LodButton.Text = PartVisibility.LevelName(visibility.Lod);
+            ShowLevels();
             Parts.Parts = visibility;
             SetPartsShown(true);
             ShowTextures(surfaces);
@@ -404,7 +484,7 @@ public partial class ModelViewer : UserControl, IModalContent
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
-            return Describe(surfaces, size);
+            return Describe(surfaces);
         }
         Viewport.Show(content.Mesh);
         ShowLegend(content.Mesh.Legend);
@@ -425,16 +505,18 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>
-    /// A drawable's line, after its triangles, vertices and edges: its materials and size, and the textures it names that
-    /// weren't found; the status line's tooltip lists those and the rest of <see cref="DrawableScene.Diagnostics"/>.
+    /// A drawable's line, after its triangles, vertices and edges: the textures it names that weren't found, if any; the
+    /// status line's tooltip lists those and the rest of <see cref="DrawableScene.Diagnostics"/>.
     /// </summary>
-    private static string Describe(DrawableScene scene, System.Numerics.Vector3 size)
+    private static string Describe(DrawableScene scene)
     {
-        int materials = scene.Materials.Count;
         int missing = scene.Materials.SelectMany(material => material.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        string found = missing > 0 ? $" · {missing} {(missing == 1 ? "texture" : "textures")} not found" : "";
-        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{materials} {(materials == 1 ? "material" : "materials")} · {size.X:0.##} × {size.Y:0.##} × {size.Z:0.##} m{found}");
+        return missing switch
+        {
+            0 => "",
+            1 => "1 texture not found",
+            _ => $"{missing} textures not found",
+        };
     }
 
     /// <summary>The most entries the legend lists; the rest are counted.</summary>
@@ -536,6 +618,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
+        timeDropdown?.Close();
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();
