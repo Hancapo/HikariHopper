@@ -404,7 +404,7 @@ public sealed partial class ExplorerViewModel
         ModelFileOpened?.Invoke(this, new ModelFile(entry.Name, data)
         {
             Dictionaries = DictionariesBeside(entry),
-            GameDictionaries = GameDictionaries(entry),
+            GameDictionaries = GameDictionaries(entry.Name),
             OpenTextures = () => OpenEmbeddedTextures(entry, data),
             Nearby = NearbyDictionaries(entry),
         });
@@ -416,11 +416,11 @@ public sealed partial class ExplorerViewModel
     /// their parents, each read when the search reaches it, with a reader of its own, off the UI thread. None outside a
     /// game, for other files, or for a drawable no archetype names.
     /// </summary>
-    private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(EntryRecord entry)
+    private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(string modelName)
     {
-        if (!ModelFile.IsDrawableName(entry.Name) || LoadedGameOfProvider() is not { } game)
+        if (!ModelFile.IsDrawableName(modelName) || LoadedGameOfProvider() is not { } game)
             return null;
-        return Find(game, entry.Name);
+        return Find(game, modelName);
 
         static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
             [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
@@ -439,21 +439,27 @@ public sealed partial class ExplorerViewModel
             OpenTextureDictionary(entry);
             return;
         }
+        OpenEmbeddedDictionary(entry.Name, data);
+    }
+
+    /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>
+    private void OpenEmbeddedDictionary(string name, byte[] data)
+    {
         byte[] dictionary;
         try
         {
-            (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(entry.Name, data);
+            (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(name, data);
             var own = new FiveFury.Textures.TextureDictionary();
             own.Textures.AddRange(textures);
             dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException or InvalidOperationException)
         {
-            SetStatus($"Could not open the textures of {entry.Name}: {error.Message}");
+            SetStatus($"Could not open the textures of {name}: {error.Message}");
             return;
         }
-        TextureViewer.OpenDictionary($"{entry.Name} textures", "", dictionary);
-        SetStatus($"Opening the textures of {entry.Name}");
+        TextureViewer.OpenDictionary($"{name} textures", "", dictionary);
+        SetStatus($"Opening the textures of {name}");
     }
 
     /// <summary>The game while one is open, with its keys; none for an RPF opened on its own.</summary>

@@ -528,10 +528,7 @@ public sealed partial class ExplorerViewModel
         (byte[] Data, string Source, ArchiveEntryTarget? Target) file;
         try
         {
-            // Read where it lives; the save target keeps only paths, so the reader can go at once.
-            file = RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
-                new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
-                    reader.InArchive ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
+            file = ReadHit(hit);
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
@@ -540,12 +537,7 @@ public sealed partial class ExplorerViewModel
         }
         if (texture)
         {
-            ArchiveEntryTarget? target = file.Target;
-            TextureViewer.OpenDictionary(name, file.Source, file.Data,
-                sourceSaver: target is not null ? target.Save : null,
-                sourcePrepare: target is not null ? () => PrepareTextureWrite(target) : null,
-                sourceRootPath: target?.RootPath ?? "");
-            SetStatus($"Opening {name}");
+            OpenHitDictionary(name, file);
         }
         else if (text)
         {
@@ -559,13 +551,96 @@ public sealed partial class ExplorerViewModel
         }
         else if (model)
         {
-            ModelFileOpened?.Invoke(this, new ModelFile(name, file.Data));
+            ModelFileOpened?.Invoke(this, ModelFileOf(hit, file.Data));
             SetStatus($"Opened {name}");
         }
         else
         {
             ImageFileOpened?.Invoke(this, new ImageViewerViewModel(name, file.Data));
             SetStatus($"Opened {name}");
+        }
+    }
+
+    /// <summary>
+    /// A result read where it lives, with its source path and save target; the target keeps only paths, so the reader
+    /// can go at once.
+    /// </summary>
+    private (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadHit(SearchHit hit) =>
+        RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
+            new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
+                reader.InArchive ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
+
+    /// <summary>A texture dictionary, or a drawable's own, in the texture editor, saving back into its RPF.</summary>
+    private void OpenHitDictionary(string name, (byte[] Data, string Source, ArchiveEntryTarget? Target) file)
+    {
+        ArchiveEntryTarget? target = file.Target;
+        TextureViewer.OpenDictionary(name, file.Source, file.Data,
+            sourceSaver: target is not null ? target.Save : null,
+            sourcePrepare: target is not null ? () => PrepareTextureWrite(target) : null,
+            sourceRootPath: target?.RootPath ?? "");
+        SetStatus($"Opening {name}");
+    }
+
+    /// <summary>
+    /// A 3D file found by search, with its textures found as they are from its folder: the dictionaries named for it
+    /// there, read now; the game's for its archetypes; and the folder's other dictionaries, as the index lists them,
+    /// each read where it lives only when the search for a texture reaches it.
+    /// </summary>
+    private ModelFile ModelFileOf(SearchHit hit, byte[] data)
+    {
+        string name = hit.Name;
+        List<SearchHit> dictionaries = ModelFile.IsDrawableName(name)
+            ? [.. SearchSiblings(hit).Where(sibling => sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(sibling => sibling.Name, StringComparer.OrdinalIgnoreCase)]
+            : [];
+        IReadOnlyList<string> namedFor = ModelFile.DictionaryNames(name);
+        var named = new List<byte[]>();
+        foreach (string wanted in namedFor)
+        {
+            if (dictionaries.FirstOrDefault(sibling => string.Equals(sibling.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                is not { } sibling || sibling.Size > ModelFile.MaxSize)
+                continue;
+            try
+            {
+                named.Add(ReadHit(sibling).Data);
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+            }
+        }
+        LoadedGame? game = ReaderGame();
+        return new ModelFile(name, data)
+        {
+            Dictionaries = named,
+            GameDictionaries = GameDictionaries(name),
+            Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>
+            {
+                // Where it lives is worked out here, on the UI thread; the read runs on the viewer's, with a reader of its own.
+                HitPlace place = PlaceOf(sibling);
+                return new Rendering.NearbyDictionary(sibling.Name, sibling.Size,
+                    () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0]);
+            })],
+            OpenTextures = () => OpenHitTextures(hit),
+        };
+    }
+
+    /// <summary>
+    /// A drawable result's embedded textures: a .ydr's in the texture editor, saving back into it; a .yft's or .ydd's as
+    /// a dictionary of their own.
+    /// </summary>
+    private void OpenHitTextures(SearchHit hit)
+    {
+        try
+        {
+            var file = ReadHit(hit);
+            if (hit.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+                OpenHitDictionary(hit.Name, file);
+            else
+                OpenEmbeddedDictionary(hit.Name, file.Data);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open the textures of {hit.Name}: {error.Message}");
         }
     }
 
@@ -635,7 +710,10 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>The names already in a result's folder, as far as the index knows them.</summary>
-    private IEnumerable<string> SearchSiblingNames(SearchHit hit)
+    private IEnumerable<string> SearchSiblingNames(SearchHit hit) => SearchSiblings(hit).Select(sibling => sibling.Name);
+
+    /// <summary>The other files in a result's folder, as far as the index knows them, each as a result of its own.</summary>
+    private IEnumerable<SearchHit> SearchSiblings(SearchHit hit)
     {
         string location = hit.Location;
         foreach (IndexedGroup group in searchIndex?.State.Groups ?? [])
@@ -646,7 +724,7 @@ public sealed partial class ExplorerViewModel
             foreach (IndexedEntry entry in group.Files)
             {
                 if (entry.Folder == folder && entry.Name != hit.Name)
-                    yield return entry.Name;
+                    yield return new SearchHit(group.PathOf(entry), entry.Size, []);
             }
         }
     }
