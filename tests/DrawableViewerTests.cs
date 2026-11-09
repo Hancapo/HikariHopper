@@ -104,6 +104,40 @@ public sealed class DrawableViewerTests
     }
 
     [Fact]
+    public void A_diffspec_shader_takes_its_specular_from_the_diffuse_colour_in_either_edition()
+    {
+        SurfaceMaterial Read(GameTarget target) => ModelContent.Read("wall.ydr", Quad(target, "normal_diffspec", material =>
+        {
+            material.Parameters["SpecDesaturateIntensity"] = [.2f, .7f, .1f, .5f];
+            material.Parameters["SpecDesaturateExponent"] = [.3f, .3f, .4f, .8f];
+        })).Surfaces!.Materials.Single();
+        SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
+        foreach (SurfaceMaterial material in new[] { legacy, enhanced })
+        {
+            // surface.wgsl's spec_source (the diffuse colour), then SpecDesaturateIntensity and SpecDesaturateExponent.
+            Assert.Equal(2, material.Uniforms[56]);
+            Assert.Equal([.2f, .7f, .1f, .5f, .3f, .3f, .4f, .8f], material.Uniforms[60..68]);
+        }
+        Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Theory]
+    [InlineData("emissive_speclum", 1f)]
+    [InlineData("normal_spec", 0f)]
+    public void A_shader_says_where_its_specular_comes_from(string shader, float source) =>
+        Assert.Equal(source, ModelContent.Read("wall.ydr", Quad(GameTarget.Legacy, shader)).Surfaces!.Materials.Single().Uniforms[56]);
+
+    [Fact]
+    public void A_vertex_normal_too_short_to_point_anywhere_is_taken_as_up()
+    {
+        byte[] ydr = Quad(GameTarget.Legacy, "default", channels: mesh =>
+            mesh.SetChannel(VertexSemantic.Normal, [new(.1f, .1f, .1f, 0), new(1, 0, 0, 0), new(1, 0, 0, 0), new(1, 0, 0, 0)]));
+        SurfaceVertex[] vertices = ModelContent.Read("wall.ydr", ydr).Surfaces!.Vertices;
+        Assert.Equal(Vector3.UnitZ, vertices[0].Normal);
+        Assert.Equal(Vector3.UnitX, vertices[1].Normal);
+    }
+
+    [Fact]
     public void A_shader_without_specular_constants_writes_none()
     {
         SurfaceMaterial material = ModelContent.Read("quad.ydr", Quad(GameTarget.Enhanced, "default")).Surfaces!.Materials.Single();

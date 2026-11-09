@@ -25,7 +25,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
-    public const int UniformBytes = 224;
+    public const int UniformBytes = 272;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -197,6 +197,19 @@ internal sealed class SurfaceMaterial
         u[15] = result.Vehicle ? 1 : 0;
         // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
         u[41] = 1;
+        // Where the specular comes from besides the constants and a specular map: the diffuse map's luminance
+        // (emissive_speclum), or an overlay of its colour by SpecDesaturateIntensity and SpecDesaturateExponent (diffspec).
+        string? source = Pattern(shader, "specular_source");
+        u[56] = source switch { "luminance" => 1, "diffuse" => 2, _ => 0 };
+        if (source == "diffuse")
+        {
+            float[] intensity = Constant("spec_desaturate_intensity", .3f, .6f, .1f, .625f), exponent = Constant("spec_desaturate_exponent", .3f, .6f, .1f, .625f);
+            for (int i = 0; i < 4; i++)
+            {
+                u[60 + i] = i < intensity.Length ? intensity[i] : 0;
+                u[64 + i] = i < exponent.Length ? exponent[i] : 0;
+            }
+        }
         // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling), and what
         // masks it: the specular map's alpha, the diffuse map's for the diffspec shaders, or nothing.
         if (result.Detail is not null)
