@@ -24,6 +24,26 @@ public sealed class GameTexturesTests : IDisposable
     }
 
     [Fact]
+    public void The_rpfs_the_game_doesnt_mount_itself_are_mounted_over_it_except_dlc_packs()
+    {
+        string Rpf(string path)
+        {
+            string full = Path.Combine(scratch, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, []);
+            return full;
+        }
+        string x64a = Rpf("x64a.rpf"), update = Rpf(@"update\update.rpf");
+        string touhou = Rpf(@"fix\touhou.rpf"), hola = Rpf(@"fix\hola.rpf"), mods = Rpf(@"mods\x64a.rpf");
+        Rpf(@"update\x64\dlcpacks\unlisted\dlc.rpf");
+        Rpf(@"x64\audio\sfx\RADIO_01_CLASS_ROCK.rpf");
+
+        // The game mounts its own; the rest, in path order, but not DLC packs, which the game's list decides, nor its audio.
+        var mounted = new HashSet<string>([x64a, update], StringComparer.OrdinalIgnoreCase);
+        Assert.Equal([hola, touhou, mods], GameTextures.Tables.ExtraArchives(scratch, mounted));
+    }
+
+    [Fact]
     public void A_model_looks_in_its_archetypes_dictionaries_then_their_parents_nearest_first_then_the_detail_maps()
     {
         var tables = new GameTextures.Tables();
