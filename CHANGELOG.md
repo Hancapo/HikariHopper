@@ -9,6 +9,8 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Added
 
 - The 3D viewer opens drawables (.ydr), textured and shaded as GTA V shades them, from Legacy and Enhanced. ([#91](https://github.com/Hancapo/HikariHopper/pull/91))
+- The 3D viewer opens fragments (.yft), such as vehicles with their wheels, and drawable dictionaries (.ydd). ([#94](https://github.com/Hancapo/HikariHopper/pull/94))
+- The 3D viewer finds a model's textures in the texture dictionaries beside it, such as a vehicle's shared and interior ones. ([#94](https://github.com/Hancapo/HikariHopper/pull/94))
 
 ### Changed
 
