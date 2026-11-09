@@ -13,6 +13,13 @@ public sealed record ModelFile(string Name, byte[] Data)
     public IReadOnlyList<byte[]> Dictionaries { get; init; } = [];
 
     /// <summary>
+    /// The game's dictionaries for a drawable, as the game finds them: those its archetypes name and their parents
+    /// (gtxd), searched after <see cref="Dictionaries"/> and before <see cref="Nearby"/>. Null outside a game; until the
+    /// game's tables are ready, it waits for them.
+    /// </summary>
+    internal Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries { get; init; }
+
+    /// <summary>
     /// The other .ytd files beside a drawable, read only if a texture is still missing: a vehicle's parent dictionary
     /// (its interior's, say) is among them under a name of its own.
     /// </summary>
