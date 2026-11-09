@@ -54,7 +54,7 @@ public partial class ModelViewer : UserControl, IModalContent
         ModelContent content;
         try
         {
-            content = ModelContent.Read(file.Name, file.Data, file.Dictionaries);
+            content = ModelContent.Read(file.Name, file.Data, file.Dictionaries, file.Nearby);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)
@@ -69,6 +69,8 @@ public partial class ModelViewer : UserControl, IModalContent
         {
             Viewport.Show(surfaces);
             ShowLegend([]);
+            // What isn't shown as the game shows it, under the status line.
+            ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
             return Describe(surfaces, size);
         }
         Viewport.Show(content.Mesh);
@@ -79,7 +81,10 @@ public partial class ModelViewer : UserControl, IModalContent
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
     }
 
-    /// <summary>A drawable's line: its triangles, materials and size, and the textures it names that weren't found.</summary>
+    /// <summary>
+    /// A drawable's line: its triangles, materials and size, and the textures it names that weren't found; the status
+    /// line's tooltip lists those and the rest of <see cref="DrawableScene.Diagnostics"/>.
+    /// </summary>
     private static string Describe(DrawableScene scene, System.Numerics.Vector3 size)
     {
         int triangles = scene.TriangleCount, materials = scene.Materials.Count;

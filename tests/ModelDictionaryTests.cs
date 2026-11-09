@@ -24,4 +24,25 @@ public sealed class ModelDictionaryTests : ExplorerTestBase
         Assert.NotNull(opened);
         Assert.Equal([(byte)4, 5, 6], Assert.Single(opened.Dictionaries));
     }
+
+    [AvaloniaFact]
+    public void The_dictionaries_near_a_drawable_are_searched_in_name_order_whatever_the_filter_and_sort()
+    {
+        MakeGame();
+        File.WriteAllBytes(Path.Combine(Work, "prop_bench.ydr"), [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(Work, "b_shared.ytd"), [1]);
+        File.WriteAllBytes(Path.Combine(Work, "a_shared.ytd"), [1, 2]);
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        ModelFile? opened = null;
+        bridge.ModelFileOpened += (_, file) => opened = file;
+
+        bridge.SortEntries("size");
+        bridge.SortEntries("size");
+        bridge.SetSearch(".ydr");
+        bridge.ActivateEntry(Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == "prop_bench.ydr"));
+        Assert.NotNull(opened);
+        Assert.Equal(["a_shared.ytd", "b_shared.ytd"], opened.Nearby.Select(dictionary => dictionary.Name));
+    }
 }
