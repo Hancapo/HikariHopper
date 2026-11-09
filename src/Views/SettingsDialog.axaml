@@ -23,7 +23,7 @@
   </v:ModalSheet.Styles>
   <Grid ColumnDefinitions="Auto,*">
     <Border Width="176" Margin="12,14,0,14" Padding="4" VerticalAlignment="Top"
-            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}">
+            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
       <StackPanel Spacing="2">
         <v:SettingsGroupRow Name="GamesGroup" Label="Games" Icon="box" Selected="True" />
         <v:SettingsGroupRow Name="StartupGroup" Label="Startup" Icon="zap" />

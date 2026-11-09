@@ -144,6 +144,12 @@ public static class Theme
     // shows past the rounded corners.
     public static readonly BoxShadows SheetShadow = BoxShadows.Parse("0 16 44 -14 #80080812, 0 2 6 -2 #40080812");
     public const double SheetHeaderHeight = 40;
+
+    /// <summary>A dialog's footer, with its buttons: the sheets' and the confirmation and tool dialogs'.</summary>
+    public const double DialogFooterHeight = 48;
+
+    /// <summary>Small-caps section headings and field labels (mono, bold, spaced 1.2).</summary>
+    public const double CapsFontSize = 9;
     public const double TabStripHeight = 36;
     public const double TabHeight = 32;        // every tab; the active one merges into the toolbar below
     public const double TabWidth = 220;

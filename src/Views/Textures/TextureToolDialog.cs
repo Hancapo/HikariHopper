@@ -7,8 +7,8 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The chassis of every texture tool dialog (port of <c>TextureToolDialog.qml</c>): 520px wide,
-/// <c>headerHeight + BodyHeight + 58</c> tall, a raised header with the spaced
-/// <see cref="Heading"/>, the body, and a footer with Cancel and the green apply button.
+/// <c>SheetHeaderHeight + BodyHeight + DialogFooterHeight</c> tall, in the sheets' card: a raised header with
+/// the spaced <see cref="Heading"/> and a close mark, the body, and a footer with Cancel and the green apply button.
 /// </summary>
 /// <remarks>
 /// Apply is enabled while <see cref="ApplyEnabled"/> holds and no operation runs; clicking it
@@ -18,7 +18,7 @@ namespace HikariHopper.Views;
 public class TextureToolDialog : TextureModalDialog
 {
     public const double DialogWidth = 520;
-    public const double FooterHeight = 58;
+    public const double FooterHeight = Ui.Theme.DialogFooterHeight;
 
     public static readonly StyledProperty<string> HeadingProperty =
         AvaloniaProperty.Register<TextureToolDialog, string>(nameof(Heading), "");
@@ -86,6 +86,8 @@ public class TextureToolDialog : TextureModalDialog
         base.OnApplyTemplate(e);
         if (e.NameScope.Find<ChromeToolButton>("PART_CancelButton") is { } cancel)
             cancel.Click += (_, _) => Reject();
+        if (e.NameScope.Find<ChromeToolButton>("PART_CloseMark") is { } close)
+            close.Click += (_, _) => Reject();
         applyButton = e.NameScope.Find<ChromeToolButton>("PART_ApplyButton");
         if (applyButton is not null)
             applyButton.Click += (_, _) => Apply();
@@ -108,7 +110,7 @@ public class TextureToolDialog : TextureModalDialog
             UpdateApplyEnabled();
     }
 
-    private void UpdateHeight() => Height = Ui.Theme.HeaderHeight + BodyHeight + FooterHeight;
+    private void UpdateHeight() => Height = Ui.Theme.SheetHeaderHeight + BodyHeight + FooterHeight;
 
     private void UpdateApplyEnabled()
     {

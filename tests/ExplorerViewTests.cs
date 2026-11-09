@@ -933,13 +933,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         ExplorerCreateDialog dialog = Assert.IsType<ExplorerCreateDialog>(workspace.CreateDialog);
         Assert.Equal("NEW FOLDER", dialog.Heading);
-        Assert.Equal(24 + 112 + 58, dialog.Height);
+        Assert.Equal(Ui.Theme.SheetHeaderHeight + 112 + Ui.Theme.DialogFooterHeight, dialog.Height);
         Assert.Equal("New folder", dialog.Field.SelectedText);
 
         dialog.Field.Text = "bad:name";
         Pump();
         Assert.NotEqual("", dialog.NameError);
-        Assert.Equal(24 + 112 + 22 + 58, dialog.Height);
+        Assert.Equal(Ui.Theme.SheetHeaderHeight + 112 + 22 + Ui.Theme.DialogFooterHeight, dialog.Height);
 
         dialog.Field.Text = "made";
         Pump();

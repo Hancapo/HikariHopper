@@ -25,7 +25,7 @@
 
       <StackPanel Orientation="Horizontal" Spacing="6">
         <c:ChromeToolButton Name="StandaloneButton" Width="168" Height="28" Raised="True"
-                            Text="Open standalone RPF…" Click="OnOpenStandalone" />
+                            Text="Open RPF archive…" Click="OnOpenStandalone" />
         <c:ChromeToolButton Name="SettingsButton" Width="84" Height="28" Bordered="False"
                             Text="Settings…" Click="OnSettings" />
       </StackPanel>

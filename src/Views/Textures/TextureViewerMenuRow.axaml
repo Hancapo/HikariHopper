@@ -31,8 +31,8 @@
   <Panel>
     <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
     <StackPanel Margin="1,0,0,0" Orientation="Horizontal">
-      <c:MenuBarButton Name="FileButton" Text="File" />
-      <c:MenuBarButton Name="EditButton" Text="Edit" />
+      <c:MenuBarButton Name="FileButton" Text="File" Padding="10,0" FontSize="13" />
+      <c:MenuBarButton Name="EditButton" Text="Edit" Padding="10,0" FontSize="13" />
     </StackPanel>
   </Panel>
 </UserControl>

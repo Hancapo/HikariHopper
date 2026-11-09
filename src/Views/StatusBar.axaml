@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:HikariHopper.ViewModels"
+             xmlns:v="using:HikariHopper.Views"
              xmlns:c="using:HikariHopper.Views.Controls"
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.StatusBar"
@@ -42,7 +43,7 @@
         </StackPanel>
       </Border>
       <Panel Name="Count">
-        <TextBlock IsVisible="{Binding ShowsItemCount}" Text="{Binding VisibleCount, StringFormat='{}{0} items'}" />
+        <TextBlock IsVisible="{Binding ShowsItemCount}" Text="{Binding VisibleCount, Converter={x:Static v:ViewConverters.ItemCount}}" />
         <TextBlock IsVisible="{Binding !HasWorkspace}" Text="NO GAME" />
       </Panel>
       <Border Name="StatusDivider" Classes="divider" />

@@ -23,10 +23,10 @@
   <c:RetroMenuItem Name="PropertiesItem" Text="Properties" ShortcutText="Alt+Enter" IconName="info" Triggered="OnProperties" />
 
   <c:RetroMenuItem Name="NewEntryMenu" Text="New" IconName="plus">
-    <c:RetroMenuItem Text="Folder" IconName="folder" Triggered="OnNewFolder" />
-    <c:RetroMenuItem Name="CreateYtdMenuItem" Text="Texture dictionary" IconName="image" Triggered="OnNewYtd" />
+    <c:RetroMenuItem Text="Folder…" IconName="folder" Triggered="OnNewFolder" />
+    <c:RetroMenuItem Name="CreateYtdMenuItem" Text="Texture dictionary…" IconName="image" Triggered="OnNewYtd" />
     <c:RetroMenuSection Name="RpfArchiveSection" Text="RPF ARCHIVE" />
-    <c:RetroMenuItem Name="CreateEmptyRpfMenuItem" Text="Empty" IconName="package-plus" Triggered="OnNewEmptyRpf" />
+    <c:RetroMenuItem Name="CreateEmptyRpfMenuItem" Text="Empty…" IconName="package-plus" Triggered="OnNewEmptyRpf" />
     <c:RetroMenuItem Name="CreateRpfFromFolderMenuItem" Text="From folder…" IconName="folder-input" Triggered="OnNewRpfFromFolder" />
     <c:RetroMenuItem Name="CreateRpfFromZipMenuItem" Text="From ZIP…" IconName="file-archive" Triggered="OnNewRpfFromZip" />
   </c:RetroMenuItem>

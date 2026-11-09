@@ -10,8 +10,9 @@ public partial class TextureUnsavedChangesDialog : TextureModalDialog
     public TextureUnsavedChangesDialog()
     {
         InitializeComponent();
-        Height = Ui.Theme.HeaderHeight + 126 + 58;
+        Height = Ui.Theme.SheetHeaderHeight + 126 + Ui.Theme.DialogFooterHeight;
         CancelButton.Click += (_, _) => Reject();
+        CloseMark.Click += (_, _) => Reject();
         DiscardButton.Click += (_, _) =>
         {
             Close();

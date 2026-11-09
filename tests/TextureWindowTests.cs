@@ -94,7 +94,8 @@ public sealed class TextureWindowTests
         TextureUnsavedChangesDialog dialog = Assert.IsType<TextureUnsavedChangesDialog>(harness.Window.UnsavedDialog);
         Assert.True(dialog.IsOpen);
         Assert.Equal(470, dialog.Bounds.Width);
-        Assert.Equal(Ui.Theme.HeaderHeight + 126 + 58, dialog.Bounds.Height);
+        // In the sheets' card: their header and footer.
+        Assert.Equal(Ui.Theme.SheetHeaderHeight + 126 + Ui.Theme.DialogFooterHeight, dialog.Bounds.Height);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(dialog.IsOpen);
@@ -427,10 +428,16 @@ public sealed class TextureWindowTests
         TextureWindowHarness harness = Opened();
         TextureToolDialog dialog = harness.Window.OpenToolDialog(TextureTool.Format);
         harness.Settle();
-        Assert.Equal(new Size(520, Ui.Theme.HeaderHeight + 292 + 58), dialog.Bounds.Size);
+        Assert.Equal(new Size(520, Ui.Theme.SheetHeaderHeight + 292 + Ui.Theme.DialogFooterHeight), dialog.Bounds.Size);
         Assert.Equal(Math.Floor((1250 - 520) / 2.0 + 0.5), dialog.Bounds.X);
         Assert.Equal(Math.Floor((738 - dialog.Bounds.Height) / 2 + 0.5), dialog.Bounds.Y);
         Assert.Equal("CHANGE TEXTURE FORMAT", dialog.Heading);
+        // Its header's close mark cancels it, as the sheets' does.
+        ChromeToolButton close = Assert.IsType<ChromeToolButton>(dialog.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_CloseMark"));
+        Assert.False(close.IsTabStop);
+        close.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        harness.Settle();
+        Assert.False(dialog.IsOpen);
     }
 
     [AvaloniaFact]
@@ -785,7 +792,7 @@ public sealed class TextureWindowTests
         string[] Labels(ItemsControl items) => [.. items.Items.Select(item => item is RetroMenuItem entry ? entry.Text : "—")];
 
         // The clipboard and replacing, then editing, then the texture's own actions; every row has an icon.
-        Assert.Equal(["Copy image", "Paste…", "Replace from image…", "—", "Resize", "Mipmaps…", "Format", "—", "Extract DDS…", "Rename…", "Remove"],
+        Assert.Equal(["Copy image", "Paste…", "Replace from image…", "—", "Resize", "Recalculate mipmaps…", "Format", "—", "Extract DDS…", "Rename…", "Remove"],
             Labels(menu));
         Assert.All(menu.Items.OfType<RetroMenuItem>(), item => Assert.NotEqual("", item.IconName));
         Assert.Equal(["To a size…", "To power of 2…"], Labels(menu.ResizeMenu));

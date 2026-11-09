@@ -90,7 +90,7 @@ public partial class TextureViewerMenuRow : UserControl
             return;
         string undoLabel = viewModel?.UndoLabel ?? "";
         bool drawable = viewModel?.IsDrawable ?? false;
-        undoItem.Text = undoLabel.Length == 0 ? "Undo" : $"Undo {undoLabel}";
+        undoItem.Text = undoLabel.Length == 0 ? "Undo" : $"Undo {char.ToLowerInvariant(undoLabel[0])}{undoLabel[1..]}";
         saveItem.Text = drawable ? "Save YDR" : "Save YTD";
         saveAsItem.Text = drawable ? "Save YDR as…" : "Save YTD as…";
     }

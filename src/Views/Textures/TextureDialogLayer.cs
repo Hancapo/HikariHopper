@@ -5,7 +5,7 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The window overlay that hosts <see cref="TextureModalDialog"/>s (Qt Quick's <c>Overlay.overlay</c>):
-/// every open dialog gets its own <c>marqueeFill</c> dimmer over the whole window, stacked in
+/// every open dialog gets its own dimmer (the modal sheets' <c>ModalDim</c>) over the whole window, stacked in
 /// opening order, and is centred at <c>Math.round((parent.width - width) / 2)</c>.
 /// </summary>
 public class TextureDialogLayer : Panel
@@ -19,7 +19,7 @@ public class TextureDialogLayer : Panel
 
     internal void Add(TextureModalDialog dialog)
     {
-        var dimmer = new Border { Background = Ui.Theme.MarqueeFill };
+        var dimmer = new Border { Background = Ui.Theme.ModalDim };
         // The modal background takes every pointer event, so nothing underneath reacts.
         dimmer.PointerPressed += (_, e) => e.Handled = true;
         dimmer.PointerReleased += (_, e) => e.Handled = true;

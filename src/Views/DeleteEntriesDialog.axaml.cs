@@ -22,7 +22,7 @@ public partial class DeleteEntriesDialog : UserControl
     {
         this.bridge = bridge;
         InitializeComponent();
-        Height = Ui.Theme.HeaderHeight + 64 + 58;
+        Height = Ui.Theme.SheetHeaderHeight + 64 + Ui.Theme.DialogFooterHeight;
         Refresh();
     }
 

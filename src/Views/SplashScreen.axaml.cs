@@ -15,7 +15,7 @@ namespace HikariHopper.Views;
 public partial class SplashScreen : Window
 {
     public static readonly StyledProperty<string> StartupMessageProperty =
-        AvaloniaProperty.Register<SplashScreen, string>(nameof(StartupMessage), "Starting Qt interface…");
+        AvaloniaProperty.Register<SplashScreen, string>(nameof(StartupMessage), "Starting…");
 
     public static readonly StyledProperty<string> StartupPhaseProperty =
         AvaloniaProperty.Register<SplashScreen, string>(nameof(StartupPhase), "BOOT");

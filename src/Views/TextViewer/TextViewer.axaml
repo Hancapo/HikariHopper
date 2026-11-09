@@ -33,7 +33,6 @@
       <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
       <Setter Property="IconSize" Value="14" />
       <Setter Property="IconThickness" Value="1.5" />
-      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
     </Style>
     <Style Selector="TextBlock.status">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />

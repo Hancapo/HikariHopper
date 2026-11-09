@@ -72,8 +72,8 @@
           <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
                  IsVisible="False">
             <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-            <DockPanel Margin="6,0,6,1">
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+            <DockPanel Margin="8,0,8,1">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
                 <!-- The time of day the model is lit at, which opens its slider. -->
                 <Border Classes="well">
                   <Panel>
@@ -100,12 +100,12 @@
                   </StackPanel>
                 </Border>
               </StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="8">
                 <!-- The levels of detail the drawable has, as segments like the texture editor's channels; none when it
                      has only the one. -->
                 <c:SegmentedSwitch Name="LodSwitch" IsVisible="False" />
-                <Border Name="LodSeparator" Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" IsVisible="False"
-                        Background="{x:Static ui:Theme.BorderHard}" />
+                <Border Name="LodSeparator" Width="1" Height="14" Margin="2,0" VerticalAlignment="Center" IsVisible="False"
+                        Background="{x:Static ui:Theme.Border}" />
                 <Border Classes="well">
                   <StackPanel>
                     <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
@@ -127,27 +127,27 @@
             </DockPanel>
           </Panel>
 
-          <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ExplorerStatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+          <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.StatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
             <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
             <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,*">
               <!-- A drawable's triangles, vertices and edges. -->
               <StackPanel Name="StatsPanel" Grid.Column="0" Orientation="Horizontal" Spacing="12" Margin="10,0,0,0" IsVisible="False">
                 <StackPanel Name="TrianglesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
                   <c:LucideIcon Classes="stat" IconName="triangle" />
-                  <TextBlock Name="TrianglesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                  <TextBlock Name="TrianglesText" Classes="status" />
                 </StackPanel>
                 <StackPanel Name="VerticesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
                   <c:LucideIcon Classes="stat" IconName="git-commit-vertical" />
-                  <TextBlock Name="VerticesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                  <TextBlock Name="VerticesText" Classes="status" />
                 </StackPanel>
                 <StackPanel Name="EdgesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
                   <c:LucideIcon Classes="stat" IconName="slash" />
-                  <TextBlock Name="EdgesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                  <TextBlock Name="EdgesText" Classes="status" />
                 </StackPanel>
                 <!-- How fast the free camera flies, while it does. -->
                 <StackPanel Name="SpeedStat" Orientation="Horizontal" Spacing="5" Background="Transparent" IsVisible="False">
                   <c:LucideIcon Classes="stat" IconName="gauge" />
-                  <TextBlock Name="SpeedText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                  <TextBlock Name="SpeedText" Classes="status" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Name="StatusText" Grid.Column="1" Classes="status" Margin="10,0,0,0"
