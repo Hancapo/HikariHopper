@@ -24,10 +24,10 @@ public sealed class GameTexturesTests : IDisposable
     }
 
     [Fact]
-    public void A_model_looks_in_its_archetypes_dictionaries_then_their_parents_nearest_first()
+    public void A_model_looks_in_its_archetypes_dictionaries_then_their_parents_nearest_first_then_the_detail_maps()
     {
         var tables = new GameTextures.Tables();
-        foreach (string name in new[] { "hw1_02_grnd", "hwblockgroup1", "hollywoodrd", "globalroads", "hw1_lod" })
+        foreach (string name in new[] { "hw1_02_grnd", "hwblockgroup1", "hollywoodrd", "globalroads", "hw1_lod", "mapdetail" })
             tables.Files[H(name)] = ($"x64g.rpf/{name}.ytd", 100);
         tables.Models[H("hw1_02_grnd2")] = [H("hw1_02_grnd"), H("hw1_lod")];
         tables.Parents[H("hw1_02_grnd")] = H("hwblockgroup1");
@@ -38,9 +38,11 @@ public sealed class GameTexturesTests : IDisposable
         tables.Parents[H("globalroads")] = H("missing_parent");
         tables.Parents[H("missing_parent")] = H("globalroads");
 
-        Assert.Equal(["hw1_02_grnd", "hw1_lod", "hwblockgroup1", "globalroads", "hollywoodrd"],
+        Assert.Equal(["hw1_02_grnd", "hw1_lod", "hwblockgroup1", "globalroads", "hollywoodrd", "mapdetail"],
             tables.For("hw1_02_grnd2.ydr").Select(d => Path.GetFileNameWithoutExtension(d.Path)));
-        Assert.Empty(tables.For("unknown.ydr"));
+        // The detail maps' dictionary is on no chain, and every drawable looks in it, last.
+        Assert.Equal(["x64g.rpf/mapdetail.ytd"], tables.For("unknown.ydr").Select(d => d.Path));
+        Assert.Empty(new GameTextures.Tables().For("unknown.ydr"));
     }
 
     [Fact]

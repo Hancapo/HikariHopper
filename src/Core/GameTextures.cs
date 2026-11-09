@@ -12,7 +12,8 @@ namespace HikariHopper.Core;
 /// <summary>
 /// Where the game looks for a model's textures beyond the model itself: the texture dictionary its archetype names
 /// (the ytyps, and vehicles.meta for vehicles), then that dictionary's parents (gtxd.meta and the maps' manifests), up to
-/// the shared ones in levels/gta5/generic/gtxd.rpf; each dictionary as the game streams it, DLC overrides included.
+/// the shared ones in levels/gta5/generic/gtxd.rpf, and last the detail maps' mapdetail.ytd; each dictionary as the
+/// game streams it, DLC overrides included.
 /// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done once in the
 /// background when the game loads, and what it gives is kept as a few tables, cached on disk until the game's archives
 /// change.
@@ -64,8 +65,8 @@ public sealed class GameTextures
 
     /// <summary>
     /// The dictionaries the game looks in for <paramref name="modelName"/>'s textures (a .ydr, .yft or .ydd name), in
-    /// the order it looks: the ones its archetypes name, then their parents, nearest first; each as a path from the game
-    /// folder, RPFs included. Waits for the tables; none when they couldn't be made, whatever stopped them: the tables
+    /// the order it looks: the ones its archetypes name, then their parents, nearest first, then mapdetail.ytd; each as
+    /// a path from the game folder, RPFs included. Waits for the tables; none when they couldn't be made, whatever stopped them: the tables
     /// only add places to look, so they never stop a model from opening. A failed attempt is kept, not repeated per model.
     /// </summary>
     public async Task<IReadOnlyList<GameDictionary>> DictionariesFor(string modelName)
@@ -146,7 +147,7 @@ public sealed class GameTextures
             if (!Models.TryGetValue(new Hash32(stem).Value, out uint[]? declared)
                 // A vehicle's high-detail model shares the vehicle's archetype.
                 && !(stem.EndsWith("_hi", StringComparison.OrdinalIgnoreCase) && Models.TryGetValue(new Hash32(stem[..^3]).Value, out declared)))
-                return [];
+                declared = [];
             // As FiveFury's ResolveTexture: the declared dictionaries, then their ancestors by how far up they are.
             var order = new List<uint>(declared);
             var depth = new Dictionary<uint, int>();
@@ -162,8 +163,13 @@ public sealed class GameTextures
                 }
             }
             order.AddRange(depth.Where(pair => !declared.Contains(pair.Key)).OrderBy(pair => pair.Value).Select(pair => pair.Key));
+            // Last, the dictionary the game keeps loaded for every drawable's detail maps (ENV_NOISE_*, ENV_SMOOTH_*...):
+            // platform:/textures/mapdetail.ytd, on no archetype's parent chain.
+            order.Add(MapDetail);
             return [.. order.Distinct().Where(Files.ContainsKey).Select(hash => new GameDictionary(Files[hash].Path, Files[hash].Size))];
         }
+
+        private static readonly uint MapDetail = new Hash32("mapdetail").Value;
 
         public static Tables Build(string root, GameTarget target, GameCrypto crypto)
         {

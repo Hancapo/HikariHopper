@@ -25,7 +25,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 32.</summary>
-    public const int UniformBytes = 192;
+    public const int UniformBytes = 224;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -68,6 +68,12 @@ internal sealed class SurfaceMaterial
 
     /// <summary>A vehicle's second diffuse layer (diffuseTexture2): its livery or decals, over the paint.</summary>
     public Texture? DiffuseLayer { get; private init; }
+
+    /// <summary>
+    /// The _detail shaders' detail map: a small tiling noise (the game's are in mapdetail.ytd) that roughens the diffuse,
+    /// the specular and the bumps up close.
+    /// </summary>
+    public Texture? Detail { get; private init; }
 
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps.</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[8];
@@ -148,6 +154,8 @@ internal sealed class SurfaceMaterial
             Dirt = Texture("dirt"),
             DiffuseRamp = Texture("diffuse_ramp"),
             DiffuseLayer = Texture("diffuse2"),
+            // The vehicles' detail shaders are drawn as the rest of their family, without one.
+            Detail = Vehicles.Contains(shader) ? null : Texture("detail"),
             AlphaMode = (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -189,6 +197,16 @@ internal sealed class SurfaceMaterial
         u[15] = result.Vehicle ? 1 : 0;
         // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
         u[41] = 1;
+        // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling), and what
+        // masks it: the specular map's alpha, the diffuse map's for the diffspec shaders, or nothing.
+        if (result.Detail is not null)
+        {
+            float[] detail = Constant("detail_settings", 1.35f, 0, 7.5f, 8);
+            for (int i = 0; i < 4; i++)
+                u[48 + i] = i < detail.Length ? detail[i] : 0;
+            u[52] = 1;
+            u[53] = Declares("textures", "specular") ? 1 : Pattern(shader, "detail_mask") == "diffuse" ? 2 : 0;
+        }
         if (result.Vehicle)
         {
             Vehicle(u);

@@ -1,6 +1,6 @@
 // Drawables, shaded as GTA V shades them. Two families of the game's deferred pixel shaders are rebuilt here, each
 // writing what the game writes to its G-buffer (albedo, normal, specular intensity, power and fresnel, ambient scales):
-//   - PS_DeferredTextured: default, normal, spec, normal_spec, emissive, decal, _tnt and the rest;
+//   - PS_DeferredTextured: default, normal, spec, normal_spec, emissive, decal, _tnt, _detail and the rest;
 //   - PS_DeferredVehicleTextured: vehicle paint, mesh, shuts, tyres, interiors and the rest.
 // That is then lit with the game's directional pass (PS_directional_just_dir) and the core of its ambient one
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
@@ -36,6 +36,10 @@ struct Material {
     spec_place: vec4f,
     // The second diffuse layer's colour and strength (matDiffuseColor2).
     layer: vec4f,
+    // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling in U and V).
+    detail: vec4f,
+    // Has a detail map, what masks it (0 nothing, 1 the specular map's alpha, 2 the diffuse map's).
+    detail_options: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -48,6 +52,7 @@ struct Material {
 @group(1) @binding(7) var dirt_map: texture_2d<f32>;
 @group(1) @binding(8) var diffuse_ramp: texture_2d<f32>;
 @group(1) @binding(9) var diffuse_layer: texture_2d<f32>;
+@group(1) @binding(10) var detail_map: texture_2d<f32>;
 
 struct SurfaceInput {
     @location(0) position: vec3f,
@@ -166,16 +171,36 @@ fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
     // A vehicle's dirt tiles closer as dirtLevelMod.z goes down.
     let dirt = textureSample(dirt_map, surface_sampler, input.uv1 * (2.0 - material.dirt_level.z));
     let layer = textureSample(diffuse_layer, surface_sampler, select(input.uv0, input.uv1, material.spec_place.w > 0.5));
+    // The detail map, read at its tiling and at 3.17 times that.
+    let fine = textureSample(detail_map, surface_sampler, input.uv0 * material.detail.zw);
+    let finer = textureSample(detail_map, surface_sampler, input.uv0 * 3.17 * material.detail.zw);
 
     let mode = u32(material.options.z + 0.5);
     if (mode == 1u && diffuse.a < material.extra.x) {
         discard;
     }
 
+    // PS_DeferredTextured's detail: the two reads' red and green, centred and summed; by detailSettings and the mask,
+    // red darkens the diffuse and the specular, and both nudge the bump map before it is unpacked.
+    var detail_scale = 1.0;
+    var detail_bump = vec2f(0.0);
+    if (material.detail_options.x > 0.5) {
+        let detail = fine.xy - 1.0 + finer.xy;
+        let mask_source = u32(material.detail_options.y + 0.5);
+        var mask = 1.0;
+        if (mask_source == 1u) {
+            mask = specular_sample.a;
+        } else if (mask_source == 2u) {
+            mask = diffuse.a;
+        }
+        detail_scale = 1.0 - material.detail.x * mask * detail.x;
+        detail_bump = material.detail.y * mask * detail;
+    }
+
     // The surface normal: the bump map's XY scaled by bumpiness (at least 0.001) in the tangent frame, Z rebuilt.
     var normal = normalize(input.normal);
     if (material.options.x > 0.5) {
-        let xy = bump.xy * 2.0 - 1.0;
+        let xy = (bump.xy + detail_bump) * 2.0 - 1.0;
         let z = sqrt(abs(1.0 - dot(xy, xy)));
         let scale = max(0.001, material.specular.w);
         normal = normalize(scale * xy.x * input.tangent + scale * xy.y * input.binormal + z * input.normal);
@@ -190,6 +215,8 @@ fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
         surface = vehicle_surface(input, diffuse, specular_sample, dirt, layer, normal, view, to_light);
     } else {
         surface = textured_surface(input, diffuse, specular_sample, normal);
+        surface.base *= detail_scale;
+        surface.intensity *= detail_scale;
     }
     surface.alpha = select(1.0, surface.alpha, mode == 2u);
     let shadow = sun_shadow(input.place, normalize(input.normal));
