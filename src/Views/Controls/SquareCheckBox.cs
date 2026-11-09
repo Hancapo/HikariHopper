@@ -16,6 +16,7 @@ public class SquareCheckBox : CheckBox
 
     private Border? indicator;
     private Border? check;
+    private Border? partial;
     private TextBlock? label;
 
     public string Text
@@ -29,6 +30,7 @@ public class SquareCheckBox : CheckBox
         base.OnApplyTemplate(e);
         indicator = e.NameScope.Find<Border>("PART_Indicator");
         check = e.NameScope.Find<Border>("PART_Check");
+        partial = e.NameScope.Find<Border>("PART_Partial");
         label = e.NameScope.Find<TextBlock>("PART_Text");
         Refresh();
     }
@@ -55,6 +57,8 @@ public class SquareCheckBox : CheckBox
             return;
         indicator.BorderBrush = IsFocused || IsPointerOver ? Ui.Theme.Accent : Ui.Theme.Border;
         check.IsVisible = IsChecked == true;
+        if (partial is not null)
+            partial.IsVisible = IsChecked is null;
         label.Foreground = IsEffectivelyEnabled ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
     }
 }

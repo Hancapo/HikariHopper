@@ -66,7 +66,8 @@
                                 AutomationProperties.Name="Close the 3D viewer" />
           </Panel>
 
-          <!-- A drawable's toolbar: whether the sun casts shadows; and, on the right, the camera back on the model. -->
+          <!-- A drawable's toolbar: the parts panel and the level of detail; whether the sun casts shadows; and, on
+               the right, the camera back on the model. -->
           <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
                  IsVisible="False">
             <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
@@ -79,6 +80,25 @@
                 </Border>
               </StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="6">
+                <Border Classes="well">
+                  <StackPanel>
+                    <c:ChromeToolButton Name="PartsButton" Classes="tool" IconKind="parts" AutomationProperties.Name="Parts" />
+                  </StackPanel>
+                </Border>
+                <!-- The level of detail, which opens the levels the drawable has. -->
+                <Border Classes="well">
+                  <Panel>
+                    <c:ChromeToolButton Name="LodButton" Classes="tool" Width="92" Padding="16,0,12,0"
+                                        AutomationProperties.Name="Level of detail" />
+                    <c:LucideIcon IconName="layers" Width="12" Height="12" Margin="8,0,0,0" Weight="1.6"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                    <c:LucideIcon IconName="chevron-down" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                  </Panel>
+                </Border>
+                <Border Width="1" Height="20" Margin="2,0" VerticalAlignment="Center" Background="{x:Static ui:Theme.BorderHard}" />
                 <Border Classes="well">
                   <StackPanel>
                     <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
@@ -123,6 +143,12 @@
           <!-- What the colours mean: the materials of a collision, or a navmesh's ground and what is drawn on it. -->
           <Border Name="LegendBar" DockPanel.Dock="Bottom" IsVisible="False" Background="{x:Static ui:Theme.ChromeBg}" Padding="10,6,10,4">
             <WrapPanel Name="LegendPanel" ItemSpacing="14" LineSpacing="4" />
+          </Border>
+
+          <!-- The parts panel, beside the viewport. -->
+          <Border Name="PartsSide" DockPanel.Dock="Left" Width="236" IsVisible="False"
+                  BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,1,0">
+            <v:PartsPanel Name="Parts" />
           </Border>
 
           <v:ViewportHost Name="Viewport" />

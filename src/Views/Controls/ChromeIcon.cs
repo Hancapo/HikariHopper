@@ -52,6 +52,7 @@ public class ChromeIcon : Control
         ["folder"] = "folder",
         ["house"] = "house",
         ["sun"] = "sun",
+        ["parts"] = "panel-left",
         ["frame"] = "focus",
     };
 

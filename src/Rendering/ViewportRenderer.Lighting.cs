@@ -333,9 +333,9 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetBindGroup(0, shadowGroup!);
         pass.SetVertexBuffer(0, surfaceVertices!);
         pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
-        foreach (var (part, _, mode, _) in surfaceParts)
-            if (mode != AlphaMode.Blend)
-                pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
+        for (int i = 0; i < surfaceParts.Length; i++)
+            if (surfaceParts[i].Mode != AlphaMode.Blend && partsShown[i])
+                pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
         pass.End();
     }
 

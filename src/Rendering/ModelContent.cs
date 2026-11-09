@@ -31,9 +31,10 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     {
         IReadOnlyList<SceneModel>? models = Path.GetExtension(name).ToLowerInvariant() switch
         {
-            ".ydr" => [new SceneModel(name, Ydr.Read(data).Drawable, Matrix4x4.Identity)],
-            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel($"0x{entry.Name.Value:X8}", entry.Drawable, Matrix4x4.Identity))],
-            ".yft" => FragmentModels.Of(Yft.Read(data)),
+            ".ydr" => [new SceneModel(Path.GetFileNameWithoutExtension(name), Ydr.Read(data).Drawable, Matrix4x4.Identity)],
+            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel(entry.Drawable.Name is { Length: > 0 } own ? own : $"0x{entry.Name.Value:X8}",
+                entry.Drawable, Matrix4x4.Identity))],
+            ".yft" => FragmentModels.Of(Yft.Read(data), Path.GetFileNameWithoutExtension(name)),
             _ => null,
         };
         if (models is not null)

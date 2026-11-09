@@ -370,6 +370,24 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.Viewport.Shadows);
         // A key the toolbar doesn't use is left alone.
         Assert.False(viewer.Shortcut('W'));
+        // The parts panel shows the drawable, and P hides and shows it; the drawable has only the high level, so 2
+        // changes nothing.
+        Assert.True(viewer.PartsSide.IsVisible);
+        Assert.Equal("1 / 1", viewer.Parts.CountText);
+        // The drawable, open, and its one geometry under it.
+        Assert.Equal(["tri", "default"], viewer.Parts.Rows.Select(row => row.Node.Name));
+        Assert.True(viewer.Shortcut('P'));
+        Assert.False(viewer.PartsSide.IsVisible);
+        Assert.True(viewer.Shortcut('P'));
+        Assert.True(viewer.PartsSide.IsVisible);
+        Assert.Equal("High", viewer.LodButton.Text);
+        viewer.Shortcut('2');
+        Assert.Equal(0, viewer.Visibility!.Lod);
+        // Hiding the drawable leaves nothing counted.
+        viewer.Parts.Flip(viewer.Parts.Rows[0].Node);
+        Assert.Equal(("0", "0", "0"), (viewer.TrianglesText.Text, viewer.VerticesText.Text, viewer.EdgesText.Text));
+        Assert.Equal("0 / 1", viewer.Parts.CountText);
+        viewer.Parts.Flip(viewer.Parts.Rows[0].Node);
 
         viewer.SetHours(18.25f);
         Assert.Equal(18.25f, viewer.Hours);
@@ -389,6 +407,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.SunBar.IsVisible);
         Assert.False(viewer.Toolbar.IsVisible);
         Assert.False(viewer.StatsPanel.IsVisible);
+        Assert.False(viewer.PartsSide.IsVisible);
         Assert.False(viewer.Shortcut('H'));
     }
 

@@ -15,7 +15,12 @@
           <Panel Margin="{TemplateBinding Padding}">
             <Border Name="PART_Indicator" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center"
                     Background="{x:Static ui:Theme.InsetBg}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.KeyCapCorner}">
-              <Border Name="PART_Check" Margin="3" CornerRadius="2" Background="{x:Static ui:Theme.Accent}" />
+              <Panel>
+                <Border Name="PART_Check" Margin="3" CornerRadius="2" Background="{x:Static ui:Theme.Accent}" />
+                <!-- Partly: some of what it stands for is on. -->
+                <Border Name="PART_Partial" Height="2" Margin="3,0" CornerRadius="1" VerticalAlignment="Center"
+                        Background="{x:Static ui:Theme.Accent}" IsVisible="False" />
+              </Panel>
             </Border>
             <TextBlock Name="PART_Text" Text="{TemplateBinding Text}" Margin="24,0,0,0"
                        FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
