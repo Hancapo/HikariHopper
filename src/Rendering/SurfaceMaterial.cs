@@ -24,7 +24,7 @@ internal enum AlphaMode
 /// </summary>
 internal sealed class SurfaceMaterial
 {
-    /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 32.</summary>
+    /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
     public const int UniformBytes = 224;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
@@ -44,7 +44,7 @@ internal sealed class SurfaceMaterial
 
     /// <summary>
     /// Whether it is a terrain shader, drawn with terrain.wgsl: those the shader rebuilds, and the rest of the terrain
-    /// shaders without what sets them apart (parallax, tint textures).
+    /// shaders (the tint textures' tt, ttn and uber, which no map drawable uses) without what sets them apart.
     /// </summary>
     public bool Terrain { get; private init; }
 
@@ -75,8 +75,8 @@ internal sealed class SurfaceMaterial
     /// </summary>
     public Texture? Detail { get; private init; }
 
-    /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps.</summary>
-    public Texture?[] Layers { get; private init; } = new Texture?[8];
+    /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
+    public Texture?[] Layers { get; private init; } = new Texture?[12];
 
     /// <summary>A terrain shader's lookup map, which holds the layer weights on the second UV set (_cm, _2tex_blend).</summary>
     public Texture? Lookup { get; private init; }
@@ -145,7 +145,7 @@ internal sealed class SurfaceMaterial
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
-            Layers = [.. Enumerable.Range(0, 4).Select(i => Texture($"layer{i}")), .. Enumerable.Range(0, 4).Select(i => Texture($"layer_bump{i}"))],
+            Layers = [.. new[] { "layer", "layer_bump", "layer_height" }.SelectMany(role => Enumerable.Range(0, 4).Select(i => Texture($"{role}{i}")))],
             Lookup = Texture("lookup"),
             Diffuse = Texture("diffuse"),
             Normal = Texture("normal"),
@@ -215,7 +215,9 @@ internal sealed class SurfaceMaterial
         return result;
 
         // The terrain shaders' PS_TexturedDeferred: specularIntensityMult (squared by the program), specularFalloffMult and
-        // a fixed fresnel of 0.98; the layer weights from the vertex, the lookup map or both; no bumps for the _lod shaders.
+        // a fixed fresnel of 0.98; the layer weights from the vertex, the lookup map or both; no bumps for the _lod shaders;
+        // layers 1 to 3 on the second UV set for _2tex; the bump self-shadow; the _pxm shaders' parallax, by each layer's
+        // height scale and bias, and the _spm ones' specular map.
         void TerrainUniforms(Span<float> v)
         {
             v[0] = Constant("specular_intensity", 0)[0];
@@ -226,6 +228,24 @@ internal sealed class SurfaceMaterial
             v[5] = Enumerable.Range(0, 4).Any(i => Declares("textures", $"layer_bump{i}")) ? 1 : 0;
             v[6] = result.TintPalette is not null ? 1 : 0;
             v[7] = Constant("tint_palette_selector", 0)[0];
+            v[8] = Pattern(shader, "terrain_layers") == "second" ? 1 : 0;
+            v[9] = Constant("bump_self_shadow", .3f)[0];
+            bool parallax = Pattern(shader, "terrain_parallax") == "true";
+            v[10] = parallax ? 1 : 0;
+            v[11] = parallax ? Constant("parallax_self_shadow", .95f)[0] : 0;
+            for (int i = 0; i < 4; i++)
+            {
+                v[12 + i] = parallax ? Constant($"height_scale{i}", .03f)[0] : 0;
+                v[16 + i] = parallax ? Constant($"height_bias{i}", .015f)[0] : 0;
+            }
+            bool specularMap = Pattern(shader, "terrain_spec_map") == "true";
+            v[20] = specularMap ? 1 : 0;
+            v[21] = Constant("spec_map_intensity", 1)[0];
+            v[22] = Constant("spec_intensity_adjust", 1)[0];
+            v[23] = Constant("spec_map_falloff", 48)[0];
+            v[24] = Constant("spec_falloff_adjust", 1)[0];
+            // globalHeightScale, which the game leaves at one.
+            v[25] = 1;
         }
 
         // What the shader's program writes to the G-buffer's specular (materials.json's vehicle_specular).

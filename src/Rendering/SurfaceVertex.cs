@@ -10,10 +10,15 @@ namespace HikariHopper.Rendering;
 /// <param name="Tangent">The tangent, with the binormal's handedness in W (the binormal is cross(T, N) · W).</param>
 /// <param name="Colour0">RGBA, R first: natural ambient, artificial ambient, emissive mask, alpha.</param>
 /// <param name="Colour1">RGBA, R first; tints and blends for the shaders that use it.</param>
+/// <param name="Uv2">
+/// The vertex's TexCoord3, which the terrain shaders with parallax (_pxm) read as their parallax controls: the set after
+/// the ones they map textures with, as the game binds a layout's sets in order.
+/// </param>
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-internal readonly record struct SurfaceVertex(Vector3 Position, Vector3 Normal, Vector4 Tangent, Vector2 Uv0, Vector2 Uv1, uint Colour0, uint Colour1)
+internal readonly record struct SurfaceVertex(Vector3 Position, Vector3 Normal, Vector4 Tangent, Vector2 Uv0, Vector2 Uv1, uint Colour0, uint Colour1,
+    Vector2 Uv2 = default)
 {
-    public const int Size = 64;
+    public const int Size = 72;
 
     /// <summary>A colour as four bytes, R first.</summary>
     public static uint Pack(Vector4 colour)

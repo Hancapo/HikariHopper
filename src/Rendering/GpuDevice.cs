@@ -91,6 +91,9 @@ internal sealed class GpuDevice
     /// <summary>A compute pipeline compiled once per key.</summary>
     internal ComputePipeline Compute(string key, Func<ComputePipeline> create) => (ComputePipeline)pipelines.GetOrAdd(key, _ => create());
 
+    /// <summary>Forgets the compiled pipelines, so the next viewport compiles them again; for tests.</summary>
+    internal void ForgetPipelines() => pipelines.Clear();
+
     /// <summary>Whether a pipeline is compiled already, for tests.</summary>
     internal bool Compiled(string key) => pipelines.ContainsKey(key);
 

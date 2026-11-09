@@ -28,4 +28,30 @@ public sealed class GpuDeviceTests
         Assert.Same(GpuDevice.WarmUp(), GpuDevice.WarmUp());
         Assert.Same(gpu, GpuDevice.Shared);
     }
+
+    [Fact]
+    public void Every_viewport_shader_and_pipeline_is_valid()
+    {
+        GpuDevice gpu;
+        try
+        {
+            gpu = GpuDevice.Shared;
+        }
+        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
+            or WebGpuSharp.WebGPUException)
+        {
+            Assert.Skip($"No GPU to test on: {error.Message}");
+            return;
+        }
+        // A shader that doesn't compile still makes a pipeline, an invalid one; the device only says so in an error scope.
+        (WebGpuSharp.ErrorType Type, string Message) result;
+        lock (gpu.Gate)
+        {
+            gpu.ForgetPipelines();
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            new ViewportRenderer(gpu).Dispose();
+            result = gpu.Device.PopErrorScopeSync(10_000_000_000);
+        }
+        Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
+    }
 }

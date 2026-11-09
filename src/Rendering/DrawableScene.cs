@@ -158,6 +158,7 @@ internal sealed class DrawableScene
             Element(VertexSemantic.TexCoord0, default).AsVector2(),
             Element(VertexSemantic.TexCoord1, default).AsVector2(),
             SurfaceVertex.Pack(Element(VertexSemantic.Color0, Vector4.One)),
-            SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.Zero)));
+            SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.Zero)),
+            Element(VertexSemantic.TexCoord3, default).AsVector2());
     }
 }

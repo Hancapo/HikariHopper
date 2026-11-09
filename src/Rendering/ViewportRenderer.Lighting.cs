@@ -76,10 +76,11 @@ internal sealed unsafe partial class ViewportRenderer
         {
             Entries =
             [
+                // The terrain's vertices read the sun's direction as well.
                 new BindGroupLayoutEntry
                 {
                     Binding = 0,
-                    Visibility = ShaderStage.Fragment,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = LightBytes },
                 },
                 new BindGroupLayoutEntry

@@ -63,7 +63,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Map(7), Map(8), Map(9), Map(10),
             ],
         });
-        // Terrain: its four layers' diffuse and bump maps, the lookup map and the tint palette.
+        // Terrain: its four layers' diffuse and bump maps, the lookup map, the tint palette and the layers' height maps.
         terrainLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -83,6 +83,7 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 12, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                Map(13), Map(14), Map(15), Map(16),
             ],
         });
         PipelineLayout Layout(BindGroupLayout material, bool reflected) => device.CreatePipelineLayout(new PipelineLayoutDescriptor
@@ -120,6 +121,7 @@ internal sealed unsafe partial class ViewportRenderer
                             new VertexAttribute { ShaderLocation = 4, Offset = 48, Format = VertexFormat.Float32x2 },
                             new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
                             new VertexAttribute { ShaderLocation = 6, Offset = 60, Format = VertexFormat.Unorm8x4 },
+                            new VertexAttribute { ShaderLocation = 7, Offset = 64, Format = VertexFormat.Float32x2 },
                         },
                     },
                 },
@@ -266,15 +268,15 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     /// <summary>The bytes of terrain.wgsl's Terrain uniform, the start of the material's.</summary>
-    private const int TerrainUniformBytes = 32;
+    private const int TerrainUniformBytes = 112;
 
     private BindGroup TerrainGroup(SurfaceMaterial material)
     {
         Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         materialBuffers.Add(uniforms);
         queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
-        // A missing layer reads white, as a missing diffuse map does elsewhere, and a missing bump map flat; without a
-        // lookup map every weight is nothing, which is all the first layer.
+        // A missing layer reads white, as a missing diffuse map does elsewhere, a missing bump map flat and a missing
+        // height map as high as it goes; without a lookup map every weight is nothing, which is all the first layer.
         var entries = new List<BindGroupEntry>
         {
             new() { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
@@ -285,6 +287,8 @@ internal sealed unsafe partial class ViewportRenderer
         entries.Add(new BindGroupEntry { Binding = 10, TextureView = View(material.Lookup) ?? clear! });
         entries.Add(new BindGroupEntry { Binding = 11, TextureView = View(material.TintPalette) ?? white! });
         entries.Add(new BindGroupEntry { Binding = 12, Sampler = paletteSampler! });
+        for (int i = 0; i < 4; i++)
+            entries.Add(new BindGroupEntry { Binding = (uint)(13 + i), TextureView = View(material.Layers[8 + i]) ?? white! });
         return device.CreateBindGroup(new BindGroupDescriptor { Layout = terrainLayout!, Entries = [.. entries] });
     }
 
