@@ -191,6 +191,31 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task A_drawable_found_by_search_finds_its_textures_as_it_does_from_its_folder()
+    {
+        ExplorerViewModel bridge = Game();
+        SaveArchive(Path.Combine(Work, "props.rpf"),
+            ("stuff/prop_seat.ydr", "model"), ("stuff/prop_seat.ytd", "named"), ("stuff/b_shared.ytd", "b"), ("stuff/a_shared.ytd", "a"),
+            ("other/c_elsewhere.ytd", "c"));
+        ModelFile? opened = null;
+        bridge.ModelFileOpened += (_, file) => opened = file;
+        bridge.BeginSearch();
+        bridge.SetSearchText("prop_seat.ydr");
+        await Searched(bridge);
+
+        bridge.ActivateEntry(Row(bridge, "props.rpf/stuff/prop_seat.ydr"));
+        Assert.True(bridge.IsSearching);
+        Assert.NotNull(opened);
+        // The dictionary named for it, read with it; the folder's others, in name order, each read where it lives when
+        // the viewer reaches it; nothing from another folder.
+        Assert.Equal(Bytes("named"), Assert.Single(opened.Dictionaries));
+        Assert.Equal(["a_shared.ytd", "b_shared.ytd"], opened.Nearby.Select(dictionary => dictionary.Name));
+        Assert.Equal(Bytes("b"), await Task.Run(() => opened.Nearby[1].Read()));
+        // Its embedded textures open from the viewer too.
+        Assert.NotNull(opened.OpenTextures);
+    }
+
+    [AvaloniaFact]
     public async Task OpeningAnRpfResultBrowsesItInANewTab()
     {
         MakeGame();

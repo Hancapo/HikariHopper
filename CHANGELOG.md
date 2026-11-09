@@ -35,6 +35,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A model opened from search results in the 3D viewer finds its textures as it does from its folder, and its textures button works. ([#113](https://github.com/Hancapo/HikariHopper/pull/113))
+
 ### Removed
 
 ## [0.0.5] - 2026-11-06
