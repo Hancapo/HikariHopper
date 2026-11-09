@@ -62,12 +62,46 @@ struct SurfaceOutput {
     @location(6) tint: vec3f,
     // The second UV set: a vehicle's dirt is tiled over it.
     @location(7) uv1: vec2f,
+    // Drawn into the reflection map: how far into the hemisphere being drawn the point is; behind it below zero.
+    @location(8) hemisphere: f32,
 };
+
+// The camera's reflection map being drawn (ViewportRenderer.Reflections.cs): the eye relative to the scene's origin,
+// with the depth range in w, and the hemisphere, +1 upper or -1 lower, in x.
+struct ReflectionView {
+    eye: vec4f,
+    side: vec4f,
+};
+
+@group(3) @binding(0) var<uniform> reflection_view: ReflectionView;
 
 @vertex
 fn vs_surface(input: SurfaceInput) -> SurfaceOutput {
-    var output: SurfaceOutput;
+    var output = surface_vertex(input);
     output.position = scene.view_projection * vec4f(input.position, 1.0);
+    return output;
+}
+
+// A drawable into the reflection map, as GTA draws its world into its own: a paraboloid projection of the
+// hemisphere around the eye, into that hemisphere's half of the map (light.wgsl's paraboloid_uv, within the half's
+// viewport), with the distance as depth.
+@vertex
+fn vs_surface_paraboloid(input: SurfaceInput) -> SurfaceOutput {
+    var output = surface_vertex(input);
+    let offset = input.position - reflection_view.eye.xyz;
+    let distance = max(length(offset), 1e-5);
+    let d = offset / distance;
+    let side = reflection_view.side.x;
+    let z = d.z * side;
+    let p = d.xy / max(1.0 + z, 1e-3);
+    output.position = vec4f(p.x * side, p.y, saturate(distance / reflection_view.eye.w), 1.0);
+    output.hemisphere = z;
+    return output;
+}
+
+fn surface_vertex(input: SurfaceInput) -> SurfaceOutput {
+    var output: SurfaceOutput;
+    output.hemisphere = 1.0;
     output.place = input.position;
     // As VS_Transform: the normal normalised, the tangent as it is, the binormal cross(T, N) by the handedness.
     output.normal = normalize(input.normal);
@@ -107,6 +141,21 @@ struct Surface {
 
 @fragment
 fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+    return shade_surface(input, front);
+}
+
+// Into the reflection map: the paraboloid mirrors the winding, and what is behind the hemisphere is left out (after
+// shading, which needs uniform control flow).
+@fragment
+fn fs_surface_reflected(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+    let colour = shade_surface(input, !front);
+    if (input.hemisphere < 0.0) {
+        discard;
+    }
+    return colour;
+}
+
+fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
     // Every map is sampled before anything is decided, as derivatives need uniform control flow.
     let diffuse = textureSample(diffuse_map, surface_sampler, input.uv0);
     let bump = textureSample(normal_map, surface_sampler, input.uv0);
@@ -270,6 +319,9 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     let scale = 1.0 - multiplier * (1.0 - saturate(surface.natural));
     let ambient = albedo * kept * gta_ambient(normal) * scale * scale;
 
+    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is.
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * scale * scale;
+
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
     var glow = vec3f(0.0);
@@ -277,5 +329,5 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
         let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w);
         glow = albedo * stored * 16.0 * n_dot_v;
     }
-    return sun + ambient + glow;
+    return sun + ambient + reflection + glow;
 }

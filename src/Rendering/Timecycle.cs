@@ -32,7 +32,7 @@ internal static class Timecycle
     private static readonly Dictionary<string, float[]> Values;
 
     // visualsettings.dat: the curve from the scene's luminance to an exposure in stops, in both editions.
-    private const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
+    internal const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
 
     /// <summary>
     /// visualsettings.dat's filmic curves, bright and dark, and the exposures they belong to: the timecycle does not
@@ -42,8 +42,8 @@ internal static class Timecycle
     internal const float BrightExposure = -.5f, DarkExposure = 3;
 
     /// <summary>
-    /// The albedo the exposure is measured on: a mid-grey map, squared as GTA's lighting reads it. The game measures
-    /// the whole frame; the viewer has no world around the model, so it measures open ground under this light.
+    /// The albedo of the ground the viewer puts below the horizon, where the game has its world: a mid-grey map,
+    /// squared as GTA's lighting reads it.
     /// </summary>
     internal const float ReferenceAlbedo = .25f;
 
@@ -56,8 +56,11 @@ internal static class Timecycle
             .ToDictionary(field => field.Name, field => field.Value.EnumerateArray().Select(value => value.GetSingle()).ToArray());
     }
 
-    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
-    internal static TimecycleLight Evaluate(float hours)
+    /// <summary>
+    /// The timecycle at <paramref name="hours"/> after midnight, each field interpolated between the keyframes either
+    /// side, as the game blends them; any finite value wraps to the day.
+    /// </summary>
+    internal static TimecycleSample Sample(float hours)
     {
         if (!float.IsFinite(hours))
             throw new ArgumentOutOfRangeException(nameof(hours));
@@ -70,9 +73,18 @@ internal static class Timecycle
             index--;
         int next = (index + 1) % Hours.Length;
         float end = next == 0 ? 24 : Hours[next];
-        float t = (hours - Hours[index]) / (end - Hours[index]);
-        float Get(string name) => float.Lerp(Values[name][index], Values[name][next], t);
-        Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));
+        return new(index, next, (hours - Hours[index]) / (end - Hours[index]));
+    }
+
+    /// <summary>One field of the timecycle between two keyframes.</summary>
+    internal static float Field(string name, int index, int next, float t) => float.Lerp(Values[name][index], Values[name][next], t);
+
+    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
+    internal static TimecycleLight Evaluate(float hours)
+    {
+        TimecycleSample sample = Sample(hours);
+        float Get(string name) => sample.Get(name);
+        Vector3 Colour(string name) => sample.Colour(name);
 
         float natural = Get("natural_ambient_multiplier");
         float occlusion = Get("light_amb_occ_mult");
@@ -121,19 +133,34 @@ internal static class Timecycle
         return Math.Clamp(stops, light.ExposureMin, light.ExposureMax);
     }
 
-    /// <summary>The exposure GTA settles on for open ground of the reference albedo under this light.</summary>
-    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight)
+    /// <summary>
+    /// The stand-in ground's radiance: open ground of the reference albedo under this light, lit as GTA lights it
+    /// (the directional light, the natural ambient from above and the directional ambient).
+    /// </summary>
+    internal static Vector3 GroundRadiance(in TimecycleLight light, Vector3 towardsLight)
     {
         Vector3 up = Vector3.UnitZ;
         Vector3 irradiance = light.Directional * MathF.Max(towardsLight.Z, 0) + NaturalAmbient(light, up)
             + light.DirectionalAmbient * MathF.Max(Vector3.Dot(DirectionalAmbientDirection(light, towardsLight), up), 0);
-        return ExposureFor(ReferenceAlbedo * Luminance(irradiance), light);
+        return ReferenceAlbedo * irradiance;
     }
+
+    /// <summary>The exposure GTA settles on for a frame of nothing but that ground.</summary>
+    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight) => ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
 
     /// <summary>The filmic curve for this exposure: bright at or below the bright exposure, dark at or above the dark.</summary>
     internal static Filmic FilmicFor(float stops) => Filmic.Lerp(Bright, Dark, Math.Clamp((stops - BrightExposure) / (DarkExposure - BrightExposure), 0, 1));
 
     internal static float Luminance(Vector3 colour) => Vector3.Dot(colour, new(.2125f, .7154f, .0721f));
+}
+
+/// <summary>The timecycle between two keyframes, a fraction of the way from one to the next.</summary>
+internal readonly record struct TimecycleSample(int Index, int Next, float T)
+{
+    internal float Get(string name) => Timecycle.Field(name, Index, Next, T);
+
+    /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
+    internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));
 }
 
 /// <summary>GTA's filmic tone curve (Hable's), as PS_Composite applies it: A to F shape it, W is the white point.</summary>

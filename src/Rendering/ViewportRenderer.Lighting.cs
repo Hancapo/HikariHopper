@@ -9,15 +9,16 @@ namespace HikariHopper.Rendering;
 // Drawables' light: GTA V's timecycle at the viewer's time of day, the directional light's shadow (after RedFury's),
 // and drawables drawn in HDR, then exposed and tone-mapped as the game's post-process does, over the backdrop.
 // Collisions, navmeshes and the backdrop keep their own flat shading, in the theme's colours.
-//   shadow map -> backdrop and lines to the display -> drawables to HDR -> tone map over them
+//   reflection map (when the time changes) -> shadow map -> backdrop and lines to the display -> drawables to HDR ->
+//   the frame's mean luminance -> tone map over them, exposed for it
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 208, ShadowViewBytes = 64;
+    private const int LightBytes = 288, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
-    private BindGroup? lightGroup;
+    private BindGroup? lightGroup, skyLightGroup;
     private Buffer? lightBuffer;
     private Texture? shadowMap;
     private TextureView? shadowView;
@@ -33,7 +34,6 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroup? tonemapGroup;
     private KeyLight key;
     private TimecycleLight cycle;
-    private float exposureStops;
     private Matrix4x4 shadowMatrix;
     private float shadowTexel, shadowDepth;
     // The radius the shadow is fitted to, for refitting it when the sun moves; none without a drawable.
@@ -42,7 +42,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
     public float Hours { get; private set; } = DayCycle.DefaultHours;
 
-    /// <summary>Stops added to the exposure the game's post-process settles on for this time of day.</summary>
+    /// <summary>Stops added to the exposure the game's post-process works out from the frame.</summary>
     public float Exposure { get; set; }
 
     private void CreateLighting()
@@ -71,6 +71,7 @@ internal sealed unsafe partial class ViewportRenderer
             Compare = CompareFunction.LessEqual,
             MaxAnisotropy = 1,
         })!;
+        CreateReflections();
         lightLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -88,9 +89,17 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 3,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
-        lightGroup = device.CreateBindGroup(new BindGroupDescriptor
+        // Drawables reflect the scene map; drawn into it, they reflect the sky map.
+        BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = lightLayout,
             Entries =
@@ -98,8 +107,12 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 0, Buffer = lightBuffer, Size = LightBytes },
                 new BindGroupEntry { Binding = 1, TextureView = shadowView },
                 new BindGroupEntry { Binding = 2, Sampler = compare },
+                new BindGroupEntry { Binding = 3, TextureView = reflections },
+                new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
             ],
         });
+        lightGroup = LightGroup(sceneMap!.View);
+        skyLightGroup = LightGroup(skyMap!.View);
 
         // The shadow map: depth only, from the sun, nearer is smaller.
         BindGroupLayout shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -182,8 +195,15 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
                 },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 1,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = MeasuredBytes },
+                },
             ],
         });
+        CreateExposure();
         ShaderModule tonemapShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("tonemap.wgsl") });
         tonemapPipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
@@ -217,11 +237,11 @@ internal sealed unsafe partial class ViewportRenderer
         // Evaluated first: an hour that isn't a number throws and changes nothing.
         key = DayCycle.Evaluate(hours);
         cycle = Timecycle.Evaluate(hours);
-        exposureStops = Timecycle.Exposure(cycle, key.Direction);
         Hours = hours;
         // A drawable's shadow follows the sun.
         if (shadowRadius > 0)
             FitShadow(shadowRadius);
+        DrawReflections(hours);
     }
 
     /// <summary>The HDR target drawables are drawn to, sized to the window, and the tone map's view of it.</summary>
@@ -241,8 +261,13 @@ internal sealed unsafe partial class ViewportRenderer
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = tonemapLayout!,
-            Entries = [new BindGroupEntry { Binding = 0, TextureView = hdrView }],
+            Entries =
+            [
+                new BindGroupEntry { Binding = 0, TextureView = hdrView },
+                new BindGroupEntry { Binding = 1, Buffer = measured!, Size = MeasuredBytes },
+            ],
         });
+        CreateExposureGroup();
     }
 
     /// <summary>
@@ -267,18 +292,22 @@ internal sealed unsafe partial class ViewportRenderer
     {
         Span<float> values = stackalloc float[LightBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
-        float stops = exposureStops + Exposure;
-        Filmic filmic = Timecycle.FilmicFor(stops);
-        vectors[0] = new Vector4(key.Direction, MathF.Pow(2, stops));
+        vectors[0] = new Vector4(key.Direction, 0);
         vectors[1] = new Vector4(cycle.Directional, 0);
         vectors[2] = new Vector4(cycle.NaturalDown, cycle.DownWrap);
         vectors[3] = new Vector4(cycle.NaturalUp, cycle.OcclusionProp);
         vectors[4] = new Vector4(cycle.DirectionalAmbient, cycle.OcclusionVehicle);
         vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
-        vectors[6] = new Vector4(filmic.A, filmic.B, filmic.C, filmic.D);
-        vectors[7] = new Vector4(filmic.E, filmic.F, filmic.W, 1 / filmic.Curve(filmic.W));
-        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[32..48]), in shadowMatrix);
-        vectors[12] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        vectors[6] = new Vector4(Timecycle.ExposureScale, Timecycle.ExposurePower, Timecycle.ExposureOffset, cycle.Exposure + Exposure);
+        vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, Timecycle.BrightExposure, Timecycle.DarkExposure);
+        Filmic bright = Timecycle.Bright, dark = Timecycle.Dark;
+        vectors[8] = new Vector4(bright.A, bright.B, bright.C, bright.D);
+        vectors[9] = new Vector4(bright.E, bright.F, bright.W, 0);
+        vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
+        vectors[11] = new Vector4(dark.E, dark.F, dark.W, 0);
+        vectors[12] = new Vector4(ReflectionMips, 0, 0, 0);
+        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[52..68]), in shadowMatrix);
+        vectors[17] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
