@@ -431,6 +431,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Shortcut('B'));
         Assert.False(viewer.Shortcut('C'));
         Assert.False(viewer.Shortcut('L'));
+        Assert.False(viewer.SolidButton.IsEnabled);
+        Assert.False(viewer.Shortcut('K'));
         // Not a fragment with a damaged state: its button is off, and X does nothing.
         Assert.False(viewer.DamagedButton.IsEnabled);
         Assert.False(viewer.Shortcut('X'));
@@ -547,6 +549,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.BoundsButton.Sunken);
         Assert.True(viewer.Shortcut('c'));
         Assert.False(viewer.BoundsButton.Sunken);
+        // The same collision drawn solid, with K, on its own.
+        Assert.True(viewer.SolidButton.IsEnabled);
+        Assert.True(viewer.Shortcut('K'));
+        Assert.True(viewer.OverlayShown(Views.ModelViewer.Overlay.Solid));
+        Assert.True(viewer.SolidButton.Sunken);
+        Assert.False(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
+        Assert.True(viewer.Shortcut('k'));
+        Assert.False(viewer.SolidButton.Sunken);
     }
 
     [AvaloniaFact]

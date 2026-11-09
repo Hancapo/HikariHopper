@@ -53,6 +53,10 @@ public sealed class DrawableOverlayTests
         ViewportSegment[] bounds = Build().Bounds;
         // A box of twelve triangles: its twelve edges and a diagonal across each face.
         Assert.Equal(18, bounds.Length);
+        // And the same twelve triangles, solid, where the drawable is placed.
+        ViewportVertex[] solid = Build().Solid;
+        Assert.Equal(12 * 3, solid.Length);
+        Assert.All(solid, corner => Assert.InRange(corner.Position.X + Origin.X, 4 - 1e-4f, 6 + 1e-4f));
         Assert.All(bounds, segment =>
         {
             Assert.Equal(DrawableOverlays.BoundColour, segment.Colour);

@@ -44,6 +44,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private bool shadows = true;
     private bool[]? partsShown;
     private ViewportSegment[] overlays = [];
+    private ViewportVertex[] solid = [];
     private bool free;
     private long flown;
 
@@ -94,6 +95,13 @@ internal sealed partial class ViewportHost : NativeControlHost
             SetFocus(hwnd);
     }
 
+    /// <summary>Draws these triangles over the drawable, its collision, in place of any before.</summary>
+    internal void ShowSolid(ViewportVertex[] triangles)
+    {
+        solid = triangles;
+        renderer?.ShowSolid(triangles);
+    }
+
     /// <summary>Draws these lines over the drawable (its skeleton, bounds or lights), in place of any before.</summary>
     internal void ShowOverlays(ViewportSegment[] segments)
     {
@@ -135,6 +143,7 @@ internal sealed partial class ViewportHost : NativeControlHost
         surfaces = drawable;
         partsShown = null;
         overlays = [];
+        solid = [];
         shown = null;
         renderer?.Show(drawable);
     }
@@ -185,6 +194,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 if (partsShown is not null)
                     renderer.ShowParts(partsShown);
                 renderer.ShowOverlays(overlays);
+                renderer.ShowSolid(solid);
             }
             else
                 renderer.Show(shown);

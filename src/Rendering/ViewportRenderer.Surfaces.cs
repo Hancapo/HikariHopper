@@ -246,6 +246,7 @@ internal sealed unsafe partial class ViewportRenderer
         materialBuffers.Clear();
         surfaceVertices = surfaceIndices = null;
         ShowOverlays([]);
+        ShowSolid([]);
         shadowRadius = 0;
         surfaceParts = [];
         partsShown = [];
