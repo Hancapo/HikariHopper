@@ -58,17 +58,33 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (file.Data.Length == 0)
             return;
-        (ModelContent? content, string? failure) = await Task.Run(() => Read(file));
+        // The game's dictionaries for it, once the game's texture tables are ready (worked out when the game loads).
+        IReadOnlyList<NearbyDictionary> game = [];
+        if (file.GameDictionaries is { } pending)
+        {
+            if (!pending.IsCompleted)
+                StatusText.Text = $"Finding the game's textures for {file.Name}…";
+            try
+            {
+                game = await pending;
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException
+                or NotSupportedException or UnauthorizedAccessException)
+            {
+            }
+            StatusText.Text = $"Reading {file.Name}…";
+        }
+        (ModelContent? content, string? failure) = await Task.Run(() => Read(file, game));
         Location = content is not null ? Locate(content) : failure!;
         if (started)
             StatusText.Text = Location;
     }
 
-    private static (ModelContent? Content, string? Failure) Read(ModelFile file)
+    private static (ModelContent? Content, string? Failure) Read(ModelFile file, IReadOnlyList<NearbyDictionary> game)
     {
         try
         {
-            return (ModelContent.Read(file.Name, file.Data, file.Dictionaries, file.Nearby), null);
+            return (ModelContent.Read(file.Name, file.Data, file.Dictionaries, [.. game, .. file.Nearby]), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)
