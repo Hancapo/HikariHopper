@@ -397,21 +397,23 @@ public sealed class ModelViewerTests : ExplorerTestBase
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
         Settle(viewer);
-        // No embedded textures: the button is off, and T does nothing.
+        // No embedded textures: the button (an icon, no count) is off, and T does nothing.
         Assert.False(viewer.TexturesButton.IsEnabled);
-        Assert.Equal("0", viewer.TexturesButton.Text);
+        Assert.True(string.IsNullOrEmpty(viewer.TexturesButton.Text));
         Assert.False(viewer.Shortcut('T'));
         Assert.Equal(0, opened);
-        // The game's afternoon to start with, in quarter hours.
-        Assert.True(viewer.SunBar.IsVisible);
+        // The game's afternoon to start with, in quarter hours, on the time button and in its dropdown.
+        Assert.Equal("14:30", viewer.TimeButton.Text);
         Assert.Equal("14:30", viewer.SunText.Text);
+        Assert.False(viewer.TimeOpen);
         Assert.Equal(58, viewer.SunSlider.Value);
         Assert.Equal(14.5f, viewer.Hours);
 
         // The toolbar and the stats: one triangle, three corners, three edges.
         Assert.True(viewer.Toolbar.IsVisible);
         Assert.Equal(("1", "3", "3"), (viewer.TrianglesText.Text, viewer.VerticesText.Text, viewer.EdgesText.Text));
-        Assert.Equal("1 material · 1 × 1 × 0 m", viewer.Location);
+        // No material count or size, and nothing missing to say.
+        Assert.Equal("", viewer.Location);
         // Shadows are on, and H turns them off and on; the button sits raised while they're on.
         Assert.True(viewer.Viewport.Shadows);
         Assert.True(viewer.ShadowsButton.Sunken);
@@ -455,7 +457,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.PartsSide.IsVisible);
         Assert.True(viewer.Shortcut('P'));
         Assert.True(viewer.PartsSide.IsVisible);
-        Assert.Equal("High", viewer.LodButton.Text);
+        // Only the high level: no level segments, and 2 changes nothing.
+        Assert.False(viewer.LodSwitch.IsVisible);
         viewer.Shortcut('2');
         Assert.Equal(0, viewer.Visibility!.Lod);
         // Hiding the drawable leaves nothing counted.
@@ -467,6 +470,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.SetHours(18.25f);
         Assert.Equal(18.25f, viewer.Hours);
         Assert.Equal("18:15", viewer.SunText.Text);
+        Assert.Equal("18:15", viewer.TimeButton.Text);
         Assert.Equal(73, viewer.SunSlider.Value);
         // Midnight at either end.
         viewer.SetHours(24);
@@ -493,7 +497,6 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
         Settle(viewer);
         Assert.True(viewer.TexturesButton.IsEnabled);
-        Assert.Equal("1", viewer.TexturesButton.Text);
         Assert.True(viewer.Shortcut('T'));
         Assert.True(viewer.OpenTextures());
         Assert.Equal(2, opened);
@@ -552,12 +555,71 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void The_time_of_day_opens_in_a_dropdown_window_over_the_viewport()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var window = new Views.MainWindow { Width = 1360, Height = 840 };
+        window.Show();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
+        viewer.Present();
+        Settle(viewer);
+        ExplorerStateRenders.Pump(400);
+
+        // A window of its own (the viewport would cover a popup drawn in the main one), and the viewport stays.
+        viewer.ToggleTime();
+        Assert.True(viewer.TimeOpen);
+        Assert.True(viewer.TimeButton.Sunken);
+        Assert.Contains(viewer.SunSlider, Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.SunSlider).OfType<Avalonia.Controls.Window>()
+            .SelectMany(owner => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(owner)));
+        Assert.True(viewer.Viewport.IsVisible);
+        viewer.ToggleTime();
+        Assert.False(viewer.TimeOpen);
+        Assert.False(viewer.TimeButton.Sunken);
+
+        viewer.Close();
+        ExplorerStateRenders.Pump(300);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_levels_a_drawable_has_are_segments_and_picking_one_shows_it()
+    {
+        // A triangle at the high level and another at the medium one.
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "sign" };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        foreach (var lod in new[] { CommonFury.Assets.DrawableLod.High, CommonFury.Assets.DrawableLod.Medium })
+        {
+            var model = new FiveFury.Drawables.DrawableModelInput { Lod = lod };
+            model.Meshes.Add(new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface"));
+            builder.Models.Add(model);
+        }
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+
+        var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr));
+        Settle(viewer);
+        Assert.True(viewer.LodSwitch.IsVisible);
+        Assert.Equal(["High", "Med"], viewer.LodSwitch.Sides.Select(side => side.Text));
+        Assert.Equal(0, viewer.LodSwitch.SelectedIndex);
+        Assert.True(viewer.Shortcut('2'));
+        Assert.Equal(1, viewer.Visibility!.Lod);
+        Assert.Equal(1, viewer.LodSwitch.SelectedIndex);
+        // A level it lacks is left alone.
+        viewer.Shortcut('3');
+        Assert.Equal(1, viewer.LodSwitch.SelectedIndex);
+    }
+
+    [AvaloniaFact]
     public void A_collision_has_no_time_of_day()
     {
         var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
         Settle(viewer);
-        Assert.False(viewer.SunBar.IsVisible);
         Assert.False(viewer.Toolbar.IsVisible);
         Assert.False(viewer.StatsPanel.IsVisible);
         Assert.False(viewer.PartsSide.IsVisible);

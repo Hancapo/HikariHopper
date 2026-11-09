@@ -40,6 +40,9 @@ internal sealed class PartVisibility
     /// <summary>The level of detail picked.</summary>
     public int Lod { get; set; }
 
+    /// <summary>A level of detail as its segment names it: High, Med, Low, VLow.</summary>
+    public static string ShortLevelName(int lod) => lod switch { 0 => "High", 1 => "Med", 2 => "Low", _ => "VLow" };
+
     /// <summary>A level of detail's name.</summary>
     public static string LevelName(int lod) => lod switch { 0 => "High", 1 => "Medium", 2 => "Low", _ => "Very low" };
 
