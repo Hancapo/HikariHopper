@@ -343,5 +343,5 @@ fn shade_terrain(input: TerrainOutput) -> vec4f {
 
     let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
     let shadow = sun_shadow(input.place, normalize(input.normal)) * self_shadow;
-    return vec4f(gta_lit(stored, normal, view, intensity, power, terrain.specular.w, ambient * ambient, shadow), 1.0);
+    return vec4f(gta_lit(stored, normal, view, intensity, power, terrain.specular.w, ambient * ambient, shadow, 1.0), 1.0);
 }

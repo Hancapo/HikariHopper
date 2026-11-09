@@ -25,7 +25,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
-    public const int UniformBytes = 304;
+    public const int UniformBytes = 368;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -48,7 +48,23 @@ internal sealed class SurfaceMaterial
     /// </summary>
     public bool Terrain { get; private init; }
 
+    /// <summary>
+    /// Whether it is a ped shader (PS_DeferredPedTextured): those the shader rebuilds, and the rest (fur, medals) as the
+    /// closest of them.
+    /// </summary>
+    public bool Ped { get; private init; }
+
     public AlphaMode AlphaMode { get; private init; }
+
+    /// <summary>
+    /// Ped hair, which covers each pixel by its alpha. Enhanced draws it with deferredsubsamplealpha: it drops pixels by
+    /// a noise where the alpha is low and lets its TAA average them, with no cutoff. Without TAA, the viewer draws it
+    /// twice to the same end: solid where it is all but opaque, then the rest blended over that by its alpha.
+    /// </summary>
+    public bool HairFringe => Ped && Uniforms[76] == 3 && AlphaMode == AlphaMode.Mask;
+
+    /// <summary>Where hair counts as solid, for its first pass: what is less is blended in its second.</summary>
+    internal const float HairSolid = .95f;
 
     /// <summary>A decal: drawn over the surface it sits on, without writing depth.</summary>
     public bool Decal { get; private init; }
@@ -78,6 +94,12 @@ internal sealed class SurfaceMaterial
     /// <summary>The _pxm shaders' height map, which their parallax marches.</summary>
     public Texture? Height { get; private init; }
 
+    /// <summary>Hair's noise map, which breaks up its highlights (R, G, B) and its alpha (A).</summary>
+    public Texture? HairNoise { get; private init; }
+
+    /// <summary>The ped_hair_spiked_mask shader's mask over the hair's alpha, on the second UV set.</summary>
+    public Texture? DiffuseMask { get; private init; }
+
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[12];
 
@@ -99,6 +121,10 @@ internal sealed class SurfaceMaterial
     private static readonly HashSet<string> Vehicles = Family("vehicle");
     private static readonly HashSet<string> Terrains = Family("terrain");
     private static readonly HashSet<string> ApproximateTerrains = Family("terrain_approximate");
+    private static readonly HashSet<string> Peds = Family("ped");
+    private static readonly HashSet<string> PedsDiffuse = Family("ped_diffuse");
+    private static readonly HashSet<string> PedsHair = Family("ped_hair");
+    private static readonly HashSet<string> ApproximatePeds = Family("ped_approximate");
 
     private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
         .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -155,9 +181,11 @@ internal sealed class SurfaceMaterial
         var result = new SurfaceMaterial
         {
             Shader = shader,
-            Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader),
+            Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
+                || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
+            Ped = Peds.Contains(shader) || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || ApproximatePeds.Contains(shader),
             Layers = [.. new[] { "layer", "layer_bump", "layer_height" }.SelectMany(role => Enumerable.Range(0, 4).Select(i => Texture($"{role}{i}")))],
             Lookup = Texture("lookup"),
             Diffuse = Texture("diffuse"),
@@ -170,6 +198,8 @@ internal sealed class SurfaceMaterial
             // The vehicles' detail shaders are drawn as the rest of their family, without one.
             Detail = Vehicles.Contains(shader) ? null : Texture("detail"),
             Height = Texture("height"),
+            HairNoise = PedsHair.Contains(shader) ? Texture("hair_noise") : null,
+            DiffuseMask = PedsHair.Contains(shader) ? Texture("diffuse_mask") : null,
             AlphaMode = (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -253,7 +283,35 @@ internal sealed class SurfaceMaterial
             Vehicle(u);
             VehicleSpecular(u);
         }
+        if (result.Ped)
+            Ped(u);
         return result;
+
+        // PS_DeferredPedTextured at rest: which of its programs, whether it has the rim light and the bend towards the
+        // view, whether the diffuse alpha is a palette index, and hair's highlights, noise and alpha bias. The ped
+        // programs cut out at alpha 128 of 255, inclusive; hair is solid only where it is all but opaque, and its second
+        // pass blends in the rest.
+        void Ped(Span<float> v)
+        {
+            v[76] = PedsHair.Contains(shader) ? 3 : PedsDiffuse.Contains(shader) ? 2 : 1;
+            v[77] = Pattern(shader, "ped_rim") == "false" ? 0 : 1;
+            v[78] = Pattern(shader, "palette_alpha") == "true" ? 1 : 0;
+            v[79] = result.DiffuseMask is not null ? 1 : 0;
+            v[12] = v[76] == 3 && result.AlphaMode == AlphaMode.Mask ? HairSolid : 128.5f / 255;
+            if (v[76] != 3)
+                return;
+            float[] intensity = Constant("aniso_intensity", .1f, .15f), exponent = Constant("aniso_exponent", 16, 32);
+            float[] colour = Constant("aniso_colour", .1f, .1f, .1f, 1), scale = Constant("hair_noise_scale", 2, 1, 3, 1);
+            v[80] = intensity.ElementAtOrDefault(0);
+            v[81] = intensity.ElementAtOrDefault(1);
+            v[82] = exponent.ElementAtOrDefault(0);
+            v[83] = exponent.ElementAtOrDefault(1);
+            for (int i = 0; i < 3; i++)
+                v[84 + i] = colour.ElementAtOrDefault(i);
+            v[87] = Constant("aniso_alpha_bias", 1)[0];
+            for (int i = 0; i < 4; i++)
+                v[88 + i] = i < scale.Length ? scale[i] : 1;
+        }
 
         // The terrain shaders' PS_TexturedDeferred: specularIntensityMult (squared by the program), specularFalloffMult and
         // a fixed fresnel of 0.98; the layer weights from the vertex, the lookup map or both; no bumps for the _lod shaders;
@@ -380,11 +438,13 @@ internal sealed class SurfaceMaterial
     private static string? Pattern(string shader, string setting)
     {
         if (Mapping.RootElement.GetProperty("shaders").TryGetProperty(shader, out JsonElement own) && own.TryGetProperty(setting, out JsonElement value))
-            return value.ToString();
+            return Text(value);
         foreach (JsonElement pattern in Mapping.RootElement.GetProperty("patterns").EnumerateArray())
             if (pattern.TryGetProperty("contains", out JsonElement contains) && shader.Contains(contains.GetString()!, StringComparison.OrdinalIgnoreCase)
                 && pattern.TryGetProperty(setting, out JsonElement found))
-                return found.ValueKind is JsonValueKind.True or JsonValueKind.False ? found.ToString().ToLowerInvariant() : found.ToString();
+                return Text(found);
         return null;
+
+        static string Text(JsonElement value) => value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.ToString().ToLowerInvariant() : value.ToString();
     }
 }

@@ -35,6 +35,8 @@ struct Light {
     // The bloom (BloomParams): the exposed luminance its bright pass starts at, the timecycle's bloom intensity, and
     // one over the luminance range it fades in over.
     bloom: vec4f,
+    // The peds' ambient occlusion multiplier (light_amb_occ_mult_ped) and their rim light's (light_ped_rim_mult).
+    ped: vec4f,
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
@@ -132,7 +134,7 @@ fn fresnel(fresnel_value: f32, cosine: f32) -> f32 {
 // a deferred shader wrote to its G-buffer: albedo as stored (gamma 2, squared here as the passes read it), normal,
 // specular intensity, power and fresnel, and the ambient scale. The game's lighting has no 1/pi.
 fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32, fresnel_value: f32, ambient_scale: f32,
-    shadow: f32) -> vec3f {
+    shadow: f32, reflection_scale: f32) -> vec3f {
     let to_light = normalize(light.sun_direction.xyz);
     let albedo = stored * stored;
     let spec = saturate(intensity);
@@ -156,7 +158,8 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     // daylight the game's artificial ambient is nothing to speak of, so it is left out.
     let ambient = albedo * kept * gta_ambient(normal) * ambient_scale;
 
-    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is.
-    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale;
+    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is, and by the scale
+    // the G-buffer's last channel holds (one for all but peds, whose deferred shaders write their own).
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale * reflection_scale;
     return sun + ambient + reflection;
 }

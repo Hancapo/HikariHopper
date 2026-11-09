@@ -14,7 +14,7 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 304, ShadowViewBytes = 64;
+    private const int LightBytes = 320, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
 
     private BindGroupLayout? lightLayout;
@@ -24,7 +24,10 @@ internal sealed unsafe partial class ViewportRenderer
     private TextureView? shadowView;
     private Buffer? shadowViewBuffer;
     private BindGroup? shadowGroup;
+    private BindGroupLayout? shadowViewLayout;
     private RenderPipeline? shadowPipeline;
+    // Cut-out surfaces, with their material for the diffuse map's alpha (made with the surface pipelines).
+    private RenderPipeline? maskedShadowPipeline;
     private RenderPipeline? groundShadowPipeline;
     private BindGroup? noGroup;
     private BindGroupLayout? tonemapLayout;
@@ -129,7 +132,7 @@ internal sealed unsafe partial class ViewportRenderer
         skyLightGroup = LightGroup(skyMap!.View);
 
         // The shadow map: depth only, from the sun, nearer is smaller.
-        BindGroupLayout shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
             [
@@ -334,6 +337,7 @@ internal sealed unsafe partial class ViewportRenderer
         MemoryMarshal.Write(MemoryMarshal.AsBytes(values[52..68]), in shadowMatrix);
         vectors[17] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
         vectors[18] = Timecycle.BloomParameters(cycle);
+        vectors[19] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -356,9 +360,20 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetVertexBuffer(0, surfaceVertices!);
         pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
         for (int i = 0; i < surfaceParts.Length; i++)
-            if (surfaceParts[i].Mode != AlphaMode.Blend && partsShown[i])
+            if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && partsShown[i])
                 pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+        // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
+        pass.SetPipeline(maskedShadowPipeline!);
+        for (int i = 0; i < surfaceParts.Length; i++)
+            if (CutOut(i) && partsShown[i])
+            {
+                pass.SetBindGroup(1, surfaceParts[i].Material);
+                pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+            }
         pass.End();
+
+        // Terrain's material is laid out differently, and cuts nothing out.
+        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && !surfaceParts[i].Terrain;
     }
 
     /// <summary>The drawable's shadow on the backdrop's ground, over the backdrop just drawn.</summary>

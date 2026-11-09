@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured) and vehicle (PS_DeferredVehicleTextured); and what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
+  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured) and the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped); and what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
@@ -23,7 +23,9 @@
     "layer_height3": ["heightMapSamplerLayer3"],
     "lookup": ["lookupSampler"],
     "detail": ["DetailSampler"],
-    "height": ["heightSampler"]
+    "height": ["heightSampler"],
+    "hair_noise": ["AnisoNoiseSpecSampler"],
+    "diffuse_mask": ["DiffuseMaskSampler"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -58,7 +60,12 @@
     "spec_map_intensity": ["specularIntensityMultSpecMap"],
     "spec_intensity_adjust": ["specIntensityAdjust"],
     "spec_map_falloff": ["specularFalloffMultSpecMap"],
-    "spec_falloff_adjust": ["specFalloffAdjust"]
+    "spec_falloff_adjust": ["specFalloffAdjust"],
+    "aniso_intensity": ["anisotropicSpecularIntensity"],
+    "aniso_exponent": ["anisotropicSpecularExponent"],
+    "aniso_colour": ["anisotropicSpecularColour"],
+    "aniso_alpha_bias": ["AnisotropicAlphaBias"],
+    "hair_noise_scale": ["specularNoiseMapUVScaleFactor"]
   },
   "patterns": [
     { "contains": "diffspec", "detail_mask": "diffuse", "specular_source": "diffuse" },
@@ -71,6 +78,9 @@
     { "contains": "_blend", "terrain_weights": "blend" },
     { "contains": "vehicle_paint", "paint": true },
     { "contains": "emissive", "emissive": true },
+    { "contains": "ped_hair", "alpha_mode": "MASK" },
+    { "contains": "ped_default_palette", "palette_alpha": true },
+    { "contains": "ped_palette", "palette_alpha": true },
     { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
     { "contains": "cutout", "alpha_mode": "MASK" },
     { "contains": "alpha", "alpha_mode": "BLEND" }
@@ -115,6 +125,20 @@
       "parallax_specmap", "parallax_steep", "reflect", "reflect_decal", "spec", "spec_decal", "spec_reflect", "spec_reflect_decal",
       "spec_tnt", "spec_twiddle_tnt", "weapon_emissive_tnt", "weapon_normal_spec_detail_palette", "weapon_normal_spec_detail_tnt",
       "weapon_normal_spec_palette", "weapon_normal_spec_tnt"
+    ],
+    "ped": [
+      "ped", "ped_alpha", "ped_cloth", "ped_cloth_enveff", "ped_decal_decoration", "ped_decal_exp", "ped_decal_nodiff", "ped_emissive",
+      "ped_enveff", "ped_nopeddamagedecals", "ped_palette", "ped_wrinkle", "ped_wrinkle_cloth", "ped_wrinkle_cloth_enveff", "ped_wrinkle_cs",
+      "ped_wrinkle_enveff"
+    ],
+    "ped_diffuse": [
+      "ped_decal", "ped_default", "ped_default_cloth", "ped_default_enveff", "ped_default_mp", "ped_default_palette"
+    ],
+    "ped_hair": [
+      "ped_hair_cutout_alpha", "ped_hair_cutout_alpha_cloth", "ped_hair_spiked", "ped_hair_spiked_enveff", "ped_hair_spiked_mask"
+    ],
+    "ped_approximate": [
+      "ped_decal_medals", "ped_fur"
     ]
   },
   "vehicle_specular": {
@@ -152,5 +176,7 @@
     "vehicle_cloth2": { "scale": 0 },
     "vehicle_dash_emissive_opaque": { "scale": 0, "fresnel": 1 }
   },
-  "shaders": {}
+  "shaders": {
+    "ped_alpha": { "ped_rim": false }
+  }
 }
