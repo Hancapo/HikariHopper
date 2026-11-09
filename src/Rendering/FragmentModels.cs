@@ -13,11 +13,12 @@ namespace HikariHopper.Rendering;
 /// </summary>
 internal static class FragmentModels
 {
-    public static IReadOnlyList<SceneModel> Of(Yft fragment)
+    /// <summary>What <paramref name="fragment"/> draws; its main drawable is named <paramref name="title"/>, the fragment's.</summary>
+    public static IReadOnlyList<SceneModel> Of(Yft fragment, string title)
     {
         if (fragment.MainDrawable?.Core is not { } main)
             return [];
-        var models = new List<SceneModel> { new(main.Name ?? "main", main, Matrix4x4.Identity) };
+        var models = new List<SceneModel> { new(title, main, Matrix4x4.Identity) };
         if (main.Skeleton is not { } skeleton || fragment.PhysicsLods.FirstOrDefault(lod => lod is not null) is not { } physics)
             return models;
         Matrix4x4[] bones = skeleton.DeriveAbsoluteTransforms();
@@ -33,7 +34,7 @@ internal static class FragmentModels
             // A wheel on the other side from the one it borrows is turned half round, its outer face out.
             bool turned = model is null && Side(bone.Name!) != Side(shared.Name!);
             Matrix4x4 turn = turned ? Matrix4x4.CreateRotationZ(MathF.PI) : Matrix4x4.Identity;
-            models.Add(new SceneModel(bone.Name!, model ?? sharedModel, turn * bones[bone.Index]));
+            models.Add(new SceneModel(bone.Name!, model ?? sharedModel, turn * bones[bone.Index], "Wheels"));
         }
         return models;
     }

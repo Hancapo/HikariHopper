@@ -48,6 +48,11 @@ public partial class ModelViewer : UserControl, IModalContent
         SunText.Text = Clock(DayCycle.DefaultHours);
         SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
+        PartsButton.Click += (_, _) => SetPartsShown(!PartsSide.IsVisible);
+        LodButton.Click += (_, _) => OpenLevels();
+        Parts.Changed += ShowParts;
+        ThemedToolTip.Set(PartsButton, "Parts  (P)");
+        ThemedToolTip.Set(LodButton, "Level of detail  (1-4)");
         FrameButton.Click += (_, _) => Viewport.Reframe();
         ThemedToolTip.Set(ShadowsButton, "Shadows  (H)");
         ThemedToolTip.Set(FrameButton, "Frame the model  (F)");
@@ -68,13 +73,80 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>A toggle that is on sits raised in its well in full ink; one that is off is flat and dimmer.</summary>
     private void RefreshToggles()
     {
-        ShadowsButton.Sunken = Viewport.Shadows;
-        ShadowsButton.Foreground = Viewport.Shadows ? Ui.Theme.Text : Ui.Theme.TextDim;
+        static void Set(ChromeToolButton button, bool on)
+        {
+            button.Sunken = on;
+            button.Foreground = on ? Ui.Theme.Text : Ui.Theme.TextDim;
+        }
+        Set(ShadowsButton, Viewport.Shadows);
+        Set(PartsButton, PartsSide.IsVisible);
+    }
+
+    private PartVisibility? visibility;
+    private RetroMenu? levels;
+
+    /// <summary>The drawable's parts and what of them is shown, once read.</summary>
+    internal PartVisibility? Visibility => visibility;
+
+    /// <summary>Shows or hides the parts panel.</summary>
+    internal void SetPartsShown(bool shown)
+    {
+        PartsSide.IsVisible = shown && visibility is not null;
+        RefreshToggles();
+    }
+
+    /// <summary>Shows a level of detail the drawable has.</summary>
+    internal void SetLevel(int lod)
+    {
+        if (visibility is null || !visibility.Levels.Contains(lod))
+            return;
+        visibility.Lod = lod;
+        LodButton.Text = PartVisibility.LevelName(lod);
+        Parts.Refresh();
+        ShowParts();
+    }
+
+    /// <summary>Opens the levels of detail under their button, the one shown checked and the ones the drawable lacks off.</summary>
+    internal void OpenLevels()
+    {
+        if (visibility is null)
+            return;
+        if (levels is null)
+        {
+            levels = new RetroMenu { Width = 132 + 2 * Ui.Theme.MenuPadding };
+            for (int lod = 0; lod < 4; lod++)
+            {
+                int level = lod;
+                var item = new RetroMenuItem { Text = PartVisibility.LevelName(lod), Tag = lod, Checkable = true, ShortcutText = $"{lod + 1}", MinWidth = 0 };
+                item.Triggered += (_, _) => SetLevel(level);
+                levels.Items.Add(item);
+            }
+        }
+        foreach (RetroMenuItem item in levels.Items.OfType<RetroMenuItem>())
+        {
+            int lod = (int)item.Tag!;
+            item.IsChecked = lod == visibility.Lod;
+            item.IsEnabled = visibility.Levels.Contains(lod);
+        }
+        levels.OpenUnder(LodButton, 4);
+    }
+
+    /// <summary>Draws what the parts panel and the level say, and counts it.</summary>
+    private void ShowParts()
+    {
+        if (visibility is null)
+            return;
+        Viewport.ShowParts(visibility.Mask());
+        (int triangles, int vertices, int edges) = visibility.Stats();
+        static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        TrianglesText.Text = Count(triangles);
+        VerticesText.Text = Count(vertices);
+        EdgesText.Text = Count(edges);
     }
 
     /// <summary>
-    /// The toolbar's keys, from the viewport or the viewer: H shadows, F frame. None is W, A, S, D, Q or E, which the
-    /// free camera moves with.
+    /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, F frame. None
+    /// is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -88,6 +160,12 @@ public partial class ModelViewer : UserControl, IModalContent
             case 'F':
                 Viewport.Reframe();
                 return true;
+            case 'P':
+                SetPartsShown(!PartsSide.IsVisible);
+                return true;
+            case >= '1' and <= '4':
+                SetLevel(key - '1');
+                return true;
         }
         return false;
     }
@@ -95,8 +173,15 @@ public partial class ModelViewer : UserControl, IModalContent
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (!e.Handled && e.KeyModifiers == Avalonia.Input.KeyModifiers.None && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z
-            && Shortcut((char)('A' + (e.Key - Avalonia.Input.Key.A))))
+        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None)
+            return;
+        char? key = e.Key switch
+        {
+            >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z => (char)('A' + (e.Key - Avalonia.Input.Key.A)),
+            >= Avalonia.Input.Key.D0 and <= Avalonia.Input.Key.D9 => (char)('0' + (e.Key - Avalonia.Input.Key.D0)),
+            _ => null,
+        };
+        if (key is { } shortcut && Shortcut(shortcut))
             e.Handled = true;
     }
 
@@ -178,6 +263,10 @@ public partial class ModelViewer : UserControl, IModalContent
             SunBar.IsVisible = true;
             Toolbar.IsVisible = true;
             ShowStats(surfaces);
+            visibility = new PartVisibility(surfaces);
+            LodButton.Text = PartVisibility.LevelName(visibility.Lod);
+            Parts.Parts = visibility;
+            SetPartsShown(true);
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);

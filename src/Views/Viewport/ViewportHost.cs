@@ -41,6 +41,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private DrawableScene? surfaces;
     private float hours = DayCycle.DefaultHours;
     private bool shadows = true;
+    private bool[]? partsShown;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -62,6 +63,13 @@ internal sealed partial class ViewportHost : NativeControlHost
             if (renderer is not null)
                 renderer.Shadows = value;
         }
+    }
+
+    /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
+    internal void ShowParts(bool[] shown)
+    {
+        partsShown = shown;
+        renderer?.ShowParts(shown);
     }
 
     /// <summary>Points the camera back at what was framed last.</summary>
@@ -89,6 +97,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     internal void Show(DrawableScene? drawable)
     {
         surfaces = drawable;
+        partsShown = null;
         shown = null;
         renderer?.Show(drawable);
     }
@@ -133,7 +142,11 @@ internal sealed partial class ViewportHost : NativeControlHost
             renderer.SetTime(hours);
             renderer.Shadows = shadows;
             if (surfaces is not null)
+            {
                 renderer.Show(surfaces);
+                if (partsShown is not null)
+                    renderer.ShowParts(partsShown);
+            }
             else
                 renderer.Show(shown);
             pacer = new DisplayPacer(hwnd, RequestFrame);

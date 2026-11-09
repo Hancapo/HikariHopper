@@ -47,10 +47,13 @@ public sealed class FragmentViewerTests
             physics.Children.Add(new PhysicsChild { BoneId = bone.Tag, UndamagedDrawable = bone.Name == "wheel_lf" ? new FragmentDrawable(wheel) : null });
         fragment.PhysicsLods[0] = physics;
 
-        IReadOnlyList<SceneModel> models = FragmentModels.Of(fragment);
+        IReadOnlyList<SceneModel> models = FragmentModels.Of(fragment, "car");
 
-        // The body, then the one wheel at each wheel bone; the chassis isn't a wheel.
+        // The body, named for the fragment, then the one wheel at each wheel bone, gathered as the wheels; the
+        // chassis isn't a wheel.
+        Assert.Equal(("car", (string?)null), (models[0].Name, models[0].Group));
         Assert.Equal(["wheel_lf", "wheel_rf", "wheel_lr", "wheel_rr"], models.Skip(1).Select(m => m.Name));
+        Assert.All(models.Skip(1), model => Assert.Equal("Wheels", model.Group));
         Assert.Same(body, models[0].Drawable);
         Assert.All(models.Skip(1), model => Assert.Same(wheel, model.Drawable));
         foreach (SceneModel model in models.Skip(1))

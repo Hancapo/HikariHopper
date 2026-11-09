@@ -29,6 +29,8 @@ internal sealed unsafe partial class ViewportRenderer
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     private (SurfacePart Part, BindGroup Material, AlphaMode Mode, bool Terrain)[] surfaceParts = [];
+    // Which of the parts are drawn: at first each drawable's most detailed level.
+    private bool[] partsShown = [];
     private readonly List<Buffer> materialBuffers = [];
 
     private void CreateSurfacePipelines()
@@ -202,6 +204,14 @@ internal sealed unsafe partial class ViewportRenderer
         clear = Solid(0, 0, 0, 0);
     }
 
+    /// <summary>Draws only the drawable's parts marked true, one flag per <see cref="DrawableScene.Parts"/>.</summary>
+    public void ShowParts(IReadOnlyList<bool> shown)
+    {
+        if (shown.Count == partsShown.Length)
+            for (int i = 0; i < shown.Count; i++)
+                partsShown[i] = shown[i];
+    }
+
     /// <summary>Shows a drawable's surfaces in place of anything before; null shows none.</summary>
     public void Show(DrawableScene? drawable)
     {
@@ -221,6 +231,7 @@ internal sealed unsafe partial class ViewportRenderer
             AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
             return (part, groups[part.Material], mode, material.Terrain);
         })];
+        partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
     }
@@ -236,6 +247,7 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceVertices = surfaceIndices = null;
         shadowRadius = 0;
         surfaceParts = [];
+        partsShown = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
         uploaded.Clear();
@@ -300,8 +312,10 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetVertexBuffer(0, surfaceVertices);
         pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
-        foreach (var (part, group, mode, terrain) in surfaceParts)
-            if (mode != AlphaMode.Blend)
+        for (int i = 0; i < surfaceParts.Length; i++)
+        {
+            var (part, group, mode, terrain) = surfaceParts[i];
+            if (mode != AlphaMode.Blend && partsShown[i])
             {
                 pass.SetPipeline(terrain ? (reflected ? terrainReflected! : terrainSurfaces!)
                     : reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
@@ -309,9 +323,10 @@ internal sealed unsafe partial class ViewportRenderer
                 pass.SetBindGroup(1, group);
                 pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
             }
+        }
         Vector3 eye = Camera.Eye - origin;
         pass.SetPipeline(reflected ? blendedReflected! : blendedSurfaces!);
-        foreach (var (part, group, _, _) in surfaceParts.Where(p => p.Mode == AlphaMode.Blend).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
+        foreach (var (part, group, _, _) in surfaceParts.Where((p, i) => p.Mode == AlphaMode.Blend && partsShown[i]).OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)))
         {
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
