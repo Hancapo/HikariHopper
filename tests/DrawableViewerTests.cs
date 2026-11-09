@@ -107,6 +107,37 @@ public sealed class DrawableViewerTests
     }
 
     [Fact]
+    public void A_colour_map_named_but_not_found_is_known_as_missing_for_its_checkerboard()
+    {
+        // Named and not found: the diffuse role is missing (drawn as the checkerboard), and so is its name.
+        SurfaceMaterial missing = ModelContent.Read("wall.ydr", Quad(GameTarget.Legacy, "normal_spec",
+            material => material.Textures["DiffuseSampler"] = new TextureReference("IM_Wall12"))).Surfaces!.Materials.Single();
+        Assert.Null(missing.Diffuse);
+        Assert.Contains("diffuse", missing.MissingRoles);
+        Assert.Contains("IM_Wall12", missing.MissingTextures);
+
+        // A material that names no colour map isn't missing one: it stays white.
+        SurfaceMaterial plain = ModelContent.Read("wall.ydr", Quad(GameTarget.Legacy, "default")).Surfaces!.Materials.Single();
+        Assert.Empty(plain.MissingRoles);
+    }
+
+    [Fact]
+    public void The_missing_texture_checkerboard_is_magenta_and_black_with_every_mip()
+    {
+        byte[][] mips = ViewportRenderer.CheckerMips();
+        // 64 down to 1.
+        Assert.Equal(7, mips.Length);
+        byte[] top = mips[0];
+        // Four squares across: magenta at the corner, black a square along, magenta again two along.
+        Assert.Equal([255, 0, 255, 255], top[..4]);
+        int square = ViewportRenderer.CheckerSize / ViewportRenderer.CheckerSquares;
+        Assert.Equal([0, 0, 0, 255], top[(square * 4)..(square * 4 + 4)]);
+        Assert.Equal([255, 0, 255, 255], top[(2 * square * 4)..(2 * square * 4 + 4)]);
+        // Smaller than a square a pixel: the two mixed.
+        Assert.Equal([128, 0, 128, 255], mips[^1]);
+    }
+
+    [Fact]
     public void A_decal_blends_by_its_diffuse_alpha_times_its_vertex_alpha()
     {
         SurfaceMaterial Read(string shader, byte? bucket = null) =>

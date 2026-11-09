@@ -81,6 +81,12 @@ internal sealed class SurfaceMaterial
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[12];
 
+    /// <summary>
+    /// The roles (materials.json's: diffuse, layer0…) whose texture the material names but which wasn't found; the
+    /// viewer draws a missing colour map as a checkerboard, so it stands out.
+    /// </summary>
+    public IReadOnlySet<string> MissingRoles { get; private init; } = new HashSet<string>();
+
     /// <summary>A terrain shader's lookup map, which holds the layer weights on the second UV set (_cm, _2tex_blend).</summary>
     public Texture? Lookup { get; private init; }
 
@@ -116,6 +122,7 @@ internal sealed class SurfaceMaterial
         }
 
         var missing = new List<string>();
+        var missingRoles = new HashSet<string>(StringComparer.Ordinal);
         Texture? Texture(string role)
         {
             foreach (string name in Names("textures", role))
@@ -123,7 +130,10 @@ internal sealed class SurfaceMaterial
                 {
                     Texture? found = resolve(reference);
                     if (found is null && reference.Name is { } missingName)
+                    {
                         missing.Add(missingName);
+                        missingRoles.Add(role);
+                    }
                     return found;
                 }
             return null;
@@ -168,6 +178,7 @@ internal sealed class SurfaceMaterial
             },
             Decal = (material.RenderBucket & 7) == 2 || Pattern(shader, "render_pass") == "DECAL",
             MissingTextures = missing,
+            MissingRoles = missingRoles,
         };
 
         Span<float> u = result.Uniforms;

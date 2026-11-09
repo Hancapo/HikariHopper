@@ -21,6 +21,7 @@ internal sealed unsafe partial class ViewportRenderer
     private Sampler? surfaceSampler;
     private Sampler? paletteSampler;
     private TextureView? white;
+    private TextureView? missing;
     private TextureView? flat;
     // A missing second diffuse layer lays nothing over the paint.
     private TextureView? clear;
@@ -198,8 +199,10 @@ internal sealed unsafe partial class ViewportRenderer
             LodMaxClamp = 32,
             MaxAnisotropy = 1,
         });
-        // What a material without a map reads: white for diffuse and specular, a flat normal.
+        // What a material without a map reads: white for diffuse and specular, a flat normal; a colour map it names but
+        // that wasn't found reads a magenta and black checkerboard, so it stands out.
         white = Solid(255, 255, 255, 255);
+        missing = Checker();
         flat = Solid(128, 128, 255, 255);
         clear = Solid(0, 0, 0, 0);
     }
@@ -268,7 +271,7 @@ internal sealed unsafe partial class ViewportRenderer
             [
                 new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
                 new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
-                new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? white! },
+                new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
                 new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
                 new BindGroupEntry { Binding = 4, TextureView = View(material.Specular) ?? white! },
                 new BindGroupEntry { Binding = 5, TextureView = View(material.TintPalette) ?? white! },
@@ -298,7 +301,11 @@ internal sealed unsafe partial class ViewportRenderer
             new() { Binding = 1, Sampler = surfaceSampler! },
         };
         for (int i = 0; i < 8; i++)
-            entries.Add(new BindGroupEntry { Binding = (uint)(2 + i), TextureView = View(material.Layers[i]) ?? (i < 4 ? white! : flat!) });
+            entries.Add(new BindGroupEntry
+            {
+                Binding = (uint)(2 + i),
+                TextureView = View(material.Layers[i]) ?? (i >= 4 ? flat! : material.MissingRoles.Contains($"layer{i}") ? missing! : white!),
+            });
         entries.Add(new BindGroupEntry { Binding = 10, TextureView = View(material.Lookup) ?? clear! });
         entries.Add(new BindGroupEntry { Binding = 11, TextureView = View(material.TintPalette) ?? white! });
         entries.Add(new BindGroupEntry { Binding = 12, Sampler = paletteSampler! });
@@ -333,6 +340,55 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
+    }
+
+    /// <summary>The size of the missing-texture checkerboard, and how many of its squares cross a texture.</summary>
+    internal const int CheckerSize = 64, CheckerSquares = 4;
+
+    /// <summary>
+    /// The missing-texture checkerboard: magenta and black squares, four across a texture, with every mip, the small
+    /// ones the two mixed, so it reads as a checkerboard close up and a dark magenta far off, without shimmering.
+    /// </summary>
+    internal static byte[][] CheckerMips()
+    {
+        var mips = new List<byte[]>();
+        for (int size = CheckerSize; size >= 1; size /= 2)
+        {
+            int square = size / CheckerSquares;
+            var pixels = new byte[size * size * 4];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    bool magenta = square == 0 || (x / square + y / square) % 2 == 0;
+                    byte level = square == 0 ? (byte)128 : magenta ? (byte)255 : (byte)0;
+                    int at = (y * size + x) * 4;
+                    (pixels[at], pixels[at + 1], pixels[at + 2], pixels[at + 3]) = (level, 0, level, 255);
+                }
+            mips.Add(pixels);
+        }
+        return [.. mips];
+    }
+
+    private TextureView Checker()
+    {
+        byte[][] mips = CheckerMips();
+        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D(CheckerSize, CheckerSize, 1),
+            Format = TextureFormat.RGBA8Unorm,
+            MipLevelCount = (uint)mips.Length,
+            SampleCount = 1,
+        });
+        for (int level = 0; level < mips.Length; level++)
+        {
+            uint size = (uint)(CheckerSize >> level);
+            var copy = new TexelCopyTextureInfo { Texture = texture, MipLevel = (uint)level, Aspect = TextureAspect.All };
+            var layout = new TexelCopyBufferLayout { BytesPerRow = 4 * size, RowsPerImage = size };
+            queue.WriteTexture(copy, (ReadOnlySpan<byte>)mips[level], layout, new Extent3D(size, size, 1));
+        }
+        return texture.CreateView();
     }
 
     private TextureView Solid(byte r, byte g, byte b, byte a)
