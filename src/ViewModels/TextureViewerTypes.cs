@@ -1,3 +1,4 @@
+using CommonFury.Textures;
 using FiveFury.Textures;
 
 namespace HikariHopper.ViewModels;
@@ -16,6 +17,9 @@ public sealed record TextureFormatOption(string Label, string Value);
 
 /// <summary>A texture size, e.g. the rounded power-of-two size of the current texture (Python <c>{"width", "height"}</c>).</summary>
 public sealed record TextureSize(int Width, int Height);
+
+/// <summary>What a tool dialog needs to know of a selected texture, to say what it is now and what it would become.</summary>
+public sealed record TextureFacts(string Name, int Width, int Height, TextureFormat Format, int MipCount, long DataSize);
 
 /// <summary>How an undo entry restores the dictionary.</summary>
 public enum TextureUndoKind

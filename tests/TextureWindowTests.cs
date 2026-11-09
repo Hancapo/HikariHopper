@@ -629,31 +629,120 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
-    public void ResizeDialogLocksTheAspectAndEstimatesTheResult()
+    public void ResizeDialogFollowsTheAspectAsYouTypeAndSaysWhatItWouldBe()
     {
         TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
         var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
         harness.Settle();
         Assert.Equal("RESIZE TEXTURE", dialog.Heading);
         Assert.True(dialog.WidthField.IsFocused);
-        dialog.WidthField.Text = "128";
-        harness.Key(Key.Enter);
-        Assert.Equal("32", dialog.HeightField.Text);
-        Assert.Equal($"256 × 64  →  128 × 32  ·  {harness.ViewModel.EstimatedMipCount(128, 32, 4)} mips  ·  last "
-            + harness.ViewModel.EstimatedSmallestMipDimensions(128, 32, 4), dialog.ResultText.Text);
-        Assert.True(dialog.ApplyEnabled);
-        // Typing a letter is refused, as the IntValidator refuses it.
-        dialog.WidthField.Text = "12x";
-        Assert.Equal("128", dialog.WidthField.Text);
-        dialog.WidthField.Text = "";
+        // The header has the name and the one thing this tool changes: the size now.
+        Assert.Equal(("wide", "256 × 64"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal((HikariHopper.Textures.ResizeUnit.Pixels, true, false), (dialog.Unit, dialog.Locked, dialog.Snap));
+        Assert.True(dialog.LockButton.Sunken);
+        // As it opens, it is what it is: nothing to apply.
+        Assert.Equal(("256", "64"), (dialog.WidthField.Text, dialog.HeightField.Text));
         Assert.False(dialog.ApplyEnabled);
-        Assert.Equal("256 × 64  →  — × 32  ·  1 mip  ·  last none", dialog.ResultText.Text);
-        dialog.MipCheck.IsChecked = false;
-        Assert.False(dialog.MipSizeCombo.IsVisible);
+        Assert.Equal(("256 × 64", "256 × 64"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+
+        // The height follows the width while it is typed: no Enter, no click away.
+        dialog.WidthField.Text = "128";
+        Assert.Equal("32", dialog.HeightField.Text);
+        Assert.True(dialog.ApplyEnabled);
+        Assert.Equal((128, 32), (dialog.TargetWidth, dialog.TargetHeight));
+        Assert.Equal(("256 × 64", "128 × 32"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        // Each side says the memory it takes, the larger filling its bar, and a saving is drawn as one.
+        long now = harness.ViewModel.SelectionFacts[0].DataSize;
+        long after = HikariHopper.Textures.ResizePlan.EstimatedSize(128, 32, harness.ViewModel.SelectionFacts[0].Format, harness.ViewModel.EstimatedMipCount(128, 32, 4));
+        Assert.True(after > 0 && after < now);
+        Assert.Equal((Core.Formatting.FormatSize(now), Core.Formatting.FormatSize(after)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.Equal(1, dialog.Outcome.Bars.Now);
+        Assert.Equal((double)after / now, dialog.Outcome.Bars.After, 6);
+        Assert.True(dialog.Outcome.Saves);
+        Assert.Empty(dialog.Outcome.Warnings);
+        // And the width follows the height.
+        dialog.HeightField.Text = "16";
+        Assert.Equal("64", dialog.WidthField.Text);
+
+        // Typing a letter is refused, as the IntValidator refuses it; an empty field is no size, and leaves the other.
+        dialog.WidthField.Text = "12x";
+        Assert.Equal("64", dialog.WidthField.Text);
+        dialog.WidthField.Text = "";
+        Assert.Equal("16", dialog.HeightField.Text);
+        Assert.False(dialog.ApplyEnabled);
+        Assert.Equal("—", dialog.Outcome.AfterValue);
+        Assert.Equal("", dialog.Outcome.AfterMemory);
+
+        // Unlocked, each field is its own; locked again, the height takes what the width gives it.
+        dialog.SetLocked(false);
+        Assert.False(dialog.LockButton.Sunken);
+        dialog.WidthField.Text = "200";
+        Assert.Equal("16", dialog.HeightField.Text);
+        Assert.Equal((200, 16), (dialog.TargetWidth, dialog.TargetHeight));
+        dialog.LockButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(dialog.Locked);
+        Assert.Equal("50", dialog.HeightField.Text);
+
+        // Mipmaps are one dropdown: none, or the full chain down to a size.
+        Assert.Equal((true, 4), (dialog.MipCombo.Generate, dialog.MipCombo.Minimum));
+        dialog.MipCombo.SelectedIndex = 0;
+        Assert.Equal((false, 1), (dialog.MipCombo.Generate, dialog.MipCombo.Minimum));
+        Assert.Equal(Core.Formatting.FormatSize(HikariHopper.Textures.ResizePlan.EstimatedSize(200, 50, harness.ViewModel.SelectionFacts[0].Format, 1)),
+            dialog.Outcome.AfterMemory);
     }
 
     [AvaloniaFact]
-    public void PowerOfTwoDialogNeedsANonPowerOfTwoTexture()
+    public void ResizeDialogTakesPercentAndQuickSizes()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        // A quick size is a share of the original, in the unit showing.
+        dialog.HalfButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("128", "32"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        // In percent the fields hold the share, the size reached kept; the outcome says the pixels.
+        dialog.UnitSwitch.Pick(1);
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(1, dialog.UnitSwitch.SelectedIndex);
+        Assert.Equal(("50", "50"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal("128 × 32", dialog.Outcome.AfterValue);
+        // Locked, the other percentage is the same one.
+        dialog.WidthField.Text = "25";
+        Assert.Equal("25", dialog.HeightField.Text);
+        Assert.Equal((64, 16), (dialog.TargetWidth, dialog.TargetHeight));
+        dialog.DoubleButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("200", "200"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal("512 × 128", dialog.Outcome.AfterValue);
+        // Larger than it is: said under the outcome, and the bar isn't a saving's.
+        Assert.Equal(["Larger than the original: no detail is added."], dialog.Outcome.Warnings);
+        Assert.False(dialog.Outcome.Saves);
+        Assert.Equal(1, dialog.Outcome.Bars.After);
+        // Back in pixels, the size reached.
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        Assert.Equal(("512", "128"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        dialog.QuarterButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("64", "16"), (dialog.WidthField.Text, dialog.HeightField.Text));
+
+        // A size that isn't a power of two is said so, and the dialog grows by the line that says it.
+        double fitted = dialog.BodyHeight;
+        dialog.WidthField.Text = "250";
+        Assert.Equal("63", dialog.HeightField.Text);
+        Assert.Equal(["250 × 63 is not a power of two."], dialog.Outcome.Warnings);
+        Assert.True(dialog.BodyHeight > fitted);
+        // Power of two rounds what the fields give, which stay as typed.
+        dialog.SnapButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(dialog.Snap);
+        Assert.True(dialog.SnapButton.Raised);
+        Assert.Equal("250", dialog.WidthField.Text);
+        Assert.Equal("256 × 64", dialog.Outcome.AfterValue);
+        Assert.Empty(dialog.Outcome.Warnings);
+        Assert.Equal(fitted, dialog.BodyHeight);
+        // Which is the size it has: nothing to apply.
+        Assert.False(dialog.ApplyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void PowerOfTwoOpensResizeWithTheRoundingOn()
     {
         TextureWindowHarness harness = Opened(Solid("odd", 100, 60), Solid("even", 64, 64));
         int odd = harness.ViewModel.TexturesModel.ToList().FindIndex(item => item.Name == "odd");
@@ -661,18 +750,68 @@ public sealed class TextureWindowTests
         harness.Settle();
         var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.PowerOfTwo);
         harness.Settle();
-        Assert.Equal("RESIZE TO POWER OF 2", dialog.Heading);
-        Assert.False(dialog.WidthField.IsEffectivelyVisible);
-        Assert.True(dialog.RoundingCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        // The same dialog, its Power of two pressed: the fields hold the size it has, the outcome the rounded one.
+        Assert.Equal("RESIZE TEXTURE", dialog.Heading);
+        Assert.True(dialog.Snap);
+        Assert.True(dialog.SnapButton.Raised);
+        Assert.True(dialog.WidthField.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        Assert.Equal(("100", "60"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal(("100 × 60", "128 × 64"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
         Assert.True(dialog.ApplyEnabled);
-        Assert.Equal($"100 × 60  →  128 × 64  ·  {harness.ViewModel.EstimatedMipCount(128, 64, 4)} mips  ·  last "
-            + harness.ViewModel.EstimatedSmallestMipDimensions(128, 64, 4), dialog.ResultText.Text);
-        dialog.Close();
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal((128, 64), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
+
+        // A texture that already is a power of two has nothing to round.
         harness.ViewModel.SelectTexture(1 - odd);
         harness.Settle();
         dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.PowerOfTwo);
         harness.Settle();
         Assert.False(dialog.ApplyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void ResizingSeveralTexturesScalesEachFromItsOwnSize()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64), Solid("odd", 100, 60));
+        harness.ViewModel.SelectAllTextures();
+        harness.Settle();
+        var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        // Several open in percent, at what they are; the header counts them and gives their sizes.
+        Assert.Equal("RESIZE 2 TEXTURES", dialog.Heading);
+        Assert.Equal(("2 textures", "100 × 60 to 256 × 64"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(("100", "100"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.False(dialog.ApplyEnabled);
+        dialog.HalfButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("50", "50"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal(("100 × 60 to 256 × 64", "50 × 30 to 128 × 32"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal(["1 of 2 will not be a power of two."], dialog.Outcome.Warnings);
+        Assert.True(dialog.ApplyEnabled);
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal([("odd", 50, 30), ("wide", 128, 32)],
+            harness.ViewModel.SelectionFacts.Select(each => (each.Name, each.Width, each.Height)).OrderBy(each => each.Name));
+
+        // In pixels a quick size goes back to percent, where each keeps its shape; typed pixels set them all to one size.
+        dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        dialog.DoubleButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(("200", "200"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        dialog.SetLocked(false);
+        dialog.WidthField.Text = "64";
+        dialog.HeightField.Text = "64";
+        Assert.Equal("64 × 64", dialog.Outcome.AfterValue);
     }
 
     [AvaloniaFact]

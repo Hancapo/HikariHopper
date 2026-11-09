@@ -207,6 +207,11 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
 
     public int SelectedHeight => SelectedRecord()?.Texture.Height ?? 0;
 
+    /// <summary>The selected textures as the tool dialogs read them: what each is now.</summary>
+    public IReadOnlyList<TextureFacts> SelectionFacts => [.. SelectionRecords().Select(record => new TextureFacts(
+        record.Item.Name, record.Item.Texture.Width, record.Item.Texture.Height, record.Item.Texture.Format,
+        record.Item.MipCount, record.Item.DataSize))];
+
     public bool SelectedNeedsPowerOfTwo => SelectionRecords()
         .Any(record => !TextureDimensions.IsPowerOfTwo(record.Item.Texture.Width, record.Item.Texture.Height));
 

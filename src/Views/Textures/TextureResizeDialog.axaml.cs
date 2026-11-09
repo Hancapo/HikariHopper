@@ -1,60 +1,75 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
+using HikariHopper.Textures;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// Resizes the selection (port of <c>TextureResizeDialog.qml</c>). With <see cref="PowerOfTwo"/>
-/// each texture is rounded to powers of two (nearest, down or up) instead of taking typed
-/// dimensions.
+/// Resizes the selection: to a size typed in pixels, the same for every texture, or by a percentage, which scales
+/// each from its own size; and, with <see cref="Snap"/>, to the nearest power of two.
 /// </summary>
 /// <remarks>
-/// The width and height fields accept integers from 1 to <see cref="TextureViewerViewModel.MaximumDimension"/>;
-/// with the aspect lock on, finishing one field recomputes the other from the current texture.
-/// Apply is enabled for a valid size (and, rounding, only when a texture is not a power of two).
+/// The fields take integers. With the aspect lock on, the other field follows the one typed in as it is typed: in
+/// pixels by the current texture's proportions, in percent by taking the same number. The quick sizes set a share of
+/// the original, and Power of two stays on until it is pressed again. The outcome says what the selection is now and
+/// what it would be, and what about the result is worth a second look; Apply is enabled for a size every texture can
+/// take and that changes at least one of them.
 /// </remarks>
 public partial class TextureResizeDialog : TextureToolDialog
 {
+    /// <summary>Opens with the result rounded to a power of two: the "To power of 2" command.</summary>
     public static readonly StyledProperty<bool> PowerOfTwoProperty =
         AvaloniaProperty.Register<TextureResizeDialog, bool>(nameof(PowerOfTwo));
 
+    /// <summary>The most a percentage can be: 64 times the size.</summary>
+    private const int MaximumPercent = 6400;
+
     private readonly QtIntValidator widthValidator;
     private readonly QtIntValidator heightValidator;
+    // While the dialog itself writes a field: not something typed, so the other field doesn't follow it.
+    private bool syncing;
 
     public TextureResizeDialog()
     {
         InitializeComponent();
-        RoundingCombo.ItemsSource = new FlatComboOption[]
-        {
-            new("Nearest", "nearest"),
-            new("Round down", "down"),
-            new("Round up", "up"),
-        };
-        RoundingCombo.SelectedIndex = 0;
+        UnitSwitch.Sides.Add(new SwitchSide { Text = "px", Width = 34, Label = "Pixels" });
+        UnitSwitch.Sides.Add(new SwitchSide { Text = "%", Width = 30, Label = "Percent" });
+        UnitSwitch.SelectedIndex = 0;
+        UnitSwitch.SideRequested += (_, side) => SetUnit(side == 1 ? ResizeUnit.Percent : ResizeUnit.Pixels);
         widthValidator = new QtIntValidator(WidthField, 1, 0x7FFF);
         heightValidator = new QtIntValidator(HeightField, 1, 0x7FFF);
-        WidthField.EditingFinished += (_, _) =>
+        WidthField.PropertyChanged += (_, e) =>
         {
-            if (widthValidator.IsAcceptable && LockAspect.IsChecked == true && ViewModel is { SelectedWidth: > 0 } vm)
-                HeightField.Text = AspectSize(WidthField.Text, vm.SelectedHeight, vm.SelectedWidth);
+            if (e.Property == TextBox.TextProperty)
+                Typed(WidthField);
         };
-        HeightField.EditingFinished += (_, _) =>
+        HeightField.PropertyChanged += (_, e) =>
         {
-            if (heightValidator.IsAcceptable && LockAspect.IsChecked == true && ViewModel is { SelectedHeight: > 0 } vm)
-                WidthField.Text = AspectSize(HeightField.Text, vm.SelectedWidth, vm.SelectedHeight);
+            if (e.Property == TextBox.TextProperty)
+                Typed(HeightField);
         };
-        foreach (Control control in new Control[] { WidthField, HeightField, RoundingCombo, MipSizeCombo, MipCheck })
-            control.PropertyChanged += (_, e) =>
+        LockButton.Click += (_, _) => SetLocked(!Locked);
+        QuarterButton.Click += (_, _) => SetScale(25);
+        HalfButton.Click += (_, _) => SetScale(50);
+        DoubleButton.Click += (_, _) => SetScale(200);
+        SnapButton.Click += (_, _) => SetSnap(!Snap);
+        foreach (FlatComboBox combo in new FlatComboBox[] { FilterCombo, MipCombo })
+            combo.PropertyChanged += (_, e) =>
             {
-                if (e.Property == TextBox.TextProperty || e.Property == FlatComboBox.CurrentValueProperty
-                    || e.Property == ToggleButton.IsCheckedProperty)
+                if (e.Property == FlatComboBox.CurrentValueProperty)
                     Refresh();
             };
+        foreach (ChromeToolButton quick in new[] { QuarterButton, HalfButton, DoubleButton, SnapButton })
+        {
+            quick.Height = 22;
+            quick.CornerRadius = Ui.Theme.InnerCorner;
+        }
+        ThemedToolTip.Set(LockButton, "Lock aspect ratio");
+        ThemedToolTip.Set(SnapButton, "Round the result to the nearest power of two");
         ApplyAction = Run;
-        UpdateMode();
+        RefreshToggles();
     }
 
     public bool PowerOfTwo
@@ -63,49 +78,62 @@ public partial class TextureResizeDialog : TextureToolDialog
         set => SetValue(PowerOfTwoProperty, value);
     }
 
-    private string RoundingMode => RoundingCombo.CurrentValue as string ?? "nearest";
+    /// <summary>Whether the fields are pixels or percent.</summary>
+    internal ResizeUnit Unit { get; private set; }
 
-    /// <summary>QML <c>roundedSize</c>: the current texture rounded with the chosen mode.</summary>
-    private TextureSize? RoundedSize =>
-        PowerOfTwo && ViewModel is { SelectedWidth: > 0, SelectedHeight: > 0 } vm ? vm.PowerOfTwoSize(RoundingMode) : null;
+    /// <summary>Whether the other field follows the one typed in.</summary>
+    internal bool Locked { get; private set; } = true;
 
-    public int TargetWidth => PowerOfTwo ? RoundedSize?.Width ?? 0 : QtIntValidator.NumberOf(WidthField.Text ?? "");
+    /// <summary>Whether the result is rounded to the nearest power of two.</summary>
+    internal bool Snap { get; private set; }
 
-    public int TargetHeight => PowerOfTwo ? RoundedSize?.Height ?? 0 : QtIntValidator.NumberOf(HeightField.Text ?? "");
+    /// <summary>What the fields ask for.</summary>
+    internal ResizePlan Plan => new(Unit, QtIntValidator.NumberOf(WidthField.Text ?? ""), QtIntValidator.NumberOf(HeightField.Text ?? ""), Snap);
 
+    /// <summary>The size the current texture would come out at; 0 × 0 while the fields don't say.</summary>
+    public int TargetWidth => ViewModel is { SelectedWidth: > 0 } vm ? Plan.Target(vm.SelectedWidth, vm.SelectedHeight).Width : 0;
+
+    public int TargetHeight => ViewModel is { SelectedHeight: > 0 } vm ? Plan.Target(vm.SelectedWidth, vm.SelectedHeight).Height : 0;
+
+    /// <summary>Whether every selected texture can take the size the fields give it.</summary>
     public bool ValidSize
     {
         get
         {
-            if (ViewModel is not { } vm)
+            if (ViewModel is not { } vm || !widthValidator.IsAcceptable || !heightValidator.IsAcceptable)
                 return false;
-            int width = TargetWidth, height = TargetHeight;
-            return width > 0 && height > 0 && width <= vm.MaximumDimension && height <= vm.MaximumDimension
-                && (PowerOfTwo
-                    ? vm.SelectedCount > 0 && vm.ValidPowerOfTwoSelection(RoundingMode)
-                    : widthValidator.IsAcceptable && heightValidator.IsAcceptable);
+            ResizePlan plan = Plan;
+            IReadOnlyList<TextureFacts> facts = vm.SelectionFacts;
+            return facts.Count > 0 && facts.All(each =>
+            {
+                (int width, int height) = plan.Target(each.Width, each.Height);
+                return width > 0 && height > 0 && width <= vm.MaximumDimension && height <= vm.MaximumDimension;
+            });
         }
     }
 
     protected override void OnOpened()
     {
         base.OnOpened();
-        WidthField.Text = (ViewModel?.SelectedWidth ?? 0).ToString();
-        HeightField.Text = (ViewModel?.SelectedHeight ?? 0).ToString();
-        if (PowerOfTwo)
-            RoundingCombo.Focus();
-        else
-        {
-            WidthField.Focus();
-            WidthField.SelectAll();
-        }
+        bool several = ViewModel is { SelectedCount: > 1 };
+        Heading = several ? $"RESIZE {ViewModel!.SelectedCount} TEXTURES" : "RESIZE TEXTURE";
+        Snap = PowerOfTwo;
+        // Several textures each keep their shape in percent; one is typed in pixels.
+        Unit = several ? ResizeUnit.Percent : ResizeUnit.Pixels;
+        UnitSwitch.SelectedIndex = Unit == ResizeUnit.Percent ? 1 : 0;
+        UpdateLimits();
+        Write(Unit == ResizeUnit.Percent ? 100 : ViewModel?.SelectedWidth ?? 0, Unit == ResizeUnit.Percent ? 100 : ViewModel?.SelectedHeight ?? 0);
+        RefreshToggles();
+        Refresh();
+        WidthField.Focus();
+        WidthField.SelectAll();
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == PowerOfTwoProperty)
-            UpdateMode();
+        if (change.Property == PowerOfTwoProperty && UnitSwitch is not null)
+            SetSnap(PowerOfTwo);
     }
 
     protected override void OnViewModelChanged(string? property)
@@ -113,83 +141,198 @@ public partial class TextureResizeDialog : TextureToolDialog
         base.OnViewModelChanged(property);
         if (widthValidator is null)
             return;
-        int maximum = ViewModel?.MaximumDimension ?? 0x7FFF;
-        widthValidator.Top = maximum;
-        heightValidator.Top = maximum;
+        UpdateLimits();
         Refresh();
+    }
+
+    /// <summary>Turns the aspect lock on or off; turned on, the height takes what the width gives it.</summary>
+    internal void SetLocked(bool locked)
+    {
+        Locked = locked;
+        RefreshToggles();
+        if (locked)
+            Follow(WidthField);
+        Refresh();
+    }
+
+    /// <summary>Rounds the result to the nearest power of two, or stops.</summary>
+    internal void SetSnap(bool snap)
+    {
+        Snap = snap;
+        RefreshToggles();
+        Refresh();
+    }
+
+    /// <summary>
+    /// Reads the fields as pixels or as percent, keeping the size reached: 512 of 1024 becomes 50, and back.
+    /// </summary>
+    internal void SetUnit(ResizeUnit unit)
+    {
+        if (unit == Unit)
+            return;
+        int width = QtIntValidator.NumberOf(WidthField.Text ?? ""), height = QtIntValidator.NumberOf(HeightField.Text ?? "");
+        (int ownWidth, int ownHeight) = (ViewModel?.SelectedWidth ?? 0, ViewModel?.SelectedHeight ?? 0);
+        Unit = unit;
+        UnitSwitch.SelectedIndex = unit == ResizeUnit.Percent ? 1 : 0;
+        UpdateLimits();
+        if (width > 0 && height > 0 && ownWidth > 0 && ownHeight > 0)
+        {
+            if (unit == ResizeUnit.Percent)
+            {
+                int share = ResizePlan.PercentOf(width, ownWidth);
+                Write(share, Locked ? share : ResizePlan.PercentOf(height, ownHeight));
+            }
+            else
+                Write(ResizePlan.Scaled(ownWidth, width), ResizePlan.Scaled(ownHeight, height));
+        }
+        Refresh();
+    }
+
+    /// <summary>
+    /// Sets the size to a share of the original, as a quick size does. Several textures typed in pixels switch to
+    /// percent, where each keeps its shape.
+    /// </summary>
+    internal void SetScale(int percent)
+    {
+        if (ViewModel is not { } vm)
+            return;
+        if (Unit == ResizeUnit.Pixels && vm.SelectedCount > 1)
+        {
+            Unit = ResizeUnit.Percent;
+            UnitSwitch.SelectedIndex = 1;
+            UpdateLimits();
+        }
+        if (Unit == ResizeUnit.Percent)
+            Write(percent, percent);
+        else
+            Write(ResizePlan.Scaled(vm.SelectedWidth, percent), ResizePlan.Scaled(vm.SelectedHeight, percent));
+        Refresh();
+    }
+
+    private void UpdateLimits()
+    {
+        int most = Unit == ResizeUnit.Percent ? MaximumPercent : ViewModel?.MaximumDimension ?? 0x7FFF;
+        widthValidator.Top = most;
+        heightValidator.Top = most;
+    }
+
+    // The dialog's own writing of both fields, which neither follows.
+    private void Write(int width, int height)
+    {
+        syncing = true;
+        try
+        {
+            WidthField.Text = width.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            HeightField.Text = height.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            syncing = false;
+        }
+    }
+
+    // A field's text changed by anything but the dialog: with the lock on, the other follows at once.
+    private void Typed(FlatTextField field)
+    {
+        if (syncing || widthValidator is null || heightValidator is null)
+            return;
+        if (Locked)
+            Follow(field);
+        Refresh();
+    }
+
+    // Gives the other field what this one's value makes it: the same percentage, or in pixels the current texture's
+    // proportions. A value that isn't a size yet (empty, or out of range) leaves the other as it is.
+    private void Follow(FlatTextField field)
+    {
+        bool fromWidth = ReferenceEquals(field, WidthField);
+        if (!(fromWidth ? widthValidator : heightValidator).IsAcceptable || ViewModel is not { SelectedWidth: > 0, SelectedHeight: > 0 } vm)
+            return;
+        FlatTextField other = fromWidth ? HeightField : WidthField;
+        string value = Unit == ResizeUnit.Percent
+            ? field.Text ?? ""
+            : fromWidth ? AspectSize(field.Text, vm.SelectedHeight, vm.SelectedWidth) : AspectSize(field.Text, vm.SelectedWidth, vm.SelectedHeight);
+        if (other.Text == value)
+            return;
+        syncing = true;
+        try
+        {
+            other.Text = value;
+        }
+        finally
+        {
+            syncing = false;
+        }
     }
 
     private static string AspectSize(string? text, int numerator, int denominator) =>
         Math.Max(1, QtRaster.JsRound((double)QtIntValidator.NumberOf(text ?? "") * numerator / denominator)).ToString("0");
 
-    private bool Run()
-    {
-        if (ViewModel is not { } vm)
-            return false;
-        string filter = (string)FilterCombo.CurrentValue!;
-        int minimum = (int)MipSizeCombo.CurrentValue!;
-        bool mipmaps = MipCheck.IsChecked == true;
-        return PowerOfTwo
-            ? vm.ResizeSelectionToPowerOfTwo(RoundingMode, filter, minimum, mipmaps)
-            : vm.ResizeSelected(TargetWidth, TargetHeight, filter, minimum, mipmaps);
-    }
+    private bool Run() => ViewModel is { } vm
+        && vm.ResizeSelection(Plan, (string)FilterCombo.CurrentValue!, MipCombo.Minimum, MipCombo.Generate);
 
-    private void UpdateMode()
+    // On, a toggle sits raised in its well in full ink.
+    private void RefreshToggles()
     {
-        bool rounding = PowerOfTwo;
-        Heading = rounding ? "RESIZE TO POWER OF 2" : "RESIZE TEXTURE";
-        ResolutionLabel.IsVisible = ResolutionRow.IsVisible = !rounding;
-        LockSpacer.IsVisible = LockAspect.IsVisible = !rounding;
-        RoundingLabel.IsVisible = RoundingCombo.IsVisible = rounding;
-        RoundingNote.IsVisible = rounding;
-        Refresh();
+        LockButton.Sunken = Locked;
+        // A button of its own, not in a well: on, it is raised.
+        SnapButton.Raised = Snap;
+
     }
 
     private void Refresh()
     {
-        if (ResultText is null || widthValidator is null)
-            return;
-        bool mipmaps = MipCheck.IsChecked == true;
-        SmallestLabel.IsVisible = MipSizeCombo.IsVisible = mipmaps;
-        UpdateRows();
-        if (ViewModel is not { } vm)
+        if (Outcome is null || widthValidator is null || ViewModel is not { } vm)
             return;
         bool valid = ValidSize;
-        ApplyEnabled = valid && (!PowerOfTwo || vm.SelectedNeedsPowerOfTwo);
-        int width = TargetWidth, height = TargetHeight;
-        int minimum = MipSizeCombo.CurrentValue is int value ? value : 0;
-        if (!valid && PowerOfTwo)
-            ResultText.Text = $"Result exceeds the maximum dimension ({vm.MaximumDimension}). Choose Round down.";
-        else if (vm.SelectedCount > 1)
-            ResultText.Text = PowerOfTwo
-                ? $"Round each texture independently · {RoundingCombo.DisplayText}"
-                : $"All selected textures → {width} × {height}";
-        else
+        ResizePlan plan = Plan;
+        IReadOnlyList<TextureFacts> facts = vm.SelectionFacts;
+        // Nothing to apply while every texture already has the size asked for.
+        ApplyEnabled = valid && facts.Any(each => !plan.Keeps(each.Width, each.Height));
+        (int Width, int Height)[] targets = [.. facts.Select(each => plan.Target(each.Width, each.Height))];
+        int minimum = MipCombo.Minimum;
+        bool mipmaps = MipCombo.Generate;
+        long now = facts.Sum(each => each.DataSize), after = 0;
+        for (int index = 0; index < facts.Count && after >= 0; index++)
         {
-            string mips = ViewModels.TextureItem.Mips(mipmaps && valid ? vm.EstimatedMipCount(width, height, minimum) : 1);
-            string last = mipmaps && valid ? vm.EstimatedSmallestMipDimensions(width, height, minimum) : "none";
-            ResultText.Text = $"{vm.SelectedWidth} × {vm.SelectedHeight}  →  {(width != 0 ? width : "—")} × "
-                + $"{(height != 0 ? height : "—")}  ·  {mips}  ·  last {last}";
+            TextureFacts each = facts[index];
+            // A texture left at its size keeps its bytes; the others are counted from their new size and chain.
+            long bytes = !valid ? -1
+                : plan.Keeps(each.Width, each.Height) ? each.DataSize
+                : ResizePlan.EstimatedSize(targets[index].Width, targets[index].Height, each.Format,
+                    mipmaps ? vm.EstimatedMipCount(targets[index].Width, targets[index].Height, minimum) : 1);
+            after = bytes < 0 ? -1 : after + bytes;
         }
+        Outcome.Show(TextureDialogSummary.Sizes(facts.Select(each => (each.Width, each.Height))), now,
+            valid ? TextureDialogSummary.Sizes(targets) : "—", after, valid ? Warnings(vm, facts, targets) : []);
+        FitBody();
     }
 
-    /// <summary>Collapses the spacing rows next to hidden rows, as a GridLayout skips hidden items.</summary>
-    private void UpdateRows()
+    /// <summary>What about the sizes asked for is worth a second look: for one texture in its own numbers, for several by how many.</summary>
+    private static IReadOnlyList<string> Warnings(TextureViewerViewModel vm, IReadOnlyList<TextureFacts> facts, (int Width, int Height)[] targets)
     {
-        RowDefinitions rows = OptionsGrid.RowDefinitions;
-        var visible = new bool[rows.Count];
-        foreach (Control child in OptionsGrid.Children)
+        var lines = new List<string>();
+        int odd = 0, unblocked = 0, larger = 0;
+        for (int index = 0; index < facts.Count; index++)
         {
-            if (child.IsVisible)
-                visible[Grid.GetRow(child)] = true;
+            (int width, int height) = targets[index];
+            if (!TextureDimensions.IsPowerOfTwo(width, height))
+                odd++;
+            if (ResizePlan.InBlocks(facts[index].Format) && (width % 4 != 0 || height % 4 != 0))
+                unblocked++;
+            if (width > facts[index].Width || height > facts[index].Height)
+                larger++;
         }
-        bool previous = false;
-        for (int row = 0; row < rows.Count; row += 2)
-        {
-            if (row > 0)
-                rows[row - 1].Height = new GridLength(previous && visible[row] ? 8 : 0);
-            if (visible[row])
-                previous = true;
-        }
+        bool one = facts.Count == 1;
+        string size = one ? $"{targets[0].Width} × {targets[0].Height}" : "";
+        if (odd > 0)
+            lines.Add(one ? $"{size} is not a power of two." : $"{odd} of {facts.Count} will not be a power of two.");
+        if (unblocked > 0)
+            lines.Add(one
+                ? $"{vm.SelectedFormat} is stored in 4 × 4 blocks, and {size} is not a multiple of 4."
+                : $"{unblocked} of {facts.Count} are stored in 4 × 4 blocks and will not be a multiple of 4.");
+        if (larger > 0)
+            lines.Add(one ? "Larger than the original: no detail is added." : $"{larger} of {facts.Count} get larger: no detail is added.");
+        return lines;
     }
 }

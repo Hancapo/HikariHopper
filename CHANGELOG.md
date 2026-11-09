@@ -8,9 +8,15 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Resize a texture by percentage, or with one press to a quarter, half or double its size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Resizing several textures by percentage scales each from its own size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+
 ### Changed
 
 - Removing a texture in the texture editor asks with a red Remove button, like deleting a file. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- With the aspect ratio locked, the other dimension follows as you type in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- The Resize dialog shows the texture now and after side by side, with the memory each takes, and says when the new size is not a power of two. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Resizing to a power of two is a button in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
 
 ### Fixed
 

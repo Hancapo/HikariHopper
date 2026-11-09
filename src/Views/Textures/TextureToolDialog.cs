@@ -37,6 +37,8 @@ public class TextureToolDialog : TextureModalDialog
         AvaloniaProperty.Register<TextureToolDialog, double>(nameof(BodyHeight), 280);
 
     private ChromeToolButton? applyButton;
+    // Whether the body is as tall as its content (FitBody), measured once the dialog is in a window.
+    private bool fitsBody;
 
     public TextureToolDialog()
     {
@@ -123,7 +125,30 @@ public class TextureToolDialog : TextureModalDialog
             UpdateApplyEnabled();
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (fitsBody)
+            FitBody();
+    }
+
     private void UpdateHeight() => Height = Ui.Theme.SheetHeaderHeight + BodyHeight + FooterHeight;
+
+    /// <summary>
+    /// Makes the body as tall as what is in it, at the dialog's width: for a dialog whose content comes and goes
+    /// (a warning under its outcome), in place of a height written by hand.
+    /// </summary>
+    protected void FitBody()
+    {
+        fitsBody = true;
+        // Not before it is in a window: measuring it there would style it without the app's styles, for good.
+        if (Content is not Control body || VisualRoot is null)
+            return;
+        // Measured again even at the same width: what changed is inside it. The card's own border is a pixel on each side.
+        body.InvalidateMeasure();
+        body.Measure(new Size(DialogWidth - 2, double.PositiveInfinity));
+        BodyHeight = Math.Ceiling(body.DesiredSize.Height);
+    }
 
     private void UpdateApplyStyle()
     {
