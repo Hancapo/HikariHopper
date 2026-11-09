@@ -538,6 +538,8 @@ internal sealed class PartsPanel : UserControl
         Rows = listed;
         selected.IntersectWith(listed.Select(row => row.Item1.Key));
         bool allOpen = AllExpanded;
+        // A flat list (a collision's materials) has nothing to open or close.
+        ExpandButton.IsVisible = TreeNodes().Any(node => node.Children.Count > 0);
         ExpandButton.IconKind = allOpen ? "collapse-all" : "expand-all";
         ThemedToolTip.Set(ExpandButton, allOpen ? "Collapse all" : "Expand all");
         AutomationProperties.SetName(ExpandButton, allOpen ? "Collapse all" : "Expand all");

@@ -302,6 +302,9 @@ public sealed class PartsPanelVariantTests
         Assert.Equal(CollisionMesh.Colour((FiveFury.Bounds.BoundMaterialType)4), panel.Rows[0].Node.Colour);
         Assert.Equal("2 / 2", panel.CountText);
         Assert.False(panel.ModeRow.IsVisible);
+        // A flat list: nothing to expand, where a drawable's tree has the button.
+        Assert.False(panel.ExpandButton.IsVisible);
+        Assert.True(new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) }.ExpandButton.IsVisible);
         Assert.Equal(36 * 3, mesh.ToArray().Length);
 
         // Hidden, a material's triangles are left out of what is drawn; the rest stay.
