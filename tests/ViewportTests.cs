@@ -337,6 +337,43 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.StartsWith("Couldn't read broken.ybn: ", viewer.Location);
     }
 
+    [AvaloniaFact]
+    public void A_drawable_is_lit_at_the_time_of_day_its_slider_sets()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        Settle(viewer);
+        // The game's afternoon to start with, in quarter hours.
+        Assert.True(viewer.SunBar.IsVisible);
+        Assert.Equal("14:30", viewer.SunText.Text);
+        Assert.Equal(58, viewer.SunSlider.Value);
+        Assert.Equal(14.5f, viewer.Hours);
+
+        viewer.SetHours(18.25f);
+        Assert.Equal(18.25f, viewer.Hours);
+        Assert.Equal("18:15", viewer.SunText.Text);
+        Assert.Equal(73, viewer.SunSlider.Value);
+        // Midnight at either end.
+        viewer.SetHours(24);
+        Assert.Equal("00:00", viewer.SunText.Text);
+    }
+
+    [AvaloniaFact]
+    public void A_collision_has_no_time_of_day()
+    {
+        var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
+        var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
+        Settle(viewer);
+        Assert.False(viewer.SunBar.IsVisible);
+    }
+
     /// <summary>Waits for a viewer's background read to finish and be shown.</summary>
     private static void Settle(Views.ModelViewer viewer)
     {

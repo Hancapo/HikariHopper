@@ -10,7 +10,8 @@
              FontSize="{x:Static ui:Theme.FontSize}"
              Foreground="{x:Static ui:Theme.Text}">
   <!-- A 3D file, to look at, as a modal that fills the main window, in the image viewer's frame: a header naming
-       the file with a close mark, the 3D viewport, and the status bar: where the content is, and the GPU. -->
+       the file with a close mark, the 3D viewport, and the status bar: where the content is, for a drawable the time
+       of day its sun is at, and the GPU. -->
   <UserControl.Styles>
     <Style Selector="TextBlock.status">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
@@ -39,10 +40,18 @@
 
           <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ExplorerStatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
             <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-            <Grid Margin="0,1,0,0" ColumnDefinitions="*,Auto">
+            <Grid Margin="0,1,0,0" ColumnDefinitions="*,Auto,Auto">
               <TextBlock Name="StatusText" Grid.Column="0" Classes="status" Margin="10,0,0,0"
                          Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Name="AdapterText" Grid.Column="1" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
+              <!-- The time of day, which sets where the sun is and the rest of the game's light: quarter hours, with
+                   marks every six hours. -->
+              <StackPanel Name="SunBar" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0" IsVisible="False"
+                          ToolTip.Tip="The time of day the model is lit at">
+                <TextBlock Name="SunText" Classes="status" />
+                <v:TextureMipSlider Name="SunSlider" Width="132" Maximum="96" TickCount="5" VerticalAlignment="Center"
+                                    AutomationProperties.Name="Time of day" />
+              </StackPanel>
+              <TextBlock Name="AdapterText" Grid.Column="2" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
             </Grid>
           </Panel>
 

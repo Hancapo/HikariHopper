@@ -20,6 +20,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer finds a map model's textures where the game does: in the dictionary its archetype names and that dictionary's parents, such as the shared road and terrain dictionaries. The game's texture parents are worked out in the background when the game loads, and kept until its archives change. ([#102](https://github.com/Hancapo/HikariHopper/pull/102))
 - The 3D viewer draws the detail maps that props and buildings tile over their surfaces, found in the game's mapdetail.ytd. ([#103](https://github.com/Hancapo/HikariHopper/pull/103))
 - Terrain in the 3D viewer is drawn with the rest of GTA V's terrain shaders, including their parallax near the camera, specular maps and layers on a second UV set; blended ground mixes its layers as the game does, and the terrain shades itself from the sun as the game does. ([#104](https://github.com/Hancapo/HikariHopper/pull/104))
+- A time-of-day slider in the 3D viewer's status bar, to see a model in the game's light at any hour. ([#105](https://github.com/Hancapo/HikariHopper/pull/105))
 
 ### Changed
 
