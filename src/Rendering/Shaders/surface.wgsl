@@ -25,8 +25,17 @@ struct Material {
     dirt_colour: vec4f,
     // Vehicles: specular2Color_DirLerp, the second lobe's colour and how far its light swings overhead.
     specular2: vec4f,
-    // Vehicles: is a paint, has the second lobe, has a diffuse ramp, takes specular from constants.
+    // Vehicles: is a paint, has the second lobe, has a diffuse ramp.
     vehicle: vec4f,
+    // Vehicles: how the shader's program writes its specular (materials.json's vehicle_specular): the specular map's
+    // part in the intensity (0 none, 1 masked, 2 red squared), the roughness (0 none, 1 the dirt map's, 2
+    // dirtLevelMod.z), the map's part in the power (0 none, 1 alpha, 2 green squared), and whether fresnel is one
+    // less the map's blue.
+    spec_model: vec4f,
+    // The UV set the specular map is read on and its tiling; has a second diffuse layer, the UV set it is read on.
+    spec_place: vec4f,
+    // The second diffuse layer's colour and strength (matDiffuseColor2).
+    layer: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -38,6 +47,7 @@ struct Material {
 @group(1) @binding(6) var palette_sampler: sampler;
 @group(1) @binding(7) var dirt_map: texture_2d<f32>;
 @group(1) @binding(8) var diffuse_ramp: texture_2d<f32>;
+@group(1) @binding(9) var diffuse_layer: texture_2d<f32>;
 
 struct SurfaceInput {
     @location(0) position: vec3f,
@@ -159,9 +169,11 @@ fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
     // Every map is sampled before anything is decided, as derivatives need uniform control flow.
     let diffuse = textureSample(diffuse_map, surface_sampler, input.uv0);
     let bump = textureSample(normal_map, surface_sampler, input.uv0);
-    let specular_sample = textureSample(specular_map, surface_sampler, input.uv0);
+    let specular_sample = textureSample(specular_map, surface_sampler,
+        select(input.uv0, input.uv1, material.spec_place.x > 0.5) * material.spec_place.y);
     // A vehicle's dirt tiles closer as dirtLevelMod.z goes down.
     let dirt = textureSample(dirt_map, surface_sampler, input.uv1 * (2.0 - material.dirt_level.z));
+    let layer = textureSample(diffuse_layer, surface_sampler, select(input.uv0, input.uv1, material.spec_place.w > 0.5));
 
     let mode = u32(material.options.z + 0.5);
     if (mode == 1u && diffuse.a < material.extra.x) {
@@ -183,7 +195,7 @@ fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
     let to_light = normalize(light.sun_direction.xyz);
     var surface: Surface;
     if (material.extra.w > 0.5) {
-        surface = vehicle_surface(input, diffuse, specular_sample, dirt, normal, view, to_light);
+        surface = vehicle_surface(input, diffuse, specular_sample, dirt, layer, normal, view, to_light);
     } else {
         surface = textured_surface(input, diffuse, specular_sample, normal);
     }
@@ -218,7 +230,7 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
 // with fewer inputs. The vertex colour's red is ambient occlusion, for every term; its blue sets where the dirt level
 // applies (the pixel shader's dirt and ramp terms); its green scales the damage deformation in the vertex shader
 // (VS_VehicleTransformD), which an undamaged vehicle doesn't have.
-fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec4f, normal: vec3f, view: vec3f,
+fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec4f, layer: vec4f, normal: vec3f, view: vec3f,
     to_light: vec3f) -> Surface {
     var surface: Surface;
     surface.normal = normal;
@@ -236,7 +248,13 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
             paint = mix(paint, vec3f(end), level.x * input.colour0.b * (1.0 - level.z));
         }
     }
-    var base = diffuse.rgb * occlusion * paint;
+    // The diffuse map in the paint's colour, then the second layer (a livery or decals) over it, by its alpha and
+    // matDiffuseColor2's strength, in matDiffuseColor2's colour; the vertex AO over both.
+    var base = diffuse.rgb * paint;
+    if (material.spec_place.z > 0.5) {
+        base = mix(base, material.layer.rgb * layer.rgb, material.layer.w * layer.a);
+    }
+    base *= occlusion;
 
     // Dirt: how much of it shows, by the dirt map, the level and the vertex blue; its colour over the paint, and the
     // map's own over that where it is dirtiest. Its green roughens the surface, taking the specular away.
@@ -250,26 +268,41 @@ fn vehicle_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f,
         base = mix(base, vec3f(dirt.z), masked * level.x);
     }
 
-    // Specular: paints from their constants, the specular map only shaping the second lobe; the rest from the map,
-    // R² the intensity, G² the power and B the fresnel.
+    // Specular, as the shader's own program writes it: the vertex AO times a scale, the specular map's part and the
+    // roughness; the power from a scale and the map; fresnel a constant or the map's.
     let rr = specular_sample.r * specular_sample.r;
     let gg = specular_sample.g * specular_sample.g;
+    let weighed = dot(vec3f(rr, gg, specular_sample.b), material.mask.xyz);
+    let model = vec4u(material.spec_model + 0.5);
+    var map = 1.0;
+    if (model.x == 1u) {
+        map = weighed;
+    } else if (model.x == 2u) {
+        map = rr;
+    }
+    var rough = 1.0;
+    if (model.y == 1u) {
+        rough = 1.0 - roughness;
+    } else if (model.y == 2u) {
+        rough = level.z;
+    }
+    surface.intensity = occlusion * material.specular.z * map * rough;
+    var power = 1.0;
+    if (model.z == 1u) {
+        power = specular_sample.a;
+    } else if (model.z == 2u) {
+        power = gg;
+    }
+    surface.power = material.specular.y * power;
+    surface.fresnel = select(material.specular.x, 1.0 - specular_sample.b, model.w == 1u);
+    // The second lobe: paints weigh it by the masked map and take its exponent from the map's alpha; the others from
+    // red and green.
     var lobe_strength: f32;
     var lobe_exponent: f32;
-    if (material.vehicle.w > 0.5) {
-        let weighed = dot(vec3f(rr, gg, specular_sample.b), material.mask.xyz);
-        surface.intensity = occlusion * material.specular.z * (1.0 - roughness);
-        if (material.vehicle.x < 0.5 && material.options.y > 0.5) {
-            surface.intensity *= weighed;
-        }
-        surface.power = material.specular.y;
-        surface.fresnel = material.specular.x;
+    if (material.vehicle.x > 0.5) {
         lobe_strength = occlusion * 0.75 * level.w * weighed;
         lobe_exponent = specular_sample.a * 15.0;
     } else {
-        surface.intensity = 0.6 * occlusion * rr * (1.0 - roughness);
-        surface.power = 460.0 * gg;
-        surface.fresnel = 1.0 - specular_sample.b;
         lobe_strength = 0.6 * occlusion * rr * level.w;
         lobe_exponent = gg * 20.0;
     }

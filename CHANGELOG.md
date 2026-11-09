@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Vehicles in the 3D viewer are shaded with GTA V's vehicle shaders: paint, body parts, tyres and interiors, with paint slots filled as the game fills them without a vehicle's colours. ([#99](https://github.com/Hancapo/HikariHopper/pull/99))
 - Models in the 3D viewer are lit as GTA V lights them on a clear afternoon, with the game's sun, ambient light, exposure and tone map, and the sun's shadows on them and on the ground. ([#96](https://github.com/Hancapo/HikariHopper/pull/96))
 - Models in the 3D viewer reflect themselves and GTA V's sky, as the game draws its reflection map from the camera, and are exposed for what's in view, as the game exposes its frame. ([#97](https://github.com/Hancapo/HikariHopper/pull/97))
+- Each vehicle shader in the 3D viewer writes its specular as its own program does, and liveries and decals lie over the paint. ([#98](https://github.com/Hancapo/HikariHopper/pull/98))
 
 ### Changed
 
