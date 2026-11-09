@@ -44,9 +44,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private const double SolidOpacity = .75;
     private Buffer? overlayBuffer;
     private uint overlayCount;
-    // The swap chain's format, and the sRGB view of it that frames are drawn through.
+    // The swap chain's format, and the sRGB view of it that frames are shown through; frames are drawn to a texture of
+    // their own first (ViewportRenderer.Antialiasing.cs), in the frame format every pass's pipeline is made for.
     private readonly TextureFormat surfaceFormat;
-    private readonly TextureFormat viewFormat;
+    private readonly TextureFormat presentFormat;
+    private readonly TextureFormat viewFormat = FrameFormat;
     private readonly float[] scene = new float[SceneBytes / sizeof(float)];
     private Texture? depth;
     private TextureView? depthView;
@@ -104,7 +106,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 // A window's usual format, so the pipelines compiled for it are the ones a window needs.
                 surfaceFormat = TextureFormat.BGRA8UnormSrgb;
             }
-            viewFormat = surfaceFormat switch
+            presentFormat = surfaceFormat switch
             {
                 TextureFormat.BGRA8Unorm => TextureFormat.BGRA8UnormSrgb,
                 TextureFormat.RGBA8Unorm => TextureFormat.RGBA8UnormSrgb,
@@ -235,6 +237,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         overlayLines = gpu.Pipeline($"overlay-lines/{viewFormat}", () => device.CreateRenderPipelineSync(Lines(depth: false)));
         CreateLighting();
         CreateSurfacePipelines();
+        CreateAntialiasing();
         Resize(width, height);
         ThrowIfFailed();
     }
@@ -338,7 +341,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         {
             Device = device,
             Format = surfaceFormat,
-            ViewFormats = surfaceFormat == viewFormat ? [] : [viewFormat],
+            ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
             Width = (uint)width,
             Height = (uint)height,
             PresentMode = PresentMode.Fifo,
@@ -355,6 +358,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         });
         depthView = depth.CreateView();
         CreateHdr();
+        CreateAntialiasingTargets();
     }
 
     /// <summary>Draws and presents a frame.</summary>
@@ -374,12 +378,22 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         TextureView view = texture.CreateView(new TextureViewDescriptor
         {
-            Format = viewFormat,
+            Format = presentFormat,
             Dimension = TextureViewDimension.D2,
             MipLevelCount = 1,
             ArrayLayerCount = 1,
             Aspect = TextureAspect.All,
         });
+        Render(view);
+        surface.Present();
+    }
+
+    /// <summary>
+    /// Draws a frame to a target in the window's format (the window's own, or a test's), with the scene as last
+    /// written.
+    /// </summary>
+    internal void Render(TextureView target)
+    {
         CommandEncoder encoder = device.CreateCommandEncoder();
         // A drawable's shadow first: the ground under it and the drawable itself both read it.
         bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
@@ -395,7 +409,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             [
                 new RenderPassColorAttachment
                 {
-                    View = view,
+                    View = frameView!,
                     LoadOp = LoadOp.Clear,
                     StoreOp = StoreOp.Store,
                     ClearValue = new Color(0, 0, 0, 1),
@@ -454,7 +468,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DrawBloom(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
-                ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
             });
             mapped.SetPipeline(tonemapPipeline!);
             mapped.SetBindGroup(0, sceneGroup);
@@ -467,7 +481,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             {
                 RenderPassEncoder solid = encoder.BeginRenderPass(new RenderPassDescriptor
                 {
-                    ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                    ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
                     DepthStencilAttachment = new RenderPassDepthStencilAttachment
                     {
                         View = depthView,
@@ -487,7 +501,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             {
                 RenderPassEncoder lined = encoder.BeginRenderPass(new RenderPassDescriptor
                 {
-                    ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                    ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
                 });
                 lined.SetBindGroup(0, sceneGroup);
                 lined.SetPipeline(overlayLines);
@@ -496,9 +510,22 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 lined.End();
             }
         }
+        // Anti-aliased, then to the window.
+        Antialias(encoder);
+        Present(encoder, target);
         queue.Submit(encoder.Finish());
-        surface.Present();
     }
+
+    /// <summary>Draws a frame offscreen, to a target in the window's format, for tests.</summary>
+    internal void RenderTo(TextureView target)
+    {
+        ThrowIfFailed();
+        WriteScene();
+        Render(target);
+    }
+
+    /// <summary>The format frames go to the window in: what <see cref="RenderTo"/> needs.</summary>
+    internal TextureFormat PresentFormat => presentFormat;
 
     private void WriteScene()
     {
@@ -555,6 +582,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         shadowMap?.Destroy();
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
+        DisposeAntialiasing();
         ClearSurfaces();
         surface?.Unconfigure();
     }
