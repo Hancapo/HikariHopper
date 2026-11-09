@@ -500,6 +500,71 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void CtrlZUndoesAResizeAtOnceEvenWhenWhatHadTheKeyboardIsGone()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        // The keyboard on something the dialog outlives (a menu's item, a row its work rebuilds): gone when it closes.
+        var gone = new Avalonia.Controls.Button { Focusable = true };
+        harness.Backdrop.Children.Add(gone);
+        harness.Settle();
+        gone.Focus();
+        var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        harness.Backdrop.Children.Remove(gone);
+        dialog.WidthField.Text = "128";
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal(128, harness.ViewModel.SelectedWidth);
+
+        // The keyboard is back in the editor, so Ctrl+Z undoes the resize without a click first.
+        Assert.True(harness.Window.IsKeyboardFocusWithin, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        harness.Key(Key.Z, RawInputModifiers.Control);
+        harness.Settle();
+        Assert.Equal(256, harness.ViewModel.SelectedWidth);
+    }
+
+    [AvaloniaFact]
+    public void CtrlZUndoesAResizeAppliedFromTheRightClickMenuWithNothingElseTouched()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        void ClickOn(Avalonia.Controls.Control control)
+        {
+            Point at = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), harness.Host)!.Value;
+            harness.Host.MouseMove(at);
+            harness.Host.MouseDown(at, MouseButton.Left);
+            harness.Host.MouseUp(at, MouseButton.Left);
+            TextureWindowHarness.Pump();
+        }
+
+        // Right-click the texture, Resize, To a size…, then Apply as it opens.
+        harness.Click(Row(0).X, Row(0).Y, MouseButton.Right);
+        harness.Settle();
+        TextureContextMenu menu = harness.Window.Rail.ContextMenuPopup;
+        Assert.True(menu.IsOpen);
+        ClickOn(menu.ResizeMenu);
+        harness.Settle();
+        ClickOn(menu.ResizeItem);
+        harness.Settle();
+        var dialog = Assert.IsType<TextureResizeDialog>(harness.Window.ToolDialog);
+        dialog.WidthField.Text = "128";
+        ClickOn(dialog.ApplyButton!);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal(128, harness.ViewModel.SelectedWidth);
+
+        // Nothing else touched: Ctrl+Z undoes it.
+        Assert.True(harness.Window.IsKeyboardFocusWithin, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        harness.Key(Key.Z, RawInputModifiers.Control);
+        harness.Settle();
+        Assert.Equal(256, harness.ViewModel.SelectedWidth);
+    }
+
+    [AvaloniaFact]
     public void ResizeDialogLocksTheAspectAndEstimatesTheResult()
     {
         TextureWindowHarness harness = Opened(Solid("wide", 256, 64));

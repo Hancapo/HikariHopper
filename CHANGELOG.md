@@ -68,6 +68,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The search box shows its subfolders toggle only when searching a folder, not an RPF or the whole game. ([#114](https://github.com/Hancapo/HikariHopper/pull/114))
 - The start page names a recently opened installation for its edition, Legacy or Enhanced, rather than its folder. ([#120](https://github.com/Hancapo/HikariHopper/pull/120))
 - Dropping files whose names are already in the folder asks whether to replace them, skip them or keep both, instead of cancelling the whole drop; replacing a folder merges into it. ([#121](https://github.com/Hancapo/HikariHopper/pull/121))
+- Ctrl+Z undoes a resize, or any change made from a texture editor dialog, right after it, instead of only after clicking a texture. ([#125](https://github.com/Hancapo/HikariHopper/pull/125))
 
 ### Removed
 
