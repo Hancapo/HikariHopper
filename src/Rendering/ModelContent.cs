@@ -70,8 +70,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
         IReadOnlyList<SceneModel>? models = extension switch
         {
             ".ydr" => [new SceneModel(Path.GetFileNameWithoutExtension(name), Ydr.Read(data).Drawable, Matrix4x4.Identity)],
-            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel(entry.Drawable.Name is { Length: > 0 } own ? own : $"0x{entry.Name.Value:X8}",
-                entry.Drawable, Matrix4x4.Identity))],
+            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel(EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
             ".yft" => FragmentModels.Of(fragment!, Path.GetFileNameWithoutExtension(name)),
             _ => null,
         };
@@ -115,4 +114,41 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
         }
         throw new InvalidDataException($"{name} isn't a collision, navmesh, drawable or fragment file.");
     }
+
+    /// <summary>A drawable's name as shown: without the .#dr its resource name ends in.</summary>
+    internal static string DrawableName(string name) =>
+        name.EndsWith(".#dr", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+
+    /// <summary>
+    /// A drawable dictionary's drawable's name: its own, unless that is only the dictionary's (a ped's are all
+    /// a_m_y_hipster_01.#dd); then its entry's hash read back as a ped component's name (head_000_r, p_head_002) when it
+    /// is one, else the hash.
+    /// </summary>
+    internal static string EntryName(uint hash, string? own)
+    {
+        if (own is { Length: > 0 } && !own.EndsWith(".#dd", StringComparison.OrdinalIgnoreCase))
+            return DrawableName(own);
+        return PedComponentNames.Value.TryGetValue(hash, out string? name) ? name : $"0x{hash:X8}";
+    }
+
+    // The names a ped's drawables go by, by their hash: each component and prop, numbered 000 to 199, as the game names them.
+    private static readonly Lazy<Dictionary<uint, string>> PedComponentNames = new(() =>
+    {
+        var names = new Dictionary<uint, string>();
+        void Add(string name) => names.TryAdd(new CommonFury.Hashing.Hash32(name).Value, name);
+        string[] components = ["head", "berd", "hair", "uppr", "lowr", "hand", "feet", "teef", "accs", "task", "decl", "jbib"];
+        string[] props = ["head", "eyes", "ears", "mouth", "lhand", "rhand", "lwrist", "rwrist", "hip", "lfoot", "rfoot"];
+        for (int i = 0; i < 200; i++)
+        {
+            string number = i.ToString("000", System.Globalization.CultureInfo.InvariantCulture);
+            foreach (string component in components)
+            {
+                Add($"{component}_{number}_u");
+                Add($"{component}_{number}_r");
+            }
+            foreach (string prop in props)
+                Add($"p_{prop}_{number}");
+        }
+        return names;
+    });
 }

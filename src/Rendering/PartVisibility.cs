@@ -11,6 +11,22 @@ namespace HikariHopper.Rendering;
 internal sealed record PartNode(string Key, string Name, int Depth, int Triangles, IReadOnlyList<int> Parts, IReadOnlyList<PartNode> Children,
     PartKind Kind = PartKind.Drawable);
 
+/// <summary>What a section of the parts panel holds.</summary>
+internal enum PartSectionKind
+{
+    /// <summary>Rows in a tree: a drawable's parts, or a group's drawables.</summary>
+    Tree,
+    /// <summary>A vehicle's extras, each a toggle numbered as the game numbers it.</summary>
+    Extras,
+    /// <summary>A drawable dictionary's drawables of one kind (a ped's heads, say): variants of each other.</summary>
+    Variants,
+}
+
+/// <summary>A section of the parts panel.</summary>
+/// <param name="Title">Its heading; none when it's the only one, a single drawable's.</param>
+/// <param name="Nodes">Its rows; for extras, one per extra, by number.</param>
+internal sealed record PartSection(string Title, PartSectionKind Kind, IReadOnlyList<PartNode> Nodes);
+
 /// <summary>What a parts panel row is.</summary>
 internal enum PartKind
 {
@@ -149,6 +165,127 @@ internal sealed class PartVisibility
         }
         return rows;
     }
+
+    /// <summary>
+    /// The parts panel's sections at the level picked. A drawable dictionary's drawables go by what their names say they
+    /// are (a ped's head_000_r and head_001_r are both Head), as variants of each other. A fragment's are its body, then
+    /// each group of drawables (its wheels, its children), then its extras, taken out of where they're bound; a single
+    /// drawable is one section, untitled.
+    /// </summary>
+    public IReadOnlyList<PartSection> Sections() => SectionsOf(Tree());
+
+    /// <summary>The sections of these rows, as <see cref="Sections"/> makes them.</summary>
+    internal static IReadOnlyList<PartSection> SectionsOf(IReadOnlyList<PartNode> tree)
+    {
+        if (tree.Count > 1 && tree.All(node => node.Kind == PartKind.Drawable))
+            // Drawables whose names don't say what they are aren't variants of each other: all of them show.
+            return [.. tree.GroupBy(node => VariantPrefix(node.Name)).Select(group =>
+                new PartSection(VariantTitle(group.Key), group.Key.Length > 0 ? PartSectionKind.Variants : PartSectionKind.Tree, [.. group]))];
+        var extras = new List<PartNode>();
+        PartNode WithoutExtras(PartNode node)
+        {
+            if (node.Children.Count == 0)
+                return node;
+            var kept = new List<PartNode>();
+            foreach (PartNode child in node.Children)
+                if (ExtraNumber(child.Name) is not null)
+                    extras.Add(child);
+                else
+                    kept.Add(WithoutExtras(child));
+            return kept.Count == node.Children.Count && kept.SequenceEqual(node.Children)
+                ? node
+                : node with { Children = kept, Parts = [.. kept.SelectMany(child => child.Parts)], Triangles = kept.Sum(child => child.Triangles) };
+        }
+        var body = new List<PartNode>();
+        var groups = new List<PartSection>();
+        foreach (PartNode node in tree)
+        {
+            if (node.Kind != PartKind.Group)
+            {
+                body.Add(WithoutExtras(node));
+                continue;
+            }
+            var rows = new List<PartNode>();
+            foreach (PartNode child in node.Children)
+                if (ExtraNumber(child.Name) is not null)
+                    extras.Add(child);
+                else
+                    rows.Add(Lifted(WithoutExtras(child)));
+            if (rows.Count > 0)
+                groups.Add(new PartSection(node.Name, PartSectionKind.Tree, rows));
+        }
+        var sections = new List<PartSection>();
+        bool alone = groups.Count == 0 && extras.Count == 0;
+        if (body.Count > 0)
+            sections.Add(new PartSection(alone ? "" : "Body", PartSectionKind.Tree, body));
+        sections.AddRange(groups);
+        if (extras.Count > 0)
+            sections.Add(new PartSection("Extras", PartSectionKind.Extras, [.. extras.OrderBy(extra => ExtraNumber(extra.Name)).ThenBy(extra => extra.Name, StringComparer.Ordinal)]));
+        return sections;
+    }
+
+    private static readonly string[] NumberWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+    /// <summary>A vehicle extra's number, as the game numbers it: extra_1 is 1, extra_ten 10; null for anything else.</summary>
+    public static int? ExtraNumber(string name)
+    {
+        if (!name.StartsWith("extra_", StringComparison.OrdinalIgnoreCase))
+            return null;
+        string number = name[6..];
+        if (int.TryParse(number, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int value))
+            return value;
+        int word = Array.FindIndex(NumberWords, each => each.Equals(number, StringComparison.OrdinalIgnoreCase));
+        return word >= 0 ? word : null;
+    }
+
+    /// <summary>What a drawable dictionary's drawable's name says it is: head for head_000_r, p_head for p_head_002; "" when it doesn't say.</summary>
+    public static string VariantPrefix(string name)
+    {
+        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(name, @"^(.+?)_\d{3}(?:_.*)?$");
+        return match.Success ? match.Groups[1].Value.ToLowerInvariant() : "";
+    }
+
+    /// <summary>A variant section's heading: a ped component's name for its prefix, the prefix itself otherwise.</summary>
+    public static string VariantTitle(string prefix)
+    {
+        bool prop = prefix.StartsWith("p_", StringComparison.Ordinal);
+        string component = prop ? prefix[2..] : prefix;
+        string? name = component switch
+        {
+            "head" => "Head",
+            "berd" => "Mask",
+            "hair" => "Hair",
+            "uppr" => "Torso",
+            "lowr" => "Legs",
+            "hand" => "Hands",
+            "feet" => "Feet",
+            "teef" => "Neck",
+            "accs" => "Undershirt",
+            "task" => "Armour",
+            "decl" => "Decals",
+            "jbib" => "Tops",
+            "eyes" => "Eyes",
+            "ears" => "Ears",
+            "mouth" => "Mouth",
+            "lhand" => "Left hand",
+            "rhand" => "Right hand",
+            "lwrist" => "Left wrist",
+            "rwrist" => "Right wrist",
+            "hip" => "Hip",
+            "lfoot" => "Left foot",
+            "rfoot" => "Right foot",
+            _ => null,
+        };
+        if (prefix.Length == 0)
+            return "Drawables";
+        if (name is null)
+            return prefix;
+        return prop ? $"{name} prop" : name;
+    }
+
+    // A group's row brought up a level, with everything under it, now that its section stands for the group.
+    private static PartNode Lifted(PartNode node) =>
+        node with { Depth = Math.Max(0, node.Depth - 1), Children = [.. node.Children.Select(Lifted)] };
 
     /// <summary>Whether a row's parts are drawn: all of them, none, or some (null).</summary>
     public bool? State(PartNode node)

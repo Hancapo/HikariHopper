@@ -48,6 +48,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer's status bar is as tall as the other viewers', and its parts panel's header matches the explorer's list header. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The keyboard shortcuts list and the start page name actions as the menus do. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The 3D viewer's parts panel is a tree with dotted guides, an eye to show or hide each row and a badge for what it is; rows are selected apart from what is shown, with the mouse or the keyboard, narrowed by a filter, and a right click shows only, hides, frames or copies what is selected. ([#137](https://github.com/Hancapo/HikariHopper/pull/137))
+- The 3D viewer's parts panel shows a vehicle's body, wheels and other groups in sections, with its extras as numbered toggles, and a drawable dictionary's drawables by what they are (Head, Torso…), one of each at a time or all of them; a ped's drawables are named for what they are, not all for their dictionary. ([#138](https://github.com/Hancapo/HikariHopper/pull/138))
 
 ### Fixed
 
