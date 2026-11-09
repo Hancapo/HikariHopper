@@ -25,6 +25,8 @@
   },
   "patterns": [
     { "contains": "vehicle_paint", "paint": true },
+    { "contains": "vehicle_interior", "no_specular": true },
+    { "contains": "vehicle_cloth", "no_specular": true },
     { "contains": "emissive", "emissive": true },
     { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
     { "contains": "cutout", "alpha_mode": "MASK" },

@@ -89,7 +89,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 new BindGroupLayoutEntry
                 {
                     Binding = 0,
-                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment | ShaderStage.Compute,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = SceneBytes },
                 },
             ],
@@ -349,9 +349,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             pass.Draw(6, segmentCount);
         }
         pass.End();
-        // Drawables in HDR, then tone-mapped over the backdrop.
+        // Drawables in HDR, reflecting the scene as it is from the camera, then tone-mapped over the backdrop.
         if (drawable)
         {
+            DrawSceneReflections(encoder);
             RenderPassEncoder lit = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments =
@@ -370,6 +371,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             lit.SetBindGroup(2, lightGroup!);
             DrawSurfaces(lit);
             lit.End();
+            MeasureFrame(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
