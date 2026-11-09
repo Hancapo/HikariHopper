@@ -74,10 +74,20 @@ public class TextureModalDialog : ContentControl
         if (layer is not { } host)
             return;
         layer = null;
-        bool hadFocus = IsKeyboardFocusWithin;
+        // Whether the keyboard is the dialog's to give back: inside it, or nowhere, as when the Apply button that had
+        // it was disabled while its work ran.
+        bool hadFocus = IsKeyboardFocusWithin || TopLevel.GetTopLevel(host)?.FocusManager?.GetFocusedElement() is null;
         host.Remove(this);
-        if (hadFocus && focusBefore is InputElement { IsEffectivelyVisible: true } previous)
-            previous.Focus();
+        // The keyboard goes back where it was; when that is gone (a menu's item, its popup closed, or a row the
+        // dialog's work rebuilt), to the nearest focusable control around the dialog, the editor, so its shortcuts
+        // (Ctrl+Z after a resize) work at once rather than after a click.
+        if (hadFocus)
+        {
+            bool restored = focusBefore is InputElement { IsEffectivelyVisible: true } previous && TopLevel.GetTopLevel(previous) is not null
+                && previous.Focus();
+            if (!restored)
+                host.GetVisualAncestors().OfType<InputElement>().FirstOrDefault(element => element.Focusable && element.IsEffectivelyVisible)?.Focus();
+        }
         focusBefore = null;
         Closed?.Invoke(this, EventArgs.Empty);
     }
