@@ -133,7 +133,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(250);
 
         // A configured edition is a row with its tinted V and its path, and a recent install of the
-        // same game joins it under its folder name; the configured one isn't repeated.
+        // same game joins it under its edition's name (Legacy here); the configured one isn't repeated.
         string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
         string other = MakeGame("Modded GTA");
         HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.EnhancedGameRootKey, enhanced);
@@ -141,7 +141,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Tabs.GamePathSettings.Refresh();
         Pump();
         LauncherRow[] rows = [.. start.Rows];
-        Assert.Equal([("Enhanced", enhanced), ("Modded GTA", other)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
+        Assert.Equal([("Enhanced", enhanced), ("Legacy", other)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
         Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
         Assert.Equal(HikariHopper.Ui.Theme.TextDim, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
         Assert.Equal(enhanced, rows[0].Detail.Text);
