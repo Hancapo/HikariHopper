@@ -1,7 +1,7 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
@@ -11,10 +11,11 @@ namespace HikariHopper.Views.Controls;
 /// Shared application-owned title bar and window controls (port of <c>WindowTitleBar.qml</c>).
 /// </summary>
 /// <remarks>
-/// <see cref="TargetWindow"/> defaults to the window hosting the bar. Moving is delegated to the
-/// window manager once a press on the title area moves past the system drag threshold (Qt's
-/// <c>DragHandler</c> + <c>startSystemMove()</c>); a double click toggles maximize when
-/// <see cref="ShowMaximize"/> is set.
+/// <see cref="TargetWindow"/> defaults to the window hosting the bar. The bar sits in a window whose client area
+/// covers its frame (<see cref="Window.ExtendClientAreaToDecorationsHint"/>), and tells Windows what its parts are
+/// (<see cref="WindowDecorationProperties.ElementRole"/>): the title area is the window's caption, so Windows moves,
+/// snaps and maximizes the window from it as from any title bar, and the buttons are its minimize, maximize and close
+/// buttons, so Windows 11 offers snap layouts on maximize. The buttons still act through their own clicks.
 /// </remarks>
 public partial class WindowTitleBar : UserControl
 {
@@ -54,11 +55,7 @@ public partial class WindowTitleBar : UserControl
 
     private Window? observedWindow;
     private IDisposable? windowStateSubscription;
-    private SnapLayoutHook? snapLayouts;
-    private PointerPressedEventArgs? dragPress;
-    private Point dragOrigin;
     private bool maximized;
-    private bool doubleTapPending;
 
     static WindowTitleBar()
     {
@@ -69,11 +66,6 @@ public partial class WindowTitleBar : UserControl
     public WindowTitleBar()
     {
         InitializeComponent();
-        Panel dragArea = DragArea;
-        dragArea.PointerPressed += OnDragPressed;
-        dragArea.PointerMoved += OnDragMoved;
-        dragArea.PointerReleased += OnDragReleased;
-        dragArea.PointerCaptureLost += (_, _) => dragPress = null;
         MinimizeButton.Click += (_, _) => EffectiveWindow?.SetCurrentValue(Window.WindowStateProperty, WindowState.Minimized);
         MaximizeButton.Click += (_, _) => ToggleMaximized();
         CloseButton.Click += (_, _) => EffectiveWindow?.Close();
@@ -147,9 +139,6 @@ public partial class WindowTitleBar : UserControl
 
     private Window? EffectiveWindow => TargetWindow ?? TopLevel.GetTopLevel(this) as Window;
 
-    /// <summary>The window's snap layouts on the maximize button, while it has a window.</summary>
-    internal SnapLayoutHook? SnapLayouts => snapLayouts;
-
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
@@ -161,8 +150,6 @@ public partial class WindowTitleBar : UserControl
         base.OnDetachedFromVisualTree(e);
         windowStateSubscription?.Dispose();
         windowStateSubscription = null;
-        snapLayouts?.Dispose();
-        snapLayouts = null;
         observedWindow = null;
     }
 
@@ -184,11 +171,7 @@ public partial class WindowTitleBar : UserControl
         if (window == observedWindow)
             return;
         windowStateSubscription?.Dispose();
-        snapLayouts?.Dispose();
         observedWindow = window;
-        // Hovering maximize offers Windows 11's snap layouts, where the window can be maximized.
-        snapLayouts = window is null ? null
-            : new SnapLayoutHook(window, MaximizeButton, () => ShowMaximize && window.CanResize, ToggleMaximized);
         windowStateSubscription = window?.GetObservable(Window.WindowStateProperty)
             .Subscribe(new AnonymousObserver<WindowState>(state => Maximized = state == WindowState.Maximized));
         Maximized = window?.WindowState == WindowState.Maximized;
@@ -221,52 +204,6 @@ public partial class WindowTitleBar : UserControl
             return;
         window.WindowState = Maximized ? WindowState.Normal : WindowState.Maximized;
     }
-
-    private void OnDragPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            return;
-        doubleTapPending = e.ClickCount % 2 == 0;
-        if (doubleTapPending)
-        {
-            dragPress = null;
-            e.Handled = true;
-            return;
-        }
-        dragPress = e;
-        dragOrigin = e.GetPosition(this);
-    }
-
-    private void OnDragMoved(object? sender, PointerEventArgs e)
-    {
-        if (dragPress is null)
-            return;
-        Point position = e.GetPosition(this);
-        double threshold = DragThreshold();
-        if (Math.Abs(position.X - dragOrigin.X) > threshold || Math.Abs(position.Y - dragOrigin.Y) > threshold)
-        {
-            PointerPressedEventArgs press = dragPress;
-            dragPress = null;
-            EffectiveWindow?.BeginMoveDrag(press);
-        }
-    }
-
-    private void OnDragReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        dragPress = null;
-        if (!doubleTapPending)
-            return;
-        // TapHandler.onDoubleTapped (on the second release): maximize or restore when offered.
-        doubleTapPending = false;
-        if (ShowMaximize)
-            ToggleMaximized();
-    }
-
-    /// <summary>Qt's <c>startDragDistance</c> on Windows is the system drag rectangle (SM_CXDRAG).</summary>
-    private static double DragThreshold() => OperatingSystem.IsWindows() ? Math.Max(1, GetSystemMetrics(68)) : 4;
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
 
     private sealed class AnonymousObserver<T>(Action<T> onNext) : IObserver<T>
     {

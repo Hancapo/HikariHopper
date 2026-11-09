@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -190,48 +192,39 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
-    public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts() => UiThread.Run(() =>
+    public void TheTitleBarTellsWindowsWhatItsPartsAre() => UiThread.Run(() =>
     {
         var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
         Window window = Show(bar, 400, 60);
-        SnapLayoutHook hook = bar.SnapLayouts!;
-        WindowControlButton maximize = bar.MaximizeButton;
-        WindowControlGlyph glyph = maximize.GetVisualDescendants().OfType<WindowControlGlyph>().Single();
-        Point middle = maximize.TranslatePoint(new Point(maximize.Bounds.Width / 2, maximize.Bounds.Height / 2), window)!.Value;
-
-        // The pointer's screen position comes as two signed words: a monitor left of or above the main one is negative.
-        Assert.Equal(new PixelPoint(-2553, -7), SnapLayoutHook.ScreenPoint(unchecked((nint)(uint)((-7 << 16) | (-2553 & 0xFFFF)))));
-        Assert.Equal(new PixelPoint(1891, 291), SnapLayoutHook.ScreenPoint((291 << 16) | 1891));
-        // Windows asks what is under the pointer: the button's area answers HTMAXBUTTON, the rest of the bar is left alone.
-        Assert.Equal((true, SnapLayoutHook.MaxButton), hook.Handle(SnapLayoutHook.NcHitTest, 0, middle));
-        Assert.Equal((false, (nint)0), hook.Handle(SnapLayoutHook.NcHitTest, 0, new Point(60, 15)));
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, bar.CloseButton.TranslatePoint(new Point(17, 15), window)!.Value).Handled);
-
-        // The pointer then comes as non-client messages, which light the button and press it.
-        hook.Handle(SnapLayoutHook.NcMouseMove, SnapLayoutHook.MaxButton, null);
-        Assert.Equal(T.Text, glyph.Ink);
-        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null).Handled);
-        Assert.True(glyph.Pressed);
-        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null).Handled);
-        Assert.False(glyph.Pressed);
+        // The title area is the window's caption (moving, snapping and double-click maximizing it), and the buttons
+        // are its minimize, maximize and close buttons: Windows 11 offers snap layouts on the maximize button.
+        Assert.Equal(WindowDecorationsElementRole.TitleBar, WindowDecorationProperties.GetElementRole(bar.FindControl<Panel>("DragArea")!));
+        // What sits after the emblem, such as the explorer's menus, takes its own clicks over the caption.
+        Assert.Equal(WindowDecorationsElementRole.User, WindowDecorationProperties.GetElementRole(bar.FindControl<ContentPresenter>("LeadingHost")!));
+        Assert.Equal(WindowDecorationsElementRole.MinimizeButton, WindowDecorationProperties.GetElementRole(bar.MinimizeButton));
+        Assert.Equal(WindowDecorationsElementRole.MaximizeButton, WindowDecorationProperties.GetElementRole(bar.MaximizeButton));
+        Assert.Equal(WindowDecorationsElementRole.CloseButton, WindowDecorationProperties.GetElementRole(bar.CloseButton));
+        // The buttons act through their own clicks, which Avalonia sends them from Windows' non-client input.
+        bar.MaximizeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(WindowState.Maximized, window.WindowState);
-        hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null);
-        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
+        bar.MaximizeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(WindowState.Normal, window.WindowState);
-        // A release with no press on the button is no click.
-        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
-        Assert.Equal(WindowState.Normal, window.WindowState);
-        hook.Handle(SnapLayoutHook.NcMouseLeave, 0, null);
-        Assert.Equal(T.TextDim, glyph.Ink);
-
-        // Without maximize on offer, there's no maximize button to show snap layouts on.
-        window.CanResize = false;
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
-        window.CanResize = true;
-        bar.ShowMaximize = false;
-        Pump();
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
         window.Close();
+    });
+
+    [AvaloniaFact]
+    public void TheMainWindowIsANativeWindowItsTitleBarCovers() => UiThread.Run(() =>
+    {
+        var window = new MainWindow();
+        // Windows keeps the frame (resizing, rounded corners, snap layouts, taskbar minimizing and its animations);
+        // the client area covers it, and Avalonia draws no decorations of its own over the app's title bar.
+        Assert.True(window.ExtendClientAreaToDecorationsHint);
+        Assert.Equal(WindowDecorations.Full, window.WindowDecorations);
+        Assert.Equal(T.MainTitleHeight, window.ExtendClientAreaTitleBarHeightHint);
+        Assert.Same(Application.Current!.FindResource("NoDrawnDecorations"), window.WindowDecorationsTheme);
+        var splash = new SplashScreen();
+        Assert.True(splash.ExtendClientAreaToDecorationsHint);
+        Assert.Same(window.WindowDecorationsTheme, splash.WindowDecorationsTheme);
     });
 
     [AvaloniaFact]
@@ -341,31 +334,6 @@ public sealed class ControlMetricsTests
         Assert.Equal(T.AppBg.Color, Pixel(fits, 153, 10));
         fits.Close();
     });
-
-    [Fact]
-    public void Windows11RoundsTheFramelessWindowsCorners()
-    {
-        if (!OperatingSystem.IsWindows())
-            Assert.Skip("DWM is Windows-only.");
-        // A hidden native popup window, never shown on screen.
-        nint handle = CreateWindowExW(0, "STATIC", "HikariHopper corner probe", 0x80000000, 0, 0, 100, 100, 0, 0, 0, 0);
-        Assert.NotEqual(0, handle);
-        try
-        {
-            Assert.Equal(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000), QtFramelessWindow.RoundCorners(handle));
-        }
-        finally
-        {
-            DestroyWindow(handle);
-        }
-    }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-    private static extern nint CreateWindowExW(int exStyle, string className, string windowName, uint style,
-        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool DestroyWindow(nint handle);
 
     [AvaloniaFact]
     public void KeyCapIsARoundedRaisedKey() => UiThread.Run(() =>
@@ -545,7 +513,7 @@ public sealed class ControlMetricsTests
         Assert.Equal((1360.0, 840.0, 940.0, 580.0), (main.Width, main.Height, main.MinWidth, main.MinHeight));
         Assert.Equal("HikariHopper — Modding Toolkit", main.Title);
         Assert.Equal("HikariHopper — Grand Theft Auto V", MainWindow.TitleFor(true, "Grand Theft Auto V"));
-        Assert.Equal(WindowDecorations.None, main.WindowDecorations);
+        Assert.Equal(WindowDecorations.Full, main.WindowDecorations);
 
         var splash = new SplashScreen();
         Assert.Equal((720.0, 400.0), (splash.Width, splash.Height));

@@ -14,6 +14,15 @@
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
+      <!-- Windows that draw their own title bar over the native frame (ExtendClientAreaToDecorationsHint) use this
+           as their WindowDecorationsTheme: Avalonia draws none of its own decorations over theirs. -->
+      <ControlTheme x:Key="NoDrawnDecorations" TargetType="WindowDrawnDecorations">
+        <Setter Property="Template">
+          <WindowDrawnDecorationsTemplate>
+            <WindowDrawnDecorationsContent />
+          </WindowDrawnDecorationsTemplate>
+        </Setter>
+      </ControlTheme>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://HikariHopper/Views/Controls/FlatTextField.axaml" />
         <ResourceInclude Source="avares://HikariHopper/Views/Controls/ChromeToolButton.axaml" />

@@ -5,20 +5,22 @@
              x:Class="HikariHopper.Views.Controls.WindowTitleBar"
              x:DataType="c:WindowTitleBar"
              Background="{x:Static ui:Theme.ChromeRaised}">
-  <!-- Port of WindowTitleBar.qml: application-owned decoration backed by native window
-       operations. Dragging the title area performs a system move (so snapping stays native),
-       double-clicking it maximizes or restores when the window offers maximize. Leading content
-       (the explorer's menus) sits after the emblem; presses it handles never start a drag. -->
+  <!-- The app's title bar over the native frame: the title area is the window's caption to Windows (it moves,
+       snaps and maximizes the window), and the buttons are its minimize, maximize and close buttons, which gives
+       Windows 11's snap layouts on maximize. Leading content (the explorer's menus) sits after the emblem and takes
+       its own clicks. -->
   <Panel>
     <Border Name="TopBevel" Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
     <Border Name="BottomSeam" Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-      <Panel Name="DragArea" Grid.Column="0" Background="Transparent">
+      <Panel Name="DragArea" Grid.Column="0" Background="Transparent" WindowDecorationProperties.ElementRole="TitleBar">
         <DockPanel Name="TitleRow" Margin="9,0,8,0">
           <!-- The app icon, from its small design (no eye, no far ear) at 64px for high-DPI screens. -->
           <Image Name="Emblem" DockPanel.Dock="Left" Width="12" Height="12" VerticalAlignment="Center"
                  Source="avares://HikariHopper/Assets/Branding/emblem.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
+          <!-- The menus take their own clicks, over the caption. -->
           <ContentPresenter Name="LeadingHost" DockPanel.Dock="Left" VerticalAlignment="Stretch"
+                            WindowDecorationProperties.ElementRole="User"
                             Content="{Binding LeadingContent, RelativeSource={RelativeSource AncestorType=c:WindowTitleBar}}" />
           <TextBlock Name="TitleLabel" Margin="8,0,0,0" Text="{Binding TitleText, RelativeSource={RelativeSource AncestorType=c:WindowTitleBar}}"
                      Foreground="{x:Static ui:Theme.TextRow}"
@@ -27,12 +29,12 @@
         </DockPanel>
       </Panel>
       <c:WindowControlButton Name="MinimizeButton" Grid.Column="1" Kind="minimize" Height="NaN"
-                             VerticalAlignment="Stretch"
+                             VerticalAlignment="Stretch" WindowDecorationProperties.ElementRole="MinimizeButton"
                              AutomationProperties.Name="Minimize window" />
       <c:WindowControlButton Name="MaximizeButton" Grid.Column="2" Kind="maximize" Height="NaN"
-                             VerticalAlignment="Stretch" />
+                             VerticalAlignment="Stretch" WindowDecorationProperties.ElementRole="MaximizeButton" />
       <c:WindowControlButton Name="CloseButton" Grid.Column="3" Kind="close" Height="NaN"
-                             VerticalAlignment="Stretch"
+                             VerticalAlignment="Stretch" WindowDecorationProperties.ElementRole="CloseButton"
                              AutomationProperties.Name="Close window" />
     </Grid>
   </Panel>

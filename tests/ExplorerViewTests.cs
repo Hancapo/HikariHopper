@@ -1654,17 +1654,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     public void TheTitleRowStillMaximizesAndItsMenusOpenBelowIt()
     {
         Explorer ui = OpenExplorer();
+        // The empty part of the title row is the window's caption to Windows, which moves the window from it and
+        // maximizes or restores it on a double click; the menus in the row take their own clicks.
         var empty = new Point(700, 19);
-        ui.Window.MouseMove(empty);
-        for (int press = 0; press < 2; press++)
-        {
-            ui.Window.MouseDown(empty, MouseButton.Left);
-            ui.Window.MouseUp(empty, MouseButton.Left);
-        }
-        Pump();
-        Assert.Equal(WindowState.Maximized, ui.Window.WindowState);
-        ui.Window.WindowState = WindowState.Normal;
-        Pump(100);
+        Visual? under = ui.Window.GetVisualAt(empty);
+        Assert.NotNull(under);
+        Assert.Contains(WindowDecorationsElementRole.TitleBar,
+            under!.GetSelfAndVisualAncestors().Select(visual => Avalonia.Controls.Chrome.WindowDecorationProperties.GetElementRole(visual)));
 
         MenuRow menus = ui.Find<MenuRow>();
         Views.Controls.MenuBarButton file = menus.FileButton;
