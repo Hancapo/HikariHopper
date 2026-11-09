@@ -39,6 +39,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private CommonFury.Numerics.Aabb3 framed = new(new(-5), new(5));
     private ViewportMesh? shown;
     private DrawableScene? surfaces;
+    private float hours = DayCycle.DefaultHours;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -48,6 +49,16 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         framed = box;
         renderer?.Frame(box);
+    }
+
+    /// <summary>The time of day the light is the game's at, 0 to 24 hours.</summary>
+    public float Hours => hours;
+
+    /// <summary>Lights the scene as the game does at this time of day.</summary>
+    public void SetTime(float value)
+    {
+        hours = value;
+        renderer?.SetTime(value);
     }
 
     /// <summary>Shows these triangles in place of anything before.</summary>
@@ -100,6 +111,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             (surfaceWidth, surfaceHeight) = ClientSize();
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
+            renderer.SetTime(hours);
             if (surfaces is not null)
                 renderer.Show(surfaces);
             else

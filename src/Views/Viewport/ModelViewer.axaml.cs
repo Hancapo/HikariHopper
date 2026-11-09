@@ -44,6 +44,26 @@ public partial class ModelViewer : UserControl, IModalContent
             StatusText.Foreground = Ui.Theme.Error;
         };
         Viewport.EscapePressed += Close;
+        SunSlider.Value = Math.Round(DayCycle.DefaultHours * 4);
+        SunText.Text = Clock(DayCycle.DefaultHours);
+        SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
+    }
+
+    /// <summary>Lights the model as the game does at <paramref name="hours"/>, 0 to 24.</summary>
+    internal void SetHours(float hours)
+    {
+        Viewport.SetTime(hours);
+        SunText.Text = Clock(hours);
+        SunSlider.SyncValue((int)Math.Round(hours * 4));
+    }
+
+    /// <summary>The time of day the model is lit at, in hours.</summary>
+    internal float Hours => Viewport.Hours;
+
+    private static string Clock(float hours)
+    {
+        int minutes = (int)Math.Round(hours * 60) % (24 * 60);
+        return $"{minutes / 60:00}:{minutes % 60:00}";
     }
 
     private bool started;
@@ -103,6 +123,8 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Surfaces is { } surfaces)
         {
             Viewport.Show(surfaces);
+            // A drawable is lit by the game's light; collisions and navmeshes are drawn flat.
+            SunBar.IsVisible = true;
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
