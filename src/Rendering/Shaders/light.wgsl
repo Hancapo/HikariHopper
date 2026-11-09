@@ -50,21 +50,24 @@ fn gta_ambient(n: vec3f) -> vec3f {
 }
 
 // The key light's shadow at a point, as RedFury's cascade_pcf for its one map: nine bilinear comparison taps one
-// texel apart (a smooth 4x4 tent), offset along the normal on the side facing the sun by the texel's footprint, which
-// keeps grazing surfaces and both-sided cards from shadowing themselves in stripes.
+// texel apart (a smooth 4x4 tent), offset along the normal by the texel's footprint, which keeps grazing surfaces
+// from shadowing themselves in stripes. n is the geometric normal of the side being shaded (the back of a surface
+// drawn from both sides faces the other way). A side facing away from the sun is offset away from it too, into its
+// own shadow, and fades out across the terminator: its bump-mapped normals can still face the sun, but no sunlight
+// reaches it.
 fn sun_shadow(p: vec3f, n: vec3f) -> f32 {
-    if (light.shadow_parameters.w < 0.5) {
-        return 1.0;
-    }
-    let texel_world = light.shadow_parameters.x;
     let sun = light.sun_direction.xyz;
     let facing = dot(n, sun);
-    let towards_sun = select(-n, n, facing >= 0.0);
-    let offset = p + towards_sun * texel_world * (0.75 + 1.75 * (1.0 - abs(facing))) + sun * texel_world * 0.5;
+    let terminator = saturate(facing * 10.0 + 0.5);
+    if (light.shadow_parameters.w < 0.5 || terminator <= 0.0) {
+        return terminator;
+    }
+    let texel_world = light.shadow_parameters.x;
+    let offset = p + n * texel_world * (0.75 + 1.75 * (1.0 - abs(facing))) + sun * texel_world * 0.5 * saturate(facing * 10.0);
     let clip = light.shadow * vec4f(offset, 1.0);
     let uvz = vec3f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5, clip.z);
     if (any(uvz.xy <= vec2f(0.0)) || any(uvz.xy >= vec2f(1.0)) || uvz.z >= 1.0 || uvz.z <= 0.0) {
-        return 1.0;
+        return terminator;
     }
     let texel = 1.0 / light.shadow_parameters.z;
     let reference = uvz.z - texel_world / light.shadow_parameters.y;
@@ -74,7 +77,7 @@ fn sun_shadow(p: vec3f, n: vec3f) -> f32 {
             sum += textureSampleCompareLevel(shadow_map, shadow_compare, uvz.xy + vec2f(f32(x), f32(y)) * texel, reference);
         }
     }
-    return sum / 9.0;
+    return sum / 9.0 * terminator;
 }
 
 // Where PS_directional_ambient looks a direction up in the reflection map: a dual paraboloid, the upper hemisphere on

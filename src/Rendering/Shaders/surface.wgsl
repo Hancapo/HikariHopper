@@ -247,7 +247,7 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     }
     surface.alpha = select(1.0, surface.alpha, mode == 2u);
     // With the parallax self-shadow, which the game's directional pass multiplies the sun by.
-    let shadow = sun_shadow(input.place, normalize(input.normal)) * self_shadow;
+    let shadow = sun_shadow(input.place, select(-1.0, 1.0, front) * normalize(input.normal)) * self_shadow;
     return vec4f(lit(input, surface, diffuse, view, to_light, shadow), surface.alpha);
 }
 
