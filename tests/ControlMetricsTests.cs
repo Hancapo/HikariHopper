@@ -190,6 +190,51 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
+    public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts() => UiThread.Run(() =>
+    {
+        var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
+        Window window = Show(bar, 400, 60);
+        SnapLayoutHook hook = bar.SnapLayouts!;
+        WindowControlButton maximize = bar.MaximizeButton;
+        WindowControlGlyph glyph = maximize.GetVisualDescendants().OfType<WindowControlGlyph>().Single();
+        Point middle = maximize.TranslatePoint(new Point(maximize.Bounds.Width / 2, maximize.Bounds.Height / 2), window)!.Value;
+
+        // The pointer's screen position comes as two signed words: a monitor left of or above the main one is negative.
+        Assert.Equal(new PixelPoint(-2553, -7), SnapLayoutHook.ScreenPoint(unchecked((nint)(uint)((-7 << 16) | (-2553 & 0xFFFF)))));
+        Assert.Equal(new PixelPoint(1891, 291), SnapLayoutHook.ScreenPoint((291 << 16) | 1891));
+        // Windows asks what is under the pointer: the button's area answers HTMAXBUTTON, the rest of the bar is left alone.
+        Assert.Equal((true, SnapLayoutHook.MaxButton), hook.Handle(SnapLayoutHook.NcHitTest, 0, middle));
+        Assert.Equal((false, (nint)0), hook.Handle(SnapLayoutHook.NcHitTest, 0, new Point(60, 15)));
+        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, bar.CloseButton.TranslatePoint(new Point(17, 15), window)!.Value).Handled);
+
+        // The pointer then comes as non-client messages, which light the button and press it.
+        hook.Handle(SnapLayoutHook.NcMouseMove, SnapLayoutHook.MaxButton, null);
+        Assert.Equal(T.Text, glyph.Ink);
+        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null).Handled);
+        Assert.True(glyph.Pressed);
+        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null).Handled);
+        Assert.False(glyph.Pressed);
+        Assert.Equal(WindowState.Maximized, window.WindowState);
+        hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null);
+        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
+        Assert.Equal(WindowState.Normal, window.WindowState);
+        // A release with no press on the button is no click.
+        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
+        Assert.Equal(WindowState.Normal, window.WindowState);
+        hook.Handle(SnapLayoutHook.NcMouseLeave, 0, null);
+        Assert.Equal(T.TextDim, glyph.Ink);
+
+        // Without maximize on offer, there's no maximize button to show snap layouts on.
+        window.CanResize = false;
+        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
+        window.CanResize = true;
+        bar.ShowMaximize = false;
+        Pump();
+        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
+        window.Close();
+    });
+
+    [AvaloniaFact]
     public void SheetsHaveAHeadingACloseMarkAndAFooter() => UiThread.Run(() =>
     {
         var about = new AboutDialog();
