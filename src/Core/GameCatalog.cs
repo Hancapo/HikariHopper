@@ -59,8 +59,11 @@ public static class GameCatalog
             foreach (string path in recents)
             {
                 string edition = GameSettings.GameEditionForPath(path);
-                if (game.Editions.Any(candidate => candidate.Id == edition) && shown.Add(Normalize(path)))
-                    entries.Add(new LauncherEntry(game, edition, System.IO.Path.GetFileName(Normalize(path)), path));
+                if (game.Editions.FirstOrDefault(candidate => candidate.Id == edition) is not { } info || !shown.Add(Normalize(path)))
+                    continue;
+                // Named for its edition, as a configured one is; by its folder only when that name is already taken.
+                string title = entries.Any(entry => entry.Title == info.Title) ? System.IO.Path.GetFileName(Normalize(path)) : info.Title;
+                entries.Add(new LauncherEntry(game, edition, title, path));
             }
             if (entries.Count == 0)
                 entries.Add(new LauncherEntry(game, "", "Not set up", ""));
