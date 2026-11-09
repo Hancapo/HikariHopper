@@ -46,6 +46,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A model opened from search results in the 3D viewer finds its textures as it does from its folder, and its textures button works. ([#113](https://github.com/Hancapo/HikariHopper/pull/113))
 - In the 3D viewer, bumps on the side of a surface facing away from the sun no longer catch sunlight. ([#126](https://github.com/Hancapo/HikariHopper/pull/126))
 - Clicking outside the 3D viewer's time of day dropdown closes it without sending HikariHopper behind other windows. ([#128](https://github.com/Hancapo/HikariHopper/pull/128))
+- Tooltips in the 3D viewer show over the 3D view instead of behind it. ([#129](https://github.com/Hancapo/HikariHopper/pull/129))
 - Decals in the 3D viewer fade out by their vertex alpha as GTA V blends them, instead of covering what they lie on with hard edges. ([#115](https://github.com/Hancapo/HikariHopper/pull/115))
 
 ### Removed
