@@ -179,8 +179,11 @@ internal sealed class PartVisibility
     {
         if (tree.Count > 1 && tree.All(node => node.Kind == PartKind.Drawable))
             // Drawables whose names don't say what they are aren't variants of each other: all of them show.
-            return [.. tree.GroupBy(node => VariantPrefix(node.Name)).Select(group =>
-                new PartSection(VariantTitle(group.Key), group.Key.Length > 0 ? PartSectionKind.Variants : PartSectionKind.Tree, [.. group]))];
+            // A ped's are in the order of its body, head first, then its props, each kind's variants by their number;
+            // other names keep the file's order, after them.
+            return [.. tree.GroupBy(node => VariantPrefix(node.Name)).OrderBy(group => VariantOrder(group.Key)).Select(group =>
+                new PartSection(VariantTitle(group.Key), group.Key.Length > 0 ? PartSectionKind.Variants : PartSectionKind.Tree,
+                    group.Key.Length > 0 ? [.. group.OrderBy(node => node.Name, StringComparer.OrdinalIgnoreCase)] : [.. group]))];
         var extras = new List<PartNode>();
         PartNode WithoutExtras(PartNode node)
         {
@@ -245,6 +248,22 @@ internal sealed class PartVisibility
         return match.Success ? match.Groups[1].Value.ToLowerInvariant() : "";
     }
 
+    private static readonly string[] Components = ["head", "berd", "hair", "uppr", "lowr", "hand", "feet", "teef", "accs", "task", "decl", "jbib"];
+    private static readonly string[] Props = ["head", "eyes", "ears", "mouth", "lhand", "rhand", "lwrist", "rwrist", "hip", "lfoot", "rfoot"];
+
+    /// <summary>
+    /// Where a variant section goes: a ped's components in the game's order (head, mask, hair, torso, legs…), then its
+    /// props in theirs, then any other name, and last the drawables whose names say nothing.
+    /// </summary>
+    internal static int VariantOrder(string prefix)
+    {
+        if (prefix.Length == 0)
+            return int.MaxValue;
+        bool prop = prefix.StartsWith("p_", StringComparison.Ordinal);
+        int index = Array.IndexOf(prop ? Props : Components, prop ? prefix[2..] : prefix);
+        return index < 0 ? int.MaxValue - 1 : prop ? Components.Length + index : index;
+    }
+
     /// <summary>A variant section's heading: a ped component's name for its prefix, the prefix itself otherwise.</summary>
     public static string VariantTitle(string prefix)
     {
@@ -260,7 +279,7 @@ internal sealed class PartVisibility
             "hand" => "Hands",
             "feet" => "Feet",
             "teef" => "Neck",
-            "accs" => "Undershirt",
+            "accs" => "Accessories",
             "task" => "Armour",
             "decl" => "Decals",
             "jbib" => "Tops",

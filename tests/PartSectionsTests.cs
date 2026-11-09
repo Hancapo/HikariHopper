@@ -74,6 +74,19 @@ public sealed class PartSectionsTests
     }
 
     [Fact]
+    public void A_peds_sections_go_head_to_toe_then_its_props_each_kinds_variants_by_number()
+    {
+        // The file's order, as a ped's dictionary has it: by hash, which says nothing.
+        string[] names = ["lowr_001_u", "lowr_000_u", "accs_000_u", "p_eyes_000", "hair_000_r", "hair_002_u", "hair_001_u", "uppr_000_r", "p_head_001", "head_000_r", "crate_000"];
+        PartNode[] drawables = [.. names.Select(name => Branch(name, 0, PartKind.Drawable, Leaf("ped", 1)))];
+        IReadOnlyList<PartSection> sections = PartVisibility.SectionsOf(drawables);
+        // Components in the game's order, then props in theirs, then names that aren't a ped's.
+        Assert.Equal(["Head", "Hair", "Torso", "Legs", "Accessories", "Head prop", "Eyes prop", "crate"], sections.Select(section => section.Title));
+        Assert.Equal(["hair_000_r", "hair_001_u", "hair_002_u"], sections[1].Nodes.Select(node => node.Name));
+        Assert.Equal(["lowr_000_u", "lowr_001_u"], sections[3].Nodes.Select(node => node.Name));
+    }
+
+    [Fact]
     public void A_peds_drawables_named_only_for_their_dictionary_are_named_by_their_hash()
     {
         Assert.Equal("head_000_r", ModelContent.EntryName(new CommonFury.Hashing.Hash32("head_000_r").Value, "a_m_y_hipster_01.#dd"));

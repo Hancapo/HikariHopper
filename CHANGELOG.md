@@ -8,9 +8,15 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Fly the camera and frame the view in the 3D viewer for collisions and navmeshes too. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
+
 ### Changed
 
+- A ped's parts in the 3D viewer are listed head to toe, with each kind's variants in number order. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
+
 ### Fixed
+
+- Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 
 ### Removed
 

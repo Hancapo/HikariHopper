@@ -66,16 +66,16 @@
                                 AutomationProperties.Name="Close the 3D viewer" />
           </Panel>
 
-          <!-- A drawable's toolbar: the level of detail; whether the sun casts shadows, the embedded textures, and a
-               fragment damaged; and, on the right, the time of day, whether the camera orbits or flies, and the camera
-               back on the model. -->
+          <!-- The toolbar. On the right, for anything shown: whether the camera orbits or flies, and the camera back on
+               what is shown. For a drawable, which is lit and has parts, also the level of detail, whether the sun casts
+               shadows, the embedded textures and a fragment damaged, and the time of day. -->
           <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
                  IsVisible="False">
             <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
             <DockPanel Margin="8,0,8,1">
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
                 <!-- The time of day the model is lit at, which opens its slider. -->
-                <Border Classes="well">
+                <Border Name="TimeWell" Classes="well">
                   <Panel>
                     <c:ChromeToolButton Name="TimeButton" Classes="tool" Width="80" Padding="14,0,10,0"
                                         AutomationProperties.Name="Time of day" />
@@ -100,7 +100,7 @@
                   </StackPanel>
                 </Border>
               </StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="8">
+              <StackPanel Name="ModelTools" Orientation="Horizontal" Spacing="8">
                 <!-- The levels of detail the drawable has, as segments like the texture editor's channels; none when it
                      has only the one. -->
                 <c:SegmentedSwitch Name="LodSwitch" IsVisible="False" />

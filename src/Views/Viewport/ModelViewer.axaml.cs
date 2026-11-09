@@ -435,6 +435,9 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (!Toolbar.IsVisible)
             return false;
+        // A collision or a navmesh has only the camera's keys.
+        if (surfaces is null && char.ToUpperInvariant(key) is not ('V' or 'F'))
+            return false;
         switch (char.ToUpperInvariant(key))
         {
             case 'H':
@@ -685,8 +688,8 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Surfaces is { } surfaces)
         {
             Viewport.Show(surfaces);
-            // A drawable is lit by the game's light, and has the toolbar; collisions and navmeshes are drawn flat.
-            Toolbar.IsVisible = true;
+            // A drawable is lit by the game's light, and has the whole toolbar.
+            Toolbar.IsVisible = ModelTools.IsVisible = TimeWell.IsVisible = true;
             partsTab.IsWanted = toolStrip.IsWanted = true;
             ShowStats(surfaces);
             visibility = new PartVisibility(surfaces);
@@ -705,6 +708,10 @@ public partial class ModelViewer : UserControl, IModalContent
             return Describe(surfaces);
         }
         Viewport.Show(content.Mesh);
+        // Collisions and navmeshes are drawn flat, with no parts: of the toolbar, they have the camera's buttons.
+        Toolbar.IsVisible = true;
+        ModelTools.IsVisible = TimeWell.IsVisible = false;
+        RefreshToggles();
         ShowLegend(content.Mesh.Legend);
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
