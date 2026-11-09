@@ -43,6 +43,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private float hours = DayCycle.DefaultHours;
     private bool shadows = true;
     private bool[]? partsShown;
+    private ViewportSegment[] overlays = [];
     private bool free;
     private long flown;
 
@@ -93,6 +94,13 @@ internal sealed partial class ViewportHost : NativeControlHost
             SetFocus(hwnd);
     }
 
+    /// <summary>Draws these lines over the drawable (its skeleton, bounds or lights), in place of any before.</summary>
+    internal void ShowOverlays(ViewportSegment[] segments)
+    {
+        overlays = segments;
+        renderer?.ShowOverlays(segments);
+    }
+
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
     internal void ShowParts(bool[] shown)
     {
@@ -126,6 +134,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         surfaces = drawable;
         partsShown = null;
+        overlays = [];
         shown = null;
         renderer?.Show(drawable);
     }
@@ -175,6 +184,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 renderer.Show(surfaces);
                 if (partsShown is not null)
                     renderer.ShowParts(partsShown);
+                renderer.ShowOverlays(overlays);
             }
             else
                 renderer.Show(shown);

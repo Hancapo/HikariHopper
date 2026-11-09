@@ -422,6 +422,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.Viewport.Shadows);
         // A key the toolbar doesn't use is left alone.
         Assert.False(viewer.Shortcut('W'));
+        // No skeleton, bounds or lights: their buttons are off, and their keys do nothing.
+        Assert.False(viewer.SkeletonButton.IsEnabled);
+        Assert.False(viewer.BoundsButton.IsEnabled);
+        Assert.False(viewer.LightsButton.IsEnabled);
+        Assert.False(viewer.Shortcut('B'));
+        Assert.False(viewer.Shortcut('C'));
+        Assert.False(viewer.Shortcut('L'));
         // The camera orbits to start with; V flies it, with its speed in the status bar, and F frames the model and
         // orbits again.
         Assert.False(viewer.Viewport.FreeCamera);
@@ -495,6 +502,29 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var lone = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(lone);
         Assert.False(lone.TexturesButton.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void A_drawables_bounds_are_drawn_over_it_with_C()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        Settle(viewer);
+        Assert.True(viewer.BoundsButton.IsEnabled);
+        Assert.False(viewer.SkeletonButton.IsEnabled);
+        Assert.False(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
+        Assert.True(viewer.Shortcut('C'));
+        Assert.True(viewer.OverlayShown(Views.ModelViewer.Overlay.Bounds));
+        Assert.True(viewer.BoundsButton.Sunken);
+        Assert.True(viewer.Shortcut('c'));
+        Assert.False(viewer.BoundsButton.Sunken);
     }
 
     [AvaloniaFact]
