@@ -147,18 +147,18 @@ internal sealed unsafe partial class ViewportRenderer
             Entries = [new BindGroupEntry { Binding = 0, Buffer = skyBuffer, Size = SkyBytes }],
         });
 
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("sky_system.wgsl") + "\n" + Read("reflection_map.wgsl") });
-        RenderPipeline Pipeline(string entry, BindGroupLayout[] layouts) => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("sky_system.wgsl") + "\n" + Read("reflection_map.wgsl") }));
+        RenderPipeline Pipeline(string entry, BindGroupLayout[] layouts) => gpu.Pipeline($"reflection-map/{entry}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = layouts }),
-            Vertex = new VertexState { Module = shader, EntryPoint = "vs_reflection_map" },
+            Vertex = new VertexState { Module = shader.Value, EntryPoint = "vs_reflection_map" },
             Fragment = new FragmentState
             {
-                Module = shader,
+                Module = shader.Value,
                 EntryPoint = entry,
                 Targets = new[] { new ColorTargetState { Format = HdrFormat, WriteMask = ColorWriteMask.All } },
             },
-        });
+        }));
         reflectionPipeline = Pipeline("fs_reflection_map", [skyLayout]);
         downsamplePipeline = Pipeline("fs_reflection_downsample", [skyLayout, sourceLayout]);
     }

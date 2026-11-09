@@ -66,13 +66,13 @@ internal sealed unsafe partial class ViewportRenderer
         {
             BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!, reflectionViewLayout!],
         });
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") });
-        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false) => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
+        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false) => gpu.Pipeline($"surface/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = reflected ? reflectedLayout : layout,
             Vertex = new VertexState
             {
-                Module = shader,
+                Module = shader.Value,
                 EntryPoint = reflected ? "vs_surface_paraboloid" : "vs_surface",
                 Buffers = new[]
                 {
@@ -96,7 +96,7 @@ internal sealed unsafe partial class ViewportRenderer
             Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, FrontFace = FrontFace.CCW, CullMode = cull },
             Fragment = new FragmentState
             {
-                Module = shader,
+                Module = shader.Value,
                 EntryPoint = reflected ? "fs_surface_reflected" : "fs_surface",
                 Targets = new[]
                 {
@@ -120,7 +120,7 @@ internal sealed unsafe partial class ViewportRenderer
                 // The main view's depth is reversed; the reflection map's is the distance.
                 DepthCompare = reflected ? CompareFunction.LessEqual : CompareFunction.GreaterEqual,
             },
-        });
+        }));
         solidSurfaces = Pipeline(CullMode.Back, blend: false);
         doubleSidedSurfaces = Pipeline(CullMode.None, blend: false);
         blendedSurfaces = Pipeline(CullMode.None, blend: true);

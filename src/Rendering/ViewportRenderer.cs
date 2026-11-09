@@ -13,22 +13,28 @@ namespace HikariHopper.Rendering;
 /// ground grid, and in front of it a mesh of triangles or a drawable's textured surfaces, seen through the
 /// <see cref="Camera"/>.
 /// </summary>
-/// <remarks>Single-threaded: create, draw, resize and dispose it on one thread, while its window is alive.</remarks>
+/// <remarks>
+/// Single-threaded: create, draw, resize and dispose it on one thread, while its window is alive. It draws with the
+/// app's <see cref="GpuDevice"/>, whose pipelines it compiles once for every viewport.
+/// </remarks>
 internal sealed unsafe partial class ViewportRenderer : IDisposable
 {
     private const int SceneBytes = 288;
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
-    private readonly Surface surface;
+    private readonly GpuDevice gpu;
+    // The device's errors, until this viewport is gone (the device holds it weakly).
+    private readonly Action<string> failed;
+    private readonly Surface? surface;
     private readonly Adapter adapter;
     private readonly Device device;
     private readonly Queue queue;
-    private readonly Buffer sceneBuffer;
-    private readonly BindGroupLayout sceneLayout;
-    private readonly BindGroup sceneGroup;
-    private readonly RenderPipeline backdrop;
-    private readonly RenderPipeline meshes;
-    private readonly RenderPipeline lines;
+    private Buffer sceneBuffer= null!;
+    private BindGroupLayout sceneLayout= null!;
+    private BindGroup sceneGroup= null!;
+    private RenderPipeline backdrop= null!;
+    private RenderPipeline meshes= null!;
+    private RenderPipeline lines= null!;
     // The swap chain's format, and the sRGB view of it that frames are drawn through.
     private readonly TextureFormat surfaceFormat;
     private readonly TextureFormat viewFormat;
@@ -45,42 +51,62 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private bool disposed;
     private string? error;
 
-    public ViewportRenderer(nint window, nint module, int width, int height)
+    public ViewportRenderer(nint window, nint module, int width, int height) : this(GpuDevice.Shared, window, module, width, height)
     {
-        Instance instance = WebGPU.CreateInstance() ?? throw new InvalidOperationException("WebGPU is unavailable.");
-        var source = new SurfaceSourceWindowsHWNDFFI
-        {
-            Chain = new ChainedStruct { SType = SType.SurfaceSourceWindowsHWND },
-            Hwnd = (void*)window,
-            Hinstance = (void*)module,
-        };
-        surface = instance.CreateSurface(new SurfaceDescriptor(ref source)) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
-        adapter = instance.RequestAdapterSync(new RequestAdapterOptions
-        {
-            CompatibleSurface = surface,
-            BackendType = BackendType.D3D12,
-            PowerPreference = PowerPreference.HighPerformance,
-        });
-        // Game textures are block-compressed; without BC support they are drawn as plain white.
-        compressedTextures = adapter.HasFeature(FeatureName.TextureCompressionBC);
-        device = RequestDevice(adapter, compressedTextures, message => error ??= message);
-        queue = device.GetQueue();
+    }
 
-        // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is drawn
-        // through an sRGB view of it.
-        SurfaceCapabilities capabilities = surface.GetCapabilities(adapter) ?? throw new NotSupportedException("The window's capabilities are unknown.");
-        ReadOnlySpan<TextureFormat> formats = capabilities.Formats;
-        surfaceFormat = formats.Contains(TextureFormat.BGRA8UnormSrgb) ? TextureFormat.BGRA8UnormSrgb
-            : formats.Contains(TextureFormat.BGRA8Unorm) ? TextureFormat.BGRA8Unorm
-            : formats.Contains(TextureFormat.RGBA8Unorm) ? TextureFormat.RGBA8Unorm
-            : throw new NotSupportedException("The window offers no 8-bit colour format.");
-        viewFormat = surfaceFormat switch
-        {
-            TextureFormat.BGRA8Unorm => TextureFormat.BGRA8UnormSrgb,
-            TextureFormat.RGBA8Unorm => TextureFormat.RGBA8UnormSrgb,
-            _ => surfaceFormat,
-        };
+    /// <summary>A viewport with no window: it only compiles the pipelines, for <see cref="GpuDevice.WarmUp"/>.</summary>
+    internal ViewportRenderer(GpuDevice gpu) : this(gpu, 0, 0, 1, 1)
+    {
+    }
 
+    private ViewportRenderer(GpuDevice gpu, nint window, nint module, int width, int height)
+    {
+        this.gpu = gpu;
+        adapter = gpu.Adapter;
+        device = gpu.Device;
+        queue = gpu.Queue;
+        compressedTextures = gpu.CompressedTextures;
+        failed = message => error ??= message;
+        gpu.Listen(failed);
+        // Made while the background warm-up isn't using the device, which then has the pipelines ready.
+        lock (gpu.Gate)
+        {
+            if (window != 0)
+            {
+                var source = new SurfaceSourceWindowsHWNDFFI
+                {
+                    Chain = new ChainedStruct { SType = SType.SurfaceSourceWindowsHWND },
+                    Hwnd = (void*)window,
+                    Hinstance = (void*)module,
+                };
+                surface = gpu.Instance.CreateSurface(new SurfaceDescriptor(ref source)) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
+                // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is
+                // drawn through an sRGB view of it.
+                SurfaceCapabilities capabilities = surface.GetCapabilities(adapter) ?? throw new NotSupportedException("The window's capabilities are unknown.");
+                ReadOnlySpan<TextureFormat> formats = capabilities.Formats;
+                surfaceFormat = formats.Contains(TextureFormat.BGRA8UnormSrgb) ? TextureFormat.BGRA8UnormSrgb
+                    : formats.Contains(TextureFormat.BGRA8Unorm) ? TextureFormat.BGRA8Unorm
+                    : formats.Contains(TextureFormat.RGBA8Unorm) ? TextureFormat.RGBA8Unorm
+                    : throw new NotSupportedException("The window offers no 8-bit colour format.");
+            }
+            else
+            {
+                // A window's usual format, so the pipelines compiled for it are the ones a window needs.
+                surfaceFormat = TextureFormat.BGRA8UnormSrgb;
+            }
+            viewFormat = surfaceFormat switch
+            {
+                TextureFormat.BGRA8Unorm => TextureFormat.BGRA8UnormSrgb,
+                TextureFormat.RGBA8Unorm => TextureFormat.RGBA8UnormSrgb,
+                _ => surfaceFormat,
+            };
+            Create(width, height);
+        }
+    }
+
+    private void Create(int width, int height)
+    {
         sceneBuffer = device.CreateBuffer(new BufferDescriptor { Size = SceneBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         BindGroupLayout layout = sceneLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
@@ -102,27 +128,27 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         PipelineLayout pipelineLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout] });
 
         // The backdrop goes first and behind everything: it neither tests nor writes depth.
-        ShaderModule backdropShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("backdrop.wgsl") });
-        backdrop = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> backdropShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("backdrop.wgsl") }));
+        backdrop = gpu.Pipeline($"backdrop/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = pipelineLayout,
-            Vertex = new VertexState { Module = backdropShader, EntryPoint = "vs_backdrop" },
+            Vertex = new VertexState { Module = backdropShader.Value, EntryPoint = "vs_backdrop" },
             Fragment = new FragmentState
             {
-                Module = backdropShader,
+                Module = backdropShader.Value,
                 EntryPoint = "fs_backdrop",
                 Targets = new[] { new ColorTargetState { Format = viewFormat } },
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
-        });
+        }));
         // Meshes: nearer is greater in reversed Z. Both sides drawn, as collisions aren't wound consistently.
-        ShaderModule meshShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("mesh.wgsl") });
-        meshes = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> meshShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("mesh.wgsl") }));
+        meshes = gpu.Pipeline($"meshes/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = pipelineLayout,
             Vertex = new VertexState
             {
-                Module = meshShader,
+                Module = meshShader.Value,
                 EntryPoint = "vs_mesh",
                 Buffers = new[]
                 {
@@ -140,20 +166,20 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             },
             Fragment = new FragmentState
             {
-                Module = meshShader,
+                Module = meshShader.Value,
                 EntryPoint = "fs_mesh",
                 Targets = new[] { new ColorTargetState { Format = viewFormat } },
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Greater },
-        });
+        }));
         // Lines over the meshes: tested against them, writing no depth. Each segment is one instance of six corners.
-        ShaderModule lineShader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("lines.wgsl") });
-        lines = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> lineShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("lines.wgsl") }));
+        lines = gpu.Pipeline($"lines/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = pipelineLayout,
             Vertex = new VertexState
             {
-                Module = lineShader,
+                Module = lineShader.Value,
                 EntryPoint = "vs_line",
                 Buffers = new[]
                 {
@@ -173,12 +199,12 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             },
             Fragment = new FragmentState
             {
-                Module = lineShader,
+                Module = lineShader.Value,
                 EntryPoint = "fs_line",
                 Targets = new[] { new ColorTargetState { Format = viewFormat } },
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
-        });
+        }));
         CreateLighting();
         CreateSurfacePipelines();
         Resize(width, height);
@@ -256,7 +282,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         this.width = width;
         this.height = height;
-        surface.Configure(new SurfaceConfiguration
+        surface?.Configure(new SurfaceConfiguration
         {
             Device = device,
             Format = surfaceFormat,
@@ -282,7 +308,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     /// <summary>Draws and presents a frame.</summary>
     public void Draw()
     {
-        if (disposed || width == 0 || height == 0 || depthView is null)
+        if (disposed || width == 0 || height == 0 || depthView is null || surface is null)
             return;
         ThrowIfFailed();
         WriteScene();
@@ -418,21 +444,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
     }
 
-    private static Device RequestDevice(Adapter adapter, bool compressedTextures, Action<string> failed)
-    {
-        // The descriptor is a ref struct, so it is built where the request is made, off the UI thread's context.
-        return Task.Run(() => adapter.RequestDeviceAsync(new DeviceDescriptor
-        {
-            RequiredFeatures = compressedTextures ? new[] { FeatureName.TextureCompressionBC } : [],
-            UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {Encoding.UTF8.GetString(message)}"),
-            DeviceLostCallback = (reason, message) =>
-            {
-                if (reason != DeviceLostReason.Destroyed)
-                    failed($"WebGPU device lost ({reason}): {Encoding.UTF8.GetString(message)}");
-            },
-        })).GetAwaiter().GetResult();
-    }
-
     /// <summary>A shader's source: its own file, after scene.wgsl, which every shader shares (WGSL has no includes).</summary>
     private static string Shader(string name) => Read("scene.wgsl") + "\n" + Read(name);
 
@@ -456,6 +467,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
         ClearSurfaces();
-        surface.Unconfigure();
+        surface?.Unconfigure();
     }
 }

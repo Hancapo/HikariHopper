@@ -28,11 +28,14 @@ public partial class ModelViewer : UserControl, IModalContent
         TitleText.Text = file.Name;
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
-        StatusText.Text = "Starting the GPU…";
-        Location = Locate(file);
+        StatusText.Text = file.Data.Length > 0 ? $"Reading {file.Name}…" : "Starting the GPU…";
+        // Read in the background while the window opens and the GPU starts, then shown.
+        Reading = Load(file);
         Viewport.Started += adapter =>
         {
-            StatusText.Text = Location;
+            started = true;
+            if (Reading.IsCompleted)
+                StatusText.Text = Location;
             AdapterText.Text = adapter;
         };
         Viewport.Failed += error =>
@@ -43,24 +46,40 @@ public partial class ModelViewer : UserControl, IModalContent
         Viewport.EscapePressed += Close;
     }
 
-    /// <summary>What the file holds, where and how big, or why it can't be read: the status bar's line.</summary>
-    internal string Location { get; }
+    private bool started;
 
-    /// <summary>Shows the file's triangles framed in the viewport, and says what and where they are; or why it can't.</summary>
-    private string Locate(ModelFile file)
+    /// <summary>What the file holds, where and how big, or why it can't be read: the status bar's line, once read.</summary>
+    internal string Location { get; private set; } = "";
+
+    /// <summary>Done once the file is read and shown, or found unreadable.</summary>
+    internal Task Reading { get; }
+
+    private async Task Load(ModelFile file)
     {
         if (file.Data.Length == 0)
-            return "";
-        ModelContent content;
+            return;
+        (ModelContent? content, string? failure) = await Task.Run(() => Read(file));
+        Location = content is not null ? Locate(content) : failure!;
+        if (started)
+            StatusText.Text = Location;
+    }
+
+    private static (ModelContent? Content, string? Failure) Read(ModelFile file)
+    {
         try
         {
-            content = ModelContent.Read(file.Name, file.Data, file.Dictionaries, file.Nearby);
+            return (ModelContent.Read(file.Name, file.Data, file.Dictionaries, file.Nearby), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)
         {
-            return $"Couldn't read {file.Name}: {error.Message}";
+            return (null, $"Couldn't read {file.Name}: {error.Message}");
         }
+    }
+
+    /// <summary>Shows what was read framed in the viewport, and says what and where it is.</summary>
+    private string Locate(ModelContent content)
+    {
         if (content.Box.IsEmpty)
             return "Nothing in it";
         Viewport.Frame(content.Box);
