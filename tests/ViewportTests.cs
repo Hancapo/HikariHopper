@@ -348,8 +348,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
         builder.Models.Add(model);
         byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
 
-        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        int opened = 0;
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
         Settle(viewer);
+        // No embedded textures: the button is off, and T does nothing.
+        Assert.False(viewer.TexturesButton.IsEnabled);
+        Assert.Equal("0", viewer.TexturesButton.Text);
+        Assert.False(viewer.Shortcut('T'));
+        Assert.Equal(0, opened);
         // The game's afternoon to start with, in quarter hours.
         Assert.True(viewer.SunBar.IsVisible);
         Assert.Equal("14:30", viewer.SunText.Text);
@@ -396,6 +402,61 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Midnight at either end.
         viewer.SetHours(24);
         Assert.Equal("00:00", viewer.SunText.Text);
+    }
+
+    [AvaloniaFact]
+    public void The_textures_button_opens_a_drawables_embedded_textures()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        // A textured material needs a UV set.
+        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
+        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
+            new FiveFury.Textures.Texture("tri_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]));
+        builder.Materials.Add(material);
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+
+        int opened = 0;
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = () => opened++ });
+        Settle(viewer);
+        Assert.True(viewer.TexturesButton.IsEnabled);
+        Assert.Equal("1", viewer.TexturesButton.Text);
+        Assert.True(viewer.Shortcut('T'));
+        Assert.True(viewer.OpenTextures());
+        Assert.Equal(2, opened);
+
+        // A file that can't open its textures has the button off.
+        var lone = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        Settle(lone);
+        Assert.False(lone.TexturesButton.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void The_viewport_hides_while_another_overlay_is_over_the_viewer()
+    {
+        var window = new Views.MainWindow { Width = 1360, Height = 840 };
+        window.Show();
+        var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
+        var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write())) { Anchor = window.ExplorerScreenHost };
+        viewer.Present();
+        ExplorerStateRenders.Pump(400);
+        Assert.True(viewer.Viewport.IsVisible);
+
+        // The viewport is a native window, which would cover anything above it: it hides while something is.
+        Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
+        ExplorerStateRenders.Pump(50);
+        Assert.False(viewer.Viewport.IsVisible);
+        above.Close();
+        ExplorerStateRenders.Pump(400);
+        Assert.True(viewer.Viewport.IsVisible);
+
+        viewer.Close();
+        ExplorerStateRenders.Pump(300);
+        window.Close();
     }
 
     [AvaloniaFact]

@@ -50,6 +50,8 @@ public partial class ModelViewer : UserControl, IModalContent
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
         PartsButton.Click += (_, _) => SetPartsShown(!PartsSide.IsVisible);
         LodButton.Click += (_, _) => OpenLevels();
+        TexturesButton.Click += (_, _) => OpenTextures();
+        this.file = file;
         Parts.Changed += ShowParts;
         ThemedToolTip.Set(PartsButton, "Parts  (P)");
         ThemedToolTip.Set(LodButton, "Level of detail  (1-4)");
@@ -82,7 +84,27 @@ public partial class ModelViewer : UserControl, IModalContent
         Set(PartsButton, PartsSide.IsVisible);
     }
 
+    private readonly ModelFile file;
     private PartVisibility? visibility;
+
+    /// <summary>Opens the drawable's embedded textures in the texture viewer, over this viewer.</summary>
+    internal bool OpenTextures()
+    {
+        if (!TexturesButton.IsEnabled || file.OpenTextures is not { } open)
+            return false;
+        open();
+        return true;
+    }
+
+    /// <summary>How many embedded textures, on the button; off when there are none or they can't be opened.</summary>
+    private void ShowTextures(DrawableScene scene)
+    {
+        int count = scene.EmbeddedTextureCount;
+        TexturesButton.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        TexturesButton.IsEnabled = count > 0 && file.OpenTextures is not null;
+        TexturesIcon.Opacity = TexturesButton.IsEnabled ? 1 : .45;
+        ThemedToolTip.Set(TexturesButton, count > 0 ? "Embedded textures  (T)" : "No embedded textures");
+    }
     private RetroMenu? levels;
 
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
@@ -145,8 +167,8 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>
-    /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, F frame. None
-    /// is W, A, S, D, Q or E, which the free camera moves with.
+    /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
+    /// F frame. None is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -163,6 +185,8 @@ public partial class ModelViewer : UserControl, IModalContent
             case 'P':
                 SetPartsShown(!PartsSide.IsVisible);
                 return true;
+            case 'T':
+                return OpenTextures();
             case >= '1' and <= '4':
                 SetLevel(key - '1');
                 return true;
@@ -267,6 +291,7 @@ public partial class ModelViewer : UserControl, IModalContent
             LodButton.Text = PartVisibility.LevelName(visibility.Lod);
             Parts.Parts = visibility;
             SetPartsShown(true);
+            ShowTextures(surfaces);
             ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
@@ -371,14 +396,30 @@ public partial class ModelViewer : UserControl, IModalContent
         overlay = ModalOverlay.Show(anchor, this);
         if (overlay is not null)
         {
+            ModalOverlay.StackChanged += OverlaysChanged;
             overlay.Closed += (_, _) =>
             {
+                ModalOverlay.StackChanged -= OverlaysChanged;
                 overlay = null;
                 Closed?.Invoke(this, EventArgs.Empty);
             };
             DispatcherTimer.RunOnce(() => Viewport.IsVisible = IsOpen, SettleTime);
         }
         Dispatcher.UIThread.Post(() => Focus(), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Another overlay opened over the viewer (the texture viewer, say) or closed: the viewport, a native window, would
+    /// cover it, so it hides while the viewer isn't the top one, and shows once that one has gone.
+    /// </summary>
+    private void OverlaysChanged(object? sender, TopLevel host)
+    {
+        if (overlay is not { IsShown: true } own)
+            return;
+        if (!own.IsTopmost)
+            Viewport.IsVisible = false;
+        else if (!Viewport.IsVisible)
+            DispatcherTimer.RunOnce(() => Viewport.IsVisible = IsOpen && overlay?.IsTopmost == true, SettleTime);
     }
 
     /// <summary>How long the sheet takes to open, after which the viewport shows.</summary>
