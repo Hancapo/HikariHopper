@@ -17,7 +17,8 @@
     "layer_bump1": ["BumpSampler_layer1"],
     "layer_bump2": ["BumpSampler_layer2"],
     "layer_bump3": ["BumpSampler_layer3"],
-    "lookup": ["lookupSampler"]
+    "lookup": ["lookupSampler"],
+    "detail": ["DetailSampler"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -33,9 +34,11 @@
     "dirt_colour": ["dirtColor"],
     "specular2": ["specular2Color_DirLerp"],
     "specular_tile": ["specTexTileUV"],
-    "diffuse2_colour": ["matDiffuseColor2"]
+    "diffuse2_colour": ["matDiffuseColor2"],
+    "detail_settings": ["detailSettings"]
   },
   "patterns": [
+    { "contains": "diffspec", "detail_mask": "diffuse" },
     { "contains": "_cm", "terrain_weights": "map" },
     { "contains": "_blend", "terrain_weights": "blend" },
     { "contains": "vehicle_paint", "paint": true },

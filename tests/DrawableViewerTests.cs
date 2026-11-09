@@ -65,6 +65,43 @@ public sealed class DrawableViewerTests
         Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
     }
 
+    [Theory]
+    [InlineData("normal_spec_detail", 1f)]
+    [InlineData("normal_diffspec_detail", 2f)]
+    [InlineData("normal_detail", 0f)]
+    public void A_detail_shader_reads_its_detail_map_from_either_edition(string shader, float mask)
+    {
+        SurfaceMaterial Read(GameTarget target) => ModelContent.Read("wall.ydr", Quad(target, shader, material =>
+        {
+            material.Parameters["detailSettings"] = [1.2f, .3f, 11.6f, 10.4f];
+            material.Textures["DiffuseSampler"] = new TextureReference(Map("wall_d"));
+            material.Textures["BumpSampler"] = new TextureReference(Map("wall_n"));
+            material.Textures["DetailSampler"] = new TextureReference(Map("env_noise_05"));
+            if (mask == 1)
+                material.Textures["SpecSampler"] = new TextureReference(Map("wall_s"));
+        })).Surfaces!.Materials.Single();
+
+        SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
+        foreach (SurfaceMaterial material in new[] { legacy, enhanced })
+        {
+            Assert.Equal("env_noise_05", material.Detail?.Name);
+            // surface.wgsl's detail and detail_options: detailSettings, then has a detail map and what masks it (the
+            // specular map's alpha, the diffuse map's for diffspec, or nothing).
+            Assert.Equal([1.2f, .3f, 11.6f, 10.4f, 1, mask], material.Uniforms[48..54]);
+        }
+        Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Fact]
+    public void A_detail_map_the_drawable_and_its_dictionaries_lack_is_missing_and_left_out()
+    {
+        SurfaceMaterial material = ModelContent.Read("wall.ydr", Quad(GameTarget.Legacy, "normal_spec_detail",
+            m => m.Textures["DetailSampler"] = new TextureReference("env_noise_05"))).Surfaces!.Materials.Single();
+        Assert.Null(material.Detail);
+        Assert.Contains("env_noise_05", material.MissingTextures);
+        Assert.Equal(0, material.Uniforms[52]);
+    }
+
     [Fact]
     public void A_shader_without_specular_constants_writes_none()
     {
