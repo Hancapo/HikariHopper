@@ -40,6 +40,17 @@ internal sealed class PartVisibility
     /// <summary>The level of detail picked.</summary>
     public int Lod { get; set; }
 
+    /// <summary>Whether a fragment shows damaged: its damaged drawables in place of their intact ones.</summary>
+    public bool Damaged { get; set; }
+
+    /// <summary>Whether a model is drawn in the state shown: always, or only intact or damaged.</summary>
+    public bool Active(int model) => (model < scene.Variants.Count ? scene.Variants[model] : ModelVariant.Always) switch
+    {
+        ModelVariant.Intact => !Damaged,
+        ModelVariant.Damaged => Damaged,
+        _ => true,
+    };
+
     /// <summary>A level of detail as its segment names it: High, Med, Low, VLow.</summary>
     public static string ShortLevelName(int lod) => lod switch { 0 => "High", 1 => "Med", 2 => "Low", _ => "VLow" };
 
@@ -56,13 +67,13 @@ internal sealed class PartVisibility
     }
 
     /// <summary>Whether a scene part is drawn.</summary>
-    public bool Shown(int part) => scene.Parts[part].Lod == LevelOf(scene.Parts[part].Model) && !hidden.Contains(keys[part]);
+    public bool Shown(int part) => scene.Parts[part].Lod == LevelOf(scene.Parts[part].Model) && Active(scene.Parts[part].Model) && !hidden.Contains(keys[part]);
 
     /// <summary>A flag per scene part, for the renderer.</summary>
     public bool[] Mask()
     {
         int[] levels = [.. Enumerable.Range(0, scene.Models.Count).Select(LevelOf)];
-        return [.. scene.Parts.Select((part, i) => part.Lod == (part.Model < levels.Length ? levels[part.Model] : Lod) && !hidden.Contains(keys[i]))];
+        return [.. scene.Parts.Select((part, i) => part.Lod == (part.Model < levels.Length ? levels[part.Model] : Lod) && Active(part.Model) && !hidden.Contains(keys[i]))];
     }
 
     /// <summary>What is drawn: its triangles, vertices and distinct edges.</summary>
@@ -129,7 +140,8 @@ internal sealed class PartVisibility
     private IEnumerable<int> AtLevel()
     {
         int[] levels = [.. Enumerable.Range(0, scene.Models.Count).Select(LevelOf)];
-        return Enumerable.Range(0, scene.Parts.Count).Where(i => scene.Parts[i].Model < levels.Length && scene.Parts[i].Lod == levels[scene.Parts[i].Model]);
+        return Enumerable.Range(0, scene.Parts.Count).Where(i => scene.Parts[i].Model < levels.Length && scene.Parts[i].Lod == levels[scene.Parts[i].Model]
+            && Active(scene.Parts[i].Model));
     }
 
     private static PartNode Node(string key, string name, int depth, IReadOnlyList<PartNode> children) =>
