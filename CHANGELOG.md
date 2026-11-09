@@ -52,6 +52,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The 3D viewer's parts panel is a tree with dotted guides, an eye to show or hide each row and a badge for what it is; rows are selected apart from what is shown, with the mouse or the keyboard, narrowed by a filter, and a right click shows only, hides, frames or copies what is selected. ([#137](https://github.com/Hancapo/HikariHopper/pull/137))
 - The 3D viewer's parts panel shows a vehicle's body, wheels and other groups in sections, with its extras as numbered toggles, and a drawable dictionary's drawables by what they are (Head, Torso…), one of each at a time or all of them; a ped's drawables are named for what they are, not all for their dictionary. ([#138](https://github.com/Hancapo/HikariHopper/pull/138))
 - The 3D viewer's skeleton, collision and lights buttons are joined into one column over the 3D view, as in Blender: one that's on is filled with the accent colour, and one the model has nothing for is faded out. ([#140](https://github.com/Hancapo/HikariHopper/pull/140))
+- The texture editor shows the texture picked in a dictionary much sooner, and keeps the last one up while the next one decodes instead of flashing "Decoding texture…". ([#130](https://github.com/Hancapo/HikariHopper/pull/130))
 
 ### Fixed
 

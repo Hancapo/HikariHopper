@@ -44,7 +44,10 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         nameof(ShowPreviewPlaceholder),
     ];
 
-    private readonly PriorityWorkQueue pool = new(2);
+    // Previews, their mips and channels, and thumbnails are made in parallel, up to four at once.
+    private readonly PriorityWorkQueue pool = new(Math.Clamp(Environment.ProcessorCount / 2, 2, 4));
+    // The texture the preview is for, read by the views made ahead of time, which aren't needed once it's another.
+    private volatile Texture? wantedTexture;
     private readonly IClipboardService clipboard;
     private IFileDialogs? dialogs;
     private int generation;
@@ -542,6 +545,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         if (SelectedRecord() is not { } record)
             return;
         SetStatus($"Decoding {record.Name} · mip {mipLevel}…");
+        wantedTexture = record.Texture;
         StartImageTask(selectedIndex, record.Texture, channel, mipLevel, thumbnail: false);
     }
 
@@ -557,13 +561,18 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         Func<Texture, string, int, RgbaImage> decode = DecodeImage;
         // A mip already decoded only needs its channel made, not another decode.
         RgbaImage? decoded = !thumbnail && ReferenceEquals(texture, viewsTexture) && sources.TryGetValue(mip, out RgbaImage? kept) ? kept : null;
+        // A thumbnail is made from the smallest mip that covers it, not the full texture.
+        int decodedMip = thumbnail ? TextureBitmaps.ThumbnailMip(texture.Width, texture.Height, texture.MipCount) : mip;
         pool.Start(() =>
         {
+            // A view made ahead of time for a texture no longer selected isn't made, so it doesn't hold up the next.
+            if (prefetch && !ReferenceEquals(wantedTexture, texture))
+                return;
             Bitmap bitmap;
             RgbaImage source;
             try
             {
-                source = decoded ?? decode(texture, "rgba", mip);
+                source = decoded ?? decode(texture, "rgba", decodedMip);
                 bitmap = TextureBitmaps.Create(thumbnail ? TextureBitmaps.Thumbnail(source) : TextureOperations.ChannelView(source, mode));
             }
             catch (Exception exception)
