@@ -11,12 +11,13 @@ namespace HikariHopper.Tests;
 
 public sealed class DrawableViewerTests
 {
-    private static byte[] Quad(GameTarget target, string shader, Action<DrawableMaterialInput>? setup = null)
+    private static byte[] Quad(GameTarget target, string shader, Action<DrawableMaterialInput>? setup = null, Action<DrawableMeshInput>? channels = null)
     {
         Vector3[] positions = [new(0, 0, 0), new(2, 0, 0), new(2, 1, 0), new(0, 1, 0)];
         var mesh = new DrawableMeshInput(positions, [0, 1, 2, 0, 2, 3], "surface");
         mesh.SetChannel(VertexSemantic.Normal, [.. Enumerable.Repeat(Vector4.UnitZ, 4)]);
         mesh.SetChannel(VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(1, 1, 0, 0), new(0, 1, 0, 0)]);
+        channels?.Invoke(mesh);
         var material = new DrawableMaterialInput { Name = "surface", Shader = shader };
         setup?.Invoke(material);
         var builder = new DrawableBuilder { Name = "quad" };
@@ -154,13 +155,78 @@ public sealed class DrawableViewerTests
             Assert.True(material.Terrain);
             Assert.True(material.Rebuilt);
             Assert.Equal(["ground_0", "ground_1", "ground_2", "ground_3"], material.Layers[..4].Select(t => t?.Name));
-            Assert.Equal(lod ? [null, null, null, null] : ["ground_0_n", "ground_1_n", "ground_2_n", "ground_3_n"], material.Layers[4..].Select(t => t?.Name));
+            Assert.Equal(lod ? [null, null, null, null] : ["ground_0_n", "ground_1_n", "ground_2_n", "ground_3_n"], material.Layers[4..8].Select(t => t?.Name));
             Assert.Equal(weights > 0 ? "ground_lookup" : null, material.Lookup?.Name);
             // terrain.wgsl's Terrain uniform: specularIntensityMult (squared there), the falloff, bumpiness, the program's
             // fixed fresnel; where the weights come from and whether there are bump maps.
             Assert.Equal([.3f, 20, lod ? 1 : .7f, .98f, weights, bumps], material.Uniforms[..6]);
         }
         Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Theory]
+    [InlineData("terrain_cb_w_4lyr_pxm", 0f, 0f, 0f)]
+    [InlineData("terrain_cb_w_4lyr_2tex_blend_pxm_spm", 1f, 0f, 1f)]
+    [InlineData("terrain_cb_w_4lyr_2tex_pxm", 0f, 1f, 0f)]
+    [InlineData("terrain_cb_w_4lyr_cm_pxm", 2f, 0f, 0f)]
+    public void A_parallax_terrain_shader_reads_its_height_maps_from_either_edition(string shader, float weights, float second, float specularMap)
+    {
+        SurfaceMaterial Read(GameTarget target) => ModelContent.Read("ground.ydr", Quad(target, shader, material =>
+        {
+            material.Parameters["parallaxSelfShadowAmount"] = [.8f];
+            material.Parameters["bumpSelfShadowAmount"] = [.25f];
+            for (int i = 0; i < 4; i++)
+            {
+                material.Parameters[$"heightScale{i}"] = [.01f * (i + 1)];
+                material.Parameters[$"heightBias{i}"] = [.005f * (i + 1)];
+                material.Textures[$"TextureSampler_layer{i}"] = new TextureReference(Map($"ground_{i}"));
+                material.Textures[$"BumpSampler_layer{i}"] = new TextureReference(Map($"ground_{i}_n"));
+                material.Textures[$"heightMapSamplerLayer{i}"] = new TextureReference(Map($"ground_{i}_h"));
+            }
+            if (specularMap > 0)
+            {
+                material.Parameters["specularIntensityMultSpecMap"] = [.4f];
+                material.Parameters["specIntensityAdjust"] = [.6f];
+                material.Parameters["specularFalloffMultSpecMap"] = [30];
+                material.Parameters["specFalloffAdjust"] = [.5f];
+            }
+            if (weights > 0)
+                material.Textures["lookupSampler"] = new TextureReference(Map("ground_lookup"));
+        })).Surfaces!.Materials.Single();
+
+        SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
+        foreach (SurfaceMaterial material in new[] { legacy, enhanced })
+        {
+            Assert.True(material.Rebuilt);
+            Assert.Equal(["ground_0_h", "ground_1_h", "ground_2_h", "ground_3_h"], material.Layers[8..].Select(t => t?.Name));
+            Assert.Equal(weights, material.Uniforms[4]);
+            // terrain.wgsl's layout: layers 1 to 3 on the second UV set (_2tex, not _2tex_blend), bumpSelfShadowAmount,
+            // has parallax, parallaxSelfShadowAmount; then each layer's height scale and bias.
+            Assert.Equal([second, .25f, 1, .8f], material.Uniforms[8..12]);
+            Assert.Equal([.01f, .02f, .03f, .04f, .005f, .01f, .015f, .02f], material.Uniforms[12..20]);
+            // The _spm shaders' specular map in the height maps' green; and globalHeightScale.
+            Assert.Equal(specularMap, material.Uniforms[20]);
+            if (specularMap > 0)
+                Assert.Equal([.4f, .6f, 30, .5f], material.Uniforms[21..25]);
+            Assert.Equal(1, material.Uniforms[25]);
+        }
+        Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Fact]
+    public void A_terrain_shader_without_parallax_has_none_and_keeps_its_layers_on_the_first_uv_set()
+    {
+        SurfaceMaterial material = ModelContent.Read("ground.ydr", Quad(GameTarget.Legacy, "terrain_cb_w_4lyr_2tex_blend")).Surfaces!.Materials.Single();
+        Assert.Equal([0f, .3f, 0, 0], material.Uniforms[8..12]);
+        Assert.Equal(0, material.Uniforms[20]);
+    }
+
+    [Fact]
+    public void A_vertex_reads_its_fourth_uv_set_as_the_parallax_controls()
+    {
+        byte[] ydr = Quad(GameTarget.Legacy, "terrain_cb_w_4lyr_pxm", channels: mesh =>
+            mesh.SetChannel(VertexSemantic.TexCoord3, [.. Enumerable.Repeat(new Vector4(.25f, .75f, 0, 0), 4)]));
+        Assert.All(ModelContent.Read("ground.ydr", ydr).Surfaces!.Vertices, vertex => Assert.Equal(new Vector2(.25f, .75f), vertex.Uv2));
     }
 
     [Fact]
@@ -175,11 +241,11 @@ public sealed class DrawableViewerTests
     [Fact]
     public void A_terrain_shader_not_rebuilt_yet_is_drawn_as_the_closest_terrain()
     {
-        DrawableScene scene = ModelContent.Read("ground.ydr", Quad(GameTarget.Legacy, "terrain_cb_w_4lyr_pxm")).Surfaces!;
+        DrawableScene scene = ModelContent.Read("ground.ydr", Quad(GameTarget.Legacy, "terrain_cb_w_4lyr_2tex_blend_ttn")).Surfaces!;
         SurfaceMaterial material = scene.Materials.Single();
         Assert.True(material.Terrain);
         Assert.False(material.Rebuilt);
-        Assert.Contains("Not rebuilt yet, drawn as the closest terrain shader: terrain_cb_w_4lyr_pxm", scene.Diagnostics);
+        Assert.Contains("Not rebuilt yet, drawn as the closest terrain shader: terrain_cb_w_4lyr_2tex_blend_ttn", scene.Diagnostics);
     }
 
     [Fact]
