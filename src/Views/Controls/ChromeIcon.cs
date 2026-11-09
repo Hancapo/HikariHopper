@@ -60,6 +60,9 @@ public class ChromeIcon : Control
         ["collision"] = "brick-wall",
         ["lights"] = "lightbulb",
         ["free"] = "move-3d",
+        ["expand-all"] = "chevrons-up-down",
+        ["collapse-all"] = "chevrons-down-up",
+        ["show-all"] = "eye",
     };
 
     static ChromeIcon()

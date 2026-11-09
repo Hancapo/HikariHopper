@@ -44,6 +44,28 @@ internal sealed class DropdownWindow : Window
     }
 
     /// <summary>
+    /// Opens <paramref name="body"/> as a context menu: its corner at <paramref name="at"/> in <paramref name="anchor"/>,
+    /// moved back onto the screen where it would run off it; none when the anchor isn't in a window.
+    /// </summary>
+    public static DropdownWindow? OpenAt(Control anchor, Point at, Control body)
+    {
+        if (TopLevel.GetTopLevel(anchor) is not Window owner)
+            return null;
+        PixelPoint corner = anchor.PointToScreen(at);
+        var dropdown = new DropdownWindow(body);
+        Thickness margin = Ui.Theme.MenuShadowMargin;
+        body.Measure(Size.Infinity);
+        double scale = owner.RenderScaling;
+        var size = new PixelSize((int)Math.Ceiling(body.DesiredSize.Width * scale), (int)Math.Ceiling(body.DesiredSize.Height * scale));
+        var position = new PixelPoint(corner.X, corner.Y);
+        if (owner.Screens.ScreenFromPoint(corner)?.WorkingArea is { } screen)
+            position = new PixelPoint(Math.Min(position.X, screen.Right - size.Width), Math.Min(position.Y, screen.Bottom - size.Height));
+        dropdown.Position = new PixelPoint((int)Math.Round(position.X - margin.Left * scale), (int)Math.Round(position.Y - margin.Top * scale));
+        dropdown.Show(owner);
+        return dropdown;
+    }
+
+    /// <summary>
     /// Opens <paramref name="body"/> under <paramref name="anchor"/>, its right edge on the anchor's, <paramref name="gap"/>
     /// below it; none when the anchor isn't in a window.
     /// </summary>

@@ -265,6 +265,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         Ground = box.Minimum.Z;
     }
 
+    /// <summary>Turns the camera to a box, from a distance that shows it whole, leaving the ground where it is.</summary>
+    public void Focus(Aabb3 box) => Camera.Frame(box.Center, Math.Max(box.Size.Length() / 2, .05f));
+
     /// <summary>Shows these triangles and lines in place of anything before; null shows none.</summary>
     public void Show(ViewportMesh? mesh)
     {
