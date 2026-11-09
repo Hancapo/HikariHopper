@@ -29,6 +29,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A free camera in the 3D viewer for models, to fly around and into a model with W, A, S, D, Q and E, look by dragging, and set its speed with the wheel. ([#111](https://github.com/Hancapo/HikariHopper/pull/111))
 - The 3D viewer draws a model's skeleton, collision bounds and lights over it, each turned on from the toolbar. ([#112](https://github.com/Hancapo/HikariHopper/pull/112))
 - Bloom in the 3D viewer, as GTA V Enhanced draws it: emissive surfaces and other bright parts of a model glow, more strongly at night, as the game's timecycle sets it for each hour. ([#127](https://github.com/Hancapo/HikariHopper/pull/127))
+- The sun and moon in the 3D viewer cross the sky on the game's own path, read from the game's time.xml: the sun rises due east at 06:00, is highest at 13:00 and sets due west at 20:00, and the moon lights the night from 21:45 to 04:45. ([#134](https://github.com/Hancapo/HikariHopper/pull/134))
 - Textures edited from the 3D viewer's textures button show on the model as soon as the texture editor closes after saving, a .ydr's saved into it and a fragment's or drawable dictionary's over its own. ([#131](https://github.com/Hancapo/HikariHopper/pull/131))
 
 ### Changed

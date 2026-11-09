@@ -261,7 +261,7 @@ internal sealed unsafe partial class ViewportRenderer
         values[5] = sky.ZenithConstants;
         values[6] = new Vector4(sky.SunColourHdr, 0);
         values[7] = sky.SunConstants;
-        values[8] = new Vector4(DayCycle.SunDirection(hours), 0);
+        values[8] = new Vector4(DayCycle.SunDirection(hours, Sky), 0);
         values[9] = new Vector4(Timecycle.GroundRadiance(cycle, key.Direction), 0);
         queue.WriteBuffer(target, 0, (ReadOnlySpan<Vector4>)values);
     }

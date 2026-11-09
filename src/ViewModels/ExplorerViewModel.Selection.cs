@@ -405,6 +405,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
             Nearby = NearbyDictionaries(entry),
         });
@@ -425,6 +426,47 @@ public sealed partial class ExplorerViewModel
         static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
             [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
                 new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path)))];
+    }
+
+    /// <summary>
+    /// Where the game's <c>time.xml</c> is, in the order the game would take it: a mod's update, the game's update, then
+    /// the one in common.rpf, which both editions ship.
+    /// </summary>
+    internal static readonly string[] TimeXmlPaths =
+        ["mods/update/update.rpf/common/data/levels/gta5/time.xml", "update/update.rpf/common/data/levels/gta5/time.xml", "common.rpf/data/levels/gta5/time.xml"];
+
+    // Each game's sky, read once, until its archives change.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<Rendering.SkyPath>> Skies = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The sun's and moon's paths across the game's sky, from its <c>time.xml</c>, read off the UI thread once per game;
+    /// the game's own paths where no file is found or it can't be read.
+    /// </summary>
+    internal static Task<Rendering.SkyPath> SkyOf(LoadedGame game)
+    {
+        string Stamp(string archive)
+        {
+            string path = Path.Combine(game.Root, archive);
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-";
+        }
+        string key = $"{game.Root}|{game.Target}|{Stamp("mods/update/update.rpf")}|{Stamp("update/update.rpf")}|{Stamp("common.rpf")}";
+        return Skies.GetOrAdd(key, _ => Task.Run(() => ReadSky(game)));
+    }
+
+    private static Rendering.SkyPath ReadSky(LoadedGame game)
+    {
+        foreach (string path in TimeXmlPaths)
+        {
+            try
+            {
+                if (Rendering.SkyPath.Read(ReadGameFile(game, path)) is { } sky)
+                    return sky;
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+            }
+        }
+        return Rendering.SkyPath.Game;
     }
 
     /// <summary>

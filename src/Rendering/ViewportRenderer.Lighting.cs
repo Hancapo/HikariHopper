@@ -42,6 +42,16 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
     public float Hours { get; private set; } = DayCycle.DefaultHours;
 
+    /// <summary>The sun's and moon's paths, from the game's <c>time.xml</c>; the game's own until one is read.</summary>
+    public SkyPath Sky { get; private set; } = SkyPath.Game;
+
+    /// <summary>Moves the sun and moon along these paths, and lights drawables from where they then are.</summary>
+    public void SetSky(SkyPath sky)
+    {
+        Sky = sky;
+        SetTime(Hours);
+    }
+
     /// <summary>Whether the sun casts shadows, on the drawable and on the ground under it.</summary>
     public bool Shadows { get; set; } = true;
 
@@ -247,7 +257,7 @@ internal sealed unsafe partial class ViewportRenderer
     public void SetTime(float hours)
     {
         // Evaluated first: an hour that isn't a number throws and changes nothing.
-        key = DayCycle.Evaluate(hours);
+        key = DayCycle.Evaluate(hours, Sky);
         cycle = Timecycle.Evaluate(hours);
         Hours = hours;
         // A drawable's shadow follows the sun.
