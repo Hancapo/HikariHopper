@@ -50,9 +50,11 @@ All notable changes to HikariHopper are documented here. The format follows
 - The keyboard shortcuts list and the start page name actions as the menus do. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The 3D viewer's parts panel is a tree with dotted guides, an eye to show or hide each row and a badge for what it is; rows are selected apart from what is shown, with the mouse or the keyboard, narrowed by a filter, and a right click shows only, hides, frames or copies what is selected. ([#137](https://github.com/Hancapo/HikariHopper/pull/137))
 - The 3D viewer's parts panel shows a vehicle's body, wheels and other groups in sections, with its extras as numbered toggles, and a drawable dictionary's drawables by what they are (Head, Torso…), one of each at a time or all of them; a ped's drawables are named for what they are, not all for their dictionary. ([#138](https://github.com/Hancapo/HikariHopper/pull/138))
+- The 3D viewer's skeleton, collision and lights buttons are joined into one column over the 3D view, as in Blender: one that's on is filled with the accent colour, and one the model has nothing for is faded out. ([#140](https://github.com/Hancapo/HikariHopper/pull/140))
 
 ### Fixed
 
+- Tooltips over the 3D viewer are as tall as their text instead of a fixed 39 pixels, and a disabled button's tooltip says why it's off. ([#140](https://github.com/Hancapo/HikariHopper/pull/140))
 - The 3D viewer's darkest shades are as bright as in the game: the tone-mapped colour is written with the game's gamma (1/2.2) instead of the sRGB curve. ([#135](https://github.com/Hancapo/HikariHopper/pull/135))
 - The explorer's status bar says "1 item", not "1 items". ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The keyboard shortcuts list says Ctrl+C copies the selection, as it does. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))

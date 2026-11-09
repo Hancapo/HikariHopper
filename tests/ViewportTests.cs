@@ -621,9 +621,26 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         Views.Controls.ChromeToolButton[] strip = [viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
         Assert.All(strip, button => Assert.Equal(new Avalonia.Size(26, 26), button.Bounds.Size));
-        // One above the other, two pixels apart, in the strip's well.
-        Assert.Equal(new Avalonia.Point(0, 28), Avalonia.VisualExtensions.TranslatePoint(strip[1], default, strip[0]));
-        Assert.Equal(new Avalonia.Point(0, 28), Avalonia.VisualExtensions.TranslatePoint(strip[2], default, strip[1]));
+        // One above the other, joined by a one-pixel seam.
+        Assert.Equal(new Avalonia.Point(0, 27), Avalonia.VisualExtensions.TranslatePoint(strip[1], default, strip[0]));
+        Assert.Equal(new Avalonia.Point(0, 27), Avalonia.VisualExtensions.TranslatePoint(strip[2], default, strip[1]));
+        // Joined segments with no panel behind them, as Blender's: the collision this model has is a solid segment; the
+        // skeleton and lights it hasn't have their glyphs faded right out, so they don't read as merely off, and their
+        // tooltips still show, to say why.
+        Assert.All(strip, button => Assert.True(button.Segment));
+        Assert.True(viewer.SolidButton.IsEnabled);
+        Assert.False(viewer.LightsButton.IsEnabled);
+        Assert.True(Avalonia.Controls.ToolTip.GetShowOnDisabled(viewer.LightsButton));
+        double Glyph(Views.Controls.ChromeToolButton button) => button.GetVisualDescendants().OfType<Views.Controls.ChromeIcon>().Single().Opacity;
+        Assert.Equal(1, Glyph(viewer.SolidButton));
+        Assert.Equal(Views.Controls.ChromeToolButton.DisabledSegmentOpacity, Glyph(viewer.LightsButton));
+        Avalonia.Controls.ToolTip.SetIsOpen(viewer.LightsButton, true);
+        Assert.Equal("No lights", Views.Controls.WindowToolTip.ShownText);
+        // A disabled tool gets no pointer events of its own, so the strip's window tells when the pointer leaves it.
+        tools.MouseMove(Avalonia.VisualExtensions.TranslatePoint(viewer.LightsButton, new Avalonia.Point(13, 13), tools)!.Value);
+        Assert.Equal("No lights", Views.Controls.WindowToolTip.ShownText);
+        tools.MouseMove(Avalonia.VisualExtensions.TranslatePoint(viewer.SolidButton, new Avalonia.Point(13, 13), tools)!.Value);
+        Assert.Null(Views.Controls.WindowToolTip.ShownText);
         // The arrow on the viewport's left edge, at its top; the strip a little in from the edge, centred on its height.
         void Centred()
         {
@@ -793,6 +810,10 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.ShadowsButton));
         Assert.Equal("Shadows  (H)", Views.Controls.WindowToolTip.ShownText);
         Assert.Contains(window.OwnedWindows, owned => owned.Content is Avalonia.Controls.Border);
+        // Held at its own size in the window's corner: Windows keeps such a window at least 39 pixels high, which
+        // stretched a one-line tooltip.
+        var body = (Avalonia.Controls.Border)window.OwnedWindows.Single(owned => owned.Content is Avalonia.Controls.Border).Content!;
+        Assert.Equal((Avalonia.Layout.HorizontalAlignment.Left, Avalonia.Layout.VerticalAlignment.Top), (body.HorizontalAlignment, body.VerticalAlignment));
         // A tooltip that changes, as the parts arrow's does when it's pressed, closes it.
         Avalonia.Controls.ToolTip.SetTip(viewer.ShadowsButton, "Changed");
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
