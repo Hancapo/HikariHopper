@@ -18,6 +18,8 @@ public class WindowControlButton : Button
         AvaloniaProperty.Register<WindowControlButton, bool>(nameof(Separated), true);
 
     private WindowControlGlyph? glyph;
+    private bool nonClientHover;
+    private bool nonClientPressed;
 
     public string Kind
     {
@@ -52,6 +54,31 @@ public class WindowControlButton : Button
             Refresh();
     }
 
+    /// <summary>
+    /// The pointer is over the button while Windows treats its area as the window's maximize button, for snap layouts
+    /// (<see cref="SnapLayoutHook"/>): it then reaches the button as non-client messages, not as pointer events.
+    /// </summary>
+    internal bool NonClientHover
+    {
+        get => nonClientHover;
+        set
+        {
+            nonClientHover = value;
+            Refresh();
+        }
+    }
+
+    /// <summary>The button is held down there, as <see cref="NonClientHover"/>.</summary>
+    internal bool NonClientPressed
+    {
+        get => nonClientPressed;
+        set
+        {
+            nonClientPressed = value;
+            Refresh();
+        }
+    }
+
     /// <summary>Whether focus came from the keyboard (<c>:focus-visible</c>), the only time it shows.</summary>
     public bool KeyboardFocused => IsFocused && Classes.Contains(":focus-visible");
 
@@ -79,9 +106,9 @@ public class WindowControlButton : Button
     {
         if (glyph is null)
             return;
-        glyph.Pressed = IsPressed;
+        glyph.Pressed = IsPressed || NonClientPressed;
         glyph.Ink = !IsEffectivelyEnabled
             ? Ui.Theme.TextFaint
-            : IsPointerOver || KeyboardFocused ? Ui.Theme.Text : Ui.Theme.TextDim;
+            : IsPointerOver || NonClientHover || KeyboardFocused ? Ui.Theme.Text : Ui.Theme.TextDim;
     }
 }
