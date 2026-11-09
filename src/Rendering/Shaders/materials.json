@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "about": "What surface.wgsl reads from a GTA V material. Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
+  "textures": {
+    "diffuse": ["DiffuseSampler"],
+    "normal": ["BumpSampler"],
+    "specular": ["SpecSampler"],
+    "tint_palette": ["TintPaletteSampler"]
+  },
+  "constants": {
+    "fresnel": ["specularFresnel"],
+    "specular_falloff": ["specularFalloffMult"],
+    "specular_intensity": ["specularIntensityMult"],
+    "specular_mask": ["specMapIntMask"],
+    "bumpiness": ["bumpiness"],
+    "emissive_multiplier": ["emissiveMultiplier"],
+    "tint_palette_selector": ["tintPaletteSelector"]
+  },
+  "patterns": [
+    { "contains": "emissive", "emissive": true },
+    { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
+    { "contains": "cutout", "alpha_mode": "MASK" },
+    { "contains": "alpha", "alpha_mode": "BLEND" }
+  ],
+  "families": {
+    "textured": [
+      "cloth_default", "cloth_normal_spec", "cloth_normal_spec_tnt", "cubemap_reflect", "cutout_hard", "decal", "decal_amb_only",
+      "decal_diff_only_um", "decal_dirt", "decal_emissive_only", "decal_emissivenight_only", "decal_glue", "decal_normal_only",
+      "decal_normal_spec_um", "decal_shadow_only", "decal_spec_only", "decal_tnt", "default", "default_detail", "default_spec",
+      "default_terrain_wet", "default_tnt", "default_um", "emissive", "emissive_clip", "emissive_speclum", "emissive_tnt", "emissivenight",
+      "emissivenight_geomnightonly", "emissivestrong", "normal", "normal_cubemap_reflect", "normal_decal", "normal_decal_pxm",
+      "normal_decal_pxm_tnt", "normal_decal_tnt", "normal_detail", "normal_detail_dpm", "normal_detail_dpm_tnt", "normal_diffspec",
+      "normal_diffspec_detail", "normal_diffspec_detail_dpm", "normal_diffspec_detail_dpm_tnt", "normal_diffspec_detail_dpm_wind",
+      "normal_diffspec_detail_tnt", "normal_diffspec_tnt", "normal_pxm", "normal_pxm_tnt", "normal_reflect", "normal_reflect_decal",
+      "normal_spec", "normal_spec_batch", "normal_spec_cubemap_reflect", "normal_spec_decal", "normal_spec_decal_detail",
+      "normal_spec_decal_nopuddle", "normal_spec_decal_pxm", "normal_spec_decal_tnt", "normal_spec_detail", "normal_spec_detail_dpm",
+      "normal_spec_detail_dpm_texdecal_tnt", "normal_spec_detail_dpm_tnt", "normal_spec_detail_dpm_vertdecal_tnt", "normal_spec_detail_tnt",
+      "normal_spec_dpm", "normal_spec_emissive", "normal_spec_pxm", "normal_spec_pxm_tnt", "normal_spec_reflect", "normal_spec_reflect_decal",
+      "normal_spec_reflect_emissivenight", "normal_spec_tnt", "normal_spec_twiddle_tnt", "normal_spec_um", "normal_spec_wrinkle",
+      "normal_terrain_wet", "normal_terrain_wet_pxm", "normal_tnt", "normal_um", "normal_um_tnt", "normal_wind", "parallax",
+      "parallax_specmap", "parallax_steep", "reflect", "reflect_decal", "spec", "spec_decal", "spec_reflect", "spec_reflect_decal",
+      "spec_tnt", "spec_twiddle_tnt", "weapon_emissive_tnt", "weapon_normal_spec_detail_palette", "weapon_normal_spec_detail_tnt",
+      "weapon_normal_spec_palette", "weapon_normal_spec_tnt"
+    ]
+  },
+  "shaders": {}
+}

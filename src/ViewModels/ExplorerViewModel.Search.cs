@@ -509,7 +509,8 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Opened {name} in a new tab");
             return;
         }
-        bool texture = name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase);
+        // A drawable found by search opens in the 3D viewer, as it does from its folder.
+        bool texture = name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase);
         bool text = TextDocument.IsTextName(name);
         bool image = Textures.TextureImport.IsImagePath(name);
         bool model = IsModelName(name);

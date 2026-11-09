@@ -38,6 +38,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     // What is framed, the world's origin until a file says where its content is; and what is shown.
     private CommonFury.Numerics.Aabb3 framed = new(new(-5), new(5));
     private ViewportMesh? shown;
+    private DrawableScene? surfaces;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -49,11 +50,20 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.Frame(box);
     }
 
-    /// <summary>Shows these triangles in place of any before.</summary>
+    /// <summary>Shows these triangles in place of anything before.</summary>
     public void Show(ViewportMesh? mesh)
     {
         shown = mesh;
+        surfaces = null;
         renderer?.Show(mesh);
+    }
+
+    /// <summary>Shows a drawable's surfaces in place of anything before.</summary>
+    internal void Show(DrawableScene? drawable)
+    {
+        surfaces = drawable;
+        shown = null;
+        renderer?.Show(drawable);
     }
 
     /// <summary>WebGPU started, with the GPU it draws with.</summary>
@@ -90,7 +100,10 @@ internal sealed partial class ViewportHost : NativeControlHost
             (surfaceWidth, surfaceHeight) = ClientSize();
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
-            renderer.Show(shown);
+            if (surfaces is not null)
+                renderer.Show(surfaces);
+            else
+                renderer.Show(shown);
             pacer = new DisplayPacer(hwnd, RequestFrame);
             Started?.Invoke(renderer.AdapterName);
         }
