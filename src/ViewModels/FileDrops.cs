@@ -1,5 +1,8 @@
 namespace HikariHopper.ViewModels;
 
+/// <summary>A drop held back because some of its names are already in the folder: all it brings, and those names.</summary>
+public sealed record ImportConflicts(IReadOnlyList<string> Sources, IReadOnlyList<string> Names);
+
 /// <summary>Shared validation for local file drops into the explorer and editors.</summary>
 public static class FileDrops
 {

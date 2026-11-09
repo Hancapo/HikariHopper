@@ -23,6 +23,7 @@ public partial class WorkspaceView : UserControl
     private ExplorerViewModel? bridge;
     private ExplorerCreateDialog? createDialog;
     private DeleteEntriesDialog? deleteDialog;
+    private ImportConflictDialog? importDialog;
     private PropertiesDialog? propertiesDialog;
     private GridLength folderWidth = new(FolderPanel.PreferredWidth);
     private bool foldersShown = true;
@@ -80,12 +81,14 @@ public partial class WorkspaceView : UserControl
         {
             bridge.PropertyChanged -= OnBridgePropertyChanged;
             bridge.DeleteConfirmationRequested -= OnDeleteConfirmationRequested;
+            bridge.ImportConflictsFound -= OnImportConflictsFound;
         }
         bridge = Bridge;
         if (bridge is not null)
         {
             bridge.PropertyChanged += OnBridgePropertyChanged;
             bridge.DeleteConfirmationRequested += OnDeleteConfirmationRequested;
+            bridge.ImportConflictsFound += OnImportConflictsFound;
         }
         contextMenu.DataContext = bridge;
         // Another tab: its folders as they are, at once.
@@ -270,6 +273,24 @@ public partial class WorkspaceView : UserControl
     }
 
     private void OnDeleteConfirmationRequested(object? sender, EventArgs e) => OpenDeleteDialog();
+
+    /// <summary>A drop's names are already in the folder: asks whether to replace, skip or keep both.</summary>
+    private void OnImportConflictsFound(object? sender, ImportConflicts pending)
+    {
+        if (Bridge is not { } model || importDialog is not null)
+            return;
+        var dialog = new ImportConflictDialog(model, pending);
+        importDialog = dialog;
+        dialog.Closed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (importDialog == dialog)
+                importDialog = null;
+        });
+        dialog.Open(this);
+    }
+
+    /// <summary>The open dialog asking about a drop's names already here, if any.</summary>
+    internal ImportConflictDialog? ImportDialog => importDialog;
 
     /// <summary>QML <c>openDeleteDialog()</c>.</summary>
     public void OpenDeleteDialog()

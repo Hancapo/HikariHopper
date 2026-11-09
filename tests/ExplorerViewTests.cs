@@ -101,6 +101,36 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void A_drop_with_names_already_here_asks_whether_to_replace_them()
+    {
+        Explorer ui = OpenExplorer(files: 3);
+        string drops = Directory.CreateDirectory(Path.Combine(Work, "..", "drops-" + Guid.NewGuid().ToString("N"))).FullName;
+        string[] dropped = [.. Enumerable.Range(0, 20).Select(index => Write(Path.Combine(drops, $"file{index:000}.txt"), "new"))];
+
+        // Three of the twenty are already here: a dialog asks, and nothing is imported until it's answered.
+        Assert.True(ui.Bridge.ImportDroppedFiles(dropped));
+        Pump(200);
+        ImportConflictDialog dialog = Assert.IsType<ImportConflictDialog>(ui.Find<WorkspaceView>().ImportDialog);
+        Assert.Equal("3 of the 20 items are already here.", dialog.Question);
+        Assert.Equal("file000.txt, file001.txt, file002.txt", dialog.Names);
+        Assert.False(File.Exists(Path.Combine(Work, "file019.txt")));
+        if (Environment.GetEnvironmentVariable("HH_SHOT") is { } shot)
+            using (var frame = ui.Window.CaptureRenderedFrame())
+                frame?.Save(shot, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+
+        // Replace: all twenty go in, the three replaced, and the dialog closes.
+        dialog.ReplaceButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (ui.Bridge.EntryOperationBusy && clock.ElapsedMilliseconds < 10_000)
+            Pump(20);
+        Pump(300);
+        Assert.Null(ui.Find<WorkspaceView>().ImportDialog);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(Work, "file000.txt")));
+        Assert.True(File.Exists(Path.Combine(Work, "file019.txt")));
+        ui.Window.Close();
+    }
+
+    [AvaloniaFact]
     public void TheLauncherHasNoExplorerChromeAndListsTheGamesToOpen()
     {
         Explorer ui = OpenExplorer(openGame: false);

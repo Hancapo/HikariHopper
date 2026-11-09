@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.ImportConflictDialog"
+             Width="470">
+  <!-- Asked before a drop whose names are already in the folder: replace them, skip them, keep both, or cancel. -->
+  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
+  <Panel>
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Margin="10,0" VerticalAlignment="Center" Text="ALREADY HERE" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+      </Panel>
+
+      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Name="CancelButton" Width="80" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
+          <c:ChromeToolButton Name="KeepBothButton" Width="88" Height="28" Raised="True" Text="Keep both" Click="OnKeepBoth" />
+          <c:ChromeToolButton Name="SkipButton" Width="80" Height="28" Raised="True" Text="Skip" Click="OnSkip" />
+          <c:ChromeToolButton Name="ReplaceButton" Width="88" Height="28" Primary="True" Text="Replace" Click="OnReplace" />
+        </StackPanel>
+      </Panel>
+
+      <StackPanel Margin="16,14" Spacing="6" VerticalAlignment="Center">
+        <TextBlock Name="QuestionText" TextWrapping="Wrap" Foreground="{x:Static ui:Theme.Text}"
+                   FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" FontWeight="Bold" />
+        <TextBlock Name="NamesText" TextWrapping="Wrap" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+      </StackPanel>
+    </DockPanel>
+    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
+  </Panel>
+  </Border>
+</UserControl>
