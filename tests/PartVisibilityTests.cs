@@ -97,6 +97,32 @@ public sealed class PartVisibilityTests
         Assert.Equal([false, false, true], parts.Mask());
     }
 
+    [AvaloniaFact]
+    public void A_press_on_a_box_sets_the_rows_it_sweeps_over_the_same_way()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(Scene()) };
+        // The drawable, open, and its two models.
+        Assert.Equal(["sign", "model 1", "model 2"], panel.Rows.Select(row => row.Node.Name));
+
+        // Pressed on a shown model, then swept down and back: both models hidden, each once.
+        panel.BeginSweep(panel.Rows[1].Node);
+        panel.SweepOver(2);
+        panel.SweepOver(1);
+        panel.EndSweep();
+        Assert.Equal([false, false, false], panel.Parts!.Mask());
+        Assert.False(panel.Parts.State(panel.Rows[0].Node));
+
+        // Pressed on a hidden one: the sweep shows them.
+        panel.BeginSweep(panel.Rows[2].Node);
+        panel.SweepOver(1);
+        panel.EndSweep();
+        Assert.Equal([true, true, false], panel.Parts.Mask());
+
+        // Once let go, passing over the rows changes nothing.
+        panel.SweepOver(1);
+        Assert.Equal([true, true, false], panel.Parts.Mask());
+    }
+
     [Theory]
     [InlineData(840, "840")]
     [InlineData(9_412, "9.4k")]
