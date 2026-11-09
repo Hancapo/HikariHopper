@@ -6,17 +6,10 @@ using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
 
-// Drawables: their surfaces drawn with surface.wgsl, solid parts first, then blended ones from far to near.
+// Drawables: their surfaces drawn with surface.wgsl into the HDR target, solid parts first, then blended ones from
+// far to near; ViewportRenderer.Lighting.cs lights and tone-maps them.
 internal sealed unsafe partial class ViewportRenderer
 {
-    // A sun high up and to one side, as for collisions, a little warm; a cool sky over a darker ground.
-    private static readonly Vector3 SunDirection = Vector3.Normalize(new Vector3(.36f, .24f, .9f));
-    private static readonly Vector3 SunColour = new Vector3(1f, .96f, .9f) * 1.7f;
-    private static readonly Vector3 AmbientDown = new(.09f, .1f, .12f);
-    private static readonly Vector3 AmbientUp = new(.2f, .24f, .3f);
-    private static readonly Vector3 Artificial = new(.05f, .045f, .04f);
-    private const float Exposure = 1;
-
     private readonly bool compressedTextures;
     private BindGroupLayout? materialLayout;
     private RenderPipeline? solidSurfaces;
@@ -65,8 +58,8 @@ internal sealed unsafe partial class ViewportRenderer
                 Map(7), Map(8),
             ],
         });
-        PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, materialLayout] });
-        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("surface.wgsl") });
+        PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, materialLayout, lightLayout!] });
+        ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") });
         RenderPipeline Pipeline(CullMode cull, bool blend) => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = layout,
@@ -102,7 +95,8 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     new ColorTargetState
                     {
-                        Format = viewFormat,
+                        // Linear HDR with coverage, for the tone map.
+                        Format = HdrFormat,
                         Blend = blend ? new BlendState
                         {
                             Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
@@ -170,6 +164,7 @@ internal sealed unsafe partial class ViewportRenderer
             SurfaceMaterial material = drawable.Materials[part.Material];
             return (part, groups[part.Material], material.Decal ? AlphaMode.Blend : material.AlphaMode);
         })];
+        FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
     }
 
@@ -182,6 +177,7 @@ internal sealed unsafe partial class ViewportRenderer
             buffer.Destroy();
         materialBuffers.Clear();
         surfaceVertices = surfaceIndices = null;
+        shadowRadius = 0;
         surfaceParts = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
@@ -233,15 +229,6 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
-    }
-
-    private static void WriteLight(Span<Vector4> vectors)
-    {
-        vectors[0] = new Vector4(SunDirection, Exposure);
-        vectors[1] = new Vector4(SunColour, 0);
-        vectors[2] = new Vector4(AmbientDown, 0);
-        vectors[3] = new Vector4(AmbientUp, 0);
-        vectors[4] = new Vector4(Artificial, 0);
     }
 
     private TextureView Solid(byte r, byte g, byte b, byte a)
