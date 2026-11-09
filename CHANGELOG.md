@@ -36,6 +36,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - A model opened from search results in the 3D viewer finds its textures as it does from its folder, and its textures button works. ([#113](https://github.com/Hancapo/HikariHopper/pull/113))
+- Decals in the 3D viewer fade out by their vertex alpha as GTA V blends them, instead of covering what they lie on with hard edges. ([#115](https://github.com/Hancapo/HikariHopper/pull/115))
 
 ### Removed
 

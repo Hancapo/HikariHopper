@@ -49,7 +49,7 @@ struct Material {
     desaturate_exponent: vec4f,
     // The _pxm shaders: has parallax, heightScale, heightBias, parallaxSelfShadowAmount.
     parallax: vec4f,
-    // globalHeightScale.
+    // globalHeightScale; whether it is a decal, whose alpha is the diffuse map's times the vertex colour's.
     parallax_global: vec4f,
 };
 
@@ -283,7 +283,7 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     // The vertex colour's red is the natural ambient, its green the artificial.
     surface.natural = input.colour0.r;
     surface.artificial = input.colour0.g;
-    surface.alpha = diffuse.a;
+    surface.alpha = diffuse.a * select(1.0, input.colour0.a, material.parallax_global.y > 0.5);
     return surface;
 }
 
