@@ -13,14 +13,23 @@ namespace HikariHopper.Core;
 /// Where the game looks for a model's textures beyond the model itself: the texture dictionary its archetype names
 /// (the ytyps, and vehicles.meta for vehicles), then that dictionary's parents (gtxd.meta and the maps' manifests), up to
 /// the shared ones in levels/gta5/generic/gtxd.rpf, and last the detail maps' mapdetail.ytd; each dictionary as the
-/// game streams it, DLC overrides included.
+/// game streams it, DLC overrides included. RPFs in the game folder the game doesn't mount itself (a mod's, such as
+/// fix/touhou.rpf, or OpenIV's mods folder) take part too, over the game's own files.
 /// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done once in the
 /// background when the game loads, and what it gives is kept as a few tables, cached on disk until the game's archives
 /// change.
 /// </summary>
 public sealed class GameTextures
 {
-    private const int FormatVersion = 1;
+    // 4: RPFs the game doesn't mount itself are in the tables too (3 also had loose files, which tools' caches in the
+    // game folder made stale on every run and which ranked stray copies over the game's own files).
+    private const int FormatVersion = 4;
+
+    /// <summary>
+    /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
+    /// 2000), as a mod's do; each a step over the one before it in path order, as equal ranks are ambiguous.
+    /// </summary>
+    internal const int ExtraArchivePriority = 10_000;
 
     private static readonly ConcurrentDictionary<string, GameTextures> Shared = new(StringComparer.OrdinalIgnoreCase);
 
@@ -175,6 +184,20 @@ public sealed class GameTextures
         {
             var tables = new Tables();
             using GameInstallation game = GameInstallation.Open(root, target, crypto);
+            // The RPFs the game doesn't mount itself, over its own files; one that can't be read is left out.
+            var mounted = new HashSet<string>(game.FileSystem.Mounts.Select(mount => mount.SourcePath), StringComparer.OrdinalIgnoreCase);
+            int priority = ExtraArchivePriority;
+            foreach (string archive in ExtraArchives(root, mounted))
+            {
+                try
+                {
+                    game.FileSystem.MountArchive(archive, "", priority++, includeInAssetLookup: true);
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException
+                    or ArgumentException or NotSupportedException or EndOfStreamException)
+                {
+                }
+            }
             using var cache = new GameFileCache(game.FileSystem);
             cache.AssetTextures.Rebuild();
             cache.TextureGraph.Rebuild();
@@ -201,6 +224,27 @@ public sealed class GameTextures
                     pending.Enqueue(edge.ParentHash.Value);
                 }
             return tables;
+        }
+
+        /// <summary>
+        /// The RPFs under the game folder the game doesn't mount itself (<paramref name="mounted"/> are those it does), in
+        /// path order: a mod's anywhere in the folder, and OpenIV's mods folder. DLC packs are left to the game's list,
+        /// which says which of them it loads, and the game's audio (x64/audio) holds no models or textures.
+        /// </summary>
+        internal static IReadOnlyList<string> ExtraArchives(string root, IReadOnlySet<string> mounted)
+        {
+            var enumeration = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+            bool Kept(string path)
+            {
+                string[] parts = Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar);
+                return !parts.Contains("dlcpacks", StringComparer.OrdinalIgnoreCase)
+                    && !(parts.Length > 2 && string.Equals(parts[0], "x64", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(parts[1], "audio", StringComparison.OrdinalIgnoreCase));
+            }
+            return [.. Directory.EnumerateFiles(root, "*.rpf", enumeration)
+                .Select(Path.GetFullPath)
+                .Where(path => !mounted.Contains(path) && Kept(path))
+                .Order(StringComparer.OrdinalIgnoreCase)];
         }
 
         public void Write(string path, byte[] stamp)
