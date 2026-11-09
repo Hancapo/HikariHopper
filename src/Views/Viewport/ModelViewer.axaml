@@ -128,6 +128,7 @@
                   <StackPanel>
                     <c:ChromeToolButton Name="SkeletonButton" Classes="tool" IconKind="skeleton" AutomationProperties.Name="Skeleton" />
                     <c:ChromeToolButton Name="BoundsButton" Classes="tool" IconKind="bounds" AutomationProperties.Name="Bounds" />
+                    <c:ChromeToolButton Name="SolidButton" Classes="tool" IconKind="collision" AutomationProperties.Name="Solid collision" />
                     <c:ChromeToolButton Name="LightsButton" Classes="tool" IconKind="lights" AutomationProperties.Name="Lights" />
                   </StackPanel>
                 </Border>

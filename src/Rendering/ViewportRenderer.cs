@@ -36,6 +36,12 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private RenderPipeline meshes= null!;
     private RenderPipeline lines= null!;
     private RenderPipeline overlayLines = null!;
+    private RenderPipeline overlayMeshes = null!;
+    private Buffer? solidBuffer;
+    private uint solidCount;
+
+    /// <summary>How much of a drawable's solid collision covers it: enough to read, the model still seen through.</summary>
+    private const double SolidOpacity = .75;
     private Buffer? overlayBuffer;
     private uint overlayCount;
     // The swap chain's format, and the sRGB view of it that frames are drawn through.
@@ -146,7 +152,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }));
         // Meshes: nearer is greater in reversed Z. Both sides drawn, as collisions aren't wound consistently.
         Lazy<ShaderModule> meshShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("mesh.wgsl") }));
-        meshes = gpu.Pipeline($"meshes/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        // Over a drawable, its solid collision blends by a constant, the nearest surface only.
+        RenderPipelineDescriptor Meshes(bool blended) => new()
         {
             Layout = pipelineLayout,
             Vertex = new VertexState
@@ -171,10 +178,25 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             {
                 Module = meshShader.Value,
                 EntryPoint = "fs_mesh",
-                Targets = new[] { new ColorTargetState { Format = viewFormat } },
+                Targets = new[]
+                {
+                    blended
+                        ? new ColorTargetState
+                        {
+                            Format = viewFormat,
+                            Blend = new BlendState
+                            {
+                                Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Constant, DstFactor = BlendFactor.OneMinusConstant },
+                                Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.One },
+                            },
+                        }
+                        : new ColorTargetState { Format = viewFormat },
+                },
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Greater },
-        }));
+        };
+        meshes = gpu.Pipeline($"meshes/{viewFormat}", () => device.CreateRenderPipelineSync(Meshes(blended: false)));
+        overlayMeshes = gpu.Pipeline($"overlay-meshes/{viewFormat}", () => device.CreateRenderPipelineSync(Meshes(blended: true)));
         // Lines over the meshes: tested against them, writing no depth. Each segment is one instance of six corners.
         Lazy<ShaderModule> lineShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("lines.wgsl") }));
         RenderPipelineDescriptor Lines(bool depth) => new()
@@ -264,6 +286,18 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             segmentBuffer = Upload((ReadOnlySpan<ViewportSegment>)segments, ViewportSegment.Size);
             segmentCount = (uint)segments.Length;
         }
+    }
+
+    /// <summary>Draws these triangles over a drawable, its collision, relative to its origin, in place of any before; none draws none.</summary>
+    public void ShowSolid(ReadOnlySpan<ViewportVertex> triangles)
+    {
+        solidBuffer?.Destroy();
+        solidBuffer = null;
+        solidCount = 0;
+        if (triangles.Length == 0)
+            return;
+        solidBuffer = Upload(triangles, ViewportVertex.Size);
+        solidCount = (uint)triangles.Length;
     }
 
     /// <summary>Draws these lines over a drawable, relative to its origin, in place of any before; none draws none.</summary>
@@ -426,13 +460,40 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.SetBindGroup(1, tonemapGroup!);
             mapped.SetBindGroup(2, lightGroup!);
             mapped.Draw(3);
+            mapped.End();
+            // The solid collision over the model, its nearest surface only, then the lines over everything.
+            if (solidBuffer is not null)
+            {
+                RenderPassEncoder solid = encoder.BeginRenderPass(new RenderPassDescriptor
+                {
+                    ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                    DepthStencilAttachment = new RenderPassDepthStencilAttachment
+                    {
+                        View = depthView,
+                        DepthLoadOp = LoadOp.Clear,
+                        DepthStoreOp = StoreOp.Discard,
+                        DepthClearValue = 0,
+                    },
+                });
+                solid.SetBindGroup(0, sceneGroup);
+                solid.SetPipeline(overlayMeshes);
+                solid.SetBlendConstant(new Color(SolidOpacity, SolidOpacity, SolidOpacity, SolidOpacity));
+                solid.SetVertexBuffer(0, solidBuffer);
+                solid.Draw(solidCount);
+                solid.End();
+            }
             if (overlayBuffer is not null)
             {
-                mapped.SetPipeline(overlayLines);
-                mapped.SetVertexBuffer(0, overlayBuffer);
-                mapped.Draw(6, overlayCount);
+                RenderPassEncoder lined = encoder.BeginRenderPass(new RenderPassDescriptor
+                {
+                    ColorAttachments = [new RenderPassColorAttachment { View = view, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                });
+                lined.SetBindGroup(0, sceneGroup);
+                lined.SetPipeline(overlayLines);
+                lined.SetVertexBuffer(0, overlayBuffer);
+                lined.Draw(6, overlayCount);
+                lined.End();
             }
-            mapped.End();
         }
         queue.Submit(encoder.Finish());
         surface.Present();

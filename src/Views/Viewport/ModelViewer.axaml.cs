@@ -68,6 +68,7 @@ public partial class ModelViewer : UserControl, IModalContent
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         BoundsButton.Click += (_, _) => SetOverlay(Overlay.Bounds, !boundsShown);
+        SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
         LightsButton.Click += (_, _) => SetOverlay(Overlay.Lights, !lightsShown);
         OrbitButton.Click += (_, _) => SetFreeCamera(false);
         FreeButton.Click += (_, _) => SetFreeCamera(true);
@@ -107,15 +108,16 @@ public partial class ModelViewer : UserControl, IModalContent
         Set(DamagedButton, visibility?.Damaged == true);
         Set(SkeletonButton, skeletonShown);
         Set(BoundsButton, boundsShown);
+        Set(SolidButton, solidShown);
         Set(LightsButton, lightsShown);
         Set(OrbitButton, !Viewport.FreeCamera);
         Set(FreeButton, Viewport.FreeCamera);
     }
 
     /// <summary>What can be drawn over the model.</summary>
-    internal enum Overlay { Skeleton, Bounds, Lights }
+    internal enum Overlay { Skeleton, Bounds, Lights, Solid }
 
-    private bool skeletonShown, boundsShown, lightsShown;
+    private bool skeletonShown, boundsShown, lightsShown, solidShown;
     private DrawableOverlays overlays = DrawableOverlays.None;
 
     /// <summary>Whether an overlay is drawn over the model.</summary>
@@ -123,12 +125,23 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         Overlay.Skeleton => skeletonShown,
         Overlay.Bounds => boundsShown,
+        Overlay.Solid => solidShown,
         _ => lightsShown,
     };
 
     /// <summary>Draws the model's skeleton, bounds or lights over it, or stops; one it doesn't have stays off.</summary>
     internal bool SetOverlay(Overlay overlay, bool on)
     {
+        // The solid collision is the bounds' triangles, drawn filled over the model.
+        if (overlay == Overlay.Solid)
+        {
+            if (overlays.Solid.Length == 0)
+                return false;
+            solidShown = on;
+            Viewport.ShowSolid(on ? overlays.Solid : []);
+            RefreshToggles();
+            return true;
+        }
         ViewportSegment[] segments = Segments(overlay);
         if (segments.Length == 0)
             return false;
@@ -168,6 +181,8 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         Offer(SkeletonButton, Overlay.Skeleton, "Skeleton", 'B');
         Offer(BoundsButton, Overlay.Bounds, "Bounds", 'C');
+        SolidButton.IsEnabled = overlays.Solid.Length > 0;
+        ThemedToolTip.Set(SolidButton, SolidButton.IsEnabled ? "Solid collision  (K)" : "No collision");
         Offer(LightsButton, Overlay.Lights, "Lights", 'L');
     }
 
@@ -354,7 +369,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// X damaged, B skeleton, C bounds, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// X damaged, B skeleton, C bounds, K solid collision, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
@@ -374,6 +389,8 @@ public partial class ModelViewer : UserControl, IModalContent
                 return SetOverlay(Overlay.Skeleton, !skeletonShown);
             case 'C':
                 return SetOverlay(Overlay.Bounds, !boundsShown);
+            case 'K':
+                return SetOverlay(Overlay.Solid, !solidShown);
             case 'L':
                 return SetOverlay(Overlay.Lights, !lightsShown);
             case 'V':
