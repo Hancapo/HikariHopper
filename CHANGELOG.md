@@ -22,6 +22,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Terrain in the 3D viewer is drawn with the rest of GTA V's terrain shaders, including their parallax near the camera, specular maps and layers on a second UV set; blended ground mixes its layers as the game does, and the terrain shades itself from the sun as the game does. ([#104](https://github.com/Hancapo/HikariHopper/pull/104))
 - A time-of-day slider in the 3D viewer's status bar, to see a model in the game's light at any hour. ([#105](https://github.com/Hancapo/HikariHopper/pull/105))
 - The 3D viewer shades surfaces whose shine comes from their colour as GTA V does, such as tree bark and some lit signs. ([#106](https://github.com/Hancapo/HikariHopper/pull/106))
+- The 3D viewer draws the parallax of walls, floors and decals that have it, with its self-shadow, as GTA V does. ([#107](https://github.com/Hancapo/HikariHopper/pull/107))
 
 ### Changed
 

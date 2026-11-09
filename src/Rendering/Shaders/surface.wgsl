@@ -47,6 +47,10 @@ struct Material {
     // the overlay's strength.
     desaturate_intensity: vec4f,
     desaturate_exponent: vec4f,
+    // The _pxm shaders: has parallax, heightScale, heightBias, parallaxSelfShadowAmount.
+    parallax: vec4f,
+    // globalHeightScale.
+    parallax_global: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -60,6 +64,7 @@ struct Material {
 @group(1) @binding(8) var diffuse_ramp: texture_2d<f32>;
 @group(1) @binding(9) var diffuse_layer: texture_2d<f32>;
 @group(1) @binding(10) var detail_map: texture_2d<f32>;
+@group(1) @binding(11) var height_map: texture_2d<f32>;
 
 struct SurfaceInput {
     @location(0) position: vec3f,
@@ -69,6 +74,7 @@ struct SurfaceInput {
     @location(4) uv1: vec2f,
     @location(5) colour0: vec4f,
     @location(6) colour1: vec4f,
+    @location(7) uv2: vec2f,
 };
 
 struct SurfaceOutput {
@@ -86,6 +92,9 @@ struct SurfaceOutput {
     @location(7) uv1: vec2f,
     // Drawn into the reflection map: how far into the hemisphere being drawn the point is; behind it below zero.
     @location(8) hemisphere: f32,
+    // The _pxm shaders' parallax controls: how much of the height to drop (x), and how flat a view may go before the
+    // parallax stops growing (one less y).
+    @location(9) controls: vec2f,
 };
 
 // The camera's reflection map being drawn (ViewportRenderer.Reflections.cs): the eye relative to the scene's origin,
@@ -131,6 +140,7 @@ fn surface_vertex(input: SurfaceInput) -> SurfaceOutput {
     output.binormal = cross(input.tangent.xyz, output.normal) * input.tangent.w;
     output.uv0 = input.uv0;
     output.uv1 = input.uv1;
+    output.controls = input.uv2;
     output.colour0 = input.colour0;
     // As VS_TransformD in the _tnt shaders: the palette read at the vertex blue's column, the selector's row.
     output.tint = vec3f(1.0);
@@ -169,7 +179,17 @@ fn fs_surface_reflected(input: SurfaceOutput, @builtin(front_facing) front: bool
     return colour;
 }
 
-fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
+fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
+    // The _pxm shaders read their maps where the view meets the height map; the rest where the first UV set says.
+    var input = original;
+    let uv_dx = dpdx(original.uv0);
+    let uv_dy = dpdy(original.uv0);
+    input.uv0 = original.uv0 + surface_parallax(original, uv_dx, uv_dy);
+    var self_shadow = 1.0;
+    if (material.parallax.x > 0.5 && material.parallax.w > 0.0) {
+        self_shadow = parallax_self_shadow(input);
+    }
+
     // Every map is sampled before anything is decided, as derivatives need uniform control flow.
     let diffuse = textureSample(diffuse_map, surface_sampler, input.uv0);
     let bump = textureSample(normal_map, surface_sampler, input.uv0);
@@ -226,7 +246,8 @@ fn shade_surface(input: SurfaceOutput, front: bool) -> vec4f {
         surface.intensity *= detail_scale;
     }
     surface.alpha = select(1.0, surface.alpha, mode == 2u);
-    let shadow = sun_shadow(input.place, normalize(input.normal));
+    // With the parallax self-shadow, which the game's directional pass multiplies the sun by.
+    let shadow = sun_shadow(input.place, normalize(input.normal)) * self_shadow;
     return vec4f(lit(input, surface, diffuse, view, to_light, shadow), surface.alpha);
 }
 
@@ -264,6 +285,72 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     surface.artificial = input.colour0.g;
     surface.alpha = diffuse.a;
     return surface;
+}
+
+// PS_DeferredTextured's parallax occlusion mapping, as the _pxm programs compile it: the height map marched along
+// the view in tangent space, in 27 - 24|N.V| steps (more the flatter the view), with the first UV set's gradients;
+// the march stops at the first step under the heights and meets them between that step and the last. Returns the
+// offset to the first UV set.
+fn surface_parallax(input: SurfaceOutput, uv_dx: vec2f, uv_dy: vec2f) -> vec2f {
+    if (material.parallax.x < 0.5) {
+        return vec2f(0.0);
+    }
+    let flattest = clamp(1.0 - input.controls.y, 0.1, 1.0);
+    let keep = 1.0 - saturate(input.controls.x);
+    let v = scene.eye.xyz - (input.place + scene.origin.xyz);
+    let tangent_view = normalize(vec3f(dot(input.tangent, v), dot(input.binormal, v), dot(input.normal, v)));
+    let lean = max(flattest, tangent_view.z);
+    let n_dot_v = abs(dot(normalize(v), normalize(input.normal)));
+    let amount = material.parallax_global.x * keep * saturate(26.0 - 24.0 * n_dot_v) * saturate(n_dot_v * 4.0);
+    let reach = -tangent_view.xy / lean * amount * material.parallax.y;
+    let start = tangent_view.xy / lean * amount * material.parallax.z;
+    let steps = i32(27.0 - 24.0 * n_dot_v);
+    var t = 0.0;
+    if (steps != 0) {
+        let step = 1.0 / f32(steps);
+        let advance = reach * step;
+        let h0 = textureSampleGrad(height_map, surface_sampler, input.uv0, uv_dx, uv_dy).x + 1e-6;
+        var layer = 1.0;
+        var previous_layer = 1.0;
+        var offset = start;
+        var h = h0;
+        var previous_h = h0;
+        for (var i = 0; i < steps; i++) {
+            if (h >= layer) {
+                break;
+            }
+            previous_layer = layer;
+            previous_h = h;
+            layer -= step;
+            offset += advance;
+            h = textureSampleGrad(height_map, surface_sampler, input.uv0 + offset, uv_dx, uv_dy).x;
+        }
+        let after = layer - h;
+        let before = previous_layer - previous_h;
+        t = h;
+        if (before - after > 0.0) {
+            t = (before * layer - after * previous_layer) / (before - after);
+        }
+        t = clamp(t, 0.0, 1.0);
+    }
+    return (1.0 - t) * reach + start;
+}
+
+// The _pxm programs' self-shadow: the height map read towards the sun in tangent space at seven steps, each step's
+// rise over the line to the sun weighed more the further it is; the highest kept, by parallaxSelfShadowAmount.
+fn parallax_self_shadow(input: SurfaceOutput) -> f32 {
+    let travel = -light.sun_direction.xyz;
+    let towards = vec3f(dot(input.tangent, travel), dot(input.binormal, travel), dot(input.normal, travel));
+    let along = towards.xy * (1.0 - input.controls.x) * material.parallax.y * material.parallax_global.x / towards.z;
+    let h0 = textureSample(height_map, surface_sampler, input.uv0).x;
+    var steps = array<f32, 7>(0.88, 0.77, 0.66, 0.55, 0.44, 0.33, 0.22);
+    var weights = array<f32, 7>(1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0);
+    var highest = -1e9;
+    for (var k = 0; k < 7; k++) {
+        let h = textureSample(height_map, surface_sampler, input.uv0 + along * steps[k]).x;
+        highest = max(highest, (h - h0 - steps[k]) * weights[k]);
+    }
+    return 1.0 - material.parallax.w * saturate(highest);
 }
 
 // The overlay blend of a value by a strength, as the diffspec shaders write it.

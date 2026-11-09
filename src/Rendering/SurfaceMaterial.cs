@@ -25,7 +25,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
-    public const int UniformBytes = 272;
+    public const int UniformBytes = 304;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -74,6 +74,9 @@ internal sealed class SurfaceMaterial
     /// the specular and the bumps up close.
     /// </summary>
     public Texture? Detail { get; private init; }
+
+    /// <summary>The _pxm shaders' height map, which their parallax marches.</summary>
+    public Texture? Height { get; private init; }
 
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[12];
@@ -156,6 +159,7 @@ internal sealed class SurfaceMaterial
             DiffuseLayer = Texture("diffuse2"),
             // The vehicles' detail shaders are drawn as the rest of their family, without one.
             Detail = Vehicles.Contains(shader) ? null : Texture("detail"),
+            Height = Texture("height"),
             AlphaMode = (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -197,6 +201,16 @@ internal sealed class SurfaceMaterial
         u[15] = result.Vehicle ? 1 : 0;
         // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
         u[41] = 1;
+        // The _pxm shaders' parallax: heightScale, heightBias and parallaxSelfShadowAmount (the decals' programs cast no
+        // self-shadow); globalHeightScale, which the game leaves at one.
+        if (Pattern(shader, "parallax") == "true" && result.Height is not null)
+        {
+            u[68] = 1;
+            u[69] = Constant("height_scale", .03f)[0];
+            u[70] = Constant("height_bias", .015f)[0];
+            u[71] = shader.Contains("decal", StringComparison.OrdinalIgnoreCase) ? 0 : Constant("parallax_self_shadow", .95f)[0];
+            u[72] = 1;
+        }
         // Where the specular comes from besides the constants and a specular map: the diffuse map's luminance
         // (emissive_speclum), or an overlay of its colour by SpecDesaturateIntensity and SpecDesaturateExponent (diffspec).
         string? source = Pattern(shader, "specular_source");
@@ -243,7 +257,7 @@ internal sealed class SurfaceMaterial
             v[7] = Constant("tint_palette_selector", 0)[0];
             v[8] = Pattern(shader, "terrain_layers") == "second" ? 1 : 0;
             v[9] = Constant("bump_self_shadow", .3f)[0];
-            bool parallax = Pattern(shader, "terrain_parallax") == "true";
+            bool parallax = Pattern(shader, "parallax") == "true";
             v[10] = parallax ? 1 : 0;
             v[11] = parallax ? Constant("parallax_self_shadow", .95f)[0] : 0;
             for (int i = 0; i < 4; i++)

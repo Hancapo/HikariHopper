@@ -137,6 +137,47 @@ public sealed class DrawableViewerTests
         Assert.Equal(Vector3.UnitX, vertices[1].Normal);
     }
 
+    [Theory]
+    [InlineData("normal_spec_pxm", .6f)]
+    [InlineData("normal_decal_pxm", 0f)]
+    public void A_parallax_surface_reads_its_height_map_from_either_edition(string shader, float selfShadow)
+    {
+        SurfaceMaterial Read(GameTarget target) => ModelContent.Read("wall.ydr", Quad(target, shader, material =>
+        {
+            material.Parameters["heightScale"] = [.04f];
+            material.Parameters["heightBias"] = [.02f];
+            material.Parameters["parallaxSelfShadowAmount"] = [.6f];
+            material.Textures["heightSampler"] = new TextureReference(Map("wall_h"));
+        })).Surfaces!.Materials.Single();
+        SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
+        foreach (SurfaceMaterial material in new[] { legacy, enhanced })
+        {
+            Assert.Equal("wall_h", material.Height?.Name);
+            // surface.wgsl's parallax: has it, heightScale, heightBias, the self-shadow (none from the decals'
+            // programs); globalHeightScale.
+            Assert.Equal([1, .04f, .02f, selfShadow, 1], material.Uniforms[68..73]);
+        }
+        Assert.Equal(legacy.Uniforms, enhanced.Uniforms);
+    }
+
+    [Fact]
+    public void A_surface_without_parallax_has_none()
+    {
+        SurfaceMaterial material = ModelContent.Read("wall.ydr", Quad(GameTarget.Legacy, "normal_spec")).Surfaces!.Materials.Single();
+        Assert.Equal([0f, 0, 0, 0, 0], material.Uniforms[68..73]);
+    }
+
+    [Fact]
+    public void A_vertex_without_a_fourth_uv_set_reads_its_third_as_the_parallax_controls()
+    {
+        byte[] ydr = Quad(GameTarget.Legacy, "normal_spec_pxm", channels: mesh =>
+        {
+            mesh.SetChannel(VertexSemantic.TexCoord1, [.. Enumerable.Repeat(new Vector4(5, 6, 0, 0), 4)]);
+            mesh.SetChannel(VertexSemantic.TexCoord2, [.. Enumerable.Repeat(new Vector4(.1f, .9f, 0, 0), 4)]);
+        });
+        Assert.All(ModelContent.Read("wall.ydr", ydr).Surfaces!.Vertices, vertex => Assert.Equal(new Vector2(.1f, .9f), vertex.Uv2));
+    }
+
     [Fact]
     public void A_shader_without_specular_constants_writes_none()
     {
