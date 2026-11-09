@@ -64,10 +64,12 @@ public sealed class VehicleShaderTests
             Assert.Equal(0, u[20]);
             // The second lobe in the pearlescent slot's colour, swinging overhead as the material says.
             Assert.Equal([grey, grey, grey, .25f], u[28..32]);
-            // A paint, with the second lobe, taking its specular from constants.
+            // A paint with the second lobe. vehicle_paint1's program writes its intensity from the constant alone
+            // (no map), less the dirt's roughness, and its power from the constant alone.
             Assert.Equal(1, u[32]);
             Assert.Equal(1, u[33]);
-            Assert.Equal(1, u[35]);
+            Assert.Equal([0f, 1, 0, 0], u[36..40]);
+            Assert.Equal([0f, 1], u[40..42]);
             // A vehicle's vertex blue gates its dirt, never an emissive mask.
             Assert.Equal(0, u[11]);
         }
@@ -77,9 +79,56 @@ public sealed class VehicleShaderTests
     [Fact]
     public void A_vehicle_mesh_takes_its_specular_from_its_map()
     {
+        // vehicle_mesh: 0.6 times R², less the dirt's roughness; power 460 times G²; fresnel one less B.
         float[] u = Read(GameTarget.Enhanced, "vehicle_mesh").Uniforms;
         Assert.Equal(1, u[15]);
         Assert.Equal(0, u[32]);
-        Assert.Equal(0, u[35]);
+        Assert.Equal(.6f, u[2], 5);
+        Assert.Equal(460, u[1]);
+        Assert.Equal([2f, 1, 2, 1], u[36..40]);
+    }
+
+    [Fact]
+    public void A_livery_layer_lies_over_the_paint_on_the_second_uv_set()
+    {
+        // vehicle_paint3: matDiffuseColor2 colours the second diffuse layer and its w sets how strongly it covers the
+        // paint; the layer is read on the second UV set (vehicle_cloth2 reads it on the first). Without a layer
+        // texture there is nothing to lay over.
+        float[] u = Read(GameTarget.Enhanced, "vehicle_paint3", m => m.Parameters["matDiffuseColor2"] = [.2f, .4f, .6f, .8f]).Uniforms;
+        Assert.Equal([.2f, .4f, .6f, .8f], u[44..48]);
+        Assert.Equal(0, u[42]);
+        Assert.Equal(1, u[43]);
+        Assert.Equal(0, Read(GameTarget.Enhanced, "vehicle_cloth2").Uniforms[43]);
+    }
+
+    [Theory]
+    // Each shader's own program: the scale, map, roughness, power and its scale, fresnel, UV set.
+    [InlineData("vehicle_paint2", -1f, 1, 1, 1, -1f, -1f, 0)]
+    [InlineData("vehicle_paint3", -1f, 1, 1, 1, -1f, -1f, 1)]
+    [InlineData("vehicle_basic", -1f, 1, 2, 1, -1f, -1f, 0)]
+    [InlineData("vehicle_shuts", .065f, 1, 2, 1, 179f, .83f, 0)]
+    [InlineData("vehicle_emissive_opaque", .8f, 1, 1, 1, 510f, .96f, 0)]
+    [InlineData("vehicle_tire", 1f, 2, 1, 2, 512f, -2f, 0)]
+    [InlineData("vehicle_interior2", 0f, 1, 1, 1, 10f, -1f, 0)]
+    public void Each_vehicle_shader_writes_its_specular_as_its_program_does(string shader, float scale, int map, int rough, int power,
+        float powerScale, float fresnel, int uv)
+    {
+        // -1 stands for the material's own constant, set here; -2 for none (fresnel from the map).
+        SurfaceMaterial material = Read(GameTarget.Enhanced, shader, m =>
+        {
+            if (scale == -1)
+                m.Parameters["specularIntensityMult"] = [.4f];
+            if (powerScale == -1)
+                m.Parameters["specularFalloffMult"] = [90];
+            if (fresnel == -1)
+                m.Parameters["specularFresnel"] = [.9f];
+        });
+        float[] u = material.Uniforms;
+        Assert.Equal(scale == -1 ? .4f : scale, u[2], 5);
+        Assert.Equal(powerScale == -1 ? 90 : powerScale, u[1], 5);
+        if (fresnel != -2)
+            Assert.Equal(fresnel == -1 ? .9f : fresnel, u[0], 5);
+        Assert.Equal([map, rough, power], u[36..39]);
+        Assert.Equal(uv, u[40]);
     }
 }
