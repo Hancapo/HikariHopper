@@ -11,7 +11,8 @@ namespace HikariHopper.Views.Controls;
 
 /// <summary>
 /// One entry of a <see cref="FlatComboBox"/> model: QML's <c>{ label, value, supported, note }</c>.
-/// An unsupported entry is listed disabled with its <see cref="Note"/> as the reason.
+/// An unsupported entry is listed disabled with its <see cref="Note"/> as the reason; a supported one's note says
+/// something about it (what a format costs), at the right of its row and of the closed box.
 /// </summary>
 public sealed record FlatComboOption(string Label, object? Value = null, bool Supported = true, string? Note = null);
 
@@ -112,7 +113,7 @@ public class FlatComboBox : ComboBox
         {
             option.Label = LabelOf(item);
             option.Supported = item is not FlatComboOption { Supported: false };
-            option.Note = item is FlatComboOption { Supported: false, Note: { } note } ? note : "";
+            option.Note = item is FlatComboOption { Note: { } note } ? note : "";
             option.IsEnabled = option.Supported;
             option.IsHighlighted = index == HighlightedIndex;
         }

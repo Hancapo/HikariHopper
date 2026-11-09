@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - Resize a texture by percentage, or with one press to a quarter, half or double its size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
 - Resizing several textures by percentage scales each from its own size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Mipmaps can drop a texture's mip chain, leaving its full size alone. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
 
 ### Changed
 
@@ -17,6 +18,9 @@ All notable changes to HikariHopper are documented here. The format follows
 - With the aspect ratio locked, the other dimension follows as you type in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
 - The Resize dialog shows the texture now and after side by side, with the memory each takes, and says when the new size is not a power of two. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
 - Resizing to a power of two is a button in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Change format says what each format costs and keeps, and when the one picked loses the alpha or colour a texture has. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Change format and Mipmaps show the texture now and after side by side, with the memory each takes. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Change format has no resampling choice: it uses the filter last applied in Resize or Mipmaps. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
 
 ### Fixed
 

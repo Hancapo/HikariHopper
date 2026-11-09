@@ -68,12 +68,32 @@ public sealed partial class TextureViewerViewModel
             TextureOperations.ResizeToPowerOfTwo(texture, mode, filter, minMipSize, generateMipmaps));
     }
 
-    public bool RecalculateSelectedMipmaps(string filterName, int minMipSize)
+    /// <summary>Makes each selected texture's chain again, down to <paramref name="minMipSize"/>; or, not generating, leaves its full-size level alone.</summary>
+    public bool RecalculateSelectedMipmaps(string filterName, int minMipSize, bool generate = true)
     {
         if (SelectedRecord() is null)
             return false;
         ImageFilter filter = TextureOperations.MipFilter(filterName);
-        return StartTransform("Recalculating mipmaps for", texture => TextureOperations.RecalculateMipmaps(texture, filter, minMipSize));
+        return StartTransform("Recalculating mipmaps for", texture => generate
+            ? TextureOperations.RecalculateMipmaps(texture, filter, minMipSize)
+            : TextureOperations.DropMipmaps(texture, filter));
+    }
+
+    /// <summary>Whether any selected texture has pixels less than opaque; a texture that can't be decoded counts as none.</summary>
+    public bool SelectionUsesAlpha()
+    {
+        foreach ((_, TextureItem item) in SelectionRecords())
+        {
+            try
+            {
+                if (TextureOperations.UsesAlpha(item.Texture))
+                    return true;
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error) || error is NotSupportedException or ArgumentException)
+            {
+            }
+        }
+        return false;
     }
 
     /// <summary>Re-encodes DXT1/3/5 textures of the selection as DXT1 or DXT5, whichever their alpha needs.</summary>
@@ -86,7 +106,7 @@ public sealed partial class TextureViewerViewModel
     }
 
     /// <summary>Converts the selection to one of <see cref="FormatOptions"/> (<c>BC1</c>…<c>A8R8G8B8</c>).</summary>
-    public bool ChangeSelectedFormat(string formatName, double quality, string filterName, int minMipSize)
+    public bool ChangeSelectedFormat(string formatName, double quality, string filterName, int minMipSize, bool generateMipmaps = true)
     {
         string normalized = formatName.ToUpperInvariant();
         if (!TextureFormatNames.Editable.Contains(normalized))
@@ -99,7 +119,7 @@ public sealed partial class TextureViewerViewModel
         ImageFilter filter = TextureOperations.MipFilter(filterName);
         float clamped = (float)Math.Max(0.0, Math.Min(1.0, quality));
         return StartTransform("Changing format for", texture => TextureOperations.ChangeFormat(texture,
-            TextureFormatNames.FromEditable(normalized, texture.Format), clamped, filter, minMipSize));
+            TextureFormatNames.FromEditable(normalized, texture.Format), clamped, filter, minMipSize, generateMipmaps));
     }
 
     /// <summary>Asks for an image and replaces the single selected texture with it, keeping its size, format and mips.</summary>
