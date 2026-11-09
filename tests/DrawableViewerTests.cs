@@ -48,6 +48,9 @@ public sealed class DrawableViewerTests
             ModelContent content = ModelContent.Read("quad.ydr", ydr);
             DrawableScene scene = content.Surfaces!;
             Assert.Equal(2, scene.TriangleCount);
+            // A quad: four corners, and five edges, the diagonal shared by both triangles.
+            Assert.Equal(4, scene.VertexCount);
+            Assert.Equal(5, scene.EdgeCount);
             Assert.Equal(new Vector3(1, .5f, 0), scene.Origin);
             return Assert.Single(scene.Materials);
         }

@@ -176,6 +176,7 @@ public static class Theme
     public const double TextureRowHeight = 62;
     public const double TextureThumbnailSize = 50;
     public const double TextureToolbarHeight = 38;
+    public const double ModelToolbarHeight = TextureToolbarHeight;
     public const double TextureMipBarHeight = 32;
     public const double TextureCheckerCellSize = 16;
 

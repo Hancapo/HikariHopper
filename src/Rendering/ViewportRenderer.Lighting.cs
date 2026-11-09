@@ -42,6 +42,9 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
     public float Hours { get; private set; } = DayCycle.DefaultHours;
 
+    /// <summary>Whether the sun casts shadows, on the drawable and on the ground under it.</summary>
+    public bool Shadows { get; set; } = true;
+
     /// <summary>Stops added to the exposure the game's post-process works out from the frame.</summary>
     public float Exposure { get; set; }
 

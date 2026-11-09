@@ -51,6 +51,8 @@ public class ChromeIcon : Control
         ["package"] = "package",
         ["folder"] = "folder",
         ["house"] = "house",
+        ["sun"] = "sun",
+        ["frame"] = "focus",
     };
 
     static ChromeIcon()

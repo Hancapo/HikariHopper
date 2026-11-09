@@ -333,8 +333,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
         if (drawable)
         {
-            WriteLight(shadows: true);
-            DrawShadow(encoder);
+            WriteLight(Shadows);
+            if (Shadows)
+                DrawShadow(encoder);
         }
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
@@ -360,7 +361,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         pass.SetBindGroup(0, sceneGroup);
         pass.SetPipeline(backdrop);
         pass.Draw(3);
-        if (drawable)
+        if (drawable && Shadows)
             DrawGroundShadow(pass);
         if (vertexBuffer is not null)
         {

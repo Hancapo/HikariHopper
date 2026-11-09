@@ -10,9 +10,37 @@
              FontSize="{x:Static ui:Theme.FontSize}"
              Foreground="{x:Static ui:Theme.Text}">
   <!-- A 3D file, to look at, as a modal that fills the main window, in the image viewer's frame: a header naming
-       the file with a close mark, the 3D viewport, and the status bar: where the content is, for a drawable the time
-       of day its sun is at, and the GPU. -->
+       the file with a close mark; for a drawable, a toolbar of what is drawn and how; the 3D viewport; and the status
+       bar: what the content holds and where, for a drawable the time of day its sun is at, and the GPU. -->
   <UserControl.Styles>
+    <!-- The toolbar's wells and the buttons in them, as the texture viewer's. -->
+    <Style Selector="Border.well">
+      <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.well > StackPanel">
+      <Setter Property="Orientation" Value="Horizontal" />
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector="c|ChromeToolButton.tool">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Width" Value="26" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Bordered" Value="False" />
+      <Setter Property="InWell" Value="True" />
+      <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
+      <Setter Property="IconSize" Value="14" />
+      <Setter Property="IconThickness" Value="1.5" />
+    </Style>
+    <Style Selector="c|LucideIcon.stat">
+      <Setter Property="Width" Value="11" />
+      <Setter Property="Height" Value="11" />
+      <Setter Property="Weight" Value="1.7" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Stroke" Value="{x:Static ui:Theme.TextFaint}" />
+    </Style>
     <Style Selector="TextBlock.status">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
       <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
@@ -38,20 +66,57 @@
                                 AutomationProperties.Name="Close the 3D viewer" />
           </Panel>
 
+          <!-- A drawable's toolbar: whether the sun casts shadows; and, on the right, the camera back on the model. -->
+          <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
+                 IsVisible="False">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+            <DockPanel Margin="6,0,6,1">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                <Border Classes="well">
+                  <StackPanel>
+                    <c:ChromeToolButton Name="FrameButton" Classes="tool" IconKind="frame" AutomationProperties.Name="Frame the model" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Border Classes="well">
+                  <StackPanel>
+                    <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </DockPanel>
+          </Panel>
+
           <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ExplorerStatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
             <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-            <Grid Margin="0,1,0,0" ColumnDefinitions="*,Auto,Auto">
-              <TextBlock Name="StatusText" Grid.Column="0" Classes="status" Margin="10,0,0,0"
+            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
+              <!-- A drawable's triangles, vertices and edges. -->
+              <StackPanel Name="StatsPanel" Grid.Column="0" Orientation="Horizontal" Spacing="12" Margin="10,0,0,0" IsVisible="False">
+                <StackPanel Name="TrianglesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
+                  <c:LucideIcon Classes="stat" IconName="triangle" />
+                  <TextBlock Name="TrianglesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                </StackPanel>
+                <StackPanel Name="VerticesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
+                  <c:LucideIcon Classes="stat" IconName="git-commit-vertical" />
+                  <TextBlock Name="VerticesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                </StackPanel>
+                <StackPanel Name="EdgesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
+                  <c:LucideIcon Classes="stat" IconName="slash" />
+                  <TextBlock Name="EdgesText" Classes="status" Foreground="{x:Static ui:Theme.TextRow}" />
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Name="StatusText" Grid.Column="1" Classes="status" Margin="10,0,0,0"
                          Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
               <!-- The time of day, which sets where the sun is and the rest of the game's light: quarter hours, with
                    marks every six hours. -->
-              <StackPanel Name="SunBar" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0" IsVisible="False"
+              <StackPanel Name="SunBar" Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0" IsVisible="False"
                           ToolTip.Tip="The time of day the model is lit at">
                 <TextBlock Name="SunText" Classes="status" />
                 <v:TextureMipSlider Name="SunSlider" Width="132" Maximum="96" TickCount="5" VerticalAlignment="Center"
                                     AutomationProperties.Name="Time of day" />
               </StackPanel>
-              <TextBlock Name="AdapterText" Grid.Column="2" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
+              <TextBlock Name="AdapterText" Grid.Column="3" Classes="status" Margin="0,0,12,0" Foreground="{x:Static ui:Theme.TextFaint}" />
             </Grid>
           </Panel>
 
