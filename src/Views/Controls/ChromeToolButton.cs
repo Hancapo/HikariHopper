@@ -52,6 +52,14 @@ public class ChromeToolButton : Button
     public static readonly StyledProperty<bool> InWellProperty =
         AvaloniaProperty.Register<ChromeToolButton, bool>(nameof(InWell));
 
+    /// <summary>
+    /// The button is a segment of a joined group floating over the viewport (its overlay toggles): a solid raised fill
+    /// at rest and no border of its own; on (<see cref="Sunken"/>) it fills with the accent, and disabled its glyph
+    /// fades right out, so it doesn't read as merely off.
+    /// </summary>
+    public static readonly StyledProperty<bool> SegmentProperty =
+        AvaloniaProperty.Register<ChromeToolButton, bool>(nameof(Segment));
+
     /// <summary>The icon's stroke in pixels (1.8 by default, lighter on the toolbar and tabs).</summary>
     public static readonly StyledProperty<double> IconThicknessProperty =
         AvaloniaProperty.Register<ChromeToolButton, double>(nameof(IconThickness), 1.8);
@@ -69,6 +77,12 @@ public class ChromeToolButton : Button
     private static readonly IImmutableSolidColorBrush ErrorDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Error.Color, 1.12));
     private static readonly IImmutableSolidColorBrush SelectionHover = new ImmutableSolidColorBrush(Ui.Theme.Lighter(Ui.Theme.Selection.Color, 1.11));
     private static readonly IImmutableSolidColorBrush SelectionDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Selection.Color, 1.12));
+    private static readonly IImmutableSolidColorBrush AccentHover = new ImmutableSolidColorBrush(Ui.Theme.Lighter(Ui.Theme.Accent.Color, 1.11));
+    private static readonly IImmutableSolidColorBrush AccentDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Accent.Color, 1.12));
+    private static readonly IImmutableSolidColorBrush SegmentDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.ChromeRaised.Color, 1.12));
+
+    /// <summary>A disabled segment's glyph, faded well below an off one's.</summary>
+    internal const double DisabledSegmentOpacity = .32;
 
     private Border? background;
     private Border? bevel;
@@ -115,6 +129,12 @@ public class ChromeToolButton : Button
     {
         get => GetValue(SunkenProperty);
         set => SetValue(SunkenProperty, value);
+    }
+
+    public bool Segment
+    {
+        get => GetValue(SegmentProperty);
+        set => SetValue(SegmentProperty, value);
     }
 
     public bool InWell
@@ -188,7 +208,7 @@ public class ChromeToolButton : Button
             || change.Property == HoverFillProperty || change.Property == SunkenProperty
             || change.Property == IconKindProperty || change.Property == InWellProperty
             || change.Property == IconSizeProperty || change.Property == CornerRadiusProperty
-            || change.Property == IconThicknessProperty)
+            || change.Property == IconThicknessProperty || change.Property == SegmentProperty)
             Refresh();
     }
 
@@ -220,6 +240,18 @@ public class ChromeToolButton : Button
         // The 1px top edge stops where the corners start to curve.
         bevel.Margin = new Thickness(Math.Max(1, CornerRadius.TopLeft), 1, Math.Max(1, CornerRadius.TopRight), 0);
         IBrush ink = CurrentForeground;
+        if (Segment)
+        {
+            bool on = Sunken && IsEffectivelyEnabled;
+            background.Background = !IsEffectivelyEnabled ? Ui.Theme.ChromeRaised
+                : on ? (IsPressed ? AccentDown : IsPointerOver ? AccentHover : Ui.Theme.Accent)
+                : IsPressed ? SegmentDown : IsPointerOver ? Ui.Theme.HoverChrome : Ui.Theme.ChromeRaised;
+            background.BorderThickness = new Thickness(0);
+            bevel.IsVisible = false;
+            if (on && !IsSet(ForegroundProperty))
+                ink = Ui.Theme.Text;
+        }
+        icon.Opacity = label.Opacity = Segment && !IsEffectivelyEnabled ? DisabledSegmentOpacity : 1;
         icon.Width = icon.Height = IconSize;
         icon.Thickness = IconThickness;
         icon.IsVisible = IconKind.Length > 0;

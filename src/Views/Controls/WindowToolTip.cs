@@ -74,6 +74,10 @@ public static class WindowToolTip
             Padding = new Thickness(8, 5),
             MaxWidth = 360,
             IsHitTestVisible = false,
+            // Windows keeps a window like this at least 39 pixels high (at 100%), which stretched a one-line tooltip
+            // half as tall again; held at its own size in the corner, the rest of the window is transparent.
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
         };
         var window = new Window
         {
@@ -107,6 +111,17 @@ public static class WindowToolTip
         window.Position = position;
 
         void Close(object? sender, EventArgs e) => Hide(window);
+        // A disabled control (whose tooltip says why it's off) gets no pointer events of its own, so its window's moves
+        // tell when the pointer has left it, or the window itself.
+        TopLevel? level = TopLevel.GetTopLevel(control);
+        void Moved(object? sender, PointerEventArgs e)
+        {
+            if (!new Rect(control.Bounds.Size).Contains(e.GetPosition(control)))
+                Hide(window);
+        }
+        level?.AddHandler(InputElement.PointerMovedEvent, Moved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        if (level is not null)
+            level.PointerExited += Close;
         control.PointerExited += Close;
         control.AddHandler(InputElement.PointerPressedEvent, Close, RoutingStrategies.Tunnel, handledEventsToo: true);
         control.DetachedFromVisualTree += Close;
@@ -114,6 +129,9 @@ public static class WindowToolTip
         owner.Deactivated += Close;
         window.Closed += (_, _) =>
         {
+            level?.RemoveHandler(InputElement.PointerMovedEvent, (EventHandler<PointerEventArgs>)Moved);
+            if (level is not null)
+                level.PointerExited -= Close;
             control.PointerExited -= Close;
             control.RemoveHandler(InputElement.PointerPressedEvent, (EventHandler<PointerPressedEventArgs>)Close);
             control.DetachedFromVisualTree -= Close;
