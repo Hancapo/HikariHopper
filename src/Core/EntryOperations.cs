@@ -125,17 +125,28 @@ public static class EntryOperations
         return newName;
     }
 
-    /// <summary>Imports dropped files and folders; a name already at the target is an error.</summary>
-    public static IReadOnlyList<string> ImportFilesAt(EntryCreationTarget target, IEnumerable<string> sources) =>
-        ImportAt(target, sources, freeNames: false);
+    /// <summary>Imports dropped files and folders; a name already at the target is dealt with as <paramref name="conflict"/> says.</summary>
+    public static IReadOnlyList<string> ImportFilesAt(EntryCreationTarget target, IEnumerable<string> sources,
+        ImportConflict conflict = ImportConflict.Fail) =>
+        ImportAt(target, sources, conflict);
 
     /// <summary>
     /// Copies files and folders (with everything in them) into <paramref name="target"/>, a folder on disk or in an
     /// RPF. With <paramref name="freeNames"/>, as a paste, a name already there becomes "name (2)" and so on;
-    /// otherwise, as a drop, it is an error. Returns the names written.
+    /// otherwise it is an error. Returns the names written.
     /// </summary>
-    public static IReadOnlyList<string> ImportAt(EntryCreationTarget target, IEnumerable<string> sources, bool freeNames)
+    public static IReadOnlyList<string> ImportAt(EntryCreationTarget target, IEnumerable<string> sources, bool freeNames) =>
+        ImportAt(target, sources, freeNames ? ImportConflict.KeepBoth : ImportConflict.Fail);
+
+    /// <summary>
+    /// Copies files and folders (with everything in them) into <paramref name="target"/>, a folder on disk or in an
+    /// RPF; a name already there is an error, a free "name (2)", left out, or replaced, as <paramref name="conflict"/>
+    /// says. Replacing a folder merges into it, replacing the files in it with the same names. Returns the names
+    /// written.
+    /// </summary>
+    public static IReadOnlyList<string> ImportAt(EntryCreationTarget target, IEnumerable<string> sources, ImportConflict conflict)
     {
+        bool freeNames = conflict == ImportConflict.KeepBoth;
         var resolved = new List<(string Source, string Name)>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string value in sources)
@@ -166,17 +177,14 @@ public static class EntryOperations
             if (target.Directory is null)
                 throw new ArgumentException("No writable explorer location is open");
             var taken = new List<string>(new DirectoryInfo(target.Directory).EnumerateFileSystemInfos().Select(item => item.Name));
-            var destinations = new List<(string Source, string Destination)>();
-            foreach (var (source, name) in resolved)
-            {
-                string final = Claim(name, Directory.Exists(source), taken, freeNames);
-                destinations.Add((source, Path.Combine(target.Directory, final)));
-            }
+            string folderAt = target.Directory;
+            var destinations = Place(resolved, taken, name => Directory.Exists(Path.Combine(folderAt, name)), conflict)
+                .Select(item => (item.Source, Destination: Path.Combine(folderAt, item.Name), item.Replace)).ToList();
             var created = new List<string>();
             try
             {
-                foreach (var (source, destination) in destinations)
-                    CopyLoose(source, destination, created);
+                foreach (var (source, destination, replace) in destinations)
+                    CopyLoose(source, destination, created, replace);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -208,13 +216,48 @@ public static class EntryOperations
             RpfDirectoryEntry directory = DirectoryAt(archive, target.InternalDirectory)
                 ?? throw new ArgumentException($"Could not find archive folder: {target.InternalDirectory}");
             var existing = directory.Children.Select(child => child.Name).ToList();
-            var finals = resolved.Select(item => (item.Source, Name: Claim(item.Name, Directory.Exists(item.Source), existing, freeNames))).ToList();
+            var finals = Place(resolved, existing,
+                name => directory.Children.Any(child => child is RpfDirectoryEntry && string.Equals(child.Name, name, StringComparison.OrdinalIgnoreCase)), conflict);
             // File-backed: FiveFury reads each source while the archive is written right after.
-            foreach (var (source, name) in finals)
-                AddToArchive(archive, EntryNames.ArchiveChildPath(target.InternalDirectory, name), source);
+            foreach (var (source, name, replace) in finals)
+                AddToArchive(archive, EntryNames.ArchiveChildPath(target.InternalDirectory, name), source, replace);
             written.AddRange(finals.Select(item => item.Name));
         });
         return written;
+    }
+
+    /// <summary>
+    /// Where each import goes beside <paramref name="taken"/>: its own name when free; otherwise, as
+    /// <paramref name="conflict"/> says, an error, a free "name (2)", nowhere (left out), or the one already there,
+    /// replaced. A file can't replace a folder, nor a folder a file.
+    /// </summary>
+    private static List<(string Source, string Name, bool Replace)> Place(List<(string Source, string Name)> resolved,
+        List<string> taken, Func<string, bool> folderThere, ImportConflict conflict)
+    {
+        var placed = new List<(string Source, string Name, bool Replace)>();
+        foreach (var (source, name) in resolved)
+        {
+            bool folder = Directory.Exists(source);
+            string? there = taken.FirstOrDefault(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
+            if (there is null || conflict == ImportConflict.KeepBoth)
+            {
+                placed.Add((source, Claim(name, folder, taken, freeNames: conflict == ImportConflict.KeepBoth), false));
+                continue;
+            }
+            switch (conflict)
+            {
+                case ImportConflict.Skip:
+                    break;
+                case ImportConflict.Replace:
+                    if (folderThere(there) != folder)
+                        throw new ArgumentException(folder ? $"{there} is a file here; a folder can't replace it" : $"{there} is a folder here; a file can't replace it");
+                    placed.Add((source, there, true));
+                    break;
+                default:
+                    throw new EntryExistsException($"{there} already exists");
+            }
+        }
+        return placed;
     }
 
     /// <summary>
@@ -242,9 +285,29 @@ public static class EntryOperations
         return final;
     }
 
-    /// <summary>Copies a file, or a folder and everything in it, recording each thing it makes in <paramref name="created"/>.</summary>
-    private static void CopyLoose(string source, string destination, List<string> created)
+    /// <summary>
+    /// Copies a file, or a folder and everything in it, recording each thing it makes in <paramref name="created"/>.
+    /// With <paramref name="replace"/>, a file already there is replaced (written beside it, then moved over it) and a
+    /// folder already there is merged into.
+    /// </summary>
+    private static void CopyLoose(string source, string destination, List<string> created, bool replace = false)
     {
+        if (File.Exists(source) && replace && File.Exists(destination))
+        {
+            string staging = destination + ".hikari-replace";
+            File.Copy(source, staging, overwrite: true);
+            try
+            {
+                CopyStat(source, staging);
+                File.Move(staging, destination, overwrite: true);
+            }
+            catch
+            {
+                File.Delete(staging);
+                throw;
+            }
+            return;
+        }
         if (File.Exists(source))
         {
             using (FileStream input = File.OpenRead(source))
@@ -257,35 +320,52 @@ public static class EntryOperations
             return;
         }
         if (Directory.Exists(destination))
-            throw new IOException($"{Path.GetFileName(destination)} already exists");
-        Directory.CreateDirectory(destination);
-        created.Add(destination);
+        {
+            if (!replace)
+                throw new IOException($"{Path.GetFileName(destination)} already exists");
+        }
+        else
+        {
+            if (File.Exists(destination))
+                throw new IOException($"{Path.GetFileName(destination)} is a file here; a folder can't replace it");
+            Directory.CreateDirectory(destination);
+            created.Add(destination);
+        }
         foreach (string file in Directory.EnumerateFiles(source))
-            CopyLoose(file, Path.Combine(destination, Path.GetFileName(file)), created);
+            CopyLoose(file, Path.Combine(destination, Path.GetFileName(file)), created, replace);
         foreach (string folder in Directory.EnumerateDirectories(source))
         {
             if (IsLinkedPath(folder))
                 continue;
-            CopyLoose(folder, Path.Combine(destination, Path.GetFileName(folder)), created);
+            CopyLoose(folder, Path.Combine(destination, Path.GetFileName(folder)), created, replace);
         }
     }
 
-    /// <summary>Adds a file at <paramref name="path"/> in the archive, or a folder there with everything in it.</summary>
-    private static void AddToArchive(RpfArchive archive, string path, string source)
+    /// <summary>
+    /// Adds a file at <paramref name="path"/> in the archive, or a folder there with everything in it. With
+    /// <paramref name="replace"/>, a file already there is replaced and a folder already there is merged into.
+    /// </summary>
+    private static void AddToArchive(RpfArchive archive, string path, string source, bool replace = false)
     {
         if (File.Exists(source))
         {
+            if (replace && archive.Find(path) is { } existing)
+            {
+                if (existing is RpfDirectoryEntry)
+                    throw new ArgumentException($"{existing.Name} is a folder here; a file can't replace it");
+                archive.Remove(existing);
+            }
             archive.AddFile(path, source);
             return;
         }
         archive.AddDirectory(path);
         foreach (string file in Directory.EnumerateFiles(source))
-            archive.AddFile(EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(file))), file);
+            AddToArchive(archive, EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(file))), file, replace);
         foreach (string folder in Directory.EnumerateDirectories(source))
         {
             if (IsLinkedPath(folder))
                 continue;
-            AddToArchive(archive, EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(folder))), folder);
+            AddToArchive(archive, EntryNames.ArchiveChildPath(path, EntryNames.NormalizeEntryName(Path.GetFileName(folder))), folder, replace);
         }
     }
 
@@ -408,4 +488,20 @@ public static class EntryOperations
         File.SetLastAccessTimeUtc(destination, File.GetLastAccessTimeUtc(source));
         File.SetAttributes(destination, File.GetAttributes(source) & ~FileAttributes.ReparsePoint);
     }
+}
+
+/// <summary>What an import does with a name already at its target.</summary>
+public enum ImportConflict
+{
+    /// <summary>Stops: nothing is imported.</summary>
+    Fail,
+
+    /// <summary>Imports it as "name (2)", "name (3)"…, as a paste does.</summary>
+    KeepBoth,
+
+    /// <summary>Leaves it out; the rest are imported.</summary>
+    Skip,
+
+    /// <summary>Replaces the file already there, or merges a folder into the one there.</summary>
+    Replace,
 }

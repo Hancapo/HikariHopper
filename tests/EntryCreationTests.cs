@@ -285,6 +285,88 @@ public sealed class EntryCreationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void A_drop_whose_names_are_there_replaces_skips_or_keeps_both_in_a_loose_folder()
+    {
+        string destination = Directory.CreateDirectory(Path.Combine(Work, "game")).FullName;
+        Write(Path.Combine(destination, "first.txt"), "old");
+        Write(Path.Combine(destination, "mods", "kept.txt"), "kept");
+        Write(Path.Combine(destination, "mods", "swap.txt"), "old swap");
+        string first = Write(Path.Combine(Work, "source", "first.txt"), "new");
+        string fresh = Write(Path.Combine(Work, "source", "fresh.txt"), "fresh");
+        string mods = Path.GetDirectoryName(Write(Path.Combine(Work, "source", "mods", "swap.txt"), "new swap"))!;
+        var target = new EntryCreationTarget(Directory: destination);
+
+        // Skip: only what's new goes in.
+        Assert.Equal(["fresh.txt"], EntryOperations.ImportFilesAt(target, [first, fresh], ImportConflict.Skip));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(destination, "first.txt")));
+
+        // Keep both: the dropped one beside it, numbered.
+        Assert.Equal(["first (2).txt"], EntryOperations.ImportFilesAt(target, [first], ImportConflict.KeepBoth));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(destination, "first (2).txt")));
+
+        // Replace: the file is replaced, and a folder merges, its files of the same name replaced and the rest kept.
+        Assert.Equal(["first.txt", "mods"], EntryOperations.ImportFilesAt(target, [first, mods], ImportConflict.Replace));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(destination, "first.txt")));
+        Assert.Equal("new swap", File.ReadAllText(Path.Combine(destination, "mods", "swap.txt")));
+        Assert.Equal("kept", File.ReadAllText(Path.Combine(destination, "mods", "kept.txt")));
+        Assert.Empty(Directory.EnumerateFiles(destination, "*.hikari-replace", SearchOption.AllDirectories));
+
+        // A file can't replace a folder.
+        string clash = Write(Path.Combine(Work, "other", "mods"), "a file");
+        Assert.Throws<ArgumentException>(() => EntryOperations.ImportFilesAt(target, [clash], ImportConflict.Replace));
+    }
+
+    [AvaloniaFact]
+    public void A_drop_whose_names_are_there_replaces_or_skips_them_in_an_rpf()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "outer.rpf"), ("existing.txt", "original"), ("other.txt", "other"));
+        string existing = Write(Path.Combine(Work, "drop", "existing.txt"), "replacement");
+        string fresh = Write(Path.Combine(Work, "drop", "fresh.txt"), "fresh");
+        var provider = new RpfProvider();
+        provider.OpenArchive(archive);
+
+        Assert.Equal(["fresh.txt"], EntryOperations.ImportFilesAt(provider.CreationTarget("."), [existing, fresh], ImportConflict.Skip));
+        Assert.Equal(Bytes("original"), ReadSavedEntry(archive, "existing.txt"));
+        Assert.Equal(["existing.txt"], EntryOperations.ImportFilesAt(provider.CreationTarget("."), [existing], ImportConflict.Replace));
+        Assert.Equal(Bytes("replacement"), ReadSavedEntry(archive, "existing.txt"));
+        Assert.Equal(Bytes("other"), ReadSavedEntry(archive, "other.txt"));
+        provider.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_drop_with_names_already_there_asks_before_importing_anything() => OnUiThread(() =>
+    {
+        Write(Path.Combine(Work, "first.txt"), "old");
+        ExplorerViewModel bridge = OpenBareGame();
+        string first = Write(Path.Combine(Work, "..", "drops", "first.txt"), "new");
+        string second = Write(Path.Combine(Work, "..", "drops", "second.txt"), "second");
+        ImportConflicts? asked = null;
+        bridge.ImportConflictsFound += (_, pending) => asked = pending;
+
+        // Nothing starts: the names already here are asked about.
+        Assert.True(bridge.ImportDroppedFiles([first, second]));
+        Assert.False(bridge.EntryOperationBusy);
+        Assert.NotNull(asked);
+        Assert.Equal(["first.txt"], asked.Names);
+        Assert.Equal(2, asked.Sources.Count);
+        Assert.False(File.Exists(Path.Combine(Work, "second.txt")));
+
+        // Replace: both go in, the old one replaced.
+        Assert.True(bridge.ResolveImport(asked, ImportConflict.Replace));
+        Settle(bridge);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(Work, "first.txt")));
+        Assert.Equal("second", File.ReadAllText(Path.Combine(Work, "second.txt")));
+        Assert.Equal("Imported 2 files", bridge.Status);
+
+        // Skipping everything says so.
+        asked = null;
+        Assert.True(bridge.ImportDroppedFiles([first]));
+        Assert.True(bridge.ResolveImport(asked!, ImportConflict.Skip));
+        Settle(bridge);
+        Assert.Equal("Nothing imported: every file was already here", bridge.Status);
+    });
+
+    [AvaloniaFact]
     public void ImportsFilesAndNestedRpfsIntoAnRpfFolder()
     {
         string plain = Write(Path.Combine(Work, "source", "plain.txt"), "plain");

@@ -105,29 +105,45 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>
     /// Imports dropped files into the current folder. Items are local paths or <c>file://</c> URIs;
-    /// pass <c>null</c> for a dropped item without a local path so the drop is rejected.
+    /// pass <c>null</c> for a dropped item without a local path so the drop is rejected. When some of their names are
+    /// already there and <paramref name="conflict"/> doesn't say what to do with them, nothing is imported yet:
+    /// <see cref="ImportConflictsFound"/> asks, and <see cref="ResolveImport"/> carries on with the answer.
     /// </summary>
-    public bool ImportDroppedFiles(IReadOnlyList<string?> paths)
+    public bool ImportDroppedFiles(IReadOnlyList<string?> paths, ImportConflict? conflict = null)
     {
         if (EntryOperationBusy)
             return false;
         IReadOnlyList<string> sources;
         EntryCreationTarget target;
+        string[] clashes;
         try
         {
             sources = FileDrops.LocalDropPaths(paths);
             target = Provider.CreationTarget(currentPath);
+            clashes = [.. sources.Select(source => EntryNames.NormalizeEntryName(Path.GetFileName(Path.TrimEndingDirectorySeparator(source))))
+                .Where(name => currentEntryNames.Contains(name, StringComparer.OrdinalIgnoreCase))];
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
             SetStatus($"Could not import files: {error.Message}");
             return false;
         }
+        if (conflict is null && clashes.Length > 0)
+        {
+            ImportConflictsFound?.Invoke(this, new ImportConflicts(sources, clashes));
+            return true;
+        }
         int count = sources.Count;
         string noun = count == 1 ? "file" : "files";
         return StartEntryOperation(target, $"import {noun}", $"Importing {count} {noun}…",
-            () => EntryOperations.ImportFilesAt(target, sources), EntryImportCompleted);
+            () => EntryOperations.ImportFilesAt(target, sources, conflict ?? ImportConflict.Fail), EntryImportCompleted);
     }
+
+    /// <summary>Some dropped files' names are already in the folder: what to do with them is asked before anything is imported.</summary>
+    public event EventHandler<ImportConflicts>? ImportConflictsFound;
+
+    /// <summary>Carries on with a drop whose names clashed, replacing, skipping or keeping both, as answered.</summary>
+    public bool ResolveImport(ImportConflicts pending, ImportConflict choice) => ImportDroppedFiles([.. pending.Sources], choice);
 
     private string CreationName(string name, string kind = "entry")
     {
@@ -232,7 +248,7 @@ public sealed partial class ExplorerViewModel
             SelectEntriesByName(names);
         }
         int count = names.Count;
-        SetStatus($"Imported {count} {(count == 1 ? "file" : "files")}");
+        SetStatus(count == 0 ? "Nothing imported: every file was already here" : $"Imported {count} {(count == 1 ? "file" : "files")}");
         ContentChanged?.Invoke(this, target);
         FinishEntryOperation();
     }

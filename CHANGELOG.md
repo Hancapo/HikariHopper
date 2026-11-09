@@ -67,6 +67,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Decals in the 3D viewer fade out by their vertex alpha as GTA V blends them, instead of covering what they lie on with hard edges. ([#115](https://github.com/Hancapo/HikariHopper/pull/115))
 - The search box shows its subfolders toggle only when searching a folder, not an RPF or the whole game. ([#114](https://github.com/Hancapo/HikariHopper/pull/114))
 - The start page names a recently opened installation for its edition, Legacy or Enhanced, rather than its folder. ([#120](https://github.com/Hancapo/HikariHopper/pull/120))
+- Dropping files whose names are already in the folder asks whether to replace them, skip them or keep both, instead of cancelling the whole drop; replacing a folder merges into it. ([#121](https://github.com/Hancapo/HikariHopper/pull/121))
 
 ### Removed
 
