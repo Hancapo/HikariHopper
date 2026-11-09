@@ -8,6 +8,16 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.1.0] - 2026-11-09
+
+### Added
+
 - A 3D viewer for drawables (.ydr), fragments (.yft) and drawable dictionaries (.ydd), from Legacy and Enhanced. ([#91](https://github.com/Hancapo/HikariHopper/pull/91), [#94](https://github.com/Hancapo/HikariHopper/pull/94))
 - Models in the 3D viewer are shaded with GTA V's own shaders, including their parallax and detail maps. ([#91](https://github.com/Hancapo/HikariHopper/pull/91), [#103](https://github.com/Hancapo/HikariHopper/pull/103), [#106](https://github.com/Hancapo/HikariHopper/pull/106), [#107](https://github.com/Hancapo/HikariHopper/pull/107))
 - Vehicles in the 3D viewer are shaded with GTA V's vehicle shaders, liveries included. ([#98](https://github.com/Hancapo/HikariHopper/pull/98), [#99](https://github.com/Hancapo/HikariHopper/pull/99))
@@ -44,8 +54,6 @@ All notable changes to HikariHopper are documented here. The format follows
 - The explorer's status bar says "1 item", not "1 items". ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The keyboard shortcuts list says Ctrl+C copies the selection, as it does. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
 - The text viewer's toolbar buttons light up on hover like the other toolbars. ([#133](https://github.com/Hancapo/HikariHopper/pull/133))
-
-### Removed
 
 ## [0.0.5] - 2026-11-06
 
@@ -164,7 +172,8 @@ All notable changes to HikariHopper are documented here. The format follows
 - Explorer for GTA V Legacy and Enhanced game files, with nested RPF archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Hancapo/HikariHopper/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/Hancapo/HikariHopper/compare/v0.0.2...v0.0.3
