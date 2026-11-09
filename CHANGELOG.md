@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Navmeshes from the DLC packs open in the 3D viewer, in Legacy and Enhanced, not only the main archives' ones. ([#144](https://github.com/Hancapo/HikariHopper/pull/144))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09

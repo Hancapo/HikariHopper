@@ -106,6 +106,29 @@ public sealed class ViewportTests
         Assert.All(band, vertex => Assert.Equal(30.02f, vertex.Position.Z + mesh.Origin.Z, 0.001));
     }
 
+    [Theory]
+    // The main archives' navmeshes, and the DLC packs': each build of the export tools stamped its own value in the
+    // root, mpbattle's onwards in Legacy (0x40620808) and the 2023-2026 packs' in Enhanced (0x40745DA8 the latest).
+    [InlineData(0x4061E7E8u)]
+    [InlineData(0x40620808u)]
+    [InlineData(0x406D2160u)]
+    [InlineData(0x40745DA8u)]
+    public void ANavmeshFromAnyPackOpens(uint rootVtable)
+    {
+        Vector3[] vertices = [new(1010, 2020, 30), new(1040, 2020, 30), new(1040, 2050, 30), new(1010, 2050, 30)];
+        Ynv navmesh = YnvAuthoring.FromMesh(vertices, [0, 1, 2, 0, 2, 3]).Single().Mesh;
+        var resource = FiveFury.Resources.ResourceFile.Read(navmesh.Write());
+        byte[] system = resource.SystemData.ToArray();
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(system, rootVtable);
+        byte[] data = FiveFury.Resources.ResourceFile.Create(2, system, systemFlags: resource.Header.SystemFlags,
+            graphicsFlags: resource.Header.GraphicsFlags).Write();
+
+        ModelContent content = ModelContent.Read("navmesh[100][101].ynv", data);
+        Assert.Equal(2, content.Mesh.TriangleCount);
+        // Where it lies in the world, to its vertices' quantization.
+        Assert.True(Vector3.Distance(new Vector3(1010, 2020, 30), content.Box.Minimum) < .01f);
+    }
+
     [Fact]
     public void ALadderUpAndDownIsOneSolidLinkPointingBothWays()
     {
