@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Text.Json;
 using FiveFury.Drawables;
 using FiveFury.Textures;
@@ -23,7 +24,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform.</summary>
-    public const int UniformBytes = 64;
+    public const int UniformBytes = 144;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -33,6 +34,9 @@ internal sealed class SurfaceMaterial
 
     /// <summary>Whether the shader is one of the families surface.wgsl rebuilds; others are drawn as the closest it does.</summary>
     public bool Rebuilt { get; private init; }
+
+    /// <summary>Whether it is a vehicle shader (PS_DeferredVehicleTextured): paint, mesh, tyres, interiors and the rest.</summary>
+    public bool Vehicle { get; private init; }
 
     public AlphaMode AlphaMode { get; private init; }
 
@@ -46,13 +50,22 @@ internal sealed class SurfaceMaterial
     /// <summary>The palette a tinted (_tnt) shader takes its colour from: a row per tint, a column per vertex.</summary>
     public Texture? TintPalette { get; private init; }
 
+    /// <summary>A vehicle's dirt: R and B how much, G how rough it makes the surface.</summary>
+    public Texture? Dirt { get; private init; }
+
+    /// <summary>A vehicle paint's colour by viewing angle, for paints with a ramp in place of a colour.</summary>
+    public Texture? DiffuseRamp { get; private init; }
+
     /// <summary>Textures the material names that neither the drawable nor its dictionaries hold.</summary>
     public IReadOnlyList<string> MissingTextures { get; private init; } = [];
 
     private static readonly JsonDocument Mapping = JsonDocument.Parse(ViewportRenderer.Read("materials.json"));
 
-    private static readonly HashSet<string> Textured = Mapping.RootElement.GetProperty("families").GetProperty("textured")
-        .EnumerateArray().Select(name => name.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> Textured = Family("textured");
+    private static readonly HashSet<string> Vehicles = Family("vehicle");
+
+    private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
+        .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Makes a material ready to draw, finding its textures with <paramref name="resolve"/>.</summary>
     public static SurfaceMaterial From(DrawableMaterial material, Func<TextureReference, Texture?> resolve)
@@ -102,11 +115,14 @@ internal sealed class SurfaceMaterial
         var result = new SurfaceMaterial
         {
             Shader = shader,
-            Rebuilt = Textured.Contains(shader),
+            Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader),
+            Vehicle = Vehicles.Contains(shader),
             Diffuse = Texture("diffuse"),
             Normal = Texture("normal"),
             Specular = Texture("specular"),
             TintPalette = Texture("tint_palette"),
+            Dirt = Texture("dirt"),
+            DiffuseRamp = Texture("diffuse_ramp"),
             AlphaMode = (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -132,14 +148,73 @@ internal sealed class SurfaceMaterial
         u[8] = result.Normal is not null ? 1 : 0;
         u[9] = Declares("textures", "specular") ? 1 : 0;
         u[10] = (float)result.AlphaMode;
-        // A tinted shader's vertex blue picks the palette's column, so it isn't an emissive mask there.
-        u[11] = Pattern(shader, "emissive") == "true" && result.TintPalette is null ? 1 : 0;
+        // A tinted shader's vertex blue picks the palette's column, and a vehicle's is its dirt, so neither is an
+        // emissive mask there.
+        u[11] = Pattern(shader, "emissive") == "true" && result.TintPalette is null && !result.Vehicle ? 1 : 0;
         // GTA's alpha test passes at about half coverage.
         u[12] = .5f;
         u[13] = result.TintPalette is not null ? 1 : 0;
         u[14] = Constant("tint_palette_selector", 0)[0];
+        u[15] = result.Vehicle ? 1 : 0;
+        if (result.Vehicle)
+            Vehicle(u, specular);
         return result;
+
+        // PS_DeferredVehicleTextured: the paint's colour (or ramp), its dirt, and the second specular lobe. The game
+        // sets a vehicle's colours and dirt as it drives; the viewer shows a clean vehicle, its paint slots as the game
+        // fills them when no vehicle's colours apply.
+        void Vehicle(Span<float> v, bool constants)
+        {
+            float[] paint = Constant("paint_colour", 1, 1, 1);
+            Vector3 colour = PaintColour(paint);
+            v[16] = colour.X;
+            v[17] = colour.Y;
+            v[18] = colour.Z;
+            v[19] = result.DiffuseRamp is not null ? Constant("ramp_enabled", 0)[0] : 0;
+            float[] dirt = Constant("dirt_level", 0, 1, 0, 1);
+            for (int i = 0; i < 4; i++)
+                v[20 + i] = i < dirt.Length ? dirt[i] : 0;
+            v[20] = 0;
+            float[] dirtColour = Constant("dirt_colour", .23f, .22f, .2f);
+            for (int i = 0; i < 3; i++)
+                v[24 + i] = i < dirtColour.Length ? dirtColour[i] : 0;
+            v[27] = result.Dirt is not null ? 1 : 0;
+            // The second lobe's colour is the game's to set as well (its default, 0 0.5 0, is a placeholder): it is
+            // taken to be the pearlescent paint's, and only how far its light swings overhead is the material's.
+            bool second = Declares("constants", "specular2");
+            float[] lobe = Constant("specular2", 0, 0, 0, 0);
+            Vector3 pearl = second ? Layer(Pearlescent) : Vector3.Zero;
+            v[28] = pearl.X;
+            v[29] = pearl.Y;
+            v[30] = pearl.Z;
+            v[31] = second && lobe.Length > 3 ? lobe[3] : 0;
+            v[32] = Pattern(shader, "paint") == "true" ? 1 : 0;
+            v[33] = second ? 1 : 0;
+            v[34] = result.DiffuseRamp is not null ? 1 : 0;
+            // Paint-style shaders take their specular from constants; mesh-style ones from their specular map.
+            v[35] = constants ? 1 : 0;
+        }
     }
+
+    private const int Pearlescent = 3;
+    private const int Unpainted = 5;
+
+    /// <summary>
+    /// A vehicle material's diffuse colour. matDiffuseColor (2, n, n) isn't a colour but one of the vehicle's seven
+    /// paint slots, n - 1, which the game fills in: 0 primary, 1 secondary, 2 pearlescent, 3 wheels, 4 left as it is,
+    /// 5 interior and 6 dashboard. Any other value is the colour itself.
+    /// </summary>
+    internal static Vector3 PaintColour(ReadOnlySpan<float> value)
+    {
+        Vector3 colour = new(value.Length > 0 ? value[0] : 1, value.Length > 1 ? value[1] : 1, value.Length > 2 ? value[2] : 1);
+        return MathF.Abs(colour.X - 2) < .001f && MathF.Round(colour.Y) is >= 1 and <= 7 ? Layer((int)MathF.Round(colour.Y)) : colour;
+    }
+
+    /// <summary>
+    /// A paint slot's colour with no vehicle's colours to fill it, as the game sets them: grey 0x96 for every slot
+    /// but the fifth, which is white (the game greys it only for some vehicles).
+    /// </summary>
+    private static Vector3 Layer(int layer) => layer == Unpainted ? Vector3.One : new Vector3(150 / 255f);
 
     private static IEnumerable<string> Names(string group, string role) =>
         Mapping.RootElement.GetProperty(group).TryGetProperty(role, out JsonElement names) ? names.EnumerateArray().Select(n => n.GetString()!) : [];
