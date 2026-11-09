@@ -115,8 +115,9 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     let to_light = normalize(light.sun_direction.xyz);
     let albedo = stored * stored;
     let spec = saturate(intensity);
-    // GTA's exponent from the stored power: three times it up to 500, steeply beyond.
-    let p = max(power, 0.0);
+    // GTA's exponent from the stored power: three times it up to 500, steeply beyond. The G-buffer is 8-bit and holds
+    // the square root of the power over 512, so no power goes past 512.
+    let p = clamp(power, 0.0, 512.0);
     let exponent = 3.0 * min(p, 500.0) + 558.0 * max(0.0, p - 500.0);
 
     let half_vector = normalize(to_light + view);

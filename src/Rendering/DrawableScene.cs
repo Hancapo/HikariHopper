@@ -146,7 +146,9 @@ internal sealed class DrawableScene
         VertexLayout layout = buffer.Layout;
         Vector4 Element(VertexSemantic semantic, Vector4 missing) => layout.TryFind(semantic, out _) ? buffer.ReadElement(i, semantic) : missing;
         Vector3 position = Vector3.Transform(Element(VertexSemantic.Position, default).AsVector3(), transform) - origin;
-        Vector3 normal = Vector3.TransformNormal(Element(VertexSemantic.Normal, Vector4.UnitZ).AsVector3(), transform);
+        // As the vertex shaders: a normal shorter than about a third (squared under 0.1) is taken as straight up.
+        Vector3 own = Element(VertexSemantic.Normal, Vector4.UnitZ).AsVector3();
+        Vector3 normal = Vector3.TransformNormal(own.LengthSquared() < .1f ? Vector3.UnitZ : own, transform);
         Vector4 tangent = Element(VertexSemantic.Tangent, Vector4.UnitX + Vector4.UnitW);
         var direction = Vector3.TransformNormal(tangent.AsVector3(), transform);
         // A missing first colour reads as white: full natural and artificial ambient, emissive where the shader is. A

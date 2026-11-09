@@ -40,6 +40,8 @@
     "specular_tile": ["specTexTileUV"],
     "diffuse2_colour": ["matDiffuseColor2"],
     "detail_settings": ["detailSettings"],
+    "spec_desaturate_intensity": ["SpecDesaturateIntensity"],
+    "spec_desaturate_exponent": ["SpecDesaturateExponent"],
     "bump_self_shadow": ["bumpSelfShadowAmount"],
     "parallax_self_shadow": ["parallaxSelfShadowAmount"],
     "height_scale0": ["heightScale0"],
@@ -56,7 +58,8 @@
     "spec_falloff_adjust": ["specFalloffAdjust"]
   },
   "patterns": [
-    { "contains": "diffspec", "detail_mask": "diffuse" },
+    { "contains": "diffspec", "detail_mask": "diffuse", "specular_source": "diffuse" },
+    { "contains": "speclum", "specular_source": "luminance" },
     { "contains": "_2tex_blend", "terrain_layers": "first" },
     { "contains": "_2tex", "terrain_layers": "second" },
     { "contains": "_pxm", "terrain_parallax": true },

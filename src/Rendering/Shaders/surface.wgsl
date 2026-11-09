@@ -40,6 +40,13 @@ struct Material {
     detail: vec4f,
     // Has a detail map, what masks it (0 nothing, 1 the specular map's alpha, 2 the diffuse map's).
     detail_options: vec4f,
+    // Where the specular comes from besides the constants and a specular map: 0 nowhere else, 1 the diffuse map's
+    // luminance (emissive_speclum), 2 an overlay of the diffuse map's colour (diffspec).
+    spec_source: vec4f,
+    // The diffspec shaders' SpecDesaturateIntensity and SpecDesaturateExponent: weights for the diffuse colour, then
+    // the overlay's strength.
+    desaturate_intensity: vec4f,
+    desaturate_exponent: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -235,6 +242,20 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
         surface.intensity = material.specular.z * dot(weighed, material.mask.xyz);
         surface.power = material.specular.y * specular_sample.a;
     }
+    let source = u32(material.spec_source.x + 0.5);
+    if (source == 1u) {
+        // emissive_speclum: the darker the diffuse map, the stronger and tighter the specular.
+        let dark = 1.0 - dot(diffuse.rgb, vec3f(0.2125, 0.7154, 0.0721));
+        surface.intensity = material.specular.z * dark;
+        surface.power = material.specular.y * dark;
+    } else if (source == 2u) {
+        // diffspec: the diffuse colour's weighted sums, each overlaid by a strength, masked by specMapIntMask; these
+        // shaders write no power (only the game's wetness adds some).
+        let a = overlay(dot(diffuse.rgb, material.desaturate_intensity.xyz), material.desaturate_intensity.w);
+        let b = overlay(dot(diffuse.rgb, material.desaturate_exponent.xyz), material.desaturate_exponent.w);
+        surface.intensity = material.specular.z * dot(vec3f(a, b, 0.0), material.mask.xyz);
+        surface.power = 0.0;
+    }
     surface.fresnel = material.specular.x;
     // Tinted shaders multiply the diffuse map by the palette's colour.
     surface.base = diffuse.rgb * input.tint;
@@ -243,6 +264,11 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     surface.artificial = input.colour0.g;
     surface.alpha = diffuse.a;
     return surface;
+}
+
+// The overlay blend of a value by a strength, as the diffspec shaders write it.
+fn overlay(value: f32, strength: f32) -> f32 {
+    return select(1.0 - 2.0 * (1.0 - value) * (1.0 - strength), 2.0 * value * strength, value < 0.5);
 }
 
 // PS_DeferredVehicleTextured, as vehicle_paint1 and vehicle_mesh compile it; the rest of the family is one of the two
