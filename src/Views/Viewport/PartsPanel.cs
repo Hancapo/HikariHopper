@@ -278,7 +278,8 @@ internal sealed class PartsPanel : UserControl
                     return [node, .. below];
             return null;
         }
-        foreach (PartSection section in sections)
+        // The extras are toggles, not rows, so none of them can be selected.
+        foreach (PartSection section in sections.Where(section => section.Kind != PartSectionKind.Extras))
             foreach (PartNode top in section.Nodes)
                 if (Path(top) is { } path)
                 {

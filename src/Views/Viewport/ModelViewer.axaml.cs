@@ -623,6 +623,8 @@ public partial class ModelViewer : UserControl, IModalContent
         if (visibility is null)
             return;
         Viewport.ShowParts(visibility.Mask());
+        // What is picked, again: another level's rows keep their keys but not their parts.
+        ShowPicked();
         (int triangles, int vertices, int edges) = visibility.Stats();
         static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         TrianglesText.Text = Count(triangles);

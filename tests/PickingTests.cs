@@ -78,11 +78,26 @@ public sealed class PickingTests
         viewer.Parts.Select(viewer.Parts.Rows[0].Node);
         Assert.Equal([0], viewer.Viewport.Picked);
         Assert.Equal(2, told);
+        // Another level: the row stays selected, and the outline moves to that level's parts.
+        viewer.Viewport.Pick([]);
+        viewer.SetLevel(0);
+        Assert.Equal([0], viewer.Viewport.Picked);
         // Off the model: nothing picked, nothing outlined.
         Assert.False(viewer.PickAt(origin + new Vector3(5, 5, 3), -Vector3.UnitZ));
         Assert.Empty(viewer.Parts.Selection);
         Assert.Empty(viewer.Viewport.Picked);
         Assert.Equal(3, told);
+    }
+
+    [AvaloniaFact]
+    public void An_extra_picked_on_the_model_is_not_a_row_to_select()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(FragmentViewerTests.DamagedScene()) };
+        // The extra is a toggle, not a row: nothing to select. The door is.
+        Assert.False(panel.Reveal(node => node.Name == "extra_1"));
+        Assert.Empty(panel.Selection);
+        Assert.True(panel.Reveal(node => node.Name == "door_dside_f"));
+        Assert.Equal("door_dside_f", Assert.Single(panel.Selection).Name);
     }
 
     [Fact]
