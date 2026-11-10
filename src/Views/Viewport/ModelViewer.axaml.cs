@@ -76,7 +76,6 @@ public partial class ModelViewer : UserControl, IModalContent
         this.file = file;
         Parts.Changed += ShowParts;
         Parts.FrameRequested += FrameParts;
-        Parts.DamagedRequested += damaged => SetDamaged(damaged);
         Parts.TexturesRequested += () => OpenTextures();
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
@@ -283,11 +282,8 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (visibility is null || surfaces is not { HasDamaged: true })
             return false;
-        visibility.Damaged = damaged;
-        Parts.ShowState(true, damaged);
-        Parts.Refresh();
-        ShowParts();
-        RefreshToggles();
+        // Through the panel, which opens the state's row and asks for the parts to be drawn again.
+        Parts.PickState(damaged);
         return true;
     }
 
@@ -660,7 +656,6 @@ public partial class ModelViewer : UserControl, IModalContent
         if (before is not null)
             visibility.KeepFrom(before);
         Parts.Parts = visibility;
-        Parts.ShowState(after.HasDamaged, visibility.Damaged);
         ShowParts();
         overlays = after.Overlays;
         if (skeletonShown || lightsShown)
@@ -706,7 +701,6 @@ public partial class ModelViewer : UserControl, IModalContent
             ShowTextures(surfaces);
             ShowOverlayButtons(surfaces);
             this.surfaces = surfaces;
-            Parts.ShowState(surfaces.HasDamaged, visibility.Damaged);
             RefreshToggles();
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
@@ -721,7 +715,6 @@ public partial class ModelViewer : UserControl, IModalContent
         var listed = new MeshParts(content.Mesh);
         marks = listed.Any ? listed : null;
         Parts.Parts = marks;
-        Parts.ShowState(false, false);
         Parts.ShowTextures(0);
         partsTab.IsWanted = marks is not null;
         SetPartsShown(marks is not null);

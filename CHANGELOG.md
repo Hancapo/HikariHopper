@@ -14,7 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - A ped's parts in the 3D viewer are listed head to toe, with each kind's variants in number order. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - A collision's materials, and what a navmesh's colours mean, are listed in the 3D viewer's parts panel, where each can be hidden or found, instead of in a bar under the view. ([#148](https://github.com/Hancapo/HikariHopper/pull/148))
-- A fragment's Intact | Damaged switch and a drawable's embedded textures are in the 3D viewer's parts panel instead of the toolbar. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
+- A fragment's intact and damaged states are rows in the 3D viewer's parts panel, each with its parts, picked as a ped's variants are; its embedded textures are a row at the panel's foot. Both were toolbar buttons. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
 
 ### Fixed
 

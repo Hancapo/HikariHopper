@@ -110,35 +110,13 @@ internal sealed class PartsPanel : UserControl
             Margin = new Thickness(2, 0, 0, 0),
         });
         ModeRow.Children.Add(ModeSwitch);
-        // A fragment's row under the filter: its drawables intact, or its damaged ones in their place.
-        StateSwitch.Sides.Add(new SwitchSide { Text = "Intact", Width = 52, Label = "Intact" });
-        StateSwitch.Sides.Add(new SwitchSide { Text = "Damaged", Width = 68, Label = "Damaged", ToolTip = "Damaged  (X)" });
-        StateSwitch.SelectedIndex = 0;
-        StateSwitch.VerticalAlignment = VerticalAlignment.Center;
-        StateSwitch.HorizontalAlignment = HorizontalAlignment.Right;
-        StateSwitch.SideRequested += (_, index) => DamagedRequested?.Invoke(index == 1);
-        AutomationProperties.SetName(StateSwitch, "State");
-        StateRow.Margin = new Thickness(0, 6, 0, 0);
-        StateRow.IsVisible = false;
-        StateRow.Children.Add(new TextBlock
-        {
-            Text = "STATE",
-            FontFamily = Ui.Theme.MonoFont,
-            FontSize = Ui.Theme.CapsFontSize,
-            FontWeight = FontWeight.Bold,
-            LetterSpacing = 1.2,
-            Foreground = Ui.Theme.TextFaint,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(2, 0, 0, 0),
-        });
-        StateRow.Children.Add(StateSwitch);
         DockPanel.SetDock(buttons, Dock.Right);
         var tools = new Border
         {
             Padding = new Thickness(8, 6, 8, 6),
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = new StackPanel { Children = { new DockPanel { Children = { buttons, Filter } }, ModeRow, StateRow } },
+            Child = new StackPanel { Children = { new DockPanel { Children = { buttons, Filter } }, ModeRow } },
         };
         DockPanel.SetDock(tools, Dock.Top);
 
@@ -253,20 +231,11 @@ internal sealed class PartsPanel : UserControl
 
     private readonly TextBlock texturesCount = new();
 
-    /// <summary>The switch between a fragment intact and damaged.</summary>
-    internal SegmentedSwitch StateSwitch { get; } = new();
-
-    /// <summary>The switch's row, under the filter: there for a model that has a damaged state.</summary>
-    internal Panel StateRow { get; } = new();
-
     /// <summary>The embedded textures' row at the panel's foot: there for a drawable that has some that can be opened.</summary>
     internal Border TexturesRow { get; } = new();
 
     /// <summary>How many embedded textures the row says there are, as shown.</summary>
     internal string TexturesCountText => texturesCount.Text ?? "";
-
-    /// <summary>Raised when the switch asks for the fragment damaged (true) or intact.</summary>
-    public event Action<bool>? DamagedRequested;
 
     /// <summary>Raised when the embedded textures' row is pressed.</summary>
     public event Action? TexturesRequested;
@@ -276,13 +245,6 @@ internal sealed class PartsPanel : UserControl
     {
         if (TexturesRow.IsVisible)
             TexturesRequested?.Invoke();
-    }
-
-    /// <summary>Shows the Intact | Damaged switch for a model that has a damaged state, on the side it is in.</summary>
-    public void ShowState(bool available, bool damaged)
-    {
-        StateRow.IsVisible = available;
-        StateSwitch.SelectedIndex = damaged ? 1 : 0;
     }
 
     /// <summary>Shows the embedded textures' row with how many there are; none hides it.</summary>
@@ -337,6 +299,10 @@ internal sealed class PartsPanel : UserControl
                 if (section.Kind == PartSectionKind.Tree && section.Title is "" or "Body")
                     foreach (PartNode node in section.Nodes)
                         expanded.Add(node.Key);
+                // A fragment's state shown is open, the other closed.
+                else if (section.Kind == PartSectionKind.States)
+                    foreach (PartNode node in section.Nodes.Where(node => value!.State(node) != false))
+                        expanded.Add(node.Key);
             ModeRow.IsVisible = HasVariants;
             if (HasVariants && oneAtATime)
                 ApplyOneAtATime();
@@ -382,10 +348,12 @@ internal sealed class PartsPanel : UserControl
         Changed?.Invoke();
     }
 
-    /// <summary>The variant section a row is in, while one of each shows at a time; none otherwise.</summary>
-    private PartSection? RadioSection(PartNode node) => oneAtATime
-        ? sections.FirstOrDefault(section => section.Kind == PartSectionKind.Variants && section.Nodes.Any(each => each.Key == node.Key))
-        : null;
+    /// <summary>
+    /// The section a row picks one of: a fragment's states, always, or a variant section while one of each shows at a
+    /// time; none otherwise.
+    /// </summary>
+    private PartSection? RadioSection(PartNode node) => sections.FirstOrDefault(section =>
+        (section.Kind == PartSectionKind.States || (oneAtATime && section.Kind == PartSectionKind.Variants)) && section.Nodes.Any(each => each.Key == node.Key));
 
     /// <summary>Shows a drawable of a variant section in place of the one shown.</summary>
     internal void Pick(PartNode node)
@@ -393,9 +361,25 @@ internal sealed class PartsPanel : UserControl
         if (parts is null || RadioSection(node) is not { } section)
             return;
         foreach (PartNode each in section.Nodes)
+        {
             parts.Show(each, each.Key == node.Key);
+            // A fragment's state picked opens, and the other closes.
+            if (section.Kind == PartSectionKind.States && each.Children.Count > 0)
+                if (each.Key == node.Key)
+                    expanded.Add(each.Key);
+                else
+                    expanded.Remove(each.Key);
+        }
         Changed?.Invoke();
         Refresh();
+    }
+
+    /// <summary>Shows a fragment intact or damaged, as picking its state's row does.</summary>
+    internal void PickState(bool damaged)
+    {
+        string key = damaged ? PartVisibility.DamagedKey : PartVisibility.IntactKey;
+        if (sections.Where(section => section.Kind == PartSectionKind.States).SelectMany(section => section.Nodes).FirstOrDefault(node => node.Key == key) is { } state)
+            Pick(state);
     }
 
     /// <summary>The rows shown, in order, for tests: each a node and whether it is open.</summary>
@@ -597,6 +581,8 @@ internal sealed class PartsPanel : UserControl
     /// <summary>Lists the rows again, after the level, the filter or what is shown or selected changed.</summary>
     public void Refresh()
     {
+        // The rows of the level and the state shown.
+        sections = parts?.Sections() ?? [];
         rows.Children.Clear();
         rowControls.Clear();
         var listed = new List<(PartNode, bool)>();
@@ -748,6 +734,7 @@ internal sealed class PartsPanel : UserControl
         PartKind.Group => ("S", Ui.Theme.InkAsset, "Set of drawables"),
         PartKind.Child => ("C", Ui.Theme.Brass, "Child model, bound to a bone"),
         PartKind.Geometry => ("G", Ui.Theme.InkData, "Geometry, named by its shader"),
+        PartKind.State => ("F", Ui.Theme.Brass, "Fragment state, with what is drawn only in it"),
         _ => ("D", Ui.Theme.Accent, "Drawable"),
     };
 

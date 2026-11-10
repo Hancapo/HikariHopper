@@ -275,30 +275,38 @@ public sealed class PartsPanelVariantTests
     }
 
     [AvaloniaFact]
-    public void A_fragments_state_and_a_drawables_embedded_textures_are_in_the_panel()
+    public void A_fragments_states_are_picked_as_a_peds_variants_are()
+    {
+        var visibility = new PartVisibility(FragmentViewerTests.DamagedScene());
+        var panel = new Views.PartsPanel { Parts = visibility };
+        int changed = 0;
+        panel.Changed += () => changed++;
+        // A State section first, intact open with its parts, damaged closed; then the extras. No One | All switch.
+        Assert.False(panel.ModeRow.IsVisible);
+        Assert.Equal([("Intact", true), ("chassis", false), ("door_dside_f", false), ("Damaged", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+
+        // A click on the damaged row shows it in place of the intact one, open, the intact one closed.
+        panel.Select(panel.Rows[3].Node);
+        Assert.True(visibility.Damaged);
+        Assert.Equal(1, changed);
+        Assert.Equal([("Intact", false), ("Damaged", true), ("chassis", false), ("door_dside_f", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+        Assert.Equal((false, true), (visibility.State(panel.Rows[0].Node), visibility.State(panel.Rows[1].Node)));
+        // X does the same through the panel.
+        panel.PickState(false);
+        Assert.False(visibility.Damaged);
+        Assert.Equal(2, changed);
+        Assert.Equal("Intact", panel.Rows[0].Node.Name);
+        Assert.True(panel.Rows[0].Open);
+    }
+
+    [AvaloniaFact]
+    public void A_drawables_embedded_textures_are_a_row_at_the_panels_foot()
     {
         var panel = new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
-        // Neither until the model has them.
-        Assert.False(panel.StateRow.IsVisible);
+        // None until the model has them.
         Assert.False(panel.TexturesRow.IsVisible);
-
-        // A model with a damaged state has the switch, on the side it is in; picking a side asks for it, and the panel
-        // waits to be told it happened.
-        panel.ShowState(true, false);
-        Assert.True(panel.StateRow.IsVisible);
-        Assert.Equal(0, panel.StateSwitch.SelectedIndex);
-        Assert.Equal(["Intact", "Damaged"], panel.StateSwitch.Sides.Select(side => side.Text));
-        var asked = new List<bool>();
-        panel.DamagedRequested += asked.Add;
-        panel.StateSwitch.Pick(1);
-        Assert.Equal([true], asked);
-        Assert.Equal(0, panel.StateSwitch.SelectedIndex);
-        panel.ShowState(true, true);
-        Assert.Equal(1, panel.StateSwitch.SelectedIndex);
-        panel.StateSwitch.Pick(0);
-        Assert.Equal([true, false], asked);
-        panel.ShowState(false, false);
-        Assert.False(panel.StateRow.IsVisible);
 
         // Embedded textures are a row at the foot, with how many, which asks for them when pressed.
         int opened = 0;

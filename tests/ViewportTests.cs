@@ -458,8 +458,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Shortcut('L'));
         Assert.False(viewer.SolidButton.IsEnabled);
         Assert.False(viewer.Shortcut('K'));
-        // Not a fragment with a damaged state: the parts panel has no Intact | Damaged switch, and X does nothing.
-        Assert.False(viewer.Parts.StateRow.IsVisible);
+        // Not a fragment with a damaged state: the parts panel has no State section, and X does nothing.
+        Assert.DoesNotContain(viewer.Parts.Rows, row => row.Node.Kind == PartKind.State);
         Assert.False(viewer.Shortcut('X'));
         // Off, the toggles keep the button's own faint ink.
         Assert.False(viewer.SkeletonButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
