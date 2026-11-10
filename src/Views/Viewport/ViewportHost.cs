@@ -220,6 +220,15 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.Show(drawable);
     }
 
+    /// <summary>
+    /// Draws the drawable shown's material <paramref name="index"/> as the scene now has it, after its values were edited.
+    /// </summary>
+    internal void UpdateMaterial(int index)
+    {
+        if (surfaces is not null && index >= 0 && index < surfaces.Materials.Count)
+            renderer?.UpdateMaterial(index, surfaces.Materials[index]);
+    }
+
     /// <summary>WebGPU started, with the GPU it draws with.</summary>
     public event Action<string>? Started;
 
@@ -228,6 +237,9 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     /// <summary>Escape was pressed while the viewport had the keyboard.</summary>
     public event Action? EscapePressed;
+
+    /// <summary>A letter was pressed with Ctrl, without Alt, while the viewport had the keyboard: Ctrl+Z, say.</summary>
+    public event Action<char>? CommandPressed;
 
     /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
     public event Action<char>? ShortcutPressed;
@@ -469,6 +481,10 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case KeyPressed when wParam == 0x1B:
                 Dispatcher.UIThread.Post(() => EscapePressed?.Invoke());
+                return 0;
+            case KeyPressed when (uint)wParam is >= 0x41 and <= 0x5A && GetKeyState(0x11) < 0 && GetKeyState(0x12) >= 0:
+                char command = (char)wParam;
+                Dispatcher.UIThread.Post(() => CommandPressed?.Invoke(command));
                 return 0;
             case KeyPressed when (uint)wParam is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A && GetKeyState(0x11) >= 0 && GetKeyState(0x12) >= 0:
                 char key = (char)wParam;

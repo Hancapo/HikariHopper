@@ -1,0 +1,232 @@
+using System.Numerics;
+using Avalonia.Headless.XUnit;
+using FiveFury;
+using FiveFury.Drawables;
+using HikariHopper.Rendering;
+using HikariHopper.ViewModels;
+
+namespace HikariHopper.Tests;
+
+public sealed class ShaderValuesTests
+{
+    private static DrawableMaterial Material(string shader = "normal_spec", GameTarget target = GameTarget.Legacy) =>
+        new DrawableMaterialInput { Name = "surface", Shader = shader }.Build(target);
+
+    // A triangle drawn with one shader entry, as a .ydr.
+    internal static byte[] Triangle(string shader = "normal_spec", GameTarget target = GameTarget.Legacy)
+    {
+        var mesh = new DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(new DrawableMaterialInput { Name = "surface", Shader = shader });
+        var model = new DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        return new FiveFury.Ydr.Ydr(builder.Build(target), target).Write();
+    }
+
+    [Fact]
+    public void A_shader_entrys_values_are_listed_by_group_with_readable_names()
+    {
+        IReadOnlyList<ShaderValue> values = ShaderEdits.ValuesOf(Material());
+        // Its numbers only, no textures, each named for what it does and grouped: specular before the surface's.
+        ShaderValue intensity = Assert.Single(values, value => value.Name == "specularIntensityMult");
+        Assert.Equal(("Intensity", "Specular", 1), (intensity.Label, intensity.Group, intensity.Components));
+        Assert.Equal(("Bumpiness", "Surface"), values.Single(value => value.Name == "bumpiness") is var bump ? (bump.Label, bump.Group) : default);
+        Assert.Equal(3, values.Single(value => value.Name == "specMapIntMask").Components);
+        Assert.DoesNotContain(values, value => value.Name.Contains("Sampler", StringComparison.OrdinalIgnoreCase));
+        string[] groups = [.. values.Select(value => value.Group).Distinct()];
+        Assert.True(Array.IndexOf(groups, "Specular") < Array.IndexOf(groups, "Surface"));
+        // One values.json doesn't name keeps its own, in words, under Other.
+        Assert.Equal("Env eff tex tile UV", ShaderEdits.Words("envEffTexTileUV"));
+        Assert.Equal("Use tessellation", ShaderEdits.Words("useTessellation"));
+    }
+
+    [Fact]
+    public void A_change_is_made_in_the_entry_and_a_drag_is_undone_as_one_step()
+    {
+        DrawableMaterial material = Material();
+        var edits = new ShaderEdits();
+        int told = 0;
+        edits.Changed += _ => told++;
+        float[] first = ShaderEdits.Current(material, "specularIntensityMult");
+        float[] Values(float intensity) => [intensity, .. first[1..]];
+
+        // A drag: its first step, then two more joined to it.
+        edits.Set(material, "specularIntensityMult", Values(.2f));
+        edits.Set(material, "specularIntensityMult", Values(.3f), continuing: true);
+        edits.Set(material, "specularIntensityMult", Values(.4f), continuing: true);
+        edits.Close();
+        Assert.Equal(.4f, ShaderEdits.Current(material, "specularIntensityMult")[0]);
+        Assert.True(edits.IsChanged(material, "specularIntensityMult"));
+        Assert.False(edits.IsChanged(material, "bumpiness"));
+        Assert.True(edits.Dirty);
+        Assert.Equal(3, told);
+        // Another value is a step of its own.
+        edits.Set(material, "bumpiness", [2, 0, 0, 0]);
+        edits.Close();
+
+        Assert.True(edits.Undo());
+        Assert.Equal(1, ShaderEdits.Current(material, "bumpiness")[0]);
+        Assert.True(edits.Undo());
+        Assert.Equal(first, ShaderEdits.Current(material, "specularIntensityMult"));
+        Assert.False(edits.Dirty);
+        Assert.False(edits.Undo());
+    }
+
+    [Fact]
+    public void A_reset_puts_the_files_value_back_and_reset_all_every_one_in_one_step()
+    {
+        DrawableMaterial material = Material();
+        var edits = new ShaderEdits();
+        float[] intensity = ShaderEdits.Current(material, "specularIntensityMult"), bump = ShaderEdits.Current(material, "bumpiness");
+        edits.Set(material, "specularIntensityMult", [.5f, 0, 0, 0]);
+        edits.Set(material, "bumpiness", [3, 0, 0, 0]);
+        edits.Close();
+
+        edits.Reset(material, "bumpiness");
+        Assert.Equal(bump, ShaderEdits.Current(material, "bumpiness"));
+        Assert.False(edits.IsChanged(material, "bumpiness"));
+        // A reset is undone like any change.
+        edits.Undo();
+        Assert.Equal(3, ShaderEdits.Current(material, "bumpiness")[0]);
+
+        edits.ResetAll(material);
+        Assert.Equal(intensity, ShaderEdits.Current(material, "specularIntensityMult"));
+        Assert.Equal(bump, ShaderEdits.Current(material, "bumpiness"));
+        Assert.False(edits.Dirty);
+        edits.Undo();
+        Assert.Equal((.5f, 3f), (ShaderEdits.Current(material, "specularIntensityMult")[0], ShaderEdits.Current(material, "bumpiness")[0]));
+
+        // Saved, the values as they are become the file's: what a reset goes back to.
+        edits.MarkSaved();
+        Assert.False(edits.Dirty);
+        Assert.Equal(.5f, edits.Original(material, "specularIntensityMult")[0]);
+    }
+
+    [Fact]
+    public void An_enhanced_entrys_values_are_edited_in_every_copy()
+    {
+        DrawableMaterial material = Material(target: GameTarget.Enhanced);
+        ShaderValue intensity = Assert.Single(ShaderEdits.ValuesOf(material), value => value.Label == "Intensity" && value.Group == "Specular");
+        var edits = new ShaderEdits();
+        float[] values = ShaderEdits.Current(material, intensity.Name);
+        values[0] = .75f;
+        edits.Set(material, intensity.Name, values);
+        Assert.Equal(.75f, ShaderEdits.Current(material, intensity.Name)[0]);
+        Assert.All(material.Gen9Parameters!.Copies, copy => Assert.Contains(.75f, copy.ConstantBuffers.SelectMany(buffer => buffer.Floats.ToArray())));
+    }
+
+    [Fact]
+    public void Changes_go_with_the_drawables_when_they_are_read_again()
+    {
+        DrawableMaterial before = Material(), after = Material();
+        var edits = new ShaderEdits();
+        edits.Set(before, "bumpiness", [2, 0, 0, 0]);
+        edits.Close();
+        Assert.Equal([0], edits.Carry([before], [after]));
+        // The entry read again has the change, it counts as changed from the file, and undo takes it back there.
+        Assert.Equal(2, ShaderEdits.Current(after, "bumpiness")[0]);
+        Assert.True(edits.IsChanged(after, "bumpiness"));
+        Assert.True(edits.Undo());
+        Assert.Equal(1, ShaderEdits.Current(after, "bumpiness")[0]);
+    }
+
+    [Fact]
+    public void A_fields_drag_steps_by_a_hundredth_and_typing_keeps_a_number()
+    {
+        Assert.Equal(.01f, Views.ScrubField.Step(1, fine: false), 5);
+        Assert.Equal(1f, Views.ScrubField.Step(100, fine: false), 5);
+        Assert.Equal(.0001f, Views.ScrubField.Step(0, fine: true), 6);
+        Assert.Equal("0.125", Views.ScrubField.Format(.125f));
+        Assert.Equal("100", Views.ScrubField.Format(100));
+    }
+
+    [AvaloniaFact]
+    public void Typing_in_a_field_keeps_a_number_and_drops_anything_else()
+    {
+        var field = new Views.ScrubField { Value = 1 };
+        var told = new List<float>();
+        field.Edited += (value, _) => told.Add(value);
+        field.StartTyping();
+        field.Editor!.Text = "0,5";
+        field.FinishTyping(keep: true);
+        Assert.Equal([.5f], told);
+        field.StartTyping();
+        field.Editor!.Text = "soft";
+        field.FinishTyping(keep: true);
+        field.StartTyping();
+        field.Editor!.Text = "2";
+        field.FinishTyping(keep: false);
+        Assert.Equal([.5f], told);
+        Assert.False(field.Typing);
+    }
+
+    private static Views.ModelViewer Open(byte[] ydr)
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        return viewer;
+    }
+
+    [AvaloniaFact]
+    public void A_picked_geometry_shows_its_values_and_a_drag_is_drawn_at_once()
+    {
+        Views.ModelViewer viewer = Open(Triangle());
+        Assert.Null(viewer.Card.Material);
+        Assert.False(viewer.CardOverlay.IsWanted);
+
+        // Picked on the model: the card shows its shader's values, under the drawable's name.
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.CardOverlay.IsWanted);
+        Assert.Same(viewer.Surfaces!.Sources[0], viewer.Card.Material);
+        Assert.Equal("tri", viewer.Card.Title);
+        Assert.Contains("SPECULAR", viewer.Card.Groups);
+        Views.ScrubField intensity = viewer.Card.Field("specularIntensityMult")!;
+        float before = intensity.Value;
+        Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
+
+        // Dragged: the entry, the field and what is drawn (the material's specular intensity) follow, with a reset.
+        intensity.BeginDrag();
+        intensity.Drag(20, fine: false, continuing: false);
+        intensity.Drag(40, fine: false, continuing: true);
+        float after = intensity.Value;
+        Assert.NotEqual(before, after);
+        Assert.Equal(after, ShaderEdits.Current(viewer.Card.Material!, "specularIntensityMult")[0]);
+        Assert.Equal(after, viewer.Surfaces.Materials[0].Uniforms[2]);
+        Assert.True(viewer.Card.ResetShown("specularIntensityMult"));
+        Assert.True(viewer.Card.ResetAllShown);
+        Assert.False(viewer.Card.ResetShown("bumpiness"));
+
+        // Ctrl+Z takes the whole drag back, and the card and the drawing with it.
+        Assert.True(viewer.Command('Z'));
+        Assert.Equal(before, intensity.Value);
+        Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
+        Assert.False(viewer.Card.ResetAllShown);
+
+        // Off the model: no card.
+        Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
+        Assert.False(viewer.CardOverlay.IsWanted);
+        viewer.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_value_reset_on_the_card_puts_back_the_files()
+    {
+        Views.ModelViewer viewer = Open(Triangle());
+        viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        Views.ScrubField bump = viewer.Card.Field("bumpiness")!;
+        float before = bump.Value;
+        bump.StartTyping();
+        bump.Editor!.Text = "2.5";
+        bump.FinishTyping(keep: true);
+        Assert.Equal(2.5f, bump.Value);
+        Assert.Equal(2.5f, viewer.Surfaces!.Materials[0].Uniforms[3]);
+        viewer.Card.ResetValue("bumpiness");
+        Assert.Equal(before, bump.Value);
+        Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[3]);
+        Assert.False(viewer.ShaderEdits.Dirty);
+        viewer.Close();
+    }
+}

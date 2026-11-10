@@ -200,6 +200,9 @@ public static class Theme
 
     /// <summary>How far the 3D viewer's overlay row sits below the viewport's top, centred across it.</summary>
     public const double ToolStripInset = 8;
+
+    /// <summary>How far the 3D viewer's shader values card sits in from the viewport's left, clear of the parts arrow.</summary>
+    public const double ShaderCardLeft = 24;
     public const double TextureMipBarHeight = 32;
     public const double TextureCheckerCellSize = 16;
 

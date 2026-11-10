@@ -36,6 +36,7 @@ public class ChromeIcon : Control
         ["image"] = "image",
         ["home"] = "house",
         ["refresh"] = "rotate-cw",
+        ["reset"] = "rotate-ccw",
         ["list"] = "list",
         ["grid"] = "layout-grid",
         ["checkerboard"] = "grid-3x3",

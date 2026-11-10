@@ -34,6 +34,9 @@ internal sealed unsafe partial class ViewportRenderer
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
     private readonly List<Buffer> materialBuffers = [];
+    // Each material's uniforms, and hair's second pass's, by material: what an edit of its values writes to.
+    private Buffer[] materialUniforms = [];
+    private Buffer?[] fringeUniforms = [];
 
     private void CreateSurfacePipelines()
     {
@@ -256,16 +259,18 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
         var fringes = new BindGroup?[drawable.Materials.Count];
+        materialUniforms = new Buffer[groups.Length];
+        fringeUniforms = new Buffer?[groups.Length];
         for (int i = 0; i < groups.Length; i++)
         {
             SurfaceMaterial material = drawable.Materials[i];
             groups[i] = material.Terrain ? TerrainGroup(material) : MaterialGroup(material, material.Uniforms);
+            materialUniforms[i] = materialBuffers[^1];
             // Hair is drawn again, blended, for what isn't solid (SurfaceMaterial.HairFringe).
             if (material.HairFringe)
             {
-                float[] blended = [.. material.Uniforms];
-                blended[10] = (float)AlphaMode.Blend;
-                fringes[i] = MaterialGroup(material, blended);
+                fringes[i] = MaterialGroup(material, Fringe(material));
+                fringeUniforms[i] = materialBuffers[^1];
             }
         }
         // Decals blend over what they lie on; terrain is always solid.
@@ -280,6 +285,27 @@ internal sealed unsafe partial class ViewportRenderer
         ThrowIfFailed();
     }
 
+    // Hair's second pass: its uniforms, blended.
+    private static float[] Fringe(SurfaceMaterial material)
+    {
+        float[] blended = [.. material.Uniforms];
+        blended[10] = (float)AlphaMode.Blend;
+        return blended;
+    }
+
+    /// <summary>
+    /// Draws a material with its uniforms as <paramref name="material"/> has them now, after its values were edited: its
+    /// textures and how it blends stay as they were shown.
+    /// </summary>
+    public void UpdateMaterial(int index, SurfaceMaterial material)
+    {
+        if (index < 0 || index >= materialUniforms.Length)
+            return;
+        queue.WriteBuffer(materialUniforms[index], 0, (ReadOnlySpan<float>)material.Uniforms);
+        if (fringeUniforms[index] is { } fringe)
+            queue.WriteBuffer(fringe, 0, (ReadOnlySpan<float>)Fringe(material));
+    }
+
     private void ClearSurfaces()
     {
         // The GPU memory goes now, not whenever the handles are collected.
@@ -288,6 +314,8 @@ internal sealed unsafe partial class ViewportRenderer
         foreach (Buffer buffer in materialBuffers)
             buffer.Destroy();
         materialBuffers.Clear();
+        materialUniforms = [];
+        fringeUniforms = [];
         surfaceVertices = surfaceIndices = null;
         ShowOverlays([]);
         ShowSolid([]);

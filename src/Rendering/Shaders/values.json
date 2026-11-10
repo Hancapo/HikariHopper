@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "about": "How the 3D viewer's shader values card names a shader entry's numeric values and groups them, by the values' Legacy names (Enhanced ones reach them through FiveFury's catalogue). Groups are shown in the order listed, and values in each group in the order listed; a value not listed keeps its own name, split into words, under Other.",
+  "groups": [
+    {
+      "name": "Paint",
+      "values": {
+        "matDiffuseColor": "Colour",
+        "matDiffuseColor2": "Layer colour",
+        "matDiffuseSpecularRampEnabled": "Ramp",
+        "matMaterialColorScale": "Colour scale",
+        "tintPaletteSelector": "Tint"
+      }
+    },
+    {
+      "name": "Specular",
+      "values": {
+        "specularIntensityMult": "Intensity",
+        "specularFalloffMult": "Falloff",
+        "specularFresnel": "Fresnel",
+        "specMapIntMask": "Map mask",
+        "specTexTileUV": "Map tiling",
+        "specularIntensityMultSpecMap": "Map intensity",
+        "specularFalloffMultSpecMap": "Map falloff",
+        "specIntensityAdjust": "Intensity adjust",
+        "specFalloffAdjust": "Falloff adjust",
+        "reflectivePower": "Reflection",
+        "diffuse2SpecMod": "Layer specular",
+        "specular2Color_DirLerp": "Second lobe",
+        "specular2Factor": "Second lobe falloff",
+        "specular2ColorIntensity": "Second lobe intensity",
+        "SpecDesaturateIntensity": "Desaturate intensity",
+        "SpecDesaturateExponent": "Desaturate exponent"
+      }
+    },
+    {
+      "name": "Surface",
+      "values": {
+        "bumpiness": "Bumpiness",
+        "bumpSelfShadowAmount": "Bump self-shadow",
+        "emissiveMultiplier": "Emissive",
+        "DiffuseTexTileUV": "Diffuse tiling",
+        "HardAlphaBlend": "Hard alpha blend",
+        "AlphaScale": "Alpha scale",
+        "AlphaTest": "Alpha cutoff",
+        "globalAnimUV0": "UV animation, row 1",
+        "globalAnimUV1": "UV animation, row 2",
+        "useTessellation": "Tessellation",
+        "tessellationMultiplier": "Tessellation amount"
+      }
+    },
+    {
+      "name": "Detail",
+      "values": {
+        "detailSettings": "Settings"
+      }
+    },
+    {
+      "name": "Parallax",
+      "values": {
+        "heightScale": "Height scale",
+        "heightBias": "Height bias",
+        "parallaxScaleBias": "Scale and bias",
+        "parallaxSelfShadowAmount": "Self-shadow",
+        "heightScale0": "Layer 1 height scale",
+        "heightBias0": "Layer 1 height bias",
+        "heightScale1": "Layer 2 height scale",
+        "heightBias1": "Layer 2 height bias",
+        "heightScale2": "Layer 3 height scale",
+        "heightBias2": "Layer 3 height bias",
+        "heightScale3": "Layer 4 height scale",
+        "heightBias3": "Layer 4 height bias"
+      }
+    },
+    {
+      "name": "Dirt",
+      "values": {
+        "dirtLevelMod": "Level",
+        "dirtColor": "Colour"
+      }
+    },
+    {
+      "name": "Hair",
+      "values": {
+        "anisotropicSpecularIntensity": "Highlight intensity",
+        "anisotropicSpecularExponent": "Highlight sharpness",
+        "anisotropicSpecularColour": "Highlight colour",
+        "AnisotropicAlphaBias": "Alpha bias",
+        "specularNoiseMapUVScaleFactor": "Noise tiling"
+      }
+    },
+    {
+      "name": "Weather",
+      "values": {
+        "wetnessMultiplier": "Wetness",
+        "materialWetnessMultiplier": "Wetness by material",
+        "envEffThickness": "Snow thickness",
+        "envEffFatThickness": "Snow thickness, fat",
+        "envEffScale": "Snow scale",
+        "envEffTexTileUV": "Snow tiling"
+      }
+    },
+    {
+      "name": "Vegetation",
+      "values": {
+        "umGlobalParams": "Micro-movement",
+        "WindGlobalParams": "Wind",
+        "UseTreeNormals": "Tree normals",
+        "SelfShadowing": "Self-shadowing",
+        "ShadowFalloff": "Shadow falloff"
+      }
+    },
+    {
+      "name": "Damage",
+      "values": {
+        "DamageMultiplier": "Amount",
+        "DamageTextureOffset": "Texture offset",
+        "BoundRadius": "Bound radius",
+        "DamagedWheelOffsets": "Wheel offsets",
+        "bDebugDisplayDamageMap": "Show the damage map",
+        "bDebugDisplayDamageScale": "Show the damage scale"
+      }
+    }
+  ]
+}

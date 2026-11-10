@@ -20,6 +20,10 @@ public partial class ModelViewer : UserControl, IModalContent
     private readonly ViewportOverlay partsTab;
     private readonly ViewportOverlay toolStrip;
     private readonly ViewportOverlay gizmo;
+    // The picked geometry's shader values, at the view's top left, and what has been changed in them.
+    private readonly ViewportOverlay shaderCard;
+    private readonly ShaderEdits shaderEdits = new();
+    private readonly ShaderValuesCard card;
 
     /// <summary>An empty viewer, for the XAML loader and previews.</summary>
     public ModelViewer() : this(new ModelFile("", []))
@@ -40,6 +44,18 @@ public partial class ModelViewer : UserControl, IModalContent
         Gizmo.Dragged += (dx, dy) => Viewport.Turn(dx, dy);
         Viewport.CameraTurned += () => Gizmo.Basis = Viewport.CameraBasis;
         Gizmo.Basis = Viewport.CameraBasis;
+        card = new ShaderValuesCard(shaderEdits);
+        WindowToolTip.SetIsEnabled(card, true);
+        shaderCard = new ViewportOverlay(Viewport, card, left: Ui.Theme.ShaderCardLeft, top: Ui.Theme.ToolStripInset);
+        card.TypingStarted += shaderCard.TakeKeyboard;
+        card.TypingEnded += shaderCard.ReturnKeyboard;
+        shaderEdits.Changed += ShowEdited;
+        Viewport.CommandPressed += key => Command(key);
+        Viewport.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty)
+                card.Room = Viewport.Bounds.Height - 2 * Ui.Theme.ToolStripInset;
+        };
         WindowToolTip.SetIsEnabled(PartsTab, true);
         WindowToolTip.SetIsEnabled(ToolStrip, true);
         TitleText.Text = file.Name;
@@ -423,11 +439,82 @@ public partial class ModelViewer : UserControl, IModalContent
         return false;
     }
 
-    // What is selected in the parts panel is outlined on the model: a drawable's geometries under the rows.
+    // What is selected in the parts panel is outlined on the model: a drawable's geometries under the rows. One geometry
+    // picked has its shader values in the card.
     private void ShowPicked()
     {
-        if (visibility is not null)
-            Viewport.Pick(Parts.Selection.SelectMany(node => node.Parts).Distinct());
+        if (visibility is null)
+            return;
+        Viewport.Pick(Parts.Selection.SelectMany(node => node.Parts).Distinct());
+        ShowCard();
+    }
+
+    /// <summary>The shader values card, while it shows.</summary>
+    internal ShaderValuesCard Card => card;
+
+    /// <summary>The shader values card's window over the viewport.</summary>
+    internal ViewportOverlay CardOverlay => shaderCard;
+
+    /// <summary>What has been changed in the drawable's shader values.</summary>
+    internal ShaderEdits ShaderEdits => shaderEdits;
+
+    /// <summary>
+    /// Shows the shader values of the geometry picked, one geometry at the level shown, in the card, under the name of
+    /// what it belongs to; with anything else picked, or nothing, there is no card.
+    /// </summary>
+    private void ShowCard()
+    {
+        FiveFury.Drawables.DrawableMaterial? material = null;
+        string owner = "";
+        if (surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node]
+            && node.Parts.Select(part => scene.Parts[part].Material).Distinct().ToArray() is [int index] && index < scene.Sources.Count)
+        {
+            material = scene.Sources[index];
+            owner = Parts.Parts is PartVisibility parts ? OwnerOf(parts, node) ?? TitleText.Text ?? "" : "";
+        }
+        if (material is null || material != card.Material || owner != card.Title)
+            card.Show(owner, material);
+        shaderCard.IsWanted = material is not null;
+    }
+
+    // The name of the row a geometry's row is under: its model, or its drawable.
+    private static string? OwnerOf(PartVisibility parts, PartNode node)
+    {
+        string? Find(IEnumerable<PartNode> nodes, string? above)
+        {
+            foreach (PartNode candidate in nodes)
+            {
+                if (candidate.Key == node.Key && candidate.Kind == PartKind.Geometry)
+                    return above;
+                if (Find(candidate.Children, candidate.Name) is { } found)
+                    return found;
+            }
+            return null;
+        }
+        return parts.Sections().Select(section => Find(section.Nodes, null)).FirstOrDefault(found => found is not null);
+    }
+
+    /// <summary>An entry's values changed: every material drawn with it is drawn again with them.</summary>
+    private void ShowEdited(FiveFury.Drawables.DrawableMaterial material)
+    {
+        if (surfaces is not { } scene)
+            return;
+        for (int i = 0; i < scene.Sources.Count; i++)
+            if (scene.Sources[i] == material && scene.Remake(i))
+                Viewport.UpdateMaterial(i);
+    }
+
+    /// <summary>The viewer's Ctrl keys: Z undoes the last change to the shader values.</summary>
+    internal bool Command(char key)
+    {
+        if (!contentShown || surfaces is null)
+            return false;
+        switch (char.ToUpperInvariant(key))
+        {
+            case 'Z':
+                return shaderEdits.Undo();
+        }
+        return false;
     }
 
     /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
@@ -680,7 +767,15 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         base.OnKeyDown(e);
         // Typing in a field (the parts filter) isn't a shortcut.
-        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None || e.Source is TextBox)
+        if (e.Handled || e.Source is TextBox)
+            return;
+        if (e.KeyModifiers == Avalonia.Input.KeyModifiers.Control && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z)
+        {
+            if (Command((char)('A' + (e.Key - Avalonia.Input.Key.A))))
+                e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers != Avalonia.Input.KeyModifiers.None)
             return;
         char? key = e.Key switch
         {
@@ -819,6 +914,10 @@ public partial class ModelViewer : UserControl, IModalContent
     private void ShowAgain(DrawableScene after)
     {
         PartVisibility? before = visibility;
+        // The shader values changed so far go into the drawables read again, which are drawn with them.
+        if (surfaces is { } shown)
+            foreach (int index in shaderEdits.Carry(shown.Sources, after.Sources))
+                after.Remake(index);
         Viewport.Show(after);
         surfaces = after;
         visibility = new PartVisibility(after);
@@ -961,6 +1060,7 @@ public partial class ModelViewer : UserControl, IModalContent
                 partsTab.Close();
                 toolStrip.Close();
                 gizmo.Close();
+                shaderCard.Close();
                 overlay = null;
                 Closed?.Invoke(this, EventArgs.Empty);
             };
