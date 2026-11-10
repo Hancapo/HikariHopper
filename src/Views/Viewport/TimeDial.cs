@@ -261,6 +261,14 @@ public sealed class TimeDial : Control
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimeDialPeer(this);
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        // A screen reader says the new time, however it was moved.
+        if (change.Property == HoursProperty && ControlAutomationPeer.FromElement(this) is TimeDialPeer peer)
+            peer.Moved(change.GetOldValue<float>(), change.GetNewValue<float>());
+    }
+
     // To screen readers, a slider of the day's hours.
     private sealed class TimeDialPeer(TimeDial owner) : ControlAutomationPeer(owner), Avalonia.Automation.Provider.IRangeValueProvider
     {
@@ -276,5 +284,8 @@ public sealed class TimeDial : Control
         public double LargeChange => 1;
 
         public void SetValue(double value) => owner.Move((float)value);
+
+        internal void Moved(float from, float to) =>
+            RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty, (double)from, (double)to);
     }
 }
