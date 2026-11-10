@@ -145,13 +145,33 @@ internal sealed class ShaderEdits
     }
 
     /// <summary>The values as they are now become the file's, once it is saved: what a reset goes back to.</summary>
-    public void MarkSaved()
+    public void MarkSaved() => MarkSaved(Snapshot());
+
+    /// <summary>The changed values as they are now, by entry and name: what a save writes, for <see cref="MarkSaved(IReadOnlyDictionary{DrawableMaterial, Dictionary{string, float[]}})"/>.</summary>
+    public IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Snapshot()
     {
         Close();
+        var now = new Dictionary<DrawableMaterial, Dictionary<string, float[]>>(ReferenceEqualityComparer.Instance);
         foreach ((DrawableMaterial material, Dictionary<string, float[]> own) in originals)
-            foreach (string name in own.Keys.ToList())
-                own[name] = Current(material, name);
+            now[material] = own.Keys.ToDictionary(name => name, name => Current(material, name), StringComparer.Ordinal);
+        return now;
     }
+
+    /// <summary>
+    /// The values a save wrote (<see cref="Snapshot"/>, taken when it started) become the file's: changes made while it
+    /// ran stay changed.
+    /// </summary>
+    public void MarkSaved(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> saved)
+    {
+        foreach ((DrawableMaterial material, Dictionary<string, float[]> values) in saved)
+            if (originals.TryGetValue(material, out var own))
+                foreach ((string name, float[] value) in values)
+                    own[name] = value;
+        Saved?.Invoke();
+    }
+
+    /// <summary>Raised once a save's values became the file's.</summary>
+    public event Action? Saved;
 
     /// <summary>
     /// The same drawables read again (with more of their textures, say): each entry of <paramref name="before"/> is

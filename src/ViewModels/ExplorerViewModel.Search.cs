@@ -551,7 +551,7 @@ public sealed partial class ExplorerViewModel
         }
         else if (model)
         {
-            ModelFileOpened?.Invoke(this, ModelFileOf(hit, file.Data));
+            ModelFileOpened?.Invoke(this, ModelFileOf(hit, file));
             SetStatus($"Opened {name}");
         }
         else
@@ -587,8 +587,9 @@ public sealed partial class ExplorerViewModel
     /// there, read now; the game's for its archetypes; and the folder's other dictionaries, as the index lists them,
     /// each read where it lives only when the search for a texture reaches it.
     /// </summary>
-    private ModelFile ModelFileOf(SearchHit hit, byte[] data)
+    private ModelFile ModelFileOf(SearchHit hit, (byte[] Data, string Source, ArchiveEntryTarget? Target) file)
     {
+        byte[] data = file.Data;
         string name = hit.Name;
         List<SearchHit> dictionaries = ModelFile.IsDrawableName(name)
             ? [.. SearchSiblings(hit).Where(sibling => sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
@@ -623,6 +624,7 @@ public sealed partial class ExplorerViewModel
                     () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0]);
             })],
             OpenTextures = saved => OpenHitTextures(hit, saved),
+            SaveTarget = ModelSaveTargetOf(file.Source, file.Target, name),
         };
     }
 

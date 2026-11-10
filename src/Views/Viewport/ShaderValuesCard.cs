@@ -289,6 +289,8 @@ internal sealed class ShaderValuesCard : Border
             if (material == Material)
                 Refresh();
         };
+        // Saved, its values are the file's: no resets.
+        edits.Saved += Refresh;
     }
 
     // The card's width, and what of it the rows have: less its border, its padding and the scroll bar's gutter.

@@ -198,6 +198,9 @@
           <v:AxesGizmo Name="Gizmo" />
         </Panel>
 
+        <!-- Where the viewer asks whether to save its changes before it closes; the viewport hides while it does. -->
+        <v:TextureDialogLayer Name="DialogLayer" />
+
         <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
         <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"
                 IsHitTestVisible="False" />

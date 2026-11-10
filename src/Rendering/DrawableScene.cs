@@ -57,6 +57,9 @@ internal sealed class DrawableScene
 
     public required IReadOnlyList<SurfaceMaterial> Materials { get => materials; init => materials = [.. value]; }
 
+    /// <summary>The file the drawables were read from, written again as they are now: with their shader values as edited.</summary>
+    public Func<byte[]>? Writer { get; set; }
+
     /// <summary>The shader entry each of <see cref="Materials"/> is made from, in the drawables read: what its values edit.</summary>
     public IReadOnlyList<DrawableMaterial> Sources { get; init; } = [];
 

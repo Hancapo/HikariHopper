@@ -67,13 +67,18 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
         Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
+        Ydr? drawable = extension == ".ydr" ? Ydr.Read(data) : null;
+        Ydd? drawables = extension == ".ydd" ? Ydd.Read(data) : null;
         IReadOnlyList<SceneModel>? models = extension switch
         {
-            ".ydr" => [new SceneModel(Path.GetFileNameWithoutExtension(name), Ydr.Read(data).Drawable, Matrix4x4.Identity)],
-            ".ydd" => [.. Ydd.Read(data).Drawables.Select(entry => new SceneModel(EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
+            ".ydr" => [new SceneModel(Path.GetFileNameWithoutExtension(name), drawable!.Drawable, Matrix4x4.Identity)],
+            ".ydd" => [.. drawables!.Drawables.Select(entry => new SceneModel(EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
             ".yft" => FragmentModels.Of(fragment!, Path.GetFileNameWithoutExtension(name)),
             _ => null,
         };
+        // The file written again from what was read, in its own edition: what a save of its shader values writes.
+        Func<byte[]>? writer = drawable is not null ? () => drawable.Write() : drawables is not null ? () => drawables.Write()
+            : fragment is not null ? () => fragment.Write() : null;
         if (models is not null)
         {
             var named = new List<TextureDictionary>();
@@ -89,6 +94,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
             }
             DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? [], overrides),
                 fragment?.PhysicsLods.FirstOrDefault(lod => lod is not null)?.CompositeBound, fragment?.Lights);
+            scene.Writer = writer;
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);
         }
         if (name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase))

@@ -50,6 +50,8 @@ public partial class ModelViewer : UserControl, IModalContent
         card.TypingStarted += shaderCard.TakeKeyboard;
         card.TypingEnded += shaderCard.ReturnKeyboard;
         shaderEdits.Changed += ShowEdited;
+        shaderEdits.Changed += _ => RefreshTitle();
+        shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += key => Command(key);
         Viewport.PropertyChanged += (_, e) =>
         {
@@ -470,7 +472,7 @@ public partial class ModelViewer : UserControl, IModalContent
             && node.Parts.Select(part => scene.Parts[part].Material).Distinct().ToArray() is [int index] && index < scene.Sources.Count)
         {
             material = scene.Sources[index];
-            owner = Parts.Parts is PartVisibility parts ? OwnerOf(parts, node) ?? TitleText.Text ?? "" : "";
+            owner = Parts.Parts is PartVisibility parts ? OwnerOf(parts, node) ?? file.Name : "";
         }
         if (material is null || material != card.Material || owner != card.Title)
             card.Show(owner, material);
@@ -504,7 +506,7 @@ public partial class ModelViewer : UserControl, IModalContent
                 Viewport.UpdateMaterial(i);
     }
 
-    /// <summary>The viewer's Ctrl keys: Z undoes the last change to the shader values.</summary>
+    /// <summary>The viewer's Ctrl keys: Z undoes the last change to the shader values, S saves them.</summary>
     internal bool Command(char key)
     {
         if (!contentShown || surfaces is null)
@@ -513,9 +515,122 @@ public partial class ModelViewer : UserControl, IModalContent
         {
             case 'Z':
                 return shaderEdits.Undo();
+            case 'S':
+                return Save();
         }
         return false;
     }
+
+    /// <summary>The file's name in the title, marked with an asterisk while it has unsaved changes.</summary>
+    private void RefreshTitle() => TitleText.Text = shaderEdits.Dirty ? $"{file.Name} *" : file.Name;
+
+    /// <summary>Whether the file can be saved where it lives: it was opened from one, and can be written again.</summary>
+    internal bool CanSave => file.SaveTarget is not null && surfaces?.Writer is not null;
+
+    private bool saving;
+
+    /// <summary>The last save, done once it is written (true) or failed (false).</summary>
+    internal Task<bool> Saving { get; private set; } = Task.FromResult(false);
+
+    /// <summary>
+    /// Saves the shader values changed (Ctrl+S): the whole file is written again from what was read, as it is now, and
+    /// put where it lives, into its RPF or over the loose file, off the UI thread. False when nothing is changed, a
+    /// save is under way, or the file can't be saved.
+    /// </summary>
+    internal bool Save()
+    {
+        if (saving || !shaderEdits.Dirty || file.SaveTarget is not { } target || surfaces?.Writer is not { } write)
+            return false;
+        // What is written is what the values are now; a change made while it is put in place stays a change.
+        IReadOnlyDictionary<FiveFury.Drawables.DrawableMaterial, Dictionary<string, float[]>> saved = shaderEdits.Snapshot();
+        byte[] bytes;
+        try
+        {
+            bytes = write();
+            target.Prepare?.Invoke();
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            ShowSaveFailure(error.Message);
+            return false;
+        }
+        saving = true;
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = $"Saving {file.Name}…";
+        Saving = Finish();
+        return true;
+
+        async Task<bool> Finish()
+        {
+            string? failure = null;
+            try
+            {
+                await Task.Run(() => target.Write(bytes));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                failure = error.Message;
+            }
+            saving = false;
+            if (failure is null)
+            {
+                // Read again from what was saved, from now on.
+                data = bytes;
+                shaderEdits.MarkSaved(saved);
+            }
+            target.Finished?.Invoke(failure is null);
+            if (failure is not null)
+                ShowSaveFailure(failure);
+            else if (!closed)
+                StatusText.Text = $"Saved {file.Name}";
+            return failure is null;
+        }
+    }
+
+    private void ShowSaveFailure(string message)
+    {
+        StatusText.Text = $"Couldn't save {file.Name}: {message}";
+        StatusText.Foreground = Ui.Theme.Error;
+    }
+
+    // Whether the viewer may close with its changes unsaved: they were saved, or the dialog was told not to.
+    private bool closeApproved;
+    private TextureUnsavedChangesDialog? unsavedDialog;
+
+    /// <summary>The dialog asking whether to save before the viewer closes, while it is open.</summary>
+    internal TextureUnsavedChangesDialog? UnsavedDialog => unsavedDialog is { IsOpen: true } ? unsavedDialog : null;
+
+    /// <summary>
+    /// Asks whether to save the changed shader values before the viewer closes: Save closes it once they are saved,
+    /// Don't save closes it, Cancel stays. The viewport, a native window that would cover the dialog, hides meanwhile.
+    /// </summary>
+    private void AskToSave()
+    {
+        if (UnsavedDialog is not null)
+            return;
+        Viewport.IsVisible = false;
+        var dialog = new TextureUnsavedChangesDialog { DocumentName = file.Name };
+        dialog.SaveRequested += async (_, _) =>
+        {
+            if (Save() && await Saving)
+            {
+                closeApproved = true;
+                Close();
+            }
+            else
+                ShowViewportAgain();
+        };
+        dialog.DiscardRequested += (_, _) =>
+        {
+            closeApproved = true;
+            Close();
+        };
+        dialog.Rejected += (_, _) => ShowViewportAgain();
+        unsavedDialog = dialog;
+        dialog.Open(DialogLayer);
+    }
+
+    private void ShowViewportAgain() => Viewport.IsVisible = IsOpen && overlay?.IsTopmost != false && !closed;
 
     /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
     internal void FrameParts(IReadOnlyList<PartNode> nodes)
@@ -1088,6 +1203,11 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
+        if (!closeApproved && !closed && shaderEdits.Dirty && CanSave)
+        {
+            AskToSave();
+            return;
+        }
         closed = true;
         timeDropdown?.Close();
         levelsDropdown?.Close();
