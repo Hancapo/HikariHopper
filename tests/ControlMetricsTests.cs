@@ -516,8 +516,9 @@ public sealed class ControlMetricsTests
     {
         foreach ((string name, IReadOnlyList<string> paths) in LucideIcons.Paths)
         {
+            // A filled part (an icon's shadow) is marked so.
             foreach (string data in paths)
-                Assert.True(Geometry.Parse(data).Bounds.Width >= 0, name);
+                Assert.True(Geometry.Parse(data.StartsWith("fill:", StringComparison.Ordinal) ? data[5..] : data).Bounds.Width >= 0, name);
         }
         foreach (string name in ChromeIcon.Names.Values)
             Assert.True(LucideIcons.Paths.ContainsKey(name), name);

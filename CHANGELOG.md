@@ -9,12 +9,14 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Added
 
 - Fly the camera and frame the view in the 3D viewer for collisions and navmeshes too. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
+- Pick a model's level of detail from a list that shows each level's triangles, and turn the mesh counts on or off; the viewer remembers which. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
 
 ### Changed
 
 - A ped's parts in the 3D viewer are listed head to toe, with each kind's variants in number order. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - A collision's materials, and what a navmesh's colours mean, are listed in the 3D viewer's parts panel, where each can be hidden or found, instead of in a bar under the view. ([#148](https://github.com/Hancapo/HikariHopper/pull/148))
 - A fragment's intact and damaged states are rows in the 3D viewer's parts panel, each with its parts, picked as a ped's variants are; its embedded textures are a row at the panel's foot. Both were toolbar buttons. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
+- The 3D viewer has no toolbar: what is drawn over the model (shadows, skeleton, collision, lights) is a row at the top of the view, and the level of detail, the mesh counts, Orbit | Fly and the time of day are in the footer. The parts panel opens when asked for. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
 
 ### Fixed
 

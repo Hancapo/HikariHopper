@@ -22,14 +22,15 @@ internal sealed class ViewportOverlay
 
     private readonly Control viewport;
     private readonly Control content;
-    // Where it goes: this far in from the viewport's left edge, and this far down from its top, or centred on its height.
-    private readonly double left;
+    // Where it goes: this far in from the viewport's left edge, or centred across it; and this far down from its top,
+    // or centred on its height.
+    private readonly double? left;
     private readonly double? top;
     private Window? window;
     private Window? owner;
     private bool wanted;
 
-    public ViewportOverlay(Control viewport, Control content, double left = 0, double? top = null)
+    public ViewportOverlay(Control viewport, Control content, double? left = 0, double? top = null)
     {
         this.viewport = viewport;
         this.content = content;
@@ -82,7 +83,9 @@ internal sealed class ViewportOverlay
         window ??= Create();
         content.Measure(Size.Infinity);
         double height = Math.Max(content.DesiredSize.Height, content.Bounds.Height);
-        window.Position = viewport.PointToScreen(new Point(left, top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
+        double width = Math.Max(content.DesiredSize.Width, content.Bounds.Width);
+        window.Position = viewport.PointToScreen(new Point(left ?? Math.Round((viewport.Bounds.Width - width) / 2),
+            top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
         if (!window.IsVisible)
         {
             window.Show(main);
