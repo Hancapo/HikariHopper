@@ -967,6 +967,21 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.LevelRows[2].Trigger();
         Assert.Equal(1, viewer.Visibility!.Lod);
         Assert.True(viewer.LevelsOpen);
+        // From the keyboard: the level shown is marked; Down stops at the last one it has, Up goes back, Enter picks.
+        Assert.Equal([false, true, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Down));
+        Assert.Equal([false, true, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Up));
+        Assert.Equal([true, false, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.False(viewer.LevelsKey(Avalonia.Input.Key.A));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Enter));
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal(0, viewer.Visibility!.Lod);
+        Assert.False(viewer.LevelsOpen);
+        viewer.Shortcut('2');
+        ExplorerStateRenders.Pump(450);
+        viewer.ToggleLevels();
+        Assert.True(viewer.LevelsOpen);
         viewer.LevelRows[0].Trigger();
         ExplorerStateRenders.Pump(50);
         Assert.Equal(0, viewer.Visibility!.Lod);
