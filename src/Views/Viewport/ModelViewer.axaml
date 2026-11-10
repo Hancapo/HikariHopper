@@ -194,6 +194,8 @@
               </StackPanel>
             </c:RoundedClip>
           </Border>
+          <!-- The world's axes as the camera sees them, at the view's top right: an axis clicked looks along it. -->
+          <v:AxesGizmo Name="Gizmo" />
         </Panel>
 
         <!-- The card's outline, drawn over the content so the content keeps the whole card. -->

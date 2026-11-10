@@ -195,6 +195,9 @@ public static class Theme
     /// <summary>How far the 3D viewer's parts arrow sits below the viewport's top.</summary>
     public const double PartsTabTop = 8;
 
+    /// <summary>How far the 3D viewer's axes gizmo sits in from the viewport's top right corner.</summary>
+    public const double GizmoInset = 6;
+
     /// <summary>How far the 3D viewer's overlay row sits below the viewport's top, centred across it.</summary>
     public const double ToolStripInset = 8;
     public const double TextureMipBarHeight = 32;

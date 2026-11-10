@@ -22,19 +22,21 @@ internal sealed class ViewportOverlay
 
     private readonly Control viewport;
     private readonly Control content;
-    // Where it goes: this far in from the viewport's left edge, or centred across it; and this far down from its top,
-    // or centred on its height.
+    // Where it goes: this far in from the viewport's left edge, or from its right, or centred across it; and this far
+    // down from its top, or centred on its height.
     private readonly double? left;
+    private readonly double? right;
     private readonly double? top;
     private Window? window;
     private Window? owner;
     private bool wanted;
 
-    public ViewportOverlay(Control viewport, Control content, double? left = 0, double? top = null)
+    public ViewportOverlay(Control viewport, Control content, double? left = 0, double? top = null, double? right = null)
     {
         this.viewport = viewport;
         this.content = content;
-        this.left = left;
+        this.left = right is null ? left : null;
+        this.right = right;
         this.top = top;
         viewport.PropertyChanged += (_, e) =>
         {
@@ -84,8 +86,8 @@ internal sealed class ViewportOverlay
         content.Measure(Size.Infinity);
         double height = Math.Max(content.DesiredSize.Height, content.Bounds.Height);
         double width = Math.Max(content.DesiredSize.Width, content.Bounds.Width);
-        window.Position = viewport.PointToScreen(new Point(left ?? Math.Round((viewport.Bounds.Width - width) / 2),
-            top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
+        double x = right is { } fromRight ? viewport.Bounds.Width - width - fromRight : left ?? Math.Round((viewport.Bounds.Width - width) / 2);
+        window.Position = viewport.PointToScreen(new Point(x, top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
         if (!window.IsVisible)
         {
             window.Show(main);

@@ -656,6 +656,8 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Each in a window of its own, over the main one: the viewport is a native window, which covers what's drawn in it.
         Assert.True(viewer.ToolStripOverlay.IsShown);
         Assert.True(viewer.PartsTabOverlay.IsShown);
+        Assert.True(viewer.GizmoOverlay.IsShown);
+        Assert.Same(viewer.GizmoOverlay.Window, Avalonia.Controls.TopLevel.GetTopLevel(viewer.Gizmo));
         Avalonia.Controls.Window tools = viewer.ToolStripOverlay.Window!, tab = viewer.PartsTabOverlay.Window!;
         Assert.NotSame(tools, tab);
         Assert.Same(window, tools.Owner);
@@ -705,6 +707,10 @@ public sealed class ModelViewerTests : ExplorerTestBase
             Assert.Equal(middle, well.Center.X, 1.0);
             // Apart: the arrow takes nothing from the row.
             Assert.True(arrow.Right < well.X);
+            // The axes in the top right corner.
+            Avalonia.Rect axes = On(viewer.Gizmo);
+            Assert.Equal(edge.X / scale + viewer.Viewport.Bounds.Width - Ui.Theme.GizmoInset, axes.Right, 0.5);
+            Assert.Equal(edge.Y / scale + Ui.Theme.GizmoInset, axes.Y, 0.5);
         }
         Centred();
         // It follows the viewport: opening the parts panel moves the viewport's edge, and the tools with it.
@@ -738,6 +744,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.Close();
         ExplorerStateRenders.Pump(300);
         Assert.False(viewer.ToolStripOverlay.IsShown);
+        Assert.False(viewer.GizmoOverlay.IsShown);
         Assert.False(tools.IsVisible);
         Assert.False(tab.IsVisible);
         window.Close();

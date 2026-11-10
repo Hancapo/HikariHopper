@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 - Fly the camera and frame the view in the 3D viewer for collisions and navmeshes too. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - Pick a model's level of detail from a list that shows each level's triangles, and turn the mesh counts on or off; the viewer remembers which. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
+- An axes gizmo in the 3D viewer's top right corner: click an axis to look from it, again for the other side, or drag it to orbit. ([#155](https://github.com/Hancapo/HikariHopper/pull/155))
 
 ### Changed
 

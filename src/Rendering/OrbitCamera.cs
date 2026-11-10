@@ -84,6 +84,28 @@ internal sealed class OrbitCamera
         Pitch = Math.Clamp(Pitch + dy * .006f, -1.5f, 1.5f);
     }
 
+    /// <summary>
+    /// Turns to look from along a world axis (+X, -Y, +Z…), as a 3D tool's axis gizmo does: from the side, level; from
+    /// above or below, as near straight as the camera goes, with +Y up the screen. Orbiting, it looks at the centre from
+    /// there; flying, the eye stays where it is and looks the other way along the axis.
+    /// </summary>
+    public void LookFrom(Vector3 axis)
+    {
+        Vector3 eye = Eye;
+        if (MathF.Abs(axis.Z) > MathF.Abs(axis.X) && MathF.Abs(axis.Z) > MathF.Abs(axis.Y))
+        {
+            Yaw = -MathF.PI / 2;
+            Pitch = MathF.Sign(axis.Z) * 1.5f;
+        }
+        else
+        {
+            Yaw = MathF.Atan2(axis.Y, axis.X);
+            Pitch = 0;
+        }
+        if (Free)
+            Center += eye - Eye;
+    }
+
     /// <summary>Moves closer for positive wheel steps, further for negative.</summary>
     public void Zoom(float steps) => Distance = Math.Clamp(Distance * MathF.Exp(-steps * .12f), Radius * .02f, Radius * 200);
 
