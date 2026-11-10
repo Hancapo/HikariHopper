@@ -476,6 +476,10 @@ public partial class ModelViewer : UserControl, IModalContent
         levelsDropdown = DropdownWindow.OpenAbove(LodWell, rows, 4);
         if (levelsDropdown is null)
             return;
+        // From the keyboard: the level shown marked to start with, Up and Down to another, Enter or Space to pick it.
+        foreach (LevelRow row in listed)
+            row.Highlighted = row.Lod == visibility!.Lod;
+        levelsDropdown.KeyDown += (_, e) => e.Handled |= LevelsKey(e.Key);
         PaintLevelWell();
         levelsDropdown.Closed += (_, _) =>
         {
@@ -486,10 +490,43 @@ public partial class ModelViewer : UserControl, IModalContent
         };
     }
 
+    /// <summary>
+    /// A key in the open list of levels: Up and Down move the mark over the levels the drawable has, Enter or Space picks
+    /// the one marked, 1 to 4 a level. False for any other key.
+    /// </summary>
+    internal bool LevelsKey(Avalonia.Input.Key key)
+    {
+        if (LevelRows.Count == 0)
+            return false;
+        int marked = LevelRows.ToList().FindIndex(row => row.Highlighted);
+        switch (key)
+        {
+            case Avalonia.Input.Key.Up or Avalonia.Input.Key.Down:
+                int step = key == Avalonia.Input.Key.Down ? 1 : -1;
+                for (int at = marked + step; at >= 0 && at < LevelRows.Count; at += step)
+                    if (LevelRows[at].Available)
+                    {
+                        foreach (LevelRow row in LevelRows)
+                            row.Highlighted = row == LevelRows[at];
+                        break;
+                    }
+                return true;
+            case Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space:
+                if (marked >= 0)
+                    LevelRows[marked].Trigger();
+                return true;
+            case >= Avalonia.Input.Key.D1 and <= Avalonia.Input.Key.D4:
+                LevelRows[key - Avalonia.Input.Key.D1].Trigger();
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>A level in the footer's list: its key, its name, its triangles; faded, and not picked, when the drawable lacks it.</summary>
     internal sealed class LevelRow : Border
     {
         private readonly TextBlock name;
+        private bool highlighted;
 
         public LevelRow(int lod, string triangles, bool available, bool current)
         {
@@ -497,7 +534,7 @@ public partial class ModelViewer : UserControl, IModalContent
             Available = available;
             Height = Ui.Theme.MenuItemHeight;
             CornerRadius = Ui.Theme.InnerCorner;
-            Background = current ? Ui.Theme.HoverChrome : Avalonia.Media.Brushes.Transparent;
+            Background = Avalonia.Media.Brushes.Transparent;
             Opacity = available ? 1 : Views.Controls.ChromeToolButton.DisabledOpacity;
             if (available)
                 Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
@@ -508,8 +545,8 @@ public partial class ModelViewer : UserControl, IModalContent
             DockPanel.SetDock(count, Dock.Right);
             Child = new DockPanel { Children = { key, count, name } };
             Triangles = triangles;
-            PointerEntered += (_, _) => { if (Available && !current) Background = Ui.Theme.HoverChrome; };
-            PointerExited += (_, _) => { if (!current) Background = Avalonia.Media.Brushes.Transparent; };
+            PointerEntered += (_, _) => Paint();
+            PointerExited += (_, _) => Paint();
             PointerReleased += (_, e) =>
             {
                 if (e.InitialPressMouseButton == Avalonia.Input.MouseButton.Left)
@@ -520,6 +557,20 @@ public partial class ModelViewer : UserControl, IModalContent
         public int Lod { get; }
 
         public bool Available { get; }
+
+        /// <summary>Whether the keyboard's mark is on it: it fills as under the pointer.</summary>
+        public bool Highlighted
+        {
+            get => highlighted;
+            set
+            {
+                highlighted = value;
+                Paint();
+            }
+        }
+
+        private void Paint() =>
+            Background = highlighted || (Available && IsPointerOver) ? Ui.Theme.HoverChrome : Avalonia.Media.Brushes.Transparent;
 
         /// <summary>Its triangles as listed, or "none".</summary>
         public string Triangles { get; }
