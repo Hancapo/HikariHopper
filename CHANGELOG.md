@@ -17,6 +17,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A collision's materials, and what a navmesh's colours mean, are listed in the 3D viewer's parts panel, where each can be hidden or found, instead of in a bar under the view. ([#148](https://github.com/Hancapo/HikariHopper/pull/148))
 - A fragment's intact and damaged states are rows in the 3D viewer's parts panel, each with its parts, picked as a ped's variants are; its embedded textures are a row at the panel's foot. Both were toolbar buttons. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
 - The 3D viewer has no toolbar: what is drawn over the model (shadows, skeleton, collision, lights) is a row at the top of the view, and the level of detail, the mesh counts, Orbit | Fly and the time of day are in the footer. The parts panel opens when asked for. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
+- The 3D viewer's time of day is a dial of the day, with noon at the top and the sun or moon to drag round it, in place of a slider; the time button shows it small. ([#154](https://github.com/Hancapo/HikariHopper/pull/154))
 
 ### Fixed
 
