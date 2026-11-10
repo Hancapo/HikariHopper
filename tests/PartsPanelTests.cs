@@ -275,6 +275,47 @@ public sealed class PartsPanelVariantTests
     }
 
     [AvaloniaFact]
+    public void A_fragments_state_and_a_drawables_embedded_textures_are_in_the_panel()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
+        // Neither until the model has them.
+        Assert.False(panel.StateRow.IsVisible);
+        Assert.False(panel.TexturesRow.IsVisible);
+
+        // A model with a damaged state has the switch, on the side it is in; picking a side asks for it, and the panel
+        // waits to be told it happened.
+        panel.ShowState(true, false);
+        Assert.True(panel.StateRow.IsVisible);
+        Assert.Equal(0, panel.StateSwitch.SelectedIndex);
+        Assert.Equal(["Intact", "Damaged"], panel.StateSwitch.Sides.Select(side => side.Text));
+        var asked = new List<bool>();
+        panel.DamagedRequested += asked.Add;
+        panel.StateSwitch.Pick(1);
+        Assert.Equal([true], asked);
+        Assert.Equal(0, panel.StateSwitch.SelectedIndex);
+        panel.ShowState(true, true);
+        Assert.Equal(1, panel.StateSwitch.SelectedIndex);
+        panel.StateSwitch.Pick(0);
+        Assert.Equal([true, false], asked);
+        panel.ShowState(false, false);
+        Assert.False(panel.StateRow.IsVisible);
+
+        // Embedded textures are a row at the foot, with how many, which asks for them when pressed.
+        int opened = 0;
+        panel.TexturesRequested += () => opened++;
+        panel.RequestTextures();
+        Assert.Equal(0, opened);
+        panel.ShowTextures(12);
+        Assert.True(panel.TexturesRow.IsVisible);
+        Assert.Equal("12", panel.TexturesCountText);
+        Assert.Contains(panel.TexturesRow.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == "Embedded textures");
+        panel.RequestTextures();
+        Assert.Equal(1, opened);
+        panel.ShowTextures(0);
+        Assert.False(panel.TexturesRow.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void A_collisions_materials_are_rows_with_their_colour_to_show_hide_and_find()
     {
         // Two boxes of tarmac and one of another material, apart from each other.

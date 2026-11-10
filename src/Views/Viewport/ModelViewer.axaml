@@ -111,18 +111,6 @@
                     <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
                   </StackPanel>
                 </Border>
-                <!-- The drawable's embedded textures, in the texture viewer. -->
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="TexturesButton" Classes="tool" IconKind="image" AutomationProperties.Name="Embedded textures" />
-                  </StackPanel>
-                </Border>
-                <!-- A fragment intact or damaged. -->
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="DamagedButton" Classes="tool" IconKind="damaged" AutomationProperties.Name="Damaged" />
-                  </StackPanel>
-                </Border>
               </StackPanel>
             </DockPanel>
           </Panel>
