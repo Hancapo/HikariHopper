@@ -183,9 +183,12 @@ public sealed class TimeDial : Control
         return hour < 0 ? hour + 24 : hour;
     }
 
-    // Sets the time from the user, and says so, when it changes.
-    private void Move(float hours)
+    // Sets the time from the user, and says so, when it changes; a value that isn't a time (from a screen reader) is
+    // left alone.
+    internal void Move(float hours)
     {
+        if (!float.IsFinite(hours))
+            return;
         hours = Wrap(hours);
         if (hours == Hours)
             return;

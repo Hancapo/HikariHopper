@@ -65,6 +65,12 @@ public sealed class TimeDialTests
         Assert.Equal(0.75f, dial.Hours);
         window.KeyPressQwerty(PhysicalKey.ArrowLeft, RawInputModifiers.None);
         Assert.Equal(0.5f, dial.Hours);
+        // What isn't a time is left alone.
+        int before = moved.Count;
+        dial.Move(float.NaN);
+        dial.Move(float.PositiveInfinity);
+        Assert.Equal(0.5f, dial.Hours);
+        Assert.Equal(before, moved.Count);
         window.Close();
     }
 
