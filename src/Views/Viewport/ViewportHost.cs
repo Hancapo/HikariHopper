@@ -34,6 +34,11 @@ internal sealed partial class ViewportHost : NativeControlHost
     private bool dragging;
     private int mouseX;
     private int mouseY;
+    // Where the left button went down, and whether it moved off it: a press that doesn't is a click, which picks.
+    private int pressX;
+    private int pressY;
+    private bool pressMoved;
+    private int[] picked = [];
     private int surfaceWidth;
     private int surfaceHeight;
     // What is framed, the world's origin until a file says where its content is; and what is shown.
@@ -109,6 +114,19 @@ internal sealed partial class ViewportHost : NativeControlHost
         overlays = segments;
         renderer?.ShowOverlays(segments);
     }
+
+    /// <summary>Outlines these of the drawable's parts, by index, as picked; none outlines none.</summary>
+    internal void Pick(IEnumerable<int> parts)
+    {
+        picked = [.. parts];
+        renderer?.Pick(picked);
+    }
+
+    /// <summary>The parts outlined, by index.</summary>
+    internal IReadOnlyList<int> Picked => picked;
+
+    /// <summary>Raised when the view is clicked without dragging, with the ray from the eye through the pointer, in the world.</summary>
+    public event Action<System.Numerics.Vector3, System.Numerics.Vector3>? Clicked;
 
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
     internal void ShowParts(bool[] shown)
@@ -195,6 +213,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         surfaces = drawable;
         partsShown = null;
+        picked = [];
         overlays = [];
         solid = [];
         shown = null;
@@ -247,6 +266,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 renderer.Show(surfaces);
                 if (partsShown is not null)
                     renderer.ShowParts(partsShown);
+                renderer.Pick(picked);
                 renderer.ShowOverlays(overlays);
                 renderer.ShowSolid(solid);
             }
@@ -410,12 +430,15 @@ internal sealed partial class ViewportHost : NativeControlHost
             case LeftDown:
             case RightDown when r.Camera.Free:
                 (mouseX, mouseY) = Point(lParam);
+                if (message == LeftDown)
+                    (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
                 dragging = true;
                 SetFocus(window);
                 SetCapture(window);
                 return 0;
             case MouseMove when dragging:
                 (int x, int y) = Point(lParam);
+                pressMoved |= Math.Abs(x - pressX) + Math.Abs(y - pressY) > 3;
                 if (r.Camera.Free)
                     r.Camera.Look(x - mouseX, y - mouseY);
                 else
@@ -424,6 +447,12 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case LeftUp:
             case RightUp when dragging:
+                if (message == LeftUp && dragging && !pressMoved)
+                {
+                    (int clickX, int clickY) = Point(lParam);
+                    (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
+                    Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                }
                 dragging = false;
                 ReleaseCapture();
                 return 0;

@@ -257,6 +257,55 @@ internal sealed class PartsPanel : UserControl
     /// <summary>Raised when the user shows or hides parts.</summary>
     public event Action? Changed;
 
+    /// <summary>Raised when which rows are selected changes.</summary>
+    public event Action? SelectionChanged;
+
+    // The selection last told, to tell only when it changes.
+    private string[] toldSelection = [];
+
+    /// <summary>
+    /// Selects the first row a test picks, opening the rows it is under and scrolling to it, as picking it on the model
+    /// does; false when no row is picked.
+    /// </summary>
+    internal bool Reveal(Func<PartNode, bool> match)
+    {
+        List<PartNode>? Path(PartNode node)
+        {
+            if (match(node))
+                return [node];
+            foreach (PartNode child in node.Children)
+                if (Path(child) is { } below)
+                    return [node, .. below];
+            return null;
+        }
+        foreach (PartSection section in sections)
+            foreach (PartNode top in section.Nodes)
+                if (Path(top) is { } path)
+                {
+                    foreach (PartNode above in path.Take(path.Count - 1))
+                        expanded.Add(above.Key);
+                    if (Filter.Text is { Length: > 0 } && !path[^1].Name.Contains(Filter.Text.Trim(), StringComparison.OrdinalIgnoreCase))
+                        Filter.Text = "";
+                    selected.Clear();
+                    selected.Add(path[^1].Key);
+                    cursor = anchor = path[^1].Key;
+                    Refresh();
+                    if (rowControls.FirstOrDefault(row => Rows[row.Item2].Node.Key == path[^1].Key).Item1 is { } shown)
+                        shown.BringIntoView();
+                    return true;
+                }
+        return false;
+    }
+
+    /// <summary>Selects nothing, as a click on the model away from it does.</summary>
+    internal void ClearSelection()
+    {
+        if (selected.Count == 0)
+            return;
+        selected.Clear();
+        Refresh();
+    }
+
     /// <summary>Raised to turn the camera to these rows' parts: double-click, Enter, or Frame in the menu.</summary>
     public event Action<IReadOnlyList<PartNode>>? FrameRequested;
 
@@ -646,6 +695,12 @@ internal sealed class PartsPanel : UserControl
         }
         Rows = listed;
         selected.IntersectWith(listed.Select(row => row.Item1.Key));
+        string[] now = [.. selected.Order(StringComparer.Ordinal)];
+        if (!now.SequenceEqual(toldSelection))
+        {
+            toldSelection = now;
+            SelectionChanged?.Invoke();
+        }
         bool allOpen = AllExpanded;
         // A flat list (a collision's materials) has nothing to open or close.
         ExpandButton.IsVisible = TreeNodes().Any(node => node.Children.Count > 0);

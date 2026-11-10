@@ -238,6 +238,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         CreateLighting();
         CreateSurfacePipelines();
         CreateAntialiasing();
+        CreateOutline();
         Resize(width, height);
         ThrowIfFailed();
     }
@@ -363,6 +364,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         depthView = depth.CreateView();
         CreateHdr();
         CreateAntialiasingTargets();
+        CreateOutlineTargets();
     }
 
     /// <summary>Draws and presents a frame.</summary>
@@ -480,6 +482,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.SetBindGroup(2, lightGroup!);
             mapped.Draw(3);
             mapped.End();
+            DrawOutline(encoder);
             // The solid collision over the model, its nearest surface only, then the lines over everything.
             if (solidBuffer is not null)
             {
@@ -587,6 +590,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
         DisposeAntialiasing();
+        DestroyOutline();
         ClearSurfaces();
         surface?.Unconfigure();
     }
