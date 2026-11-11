@@ -286,8 +286,8 @@ internal sealed class ShaderValuesCard : Border
     private static readonly Dictionary<string, bool> Opened = new(StringComparer.Ordinal);
 
     private readonly ShaderEdits edits;
-    private readonly TextBlock title;
-    private readonly TextBlock shader;
+    // What the geometry belongs to: the card shows it as the row it points at, not as a title.
+    private string title = "";
     private readonly StackPanel groups;
     private readonly ScrollViewer scroller;
     private readonly ChromeToolButton resetAll;
@@ -307,16 +307,6 @@ internal sealed class ShaderValuesCard : Border
     {
         this.edits = edits;
         Width = CardWidth + NotchWidth;
-        title = new TextBlock { FontSize = Ui.Theme.FontSize, FontWeight = FontWeight.SemiBold, Foreground = Ui.Theme.Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        shader = new TextBlock
-        {
-            FontFamily = Ui.Theme.MonoFont,
-            FontSize = Ui.Theme.SmallFontSize,
-            Foreground = Ui.Theme.TextFaint,
-            Margin = new Thickness(6, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
         groups = new StackPanel();
         scroller = new ScrollViewer
         {
@@ -332,21 +322,13 @@ internal sealed class ShaderValuesCard : Border
         };
         Avalonia.Automation.AutomationProperties.SetName(resetAll, "Reset all the values");
         ThemedToolTip.Set(resetAll, "Put every value back as the file has it");
-        var keys = new TextBlock { Text = "Ctrl+Z · Ctrl+S", FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(resetAll, Dock.Right);
-        var foot = new Border
-        {
-            BorderBrush = Ui.Theme.BorderHard,
-            BorderThickness = new Thickness(0, 1, 0, 0),
-            Padding = new Thickness(10, 5, 10, 6),
-            Child = new DockPanel { Children = { resetAll, keys } },
-        };
         alsoOn = new TextBlock
         {
             FontSize = Ui.Theme.SmallFontSize,
             Foreground = Ui.Theme.TextFaint,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 3, 0, 0),
+            Margin = new Thickness(0, 0, 0, 5),
             IsVisible = false,
         };
         applyTo = new SegmentedSwitch { Height = 22, VerticalAlignment = VerticalAlignment.Center };
@@ -357,18 +339,33 @@ internal sealed class ShaderValuesCard : Border
         Avalonia.Automation.AutomationProperties.SetName(applyTo, "Apply to");
         var applyLabel = new TextBlock { Text = "Apply to", FontSize = Ui.Theme.FontSize, Foreground = Ui.Theme.TextDim, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(applyTo, Dock.Right);
-        applyRow = new DockPanel { Margin = new Thickness(0, 7, 0, 0), IsVisible = false, Children = { applyTo, applyLabel } };
-        Header = new StackPanel { Children = { new DockPanel { Children = { title, shader } }, alsoOn, applyRow } };
-        DockPanel.SetDock(title, Dock.Left);
-        var head = new Border
+        applyRow = new DockPanel { Margin = new Thickness(0, 0, 10, 0), IsVisible = false, Children = { applyTo, applyLabel } };
+        // The foot: on a shared entry, what else the geometry is drawn on, and Apply to beside Reset all.
+        var foot = new Border
         {
             BorderBrush = Ui.Theme.BorderHard,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(10, 8, 10, 7),
-            Child = Header,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = new StackPanel { Children = { alsoOn, new DockPanel { Children = { resetAll, applyRow } } } },
         };
-        DockPanel.SetDock(head, Dock.Top);
         DockPanel.SetDock(foot, Dock.Bottom);
+        // Its close mark, at its top right, on the first group's heading: a click lets go of the pick.
+        var close = new ChromeToolButton
+        {
+            Width = 20,
+            Height = 20,
+            Margin = new Thickness(0, 2, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Bordered = false,
+            IconKind = "close",
+            IconSize = 10,
+            IconThickness = 1.4,
+            CornerRadius = Ui.Theme.InnerCorner,
+        };
+        close.Click += (_, _) => RequestClose();
+        ThemedToolTip.Set(close, "Close");
+        Avalonia.Automation.AutomationProperties.SetName(close, "Close the shader values");
         var face = new Border
         {
             Background = Ui.Theme.ChromeBg,
@@ -377,7 +374,7 @@ internal sealed class ShaderValuesCard : Border
             CornerRadius = Ui.Theme.PanelCorner,
             ClipToBounds = true,
             Margin = new Thickness(NotchWidth, 0, 0, 0),
-            Child = new DockPanel { Children = { head, foot, scroller } },
+            Child = new Panel { Children = { new DockPanel { Children = { foot, scroller } }, close } },
         };
         // Its fill covers the card's edge where it meets it; its outline is the card's.
         notch = new Avalonia.Controls.Shapes.Path
@@ -415,8 +412,11 @@ internal sealed class ShaderValuesCard : Border
     /// <summary>Where the notch points, down from the card's top; none while it's hidden.</summary>
     internal double? PointedAt => notch.IsVisible ? notch.Margin.Top + 7 : null;
 
-    /// <summary>The card's header, under the title: where what applies to the whole entry goes.</summary>
-    private StackPanel Header { get; }
+    /// <summary>Its close mark was clicked: the viewer lets go of the pick, and the card goes with it.</summary>
+    public event Action? CloseRequested;
+
+    /// <summary>Closes the card, as its close mark does.</summary>
+    internal void RequestClose() => CloseRequested?.Invoke();
 
     /// <summary>The shader entry shown; none while nothing is picked.</summary>
     public DrawableMaterial? Material { get; private set; }
@@ -447,7 +447,7 @@ internal sealed class ShaderValuesCard : Border
     internal bool ResetAllShown => resetAll.IsEnabled;
 
     /// <summary>The title shown: what the geometry belongs to.</summary>
-    internal string Title => title.Text ?? "";
+    internal string Title => title;
 
     /// <summary>The field of one number of a value; none when it isn't listed.</summary>
     internal ScrubField? Field(string name, int component = 0) =>
@@ -532,7 +532,7 @@ internal sealed class ShaderValuesCard : Border
     /// <summary>The tallest the card grows; its values scroll past that.</summary>
     public double Room
     {
-        set => scroller.MaxHeight = Math.Max(80, value - 110);
+        set => scroller.MaxHeight = Math.Max(80, value - 70);
     }
 
     /// <summary>
@@ -553,15 +553,13 @@ internal sealed class ShaderValuesCard : Border
         groups.Children.Clear();
         if (material is null)
             return;
-        title.Text = name;
-        ShaderDefinition? definition = (material.Gen9Parameters is not null ? ShaderCatalog.Enhanced : ShaderCatalog.Legacy).Find(material.ShaderHash);
-        shader.Text = definition?.Name ?? $"0x{material.ShaderHash.Value:X8}";
+        title = name;
         foreach (IGrouping<string, ShaderValue> group in ShaderEdits.ValuesOf(material).GroupBy(value => value.Group))
         {
             var body = new StackPanel { Margin = new Thickness(10, 0, 10, 5) };
             foreach (ShaderValue value in group)
                 body.Children.Add(Build(material, value));
-            Control header = Heading(group.Key, group.Count(), sections.Count > 0);
+            Control header = Heading(group.Key, sections.Count > 0);
             sections.Add((group.Key, header, body));
             groups.Children.Add(header);
             groups.Children.Add(body);
@@ -579,14 +577,12 @@ internal sealed class ShaderValuesCard : Border
         Refresh();
     }
 
-    // A group's heading: a chevron, its name and how many values it holds; a click opens or folds it.
-    private Control Heading(string group, int count, bool rule)
+    // A group's heading: a chevron and its name; a click opens or folds it.
+    private Control Heading(string group, bool rule)
     {
         var chevron = new LucideIcon { IconName = "chevron-down", Width = 9, Height = 9, Weight = 1.8, Stroke = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
-        var number = new TextBlock { Text = count.ToString(CultureInfo.InvariantCulture), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
         var name = new TextBlock { Text = group, FontSize = Ui.Theme.SmallFontSize, FontWeight = FontWeight.Medium, Foreground = Ui.Theme.TextFaint, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(chevron, Dock.Left);
-        DockPanel.SetDock(number, Dock.Right);
         var heading = new Border
         {
             Height = 24,
@@ -595,7 +591,7 @@ internal sealed class ShaderValuesCard : Border
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, rule ? 1 : 0, 0, 0),
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = new DockPanel { Children = { chevron, number, name } },
+            Child = new DockPanel { Children = { chevron, name } },
         };
         heading.PointerEntered += (_, _) => name.Foreground = Ui.Theme.TextRow;
         heading.PointerExited += (_, _) => name.Foreground = Ui.Theme.TextFaint;
