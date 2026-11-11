@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Shadows in the 3D viewer are sharper close up: the sun's shadow is split into four cascades by distance from the camera, as GTA V's is, instead of one map over the whole model. ([#163](https://github.com/Hancapo/HikariHopper/pull/163))
 ### Fixed
 
 ### Removed

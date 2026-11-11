@@ -14,16 +14,24 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 320, ShadowViewBytes = 64;
+    private const int LightBytes = 560, ShadowViewBytes = 64;
     internal const int ShadowResolution = 2048;
+
+    /// <summary>
+    /// How many cascades the sun's shadow is split into by distance from the camera, as GTA V splits its own: the nearest
+    /// covers a few metres in front of the camera at the map's full resolution, the furthest what the model reaches to.
+    /// </summary>
+    internal const int ShadowCascades = 4;
 
     private BindGroupLayout? lightLayout;
     private BindGroup? lightGroup, skyLightGroup;
     private Buffer? lightBuffer;
     private Texture? shadowMap;
+    // The cascades, all of them as the shading reads them, and each one as its pass draws it.
     private TextureView? shadowView;
-    private Buffer? shadowViewBuffer;
-    private BindGroup? shadowGroup;
+    private readonly TextureView[] shadowLayers = new TextureView[ShadowCascades];
+    private readonly Buffer[] shadowViewBuffers = new Buffer[ShadowCascades];
+    private readonly BindGroup[] shadowGroups = new BindGroup[ShadowCascades];
     private BindGroupLayout? shadowViewLayout;
     private RenderPipeline? shadowPipeline;
     // Cut-out surfaces, with their material for the diffuse map's alpha (made with the surface pipelines).
@@ -37,9 +45,11 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroup? tonemapGroup;
     private KeyLight key;
     private TimecycleLight cycle;
-    private Matrix4x4 shadowMatrix;
-    private float shadowTexel, shadowDepth;
-    // The radius the shadow is fitted to, for refitting it when the sun moves; none without a drawable.
+    // Each cascade's view from the sun, its texel in metres and its depth range in metres; and how far from the camera,
+    // along its view, each one reaches.
+    private readonly Matrix4x4[] shadowMatrices = new Matrix4x4[ShadowCascades];
+    private Vector4 shadowTexels, shadowDepths, shadowSplits;
+    // The drawables' bounding radius around the scene's origin, which the cascades reach to; none without a drawable.
     private float shadowRadius;
 
     /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
@@ -68,12 +78,29 @@ internal sealed unsafe partial class ViewportRenderer
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,
-            Size = new Extent3D(ShadowResolution, ShadowResolution, 1),
+            Size = new Extent3D(ShadowResolution, ShadowResolution, ShadowCascades),
             Format = DepthFormat,
             MipLevelCount = 1,
             SampleCount = 1,
         });
-        shadowView = shadowMap.CreateView();
+        shadowView = shadowMap.CreateView(new TextureViewDescriptor
+        {
+            Format = DepthFormat,
+            Dimension = TextureViewDimension.D2Array,
+            MipLevelCount = 1,
+            ArrayLayerCount = ShadowCascades,
+            Aspect = TextureAspect.All,
+        });
+        for (int i = 0; i < ShadowCascades; i++)
+            shadowLayers[i] = shadowMap.CreateView(new TextureViewDescriptor
+            {
+                Format = DepthFormat,
+                Dimension = TextureViewDimension.D2,
+                MipLevelCount = 1,
+                BaseArrayLayer = (uint)i,
+                ArrayLayerCount = 1,
+                Aspect = TextureAspect.All,
+            });
         Sampler compare = device.CreateSampler(new SamplerDescriptor
         {
             AddressModeU = AddressMode.ClampToEdge,
@@ -103,7 +130,7 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Binding = 1,
                     Visibility = ShaderStage.Fragment,
-                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2Array },
                 },
                 new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
                 new BindGroupLayoutEntry
@@ -144,12 +171,15 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             ],
         });
-        shadowViewBuffer = device.CreateBuffer(new BufferDescriptor { Size = ShadowViewBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        shadowGroup = device.CreateBindGroup(new BindGroupDescriptor
+        for (int i = 0; i < ShadowCascades; i++)
         {
-            Layout = shadowViewLayout,
-            Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffer, Size = ShadowViewBytes }],
-        });
+            shadowViewBuffers[i] = device.CreateBuffer(new BufferDescriptor { Size = ShadowViewBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+            shadowGroups[i] = device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = shadowViewLayout,
+                Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffers[i], Size = ShadowViewBytes }],
+            });
+        }
         Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
         shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
@@ -298,26 +328,78 @@ internal sealed unsafe partial class ViewportRenderer
         CreateExposureGroup();
     }
 
+    /// <summary>The drawables' bounding radius around the scene's origin, which the shadow's cascades reach to.</summary>
+    private void FitShadow(float radius) => shadowRadius = radius;
+
     /// <summary>
-    /// Fits the sun's shadow to what is shown: an orthographic view along the sun, around the drawables' bounding
-    /// sphere (positions are relative to its middle, the scene's origin), deep enough to reach the ground well beyond
-    /// it, where a low sun casts long shadows.
+    /// Fits the shadow's cascades to the view, each frame: the distance from the camera to the far side of the
+    /// drawables is split, more finely near the camera (GTA's practical split, between even and logarithmic), and each
+    /// slice of the view gets an orthographic view along the sun around the sphere that holds it. That sphere's size
+    /// doesn't turn with the camera, and its middle is snapped to whole texels, so the shadow's edges don't crawl as the
+    /// camera orbits. A slice wider than the drawables takes their own sphere. Each view is deep enough to take in all
+    /// of the drawables casting into it, and the ground a low sun throws their shadow onto.
     /// </summary>
-    private void FitShadow(float radius)
+    private void FitCascades()
     {
-        shadowRadius = radius;
+        float radius = shadowRadius;
+        if (radius <= 0)
+            return;
         Vector3 sun = key.Direction;
+        Vector3 eye = Camera.Eye - origin;
+        Vector3 forward = Camera.Forward;
+        float aspect = height > 0 ? (float)width / height : 1;
+        // How far a slice's corners are from its middle line, per metre along it.
+        float spread = OrbitCamera.TanHalf * MathF.Sqrt(1 + aspect * aspect);
+        float reach = Math.Max(eye.Length() + radius, .5f);
+        float near = Math.Clamp(eye.Length() - radius, reach * .002f, reach * .5f);
         Vector3 up = MathF.Abs(sun.Z) > .99f ? Vector3.UnitY : Vector3.UnitZ;
-        Matrix4x4 view = Matrix4x4.CreateLookAt(sun * radius * 2, Vector3.Zero, up);
-        Matrix4x4 projection = Matrix4x4.CreateOrthographic(radius * 2, radius * 2, radius * .5f, radius * 8);
-        shadowMatrix = view * projection;
-        shadowTexel = radius * 2 / ShadowResolution;
-        shadowDepth = radius * 7.5f;
-        queue.WriteBuffer(shadowViewBuffer!, 0, MemoryMarshal.AsBytes(new ReadOnlySpan<Matrix4x4>(in shadowMatrix)));
+        // The sun's view axes, as CreateLookAt builds them, for snapping the middle to texels.
+        Vector3 lightRight = Vector3.Normalize(Vector3.Cross(up, sun));
+        Vector3 lightUp = Vector3.Cross(sun, lightRight);
+        float start = near;
+        Span<float> splits = stackalloc float[ShadowCascades];
+        Span<float> texels = stackalloc float[ShadowCascades];
+        Span<float> depths = stackalloc float[ShadowCascades];
+        for (int i = 0; i < ShadowCascades; i++)
+        {
+            float t = (i + 1f) / ShadowCascades;
+            float end = i == ShadowCascades - 1 ? reach : .85f * near * MathF.Pow(reach / near, t) + .15f * (near + (reach - near) * t);
+            // The sphere round the slice from start to end: its middle on the view's line, as far along as holds both
+            // ends' corners, its size the same whichever way the camera turns.
+            float along = Math.Min((start + end) * (1 + spread * spread) / 2, end);
+            float size = MathF.Sqrt((end - along) * (end - along) + end * spread * end * spread);
+            Vector3 middle = eye + forward * along;
+            if (size >= radius || Vector3.Distance(middle, Vector3.Zero) + radius <= size)
+                (middle, size) = (Vector3.Zero, radius);
+            float texel = size * 2 / ShadowResolution;
+            float x = Vector3.Dot(middle, lightRight), y = Vector3.Dot(middle, lightUp);
+            middle += lightRight * (MathF.Round(x / texel) * texel - x) + lightUp * (MathF.Round(y / texel) * texel - y);
+            // From the sun's side, beyond everything that casts into the slice; deep enough for the ground behind.
+            float back = middle.Length() + radius * 2;
+            float depth = back + middle.Length() + Math.Max(radius, size) + radius;
+            Matrix4x4 view = Matrix4x4.CreateLookAt(middle + sun * back, middle, up);
+            shadowMatrices[i] = view * Matrix4x4.CreateOrthographic(size * 2, size * 2, 0, depth);
+            queue.WriteBuffer(shadowViewBuffers[i], 0, MemoryMarshal.AsBytes(new ReadOnlySpan<Matrix4x4>(in shadowMatrices[i])));
+            splits[i] = end;
+            texels[i] = texel;
+            depths[i] = depth;
+            start = end;
+        }
+        shadowSplits = new Vector4(splits[0], splits[1], splits[2], splits[3]);
+        shadowTexels = new Vector4(texels[0], texels[1], texels[2], texels[3]);
+        shadowDepths = new Vector4(depths[0], depths[1], depths[2], depths[3]);
     }
+
+    /// <summary>How far from the camera, along its view, each of the shadow's cascades reaches, as last fitted.</summary>
+    internal Vector4 ShadowSplits => shadowSplits;
+
+    /// <summary>Each of the shadow's cascades' texel, in metres, as last fitted.</summary>
+    internal Vector4 ShadowTexels => shadowTexels;
 
     private void WriteLight(bool shadows)
     {
+        if (shadows)
+            FitCascades();
         Span<float> values = stackalloc float[LightBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
         vectors[0] = new Vector4(key.Direction, 0);
@@ -334,43 +416,50 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
         vectors[11] = new Vector4(dark.E, dark.F, dark.W, 0);
         vectors[12] = new Vector4(ReflectionMips, 0, 0, 0);
-        MemoryMarshal.Write(MemoryMarshal.AsBytes(values[52..68]), in shadowMatrix);
-        vectors[17] = new Vector4(shadowTexel, shadowDepth, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
-        vectors[18] = Timecycle.BloomParameters(cycle);
-        vectors[19] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
+        for (int i = 0; i < ShadowCascades; i++)
+            MemoryMarshal.Write(MemoryMarshal.AsBytes(values[(52 + i * 16)..(68 + i * 16)]), in shadowMatrices[i]);
+        vectors[29] = shadowSplits;
+        vectors[30] = shadowTexels;
+        vectors[31] = shadowDepths;
+        vectors[32] = new Vector4(0, 0, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        vectors[33] = Timecycle.BloomParameters(cycle);
+        vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
-    /// <summary>The sun's shadow of the drawables: their solid and masked parts' depth from the sun.</summary>
+    /// <summary>The sun's shadow of the drawables, a cascade at a time: their solid and masked parts' depth from the sun.</summary>
     private void DrawShadow(CommandEncoder encoder)
     {
-        RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
+        for (int cascade = 0; cascade < ShadowCascades; cascade++)
         {
-            ColorAttachments = [],
-            DepthStencilAttachment = new RenderPassDepthStencilAttachment
+            RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
-                View = shadowView!,
-                DepthLoadOp = LoadOp.Clear,
-                DepthStoreOp = StoreOp.Store,
-                DepthClearValue = 1,
-            },
-        });
-        pass.SetPipeline(shadowPipeline!);
-        pass.SetBindGroup(0, shadowGroup!);
-        pass.SetVertexBuffer(0, surfaceVertices!);
-        pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
-        for (int i = 0; i < surfaceParts.Length; i++)
-            if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && partsShown[i])
-                pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
-        // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
-        pass.SetPipeline(maskedShadowPipeline!);
-        for (int i = 0; i < surfaceParts.Length; i++)
-            if (CutOut(i) && partsShown[i])
-            {
-                pass.SetBindGroup(1, surfaceParts[i].Material);
-                pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
-            }
-        pass.End();
+                ColorAttachments = [],
+                DepthStencilAttachment = new RenderPassDepthStencilAttachment
+                {
+                    View = shadowLayers[cascade],
+                    DepthLoadOp = LoadOp.Clear,
+                    DepthStoreOp = StoreOp.Store,
+                    DepthClearValue = 1,
+                },
+            });
+            pass.SetPipeline(shadowPipeline!);
+            pass.SetBindGroup(0, shadowGroups[cascade]);
+            pass.SetVertexBuffer(0, surfaceVertices!);
+            pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
+            for (int i = 0; i < surfaceParts.Length; i++)
+                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && partsShown[i])
+                    pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+            // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
+            pass.SetPipeline(maskedShadowPipeline!);
+            for (int i = 0; i < surfaceParts.Length; i++)
+                if (CutOut(i) && partsShown[i])
+                {
+                    pass.SetBindGroup(1, surfaceParts[i].Material);
+                    pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+                }
+            pass.End();
+        }
 
         // Terrain's material is laid out differently, and cuts nothing out.
         bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && !surfaceParts[i].Terrain;
