@@ -301,7 +301,7 @@ internal sealed class ShaderValuesCard : Border
     private readonly TextBlock alsoOn;
 
     // A value's row: its fields, one per number, its reset, and the swatch or paint slot it shows instead of numbers.
-    private sealed record Row(ShaderValue Value, ScrubField[] Fields, ChromeToolButton Reset, Border? Swatch, Control? Numbers, Border? Slot);
+    private sealed record Row(ShaderValue Value, ScrubField[] Fields, ChromeToolButton Reset, Border? Swatch, Control? Numbers, Border? Slot, TextBlock Label);
 
     public ShaderValuesCard(ShaderEdits edits)
     {
@@ -314,14 +314,25 @@ internal sealed class ShaderValuesCard : Border
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         };
-        resetAll = new ChromeToolButton { Text = "Reset all", Height = 21, Width = 70, CornerRadius = Ui.Theme.InnerCorner };
+        resetAll = new ChromeToolButton
+        {
+            Width = 24,
+            Height = 22,
+            Bordered = false,
+            IconKind = "reset",
+            IconSize = 13,
+            IconThickness = 1.6,
+            CornerRadius = Ui.Theme.InnerCorner,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        resetAll.SetValue(ToolTip.ShowOnDisabledProperty, true);
         resetAll.Click += (_, _) =>
         {
             if (Material is { } material)
                 edits.ResetAll(material);
         };
         Avalonia.Automation.AutomationProperties.SetName(resetAll, "Reset all the values");
-        ThemedToolTip.Set(resetAll, "Put every value back as the file has it");
+        ThemedToolTip.Set(resetAll, "Reset all: put every value back as the file has it");
         DockPanel.SetDock(resetAll, Dock.Right);
         alsoOn = new TextBlock
         {
@@ -332,8 +343,14 @@ internal sealed class ShaderValuesCard : Border
             IsVisible = false,
         };
         applyTo = new SegmentedSwitch { Height = 22, VerticalAlignment = VerticalAlignment.Center };
-        applyTo.Sides.Add(new SwitchSide { Text = "All", Width = 56, Label = "All the geometries drawn with it" });
-        applyTo.Sides.Add(new SwitchSide { Text = "This one", Width = 66, Label = "This geometry alone" });
+        applyTo.Sides.Add(new SwitchSide { Text = "Shared", Width = 78, Label = "Every geometry sharing this shader entry" });
+        applyTo.Sides.Add(new SwitchSide
+        {
+            Text = "Selected",
+            Width = 66,
+            Label = "The selected geometry alone",
+            ToolTip = "The selected geometry alone: it gets a copy of the shader entry at its first change",
+        });
         applyTo.RefreshSides();
         applyTo.SideRequested += (_, side) => applyTo.SelectedIndex = side;
         Avalonia.Automation.AutomationProperties.SetName(applyTo, "Apply to");
@@ -369,7 +386,7 @@ internal sealed class ShaderValuesCard : Border
         var face = new Border
         {
             Background = Ui.Theme.ChromeBg,
-            BorderBrush = Ui.Theme.BorderHard,
+            BorderBrush = Ui.Theme.Border,
             BorderThickness = new Thickness(1),
             CornerRadius = Ui.Theme.PanelCorner,
             ClipToBounds = true,
@@ -381,7 +398,7 @@ internal sealed class ShaderValuesCard : Border
         {
             Data = Geometry.Parse($"M {NotchWidth + 1},0 L 1,7 L {NotchWidth + 1},14"),
             Fill = Ui.Theme.ChromeBg,
-            Stroke = Ui.Theme.BorderHard,
+            Stroke = Ui.Theme.Border,
             StrokeThickness = 1,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
@@ -490,8 +507,9 @@ internal sealed class ShaderValuesCard : Border
     public void SetShared(int count)
     {
         shared = Math.Max(1, count);
-        applyTo.Sides[0].Text = $"All {shared}";
-        applyTo.Sides[0].Label = $"All {shared} geometries drawn with it";
+        applyTo.Sides[0].Text = $"Shared ({shared})";
+        applyTo.Sides[0].Label = $"All {shared} geometries sharing this shader entry";
+        applyTo.Sides[0].ToolTip = $"All {shared} geometries sharing this shader entry";
         applyTo.RefreshSides();
         applyRow.IsVisible = shared > 1;
     }
@@ -593,8 +611,8 @@ internal sealed class ShaderValuesCard : Border
             Cursor = new Cursor(StandardCursorType.Hand),
             Child = new DockPanel { Children = { chevron, name } },
         };
-        heading.PointerEntered += (_, _) => name.Foreground = Ui.Theme.TextRow;
-        heading.PointerExited += (_, _) => name.Foreground = Ui.Theme.TextFaint;
+        heading.PointerEntered += (_, _) => (name.Foreground, chevron.Stroke) = (Ui.Theme.TextRow, Ui.Theme.TextRow);
+        heading.PointerExited += (_, _) => (name.Foreground, chevron.Stroke) = (Ui.Theme.TextFaint, Ui.Theme.TextFaint);
         heading.PointerReleased += (_, e) =>
         {
             if (e.InitialPressMouseButton == MouseButton.Left)
@@ -684,7 +702,7 @@ internal sealed class ShaderValuesCard : Border
         var control = new Panel { Width = ControlWidth, VerticalAlignment = VerticalAlignment.Center, Children = { numbers } };
         if (slot is not null)
             control.Children.Add(slot);
-        rows.Add(new Row(value, fields, reset, swatch, numbers, slot));
+        rows.Add(new Row(value, fields, reset, swatch, numbers, slot, label));
 
         var line = new DockPanel { MinHeight = 24, Margin = new Thickness(0, vector && fields.Length > 4 ? 2 : 0, 0, vector && fields.Length > 4 ? 2 : 0) };
         DockPanel.SetDock(control, Dock.Right);
@@ -855,6 +873,9 @@ internal sealed class ShaderValuesCard : Border
                     numbers.IsVisible = at is null;
             }
             row.Reset.IsVisible = changed;
+            IBrush ink = changed ? Ui.Theme.Text : Ui.Theme.TextRow;
+            if (row.Label.Foreground != ink)
+                row.Label.Foreground = ink;
         }
         resetAll.IsEnabled = rows.Any(row => row.Reset.IsVisible);
 
