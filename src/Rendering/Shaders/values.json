@@ -1,12 +1,13 @@
 {
-  "version": 1,
-  "about": "How the 3D viewer's shader values card names a shader entry's numeric values and groups them, by the values' Legacy names (Enhanced ones reach them through FiveFury's catalogue). Groups are shown in the order listed, and values in each group in the order listed; a value not listed keeps its own name, split into words, under Other.",
+  "version": 2,
+  "about": "How the 3D viewer's shader values card names a shader entry's numeric values and groups them, by the values' Legacy names (Enhanced ones reach them through FiveFury's catalogue). Groups are shown in the order listed, folded to start with when marked so, and values in each group in the order listed. A value is its label, or an object with its label, the range its slider's fill spans (when it isn't 0 to 1, or to twice the file's value past that), and whether its first three numbers are a colour. A value not listed keeps its own name, split into words, under Other, which starts folded; hidden values aren't listed at all.",
+  "hidden": ["bDebugDisplayDamageMap", "bDebugDisplayDamageScale"],
   "groups": [
     {
       "name": "Paint",
       "values": {
-        "matDiffuseColor": "Colour",
-        "matDiffuseColor2": "Layer colour",
+        "matDiffuseColor": { "label": "Colour", "colour": true },
+        "matDiffuseColor2": { "label": "Layer", "colour": true },
         "matDiffuseSpecularRampEnabled": "Ramp",
         "matMaterialColorScale": "Colour scale",
         "tintPaletteSelector": "Tint"
@@ -15,20 +16,20 @@
     {
       "name": "Specular",
       "values": {
-        "specularIntensityMult": "Intensity",
-        "specularFalloffMult": "Falloff",
-        "specularFresnel": "Fresnel",
+        "specularIntensityMult": { "label": "Intensity", "range": [0, 1] },
+        "specularFalloffMult": { "label": "Falloff", "range": [0, 500] },
+        "specularFresnel": { "label": "Fresnel", "range": [0, 1] },
+        "reflectivePower": { "label": "Reflection", "range": [0, 1] },
         "specMapIntMask": "Map mask",
         "specTexTileUV": "Map tiling",
-        "specularIntensityMultSpecMap": "Map intensity",
-        "specularFalloffMultSpecMap": "Map falloff",
+        "specularIntensityMultSpecMap": { "label": "Map intensity", "range": [0, 1] },
+        "specularFalloffMultSpecMap": { "label": "Map falloff", "range": [0, 500] },
         "specIntensityAdjust": "Intensity adjust",
         "specFalloffAdjust": "Falloff adjust",
-        "reflectivePower": "Reflection",
-        "diffuse2SpecMod": "Layer specular",
-        "specular2Color_DirLerp": "Second lobe",
-        "specular2Factor": "Second lobe falloff",
-        "specular2ColorIntensity": "Second lobe intensity",
+        "diffuse2SpecMod": { "label": "Layer specular", "range": [0, 1] },
+        "specular2Color_DirLerp": { "label": "Second lobe", "colour": true },
+        "specular2Factor": { "label": "Second lobe falloff", "range": [0, 100] },
+        "specular2ColorIntensity": { "label": "Second lobe intensity", "range": [0, 10] },
         "SpecDesaturateIntensity": "Desaturate intensity",
         "SpecDesaturateExponent": "Desaturate exponent"
       }
@@ -36,16 +37,16 @@
     {
       "name": "Surface",
       "values": {
-        "bumpiness": "Bumpiness",
-        "bumpSelfShadowAmount": "Bump self-shadow",
-        "emissiveMultiplier": "Emissive",
+        "bumpiness": { "label": "Bumpiness", "range": [0, 2] },
+        "bumpSelfShadowAmount": { "label": "Bump self-shadow", "range": [0, 1] },
+        "emissiveMultiplier": { "label": "Emissive", "range": [0, 10] },
         "DiffuseTexTileUV": "Diffuse tiling",
-        "HardAlphaBlend": "Hard alpha blend",
-        "AlphaScale": "Alpha scale",
-        "AlphaTest": "Alpha cutoff",
+        "HardAlphaBlend": { "label": "Hard alpha blend", "range": [0, 1] },
+        "AlphaScale": { "label": "Alpha scale", "range": [0, 1] },
+        "AlphaTest": { "label": "Alpha cutoff", "range": [0, 1] },
         "globalAnimUV0": "UV animation, row 1",
         "globalAnimUV1": "UV animation, row 2",
-        "useTessellation": "Tessellation",
+        "useTessellation": { "label": "Tessellation", "range": [0, 1] },
         "tessellationMultiplier": "Tessellation amount"
       }
     },
@@ -58,25 +59,18 @@
     {
       "name": "Parallax",
       "values": {
-        "heightScale": "Height scale",
-        "heightBias": "Height bias",
-        "parallaxScaleBias": "Scale and bias",
-        "parallaxSelfShadowAmount": "Self-shadow",
-        "heightScale0": "Layer 1 height scale",
-        "heightBias0": "Layer 1 height bias",
-        "heightScale1": "Layer 2 height scale",
-        "heightBias1": "Layer 2 height bias",
-        "heightScale2": "Layer 3 height scale",
-        "heightBias2": "Layer 3 height bias",
-        "heightScale3": "Layer 4 height scale",
-        "heightBias3": "Layer 4 height bias"
-      }
-    },
-    {
-      "name": "Dirt",
-      "values": {
-        "dirtLevelMod": "Level",
-        "dirtColor": "Colour"
+        "heightScale": { "label": "Height scale", "range": [0, 0.1] },
+        "heightBias": { "label": "Height bias", "range": [0, 0.05] },
+        "parallaxScaleBias": { "label": "Scale and bias", "range": [0, 0.1] },
+        "parallaxSelfShadowAmount": { "label": "Self-shadow", "range": [0, 1] },
+        "heightScale0": { "label": "Layer 1 height scale", "range": [0, 0.1] },
+        "heightBias0": { "label": "Layer 1 height bias", "range": [0, 0.05] },
+        "heightScale1": { "label": "Layer 2 height scale", "range": [0, 0.1] },
+        "heightBias1": { "label": "Layer 2 height bias", "range": [0, 0.05] },
+        "heightScale2": { "label": "Layer 3 height scale", "range": [0, 0.1] },
+        "heightBias2": { "label": "Layer 3 height bias", "range": [0, 0.05] },
+        "heightScale3": { "label": "Layer 4 height scale", "range": [0, 0.1] },
+        "heightBias3": { "label": "Layer 4 height bias", "range": [0, 0.05] }
       }
     },
     {
@@ -84,41 +78,50 @@
       "values": {
         "anisotropicSpecularIntensity": "Highlight intensity",
         "anisotropicSpecularExponent": "Highlight sharpness",
-        "anisotropicSpecularColour": "Highlight colour",
-        "AnisotropicAlphaBias": "Alpha bias",
+        "anisotropicSpecularColour": { "label": "Highlight colour", "colour": true },
+        "AnisotropicAlphaBias": { "label": "Alpha bias", "range": [0, 1] },
         "specularNoiseMapUVScaleFactor": "Noise tiling"
       }
     },
     {
-      "name": "Weather",
+      "name": "Dirt",
+      "folded": true,
       "values": {
-        "wetnessMultiplier": "Wetness",
+        "dirtLevelMod": "Level",
+        "dirtColor": { "label": "Colour", "colour": true }
+      }
+    },
+    {
+      "name": "Weather",
+      "folded": true,
+      "values": {
+        "wetnessMultiplier": { "label": "Wetness", "range": [0, 1] },
         "materialWetnessMultiplier": "Wetness by material",
-        "envEffThickness": "Snow thickness",
+        "envEffThickness": { "label": "Snow thickness", "range": [0, 50] },
         "envEffFatThickness": "Snow thickness, fat",
         "envEffScale": "Snow scale",
-        "envEffTexTileUV": "Snow tiling"
+        "envEffTexTileUV": { "label": "Snow tiling", "range": [0, 16] }
       }
     },
     {
       "name": "Vegetation",
+      "folded": true,
       "values": {
         "umGlobalParams": "Micro-movement",
         "WindGlobalParams": "Wind",
-        "UseTreeNormals": "Tree normals",
-        "SelfShadowing": "Self-shadowing",
-        "ShadowFalloff": "Shadow falloff"
+        "UseTreeNormals": { "label": "Tree normals", "range": [0, 1] },
+        "SelfShadowing": { "label": "Self-shadowing", "range": [0, 1] },
+        "ShadowFalloff": { "label": "Shadow falloff", "range": [0, 2] }
       }
     },
     {
       "name": "Damage",
+      "folded": true,
       "values": {
-        "DamageMultiplier": "Amount",
+        "DamageMultiplier": { "label": "Amount", "range": [0, 1] },
         "DamageTextureOffset": "Texture offset",
         "BoundRadius": "Bound radius",
-        "DamagedWheelOffsets": "Wheel offsets",
-        "bDebugDisplayDamageMap": "Show the damage map",
-        "bDebugDisplayDamageScale": "Show the damage scale"
+        "DamagedWheelOffsets": "Wheel offsets"
       }
     }
   ]

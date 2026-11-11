@@ -11,7 +11,11 @@ namespace HikariHopper.Rendering;
 /// </summary>
 /// <param name="Name">The parameter's name in the entry's edition, what <see cref="DrawableMaterial.SetParameter"/> takes.</param>
 /// <param name="Order">Where it comes in the card: by group, then within it.</param>
-internal sealed record ShaderValue(string Name, string Label, string Group, int Components, int Order);
+/// <param name="Range">What its slider's fill spans, when values.json gives it; else 0 to 1, or to twice the file's value past that.</param>
+/// <param name="Colour">Whether its first three numbers are a colour, shown with a swatch.</param>
+/// <param name="Legacy">Its Legacy name, what values.json knows it by.</param>
+internal sealed record ShaderValue(string Name, string Label, string Group, int Components, int Order,
+    (float Min, float Max)? Range = null, bool Colour = false, string Legacy = "");
 
 /// <summary>What a save wrote: the changed values as they were when it started, and how many geometries had entries of their own.</summary>
 internal sealed record ShaderSnapshot(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Values, int Splits);
@@ -76,8 +80,11 @@ internal sealed class ShaderEdits
                 _ => value.Values.Length,
             };
             components = Math.Clamp(components, 1, value.Values.Length);
-            (string label, string group, int order) = Labels.TryGetValue(legacy, out var known) ? known : (Words(legacy), Other, int.MaxValue);
-            values.Add(new ShaderValue(name, label, group, components, order));
+            if (Hidden.Contains(legacy))
+                continue;
+            values.Add(Labels.TryGetValue(legacy, out ShaderValue? known)
+                ? known with { Name = name, Components = components, Legacy = legacy }
+                : new ShaderValue(name, Words(legacy), Other, components, int.MaxValue, Legacy: legacy));
         }
         return [.. values.OrderBy(value => value.Order).ThenBy(value => value.Label, StringComparer.OrdinalIgnoreCase)];
     }
@@ -281,21 +288,38 @@ internal sealed class ShaderEdits
     /// <summary>The group of values values.json doesn't name.</summary>
     public const string Other = "Other";
 
-    // Each value values.json names: its label, its group, and where it comes, by group and then as listed.
-    private static readonly Dictionary<string, (string Label, string Group, int Order)> Labels = ReadLabels();
+    // What values.json says: each value it names (its label, group, place, range and whether it's a colour), the
+    // groups that start folded, and the values not listed.
+    private static readonly (Dictionary<string, ShaderValue> Labels, HashSet<string> Folded, HashSet<string> Hidden) Table = ReadTable();
+    private static Dictionary<string, ShaderValue> Labels => Table.Labels;
+    private static HashSet<string> Hidden => Table.Hidden;
 
-    private static Dictionary<string, (string, string, int)> ReadLabels()
+    /// <summary>Whether a group starts folded on the card: the rarely used ones, and Other.</summary>
+    public static bool StartsFolded(string group) => Table.Folded.Contains(group);
+
+    private static (Dictionary<string, ShaderValue>, HashSet<string>, HashSet<string>) ReadTable()
     {
         using JsonDocument document = JsonDocument.Parse(ViewportRenderer.Read("values.json"));
-        var labels = new Dictionary<string, (string, string, int)>(StringComparer.OrdinalIgnoreCase);
+        var labels = new Dictionary<string, ShaderValue>(StringComparer.OrdinalIgnoreCase);
+        var folded = new HashSet<string>(StringComparer.Ordinal) { Other };
+        var hidden = new HashSet<string>(document.RootElement.GetProperty("hidden").EnumerateArray().Select(name => name.GetString()!), StringComparer.OrdinalIgnoreCase);
         int order = 0;
         foreach (JsonElement group in document.RootElement.GetProperty("groups").EnumerateArray())
         {
             string name = group.GetProperty("name").GetString()!;
+            if (group.TryGetProperty("folded", out JsonElement fold) && fold.GetBoolean())
+                folded.Add(name);
             foreach (JsonProperty value in group.GetProperty("values").EnumerateObject())
-                labels.TryAdd(value.Name, (value.Value.GetString()!, name, order++));
+            {
+                JsonElement entry = value.Value;
+                string label = entry.ValueKind == JsonValueKind.String ? entry.GetString()! : entry.GetProperty("label").GetString()!;
+                (float, float)? range = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("range", out JsonElement span)
+                    ? (span[0].GetSingle(), span[1].GetSingle()) : null;
+                bool colour = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("colour", out JsonElement c) && c.GetBoolean();
+                labels.TryAdd(value.Name, new ShaderValue(value.Name, label, name, 1, order++, range, colour, value.Name));
+            }
         }
-        return labels;
+        return (labels, folded, hidden);
     }
 
     /// <summary>A parameter's name in words, for one values.json doesn't name: "envEffTexTileUV" is "Env eff tex tile UV".</summary>

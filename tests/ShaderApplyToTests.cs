@@ -138,9 +138,9 @@ public sealed class ShaderApplyToTests
         Assert.Equal(["chassis", "extra_1"], Views.ModelViewer.AlsoDrawnOn(scene, 1));
         var card = new Views.ShaderValuesCard(new ShaderEdits());
         card.SetAlsoOn(Views.ModelViewer.AlsoDrawnOn(scene, 1));
-        Assert.Equal("Its geometry is also drawn on chassis and extra_1.", card.AlsoOn);
+        Assert.Equal("Also drawn on chassis and extra_1", card.AlsoOn);
         card.SetAlsoOn(["a", "b", "c", "d"]);
-        Assert.Equal("Its geometry is also drawn on a, b and 2 more parts.", card.AlsoOn);
+        Assert.Equal("Also drawn on a, b and 2 more", card.AlsoOn);
         card.SetAlsoOn([]);
         Assert.Equal("", card.AlsoOn);
     }

@@ -141,6 +141,64 @@ public sealed class ShaderValuesTests
         Assert.Equal("100", Views.ScrubField.Format(100));
     }
 
+    [Fact]
+    public void A_sliders_fill_spans_its_usual_range_and_a_segment_shortens_its_number()
+    {
+        // values.json's range where it gives one; else 0 to 1, or to twice the file's value, rounded up to a round number.
+        Assert.Equal((0f, 500f), Assert.Single(ShaderEdits.ValuesOf(Material()), value => value.Name == "specularFalloffMult").Range);
+        Assert.Equal((0f, 1f), Views.ShaderValuesCard.RangeOf(.3f));
+        Assert.Equal((0f, 50f), Views.ShaderValuesCard.RangeOf(25));
+        Assert.Equal((0f, 500f), Views.ShaderValuesCard.RangeOf(180));
+        Assert.Equal((-5f, 5f), Views.ShaderValuesCard.RangeOf(-2));
+        Assert.Equal(".23", Views.ScrubField.Short(.2314f));
+        Assert.Equal("-.5", Views.ScrubField.Short(-.5f));
+        Assert.Equal(".001", Views.ScrubField.Short(.001f));
+        Assert.Equal("180", Views.ScrubField.Short(180));
+        // Debug values aren't listed; colours are marked so.
+        DrawableMaterial paint = Material("vehicle_paint3");
+        Assert.True(Assert.Single(ShaderEdits.ValuesOf(paint), value => value.Name == "matDiffuseColor").Colour);
+    }
+
+    [AvaloniaFact]
+    public void The_rarely_used_groups_start_folded_and_stay_as_left()
+    {
+        var card = new Views.ShaderValuesCard(new ShaderEdits());
+        card.Show("door", Material("vehicle_paint3"));
+        Assert.True(card.IsOpen("Specular"));
+        Assert.False(card.IsOpen("Dirt"));
+        // Opened, the next card opens it too.
+        card.SetOpen("Dirt", true);
+        card.Show("door", Material("vehicle_paint3"));
+        Assert.True(card.IsOpen("Dirt"));
+        card.SetOpen("Dirt", false);
+    }
+
+    [AvaloniaFact]
+    public void A_vehicle_paint_slot_is_named_and_picked_from_its_list()
+    {
+        DrawableMaterial paint = Material("vehicle_paint3");
+        var edits = new ShaderEdits();
+        float[] values = ShaderEdits.Current(paint, "matDiffuseColor");
+        (values[0], values[1], values[2]) = (2, 1, 1);
+        edits.Set(paint, "matDiffuseColor", values);
+        edits.MarkSaved();
+        var card = new Views.ShaderValuesCard(edits);
+        card.Show("door", paint);
+        Assert.Equal("Primary", card.SlotShown("matDiffuseColor"));
+
+        // Another slot, then a colour of its own: the slot well goes, the swatch and numbers come.
+        ShaderValue colour = card.Values.Single(value => value.Name == "matDiffuseColor");
+        card.PickSlot(colour, 3);
+        Assert.Equal((2f, 3f, 3f), (ShaderEdits.Current(paint, "matDiffuseColor")[0], ShaderEdits.Current(paint, "matDiffuseColor")[1], ShaderEdits.Current(paint, "matDiffuseColor")[2]));
+        Assert.Equal("Pearlescent", card.SlotShown("matDiffuseColor"));
+        Assert.True(card.ResetShown("matDiffuseColor"));
+        card.PickSlot(colour, null);
+        Assert.Null(card.SlotShown("matDiffuseColor"));
+        Assert.Equal(1f, card.Field("matDiffuseColor", 0)!.Value);
+        Assert.True(edits.Undo());
+        Assert.Equal("Pearlescent", card.SlotShown("matDiffuseColor"));
+    }
+
     [AvaloniaFact]
     public void Typing_in_a_field_keeps_a_number_and_drops_anything_else()
     {
@@ -182,7 +240,7 @@ public sealed class ShaderValuesTests
         Assert.True(viewer.CardOverlay.IsWanted);
         Assert.Same(viewer.Surfaces!.Sources[0], viewer.Card.Material);
         Assert.Equal("tri", viewer.Card.Title);
-        Assert.Contains("SPECULAR", viewer.Card.Groups);
+        Assert.Contains("Specular", viewer.Card.Groups);
         Views.ScrubField intensity = viewer.Card.Field("specularIntensityMult")!;
         float before = intensity.Value;
         Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
