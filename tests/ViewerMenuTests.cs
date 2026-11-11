@@ -30,6 +30,7 @@ public sealed class ViewerMenuTests
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
             ExplorerStateRenders.Pump(10);
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        Assert.True(viewer.OpenShaderValues());
         return viewer;
     }
 

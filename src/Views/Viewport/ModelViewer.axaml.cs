@@ -65,8 +65,11 @@ public partial class ModelViewer : UserControl, IModalContent
         shaderEdits.Changed += ShowEdited;
         shaderEdits.StructureChanged += Rebuild;
         card.SplitRequested = SplitPicked;
-        // Closed, the pick goes: no row selected, no outline, no card.
-        card.CloseRequested += () => Parts.ClearSelection();
+        // Closed, the card goes; the pick stays.
+        card.CloseRequested += CloseShaderValues;
+        // The parts panel's menu offers the picked geometry's shader values, for a drawable.
+        Parts.ShaderValues = () => surfaces is null ? null : PickedMaterial() is not null;
+        Parts.ShaderValuesRequested += () => OpenShaderValues();
         shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += (key, shift) => Command(key, shift);
         Viewport.PropertyChanged += (_, e) =>
@@ -99,7 +102,7 @@ public partial class ModelViewer : UserControl, IModalContent
             StatusText.Text = $"The 3D view couldn't start: {error.Message}";
             StatusText.Foreground = Ui.Theme.Error;
         };
-        Viewport.EscapePressed += Close;
+        Viewport.EscapePressed += Escape;
         TimeButton.Text = TimeDial.Clock(DayCycle.DefaultHours);
         Dial.Moved += SetHours;
         timeBody = TimeBody();
@@ -487,13 +490,18 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     private void ShowCard()
     {
-        FiveFury.Drawables.DrawableMaterial? material = null;
+        FiveFury.Drawables.DrawableMaterial? material = PickedMaterial();
+        // Not asked for, or nothing to show for what's picked now: no card, and it stays closed until asked for again.
+        if (!cardOpen || material is null)
+        {
+            cardOpen = false;
+            shaderCard.IsWanted = false;
+            return;
+        }
         string owner = "";
         int geometries = 1;
-        if (surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node]
-            && node.Parts.Select(part => scene.Parts[part].Material).Distinct().ToArray() is [int index] && index < scene.Sources.Count)
+        if (surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node])
         {
-            material = scene.Sources[index];
             geometries = scene.GeometriesUsing(material);
             owner = Parts.Parts is PartVisibility parts ? OwnerOf(parts, node) ?? file.Name : "";
         }
@@ -505,6 +513,46 @@ public partial class ModelViewer : UserControl, IModalContent
         card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
         shaderCard.IsWanted = material is not null;
         PlaceCard();
+    }
+
+    private bool cardOpen;
+
+    /// <summary>
+    /// Whether the shader values card is open: opened from the parts panel's menu or with M, for the one geometry
+    /// picked; while open it follows the pick, and it closes when the pick has no one geometry's values to show.
+    /// </summary>
+    internal bool ShaderValuesOpen => cardOpen;
+
+    /// <summary>The shader entry of the one geometry picked, at the level shown; none for anything else.</summary>
+    private FiveFury.Drawables.DrawableMaterial? PickedMaterial() =>
+        surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node]
+            && node.Parts.Select(part => scene.Parts[part].Material).Distinct().ToArray() is [int index] && index < scene.Sources.Count
+            ? scene.Sources[index] : null;
+
+    /// <summary>Opens the shader values card for the geometry picked; false when there's none to show.</summary>
+    internal bool OpenShaderValues()
+    {
+        if (PickedMaterial() is null)
+            return false;
+        cardOpen = true;
+        ShowCard();
+        return true;
+    }
+
+    /// <summary>Closes the shader values card; the pick stays.</summary>
+    internal void CloseShaderValues()
+    {
+        cardOpen = false;
+        shaderCard.IsWanted = false;
+    }
+
+    // Escape closes the card first, then the viewer.
+    private void Escape()
+    {
+        if (cardOpen)
+            CloseShaderValues();
+        else
+            Close();
     }
 
     /// <summary>
@@ -1124,6 +1172,13 @@ public partial class ModelViewer : UserControl, IModalContent
                 return true;
             case 'T':
                 return OpenTextures();
+            case 'M':
+                if (cardOpen)
+                {
+                    CloseShaderValues();
+                    return true;
+                }
+                return OpenShaderValues();
             case >= '1' and <= '4':
                 SetLevel(key - '1');
                 return true;
@@ -1476,5 +1531,5 @@ public partial class ModelViewer : UserControl, IModalContent
         overlay?.Close();
     }
 
-    void IModalContent.RequestClose() => Close();
+    void IModalContent.RequestClose() => Escape();
 }
