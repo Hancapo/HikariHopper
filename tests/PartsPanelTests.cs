@@ -182,7 +182,7 @@ public sealed class PartsPanelTests
     }
 
     [AvaloniaFact]
-        public void A_right_click_menu_acts_on_the_selection_and_copies_its_names()
+    public void A_right_click_menu_acts_on_the_selection_and_copies_its_names()
     {
         var clipboard = new FakeClipboard();
         Infrastructure.IClipboardService previous = Infrastructure.AppServices.Clipboard;
