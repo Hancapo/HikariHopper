@@ -165,7 +165,7 @@ public sealed class PartsPanelTests
             Views.PartsPanel panel = Panel();
             window.Content = panel;
             window.Show();
-            ExplorerStateRenders.Pump(100);
+            TestWait.Pump(100);
             panel.Select(panel.Rows[1].Node);
             panel.Select(panel.Rows[2].Node, KeyModifiers.Control);
             Views.PartsPanel.MenuRowItem Item(string text)

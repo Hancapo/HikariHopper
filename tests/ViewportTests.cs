@@ -351,12 +351,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         int row = Enumerable.Range(0, bridge.EntriesModel.Count).Single(index => bridge.EntriesModel[index].Name == "ch2_04_15.ybn");
         bridge.ActivateEntry(row);
 
         Views.ModelViewer viewer = Assert.IsType<Views.ModelViewer>(session.ModelViewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Settle(viewer);
         Assert.True(viewer.IsOpen);
         Assert.Equal("Opened ch2_04_15.ybn", bridge.Status);
@@ -368,7 +368,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Escape closes it, the viewport first, and the session lets it go.
         window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
         window.KeyRelease(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.False(viewer.IsOpen);
         Assert.False(viewer.Viewport.IsVisible);
         Assert.Null(session.ModelViewer);
@@ -558,7 +558,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-                ExplorerStateRenders.Pump(10);
+                TestWait.Pump(10);
             Assert.True(task.IsCompletedSuccessfully);
         }
 
@@ -605,7 +605,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
         Settle(viewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
 
         // Each in a window of its own, over the main one: the viewport is a native window, which covers what's drawn in it.
         Assert.True(viewer.ToolStripOverlay.IsShown);
@@ -663,12 +663,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Centred();
         // It follows the viewport: closing the parts panel moves the viewport's edge, and the tools with it.
         viewer.SetPartsShown(false);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Assert.False(viewer.PartsHandle.IsVisible);
         Centred();
         // So does the main window, moved.
         window.Position = new Avalonia.PixelPoint(window.Position.X + 40, window.Position.Y + 30);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Centred();
 
         // The pointer doesn't go through the tab or the strip to the viewport.
@@ -679,18 +679,18 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         // It hides while the viewport does, under another overlay, and shows again after.
         Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.False(viewer.ToolStripOverlay.IsShown);
         Assert.False(viewer.PartsTabOverlay.IsShown);
         above.Close();
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Assert.True(viewer.ToolStripOverlay.IsShown);
         Assert.True(viewer.PartsTabOverlay.IsShown);
         Centred();
 
         // And goes with the viewer.
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.False(viewer.ToolStripOverlay.IsShown);
         Assert.False(tools.IsVisible);
         Assert.False(tab.IsVisible);
@@ -730,19 +730,19 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write())) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Assert.True(viewer.Viewport.IsVisible);
 
         // The viewport is a native window, which would cover anything above it: it hides while something is.
         Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.False(viewer.Viewport.IsVisible);
         above.Close();
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Assert.True(viewer.Viewport.IsVisible);
 
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         window.Close();
     }
 
@@ -761,7 +761,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
         Settle(viewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
 
         // A window of its own (the viewport would cover a popup drawn in the main one), and the viewport stays.
         viewer.ToggleTime();
@@ -777,7 +777,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Another window taking the keyboard closes it, once the change of window is over, not in the middle of it
         // (Windows then gave the keyboard to another app, and the main window went behind it). Past the moment in which a
         // press that closed it doesn't open it again.
-        ExplorerStateRenders.Pump(450);
+        TestWait.Pump(450);
         viewer.ToggleTime();
         Assert.True(viewer.TimeOpen);
         var dropdown = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.SunSlider).OfType<Avalonia.Controls.Window>().Single();
@@ -788,11 +788,11 @@ public sealed class ModelViewerTests : ExplorerTestBase
             .First(property => property is not null)!.GetValue(platform);
         deactivated!();
         Assert.True(viewer.TimeOpen);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         Assert.False(viewer.TimeOpen);
 
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         window.Close();
     }
 
@@ -803,7 +803,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", [])) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         // In the viewer: drawn in a window of its own, in place of the in-window tooltip the viewport would cover.
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.ShadowsButton, true);
@@ -821,14 +821,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.TimeButton, true);
         Assert.Equal("Time of day", Views.Controls.WindowToolTip.ShownText);
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
 
         // Outside it, tooltips are drawn in the window as before.
         var outside = new Avalonia.Controls.Button();
         Views.Controls.ThemedToolTip.Set(outside, "Elsewhere");
         window.ExplorerScreenHost.Content = outside;
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Avalonia.Controls.ToolTip.SetIsOpen(outside, true);
         Assert.True(Avalonia.Controls.ToolTip.GetIsOpen(outside));
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
@@ -876,7 +876,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         tables.SetResult([new NearbyDictionary("sign_txd.ytd", dictionary.Length, () => dictionary)]);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.GameTexturesAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.GameTexturesAdded.IsCompletedSuccessfully);
         Assert.Equal("", viewer.Location);
         Assert.Equal([false], viewer.Visibility!.Mask());
@@ -924,7 +924,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
         window.Show();
         Settle(viewer);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Assert.True(viewer.Viewport.Shadows);
         Avalonia.Input.KeyEventArgs Press(Avalonia.Interactivity.Interactive source) => new()
         {
@@ -963,7 +963,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.Reading.IsCompletedSuccessfully);
     }
 }

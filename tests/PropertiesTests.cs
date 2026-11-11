@@ -194,12 +194,12 @@ public sealed class PropertiesTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         bridge.SelectEntry(Row(bridge, "notes.txt"));
         window.KeyPress(Key.Enter, RawInputModifiers.Alt, PhysicalKey.Enter, null);
         window.KeyRelease(Key.Enter, RawInputModifiers.Alt, PhysicalKey.Enter, null);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         WorkspaceView workspace = window.GetVisualDescendantsOf<WorkspaceView>();
         PropertiesDialog sheet = Assert.IsType<PropertiesDialog>(workspace.PropertiesSheet);

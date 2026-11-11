@@ -260,7 +260,7 @@ public sealed class TextureWindowTests
             Assert.Equal(frame, harness.Viewport.ImageFrame.Frame);
             Assert.False(harness.Viewport.MessageText.IsVisible);
             // A decode that takes longer shows the message.
-            ExplorerStateRenders.Pump(350);
+            TestWait.Pump(350);
             Assert.True(harness.Viewport.MessageText.IsVisible);
             Assert.Equal("Decoding texture…", harness.Viewport.MessageText.Text);
             Assert.Null(harness.Viewport.ImageFrame.Source);
@@ -802,7 +802,7 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.False(preview.FilteredPreview);
         Assert.False(toolbar.SmoothSelected);
-        ExplorerStateRenders.Pump(250);
+        TestWait.Pump(250);
         Assert.Equal(toolbar.FilterSwitch.Sides[0].Width, toolbar.FilterSwitch.SegmentOffset, 3);
         toolbar.FilterSwitch.Focus();
         harness.Key(Key.Space);

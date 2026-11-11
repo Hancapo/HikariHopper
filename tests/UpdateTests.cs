@@ -288,7 +288,7 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
         Pump();
     }
 
-    private static void Pump() => ExplorerStateRenders.Pump(300);
+    private static void Pump() => TestWait.Settle();
 
     private static List<string> Texts(Control root) =>
         [.. root.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text ?? "")];

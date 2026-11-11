@@ -4,6 +4,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HikariHopper.ViewModels;
 using HikariHopper.Views;
@@ -49,7 +50,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         return new Explorer(window, session);
     }
 
-    private static void Pump(int milliseconds = 30) => ExplorerStateRenders.Pump(milliseconds);
+    private static void Pump() => TestWait.Settle();
+
+    private static void Pump(int milliseconds) => TestWait.Pump(milliseconds);
 
     /// <summary>
     /// Slows the tabs' slides down for a test, so one caught "midway" a few milliseconds in is still
@@ -81,9 +84,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
     private static void Key(Window window, PhysicalKey key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
+        KeyNow(window, key, modifiers);
+        Pump();
+    }
+
+    /// <summary>A key pressed and handled, without drawing: for what moves at once, such as focus.</summary>
+    private static void KeyNow(Window window, PhysicalKey key, RawInputModifiers modifiers = RawInputModifiers.None)
+    {
         window.KeyPressQwerty(key, modifiers);
         window.KeyReleaseQwerty(key, modifiers);
-        Pump();
+        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]
@@ -109,7 +119,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Three of the twenty are already here: a dialog asks, and nothing is imported until it's answered.
         Assert.True(ui.Bridge.ImportDroppedFiles(dropped));
-        Pump(200);
+        Pump();
         ImportConflictDialog dialog = Assert.IsType<ImportConflictDialog>(ui.Find<WorkspaceView>().ImportDialog);
         Assert.Equal("3 of the 20 items are already here.", dialog.Question);
         Assert.Equal("file000.txt, file001.txt, file002.txt", dialog.Names);
@@ -123,7 +133,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (ui.Bridge.EntryOperationBusy && clock.ElapsedMilliseconds < 10_000)
             Pump(20);
-        Pump(300);
+        Pump();
         Assert.Null(ui.Find<WorkspaceView>().ImportDialog);
         Assert.Equal("new", File.ReadAllText(Path.Combine(Work, "file000.txt")));
         Assert.True(File.Exists(Path.Combine(Work, "file019.txt")));
@@ -160,7 +170,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         SettingsDialog dialog = ui.Find<MenuRow>().Settings!;
         Assert.True(dialog.IsOpen);
         dialog.Close();
-        Pump(250);
+        Pump();
 
         // A configured edition is a row with its tinted V and its path, and a recent install of the
         // same game joins it under its edition's name (Legacy here); the configured one isn't repeated.
@@ -200,7 +210,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         MenuRow menus = ui.Find<MenuRow>();
         menus.OpenSettings();
-        Pump(300);
+        Pump();
         SettingsDialog settings = menus.Settings!;
         ModalOverlay overlay = settings.FindAncestorOfType<ModalOverlay>()!;
         Rect shown = settings.Bounds;
@@ -225,15 +235,14 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Matrix midway = picture.RenderTransform!.Value;
         Assert.InRange(midway.M11, 0.92, 0.999);
         Assert.Equal(midway.M11, midway.M22, 3);
-        Pump(1200);
-        Assert.DoesNotContain(overlay, ui.Window.GetVisualDescendants());
+        TestWait.Until(() => !ui.Window.GetVisualDescendants().Contains(overlay), "the closed modal to leave");
         Assert.Null(picture.Source);
 
         // Shown again straight after closing, it is there as before.
         menus.OpenSettings();
         settings.Close();
         menus.OpenSettings();
-        Pump(300);
+        Pump();
         Assert.True(settings.IsOpen);
         Assert.Equal(shown.Size, settings.Bounds.Size);
         ui.Window.Close();
@@ -243,20 +252,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     public void SwitchingViewsMorphsOneIntoTheOtherWhereYouWere()
     {
         // Slowed down, so the morph caught midway is still midway on a busy machine; animated whatever Windows says.
-        double pace = EntryViewMorph.Pace;
         EntryViewMorph.Pace = 4;
         Ui.Motion.ReducedOverride = false;
-        using var restore = new Restore(() =>
-        {
-            EntryViewMorph.Pace = pace;
-            Ui.Motion.ReducedOverride = null;
-        });
+        using var restore = new Restore(TestMotion.Restore);
         Explorer ui = OpenExplorer(files: 80);
         ExplorerViewModel bridge = ui.Session.Tabs.ActiveBridge;
         WorkspaceView workspace = ui.Find<WorkspaceView>();
         EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
         table.ScrollViewer.Offset = new Vector(0, 30 * Ui.Theme.RowHeight);
-        Pump(200);
+        Pump();
 
         // The grid comes in where the list was: the row with the first item you could see, at the top.
         bridge.SetViewMode("grid");
@@ -271,7 +275,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Single(workspace.EntriesArea.Children.OfType<Image>());
 
         // Once there, nothing is left over: containers are reused as the grid scrolls.
-        Pump(2400);
+        TestWait.Until(() => !workspace.EntriesArea.Children.OfType<Image>().Any()
+            && grid.RealizedCells().All(cell => cell.RenderTransform is null && cell.Transitions is null), "the morph to end");
         Assert.All(grid.RealizedCells(), cell =>
         {
             Assert.Null(cell.RenderTransform);
@@ -297,7 +302,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         MenuRow menus = ui.Find<MenuRow>();
         menus.OpenSettings();
-        Pump(300);
+        Pump();
         SettingsDialog settings = menus.Settings!;
         Assert.True(settings.IsOpen);
         Assert.True(ModalOverlay.IsOpen(ui.Window));
@@ -328,7 +333,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Esc dismisses it and undoes all of that.
         Key(ui.Window, PhysicalKey.Escape);
-        Pump(300);
+        Pump();
         Assert.False(settings.IsOpen);
         Assert.False(ModalOverlay.IsOpen(ui.Window));
         Assert.Equal(0, Assert.IsAssignableFrom<IBlurEffect>(backdrop.Effect).Radius, 1);
@@ -341,7 +346,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Same(settings, menus.Settings);
         Assert.True(settings.IsOpen);
         settings.Close();
-        Pump(250);
+        Pump();
     }
 
     [AvaloniaFact]
@@ -351,9 +356,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         MenuRow menus = ui.Find<MenuRow>();
         var about = new AboutDialog();
         about.Present(menus);
-        Pump(250);
+        Pump();
         about.FindControl<Views.Controls.ChromeToolButton>("ChangelogButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        Pump(250);
+        Pump();
         ChangelogDialog changelog = about.Changelog!;
         Assert.True(changelog.IsOpen);
         Assert.True(about.IsOpen);
@@ -364,11 +369,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Escape closes the changelog and leaves About up.
         Key(ui.Window, PhysicalKey.Escape);
-        Pump(250);
+        Pump();
         Assert.False(changelog.IsOpen);
         Assert.True(about.IsOpen);
         Key(ui.Window, PhysicalKey.Escape);
-        Pump(250);
+        Pump();
         Assert.False(about.IsOpen);
     }
 
@@ -384,12 +389,12 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Contains(changelog.Releases, release => release.Version == "0.0.1");
         changelog.Present(ui.Find<MenuRow>());
         await changelog.Updated;
-        Pump(100);
+        Pump();
         Assert.Equal(["9.9.9"], changelog.Releases.Select(release => release.Version));
         Assert.Contains(changelog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "Read from the repository.");
         Assert.Equal(repository, File.ReadAllText(Infrastructure.ChangelogSource.CachePath));
         changelog.Close();
-        Pump(250);
+        Pump();
 
         // Offline: the copy kept last time, from the start.
         Infrastructure.ChangelogSource.Forget();
@@ -424,16 +429,15 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         var changelog = new ChangelogDialog();
         changelog.Present(ui.Find<MenuRow>());
-        Pump(300);
+        Pump();
         ScrollViewer scroller = changelog.GetVisualDescendants().OfType<ScrollViewer>().Single();
         // Between the text and the scroll bar, where no text is: still part of the list.
         Point gap = scroller.TranslatePoint(new Point(scroller.Bounds.Width - 12 - 4, scroller.Bounds.Height / 2), ui.Window)!.Value;
         Assert.Empty(ui.Window.GetVisualsAt(gap).OfType<TextBlock>());
         ui.Window.MouseWheel(gap, new Vector(0, -1));
-        Pump(900);
-        Assert.Equal(SmoothScrolling.NotchDistance, scroller.Offset.Y, 1);
+        TestWait.Until(() => Math.Abs(scroller.Offset.Y - SmoothScrolling.NotchDistance) < 0.05, "the changelog to glide a notch");
         changelog.Close();
-        Pump(250);
+        Pump();
     }
 
     [AvaloniaFact]
@@ -442,7 +446,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         MenuRow menus = ui.Find<MenuRow>();
         menus.OpenSettings();
-        Pump(250);
+        Pump();
         SettingsDialog settings = menus.Settings!;
         ModalOverlay overlay = settings.FindAncestorOfType<ModalOverlay>()!;
         bool Inside() => ui.Window.FocusManager!.GetFocusedElement() is Visual focused
@@ -452,13 +456,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         var seen = new HashSet<object>();
         for (int i = 0; i < 40; i++)
         {
-            Key(ui.Window, PhysicalKey.Tab);
+            KeyNow(ui.Window, PhysicalKey.Tab);
             Assert.True(Inside(), $"Tab {i} left the modal");
             seen.Add(ui.Window.FocusManager!.GetFocusedElement()!);
         }
         for (int i = 0; i < 40; i++)
         {
-            Key(ui.Window, PhysicalKey.Tab, RawInputModifiers.Shift);
+            KeyNow(ui.Window, PhysicalKey.Tab, RawInputModifiers.Shift);
             Assert.True(Inside(), $"Shift+Tab {i} left the modal");
         }
         // And it does move between the sheet's controls rather than sticking on one.
@@ -476,11 +480,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         maximize.Focus();
         Assert.False(Inside());
         Key(ui.Window, PhysicalKey.Escape);
-        Pump(250);
+        Pump();
         Assert.False(settings.IsOpen);
         Assert.False(ModalOverlay.IsOpen(ui.Window));
         ui.Window.WindowState = WindowState.Normal;
-        Pump(100);
+        Pump();
     }
 
     [AvaloniaFact]
@@ -491,7 +495,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer(openGame: false);
         MenuRow menus = ui.Find<MenuRow>();
         menus.OpenSettings();
-        Pump(200);
+        Pump();
         SettingsDialog settings = menus.Settings!;
 
         // One row per edition, in the catalogue's order, each with its own executable.
@@ -569,17 +573,17 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         settings.CheckForUpdates.IsOn = true;
         Assert.True(Infrastructure.Updates.CheckOnStartup);
         settings.Close();
-        Pump(250);
+        Pump();
 
         // Settings reopens on the group it was left at, up to date: the check at startup turned off elsewhere shows off.
         Infrastructure.Updates.CheckOnStartup = false;
         menus.OpenSettings();
-        Pump(200);
+        Pump();
         Assert.Equal("Updates", settings.Group);
         Assert.False(settings.CheckForUpdates.IsOn);
         Infrastructure.Updates.CheckOnStartup = true;
         settings.Close();
-        Pump(250);
+        Pump();
     }
 
     [AvaloniaFact]
@@ -870,7 +874,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(30);
         Assert.True(workspace.EntryContextMenu.IsOpen, "open on press");
         ui.Window.MouseUp(Row(3), MouseButton.Right);
-        Pump(200);
+        Pump();
         // The release over the menu that just appeared neither closes it nor triggers an item.
         Assert.True(workspace.EntryContextMenu.IsOpen, "open after release");
         // It is laid out where the press was, in the window's overlay.
@@ -1044,12 +1048,12 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Wider, the whole path fits again: nothing folded, no mark; narrower again, it folds as before.
         ui.Window.Width = 2400;
-        Pump(100);
+        Pump();
         Assert.Equal(0, navigation.Segments.HiddenCount);
         Assert.Equal(0, navigation.OverflowSegment!.Bounds.Width);
         Assert.All(crumbs, segment => Assert.True(segment.Bounds.Width > 0));
         ui.Window.Width = 900;
-        Pump(100);
+        Pump();
         Assert.Equal(hidden, navigation.Segments.HiddenCount);
 
         // The "…" mark lists the folded folders, outermost first, and goes to the one picked.
@@ -1139,7 +1143,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("binary.meta isn't a text file", ui.Bridge.Status);
 
         ui.Bridge.ActivateEntry(RowOf("handling.meta"));
-        Pump(300);
+        Pump();
         TextViewer viewer = ui.Session.TextViewer!;
         Assert.True(viewer.IsOpen);
         Assert.True(ModalOverlay.IsOpen(ui.Window));
@@ -1175,7 +1179,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Then Escape closes it.
         Key(ui.Window, PhysicalKey.Escape);
-        Pump(250);
+        Pump();
         Assert.False(viewer.IsOpen);
         Assert.False(ModalOverlay.IsOpen(ui.Window));
         // Closed, it is let go of, and the whole file with it.
@@ -1190,7 +1194,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Bridge.Refresh();
         Pump();
         ui.Bridge.ActivateEntry(ui.Bridge.EntriesModel.Select((item, row) => (item, row)).First(pair => pair.item.Name == "vehicles.csv").row);
-        Pump(300);
+        Pump();
         TextViewer viewer = ui.Session.TextViewer!;
         Assert.True(viewer.ShowingTable);
         Assert.True(viewer.ViewSwitch.IsVisible);
@@ -1226,7 +1230,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("6 lines", viewer.LinesText.Text);
         Assert.Equal(1, viewer.MatchCount);
         viewer.Close();
-        Pump(250);
+        Pump();
     }
 
     [AvaloniaFact]
@@ -1419,7 +1423,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Tabs.NewTab();
         ui.Tabs.NewTab();
         ui.Tabs.ActivateTab(1);
-        Pump(100);
+        Pump();
         TabStrip strip = ui.Find<TabStrip>();
         ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
         TabStripTab Drawn(ExplorerViewModel tab) =>
@@ -1444,7 +1448,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         double sliding = Offset(before[1]);
         Assert.InRange(sliding, -219.9, -0.1);  // on its way, not jumped
-        Pump(SlowSlideMilliseconds + 200);
+        TestWait.Until(() => Math.Abs(Offset(before[1]) + 220) < 0.0005, "the tabs to slide aside");
         Assert.Equal(-220, Offset(before[1]), 3);
         Assert.Equal(-220, Offset(before[2]), 3);
 
@@ -1462,8 +1466,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(0, Offset(before[1]), 3);
         Assert.Equal(0, Offset(before[2]), 3);
         Assert.InRange(Offset(before[0]), -40.1, 0);
-        Pump(SlowSlideMilliseconds + 200);
-        Assert.Equal(0, Offset(before[0]), 3);
+        TestWait.Until(() => Offset(before[0]) == 0, "the dropped tab to settle");
         Assert.Equal(new Point(14 + 440, 42), Drawn(before[0]).TranslatePoint(default, ui.Window)!.Value);
         // The session still has one texture window per tab.
         Assert.Equal(3, ui.Session.TextureEditors.Count);
@@ -1478,7 +1481,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         // The tab that is left at the end has a game, so the strip stays: a lone empty tab hides it.
         ui.Tabs.ActiveBridge.OpenGame(Work);
         ui.Tabs.NewTab();
-        Pump(100);
+        Pump();
         TabStrip strip = ui.Find<TabStrip>();
         ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
         TabStripTab Drawn(ExplorerViewModel tab) =>
@@ -1496,10 +1499,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.InRange(Offset(before[1]), 0.1, 219.9);
         Assert.InRange(Offset(before[2]), 0.1, 219.9);
         Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
-        Pump(SlowSlideMilliseconds + 200);
-        Assert.Equal(0, Offset(before[1]), 3);
-        Assert.Equal(0, Offset(before[2]), 3);
-        Assert.Equal(0, TabStrip.SlideOffset(plus), 3);
+        TestWait.Until(() => Math.Abs(Offset(before[1])) + Math.Abs(Offset(before[2])) + Math.Abs(TabStrip.SlideOffset(plus)) < 0.0005,
+            "the tabs to glide into place");
         Assert.Equal(new Point(14, 42), Drawn(before[1]).TranslatePoint(default, ui.Window)!.Value);
         Assert.Equal(plusLeft - 220, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
 
@@ -1509,8 +1510,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         Assert.Equal(0, Offset(before[1]), 3);
         Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
-        Pump(SlowSlideMilliseconds + 200);
-        Assert.Equal(plusLeft - 440, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
+        TestWait.Until(() => Math.Abs(plus.TranslatePoint(default, ui.Window)!.Value.X - (plusLeft - 440)) < 0.0005, "the new-tab button to glide into place");
     }
 
     [AvaloniaFact]
@@ -1595,7 +1595,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Explorer ui = OpenExplorer();
         ui.Tabs.NewTab();
         ui.Tabs.ActivateTab(0);
-        Pump(100);
+        Pump();
         Window window = ui.Window;
         Point At(Visual visual) => visual.TranslatePoint(default, window)!.Value;
 
@@ -1664,7 +1664,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         Assert.Equal(WindowState.Maximized, ui.Window.WindowState);
         ui.Window.WindowState = WindowState.Normal;
-        Pump(100);
+        Pump();
 
         MenuRow menus = ui.Find<MenuRow>();
         Views.Controls.MenuBarButton file = menus.FileButton;
@@ -1859,8 +1859,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
         Pump(30);
         Assert.InRange(scroller.Offset.Y, 1, SmoothScrolling.NotchDistance - 1);
-        Pump(400);
-        Assert.Equal(SmoothScrolling.NotchDistance, scroller.Offset.Y, 3);
+        TestWait.Until(() => Math.Abs(scroller.Offset.Y - SmoothScrolling.NotchDistance) < 0.0005, "the glide to cover a notch");
     }
 
     [AvaloniaFact]
@@ -1875,8 +1874,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
             Pump(15);
         }
-        Pump(500);
-        Assert.Equal(3 * SmoothScrolling.NotchDistance, scroller.Offset.Y, 3);
+        TestWait.Until(() => Math.Abs(scroller.Offset.Y - 3 * SmoothScrolling.NotchDistance) < 0.0005, "the glides to add up");
     }
 
     [AvaloniaFact]
@@ -1900,8 +1898,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             Pump(15);
         }
         Assert.Contains(stretches, y => Math.Abs(y - Math.Round(y)) > 0.01);
-        Pump(600);
-        Assert.Null(rows.RenderTransform);
+        TestWait.Until(() => rows.RenderTransform is null, "the list to spring back");
 
         // The bottom stretches the other way.
         scroller.Offset = scroller.Offset.WithY(scroller.Extent.Height - scroller.Viewport.Height);
@@ -1909,8 +1906,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Window.MouseWheel(new Point(600, 400), new Vector(0, -1));
         Pump(40);
         Assert.True(rows.RenderTransform is Avalonia.Media.TranslateTransform { Y: < 0 }, "The bottom of the list should stretch up");
-        Pump(600);
-        Assert.Null(rows.RenderTransform);
+        TestWait.Until(() => rows.RenderTransform is null, "the list to spring back");
     }
 
     [AvaloniaFact]
@@ -1929,7 +1925,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         double held = scroller.Offset.Y;
         Assert.InRange(held, 1, 3 * SmoothScrolling.NotchDistance - 1);
-        Pump(400);
+        Pump(150);
         Assert.Equal(held, scroller.Offset.Y, 3);
         ui.Window.MouseUp(lane, MouseButton.Left);
     }

@@ -24,14 +24,14 @@ public sealed class SearchViewTests : ExplorerTestBase
             await bridge.SearchSettled;
             Dispatcher.UIThread.RunJobs();
         }
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
     }
 
     private static void Key(MainWindow window, Key key, RawInputModifiers modifiers, PhysicalKey physical)
     {
         window.KeyPress(key, modifiers, physical, null);
         window.KeyRelease(key, modifiers, physical, null);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
     }
 
     private (MainWindow Window, ExplorerViewModel Bridge, NavigationBar Navigation, WorkspaceView Workspace) Open()
@@ -47,7 +47,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         return (window, bridge, window.GetVisualDescendants().OfType<NavigationBar>().Single(),
             window.GetVisualDescendants().OfType<WorkspaceView>().Single());
     }
@@ -106,12 +106,12 @@ public sealed class SearchViewTests : ExplorerTestBase
 
         // Text typed into the box comes along to whatever is chosen.
         navigation.SearchField.Text = "readme";
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Point at = navigation.ScopeButton.TranslatePoint(new Point(20, 12), window)!.Value;
         window.MouseMove(at, RawInputModifiers.None);
         window.MouseDown(at, MouseButton.Left, RawInputModifiers.None);
         window.MouseUp(at, MouseButton.Left, RawInputModifiers.None);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         var menu = Assert.IsType<Views.Controls.RetroMenu>(navigation.ScopeMenu);
         var items = menu.Items.OfType<Views.Controls.RetroMenuItem>().ToArray();
         // The names only, with icons; what each covers is a tooltip.
@@ -135,7 +135,7 @@ public sealed class SearchViewTests : ExplorerTestBase
     {
         var (window, bridge, navigation, workspace) = Open();
         navigation.SearchField.Focus();
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         // The search row, Folder chosen, the query taking the keyboard.
         Assert.True(bridge.IsSearching);
         Assert.Equal(SearchScope.Folder, bridge.SearchScopeValue);
@@ -160,11 +160,11 @@ public sealed class SearchViewTests : ExplorerTestBase
         // Only the folder has subfolders to add: with Game the toggle isn't there, and the query takes its room.
         double withToggle = navigation.QueryField.TrailingSpace;
         bridge.BeginSearch(SearchScope.Everywhere);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Assert.False(navigation.SubfoldersToggle.IsVisible);
         Assert.True(navigation.QueryField.TrailingSpace < withToggle);
         bridge.BeginSearch(SearchScope.Folder);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Assert.True(navigation.SubfoldersToggle.IsVisible);
         Assert.Equal(withToggle, navigation.QueryField.TrailingSpace);
         window.Close();
@@ -183,15 +183,15 @@ public sealed class SearchViewTests : ExplorerTestBase
         EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
         // A row selected near the top, then the view scrolled far below it.
         bridge.SelectEntry(2);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         table.ScrollViewer.Offset = new Vector(0, 6000);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
 
         // The same search again, finding the same files: nothing moves.
         bridge.Refresh();
         await Searched(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
 
         // Found again with a new file among them (the index caught up): the list changes in place, the selection
@@ -199,7 +199,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         Write(Path.Combine(Work, "f00", "aaa_new.xml"), "n");
         bridge.Refresh();
         await Searched(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.Equal(401, bridge.SearchHitCount);
         Assert.Equal(6000, table.ScrollViewer.Offset.Y, 1);
         Assert.Single(bridge.EntriesModel, item => item.Selected);
@@ -207,7 +207,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         // A new search starts at the top.
         navigation.QueryField.Text = "item0";
         await Searched(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.Equal(0, table.ScrollViewer.Offset.Y, 1);
         window.Close();
     }
@@ -228,22 +228,21 @@ public sealed class SearchViewTests : ExplorerTestBase
             // Typing slides it shut: midway it is narrower and fading, the panel inside at its full width, cut off.
             bridge.BeginSearch(SearchScope.Everywhere);
             navigation.QueryField.Text = "readme";
-            ExplorerStateRenders.Pump(500);
+            TestWait.Pump(500);
             Assert.False(workspace.ShowsFolders);
             Assert.True(workspace.FoldersFrame.IsVisible);
             Assert.InRange(workspace.FoldersFrame.Bounds.Width, 1, width - 1);
             Assert.InRange(workspace.FoldersFrame.Opacity, 0.001, 0.999);
             Assert.Equal(width, workspace.Folders.Bounds.Width, 1);
-            ExplorerStateRenders.Pump(1200);
-            Assert.False(workspace.FoldersFrame.IsVisible);
+            TestWait.Until(() => !workspace.FoldersFrame.IsVisible, "the folder panel to slide shut");
             Assert.Equal(0, column.Width.Value);
 
             // Leaving the search slides it open again, to the width it had.
             bridge.EndSearch();
-            ExplorerStateRenders.Pump(500);
+            TestWait.Pump(500);
             Assert.True(workspace.ShowsFolders);
             Assert.InRange(workspace.FoldersFrame.Bounds.Width, 1, width - 1);
-            ExplorerStateRenders.Pump(1200);
+            TestWait.Until(() => workspace.FoldersFrame.Opacity == 1 && Math.Abs(workspace.FoldersFrame.Bounds.Width - width) < 1, "the folder panel to slide open");
             Assert.True(workspace.FoldersFrame.IsVisible);
             Assert.Equal(1, workspace.FoldersFrame.Opacity);
             Assert.Equal(width, workspace.FoldersFrame.Bounds.Width, 1);
@@ -261,13 +260,14 @@ public sealed class SearchViewTests : ExplorerTestBase
     {
         var (window, bridge, navigation, workspace) = Open();
         bridge.SetViewMode("grid");
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Assert.IsType<EntryGrid>(workspace.EntriesView);
 
         // The search row open with nothing typed leaves the grid; the switch makes way for the row.
         double barRight = navigation.ViewModeSwitch.TranslatePoint(new Point(navigation.ViewModeSwitch.Bounds.Width, 0), navigation)!.Value.X;
         bridge.BeginSearch(SearchScope.Everywhere);
-        ExplorerStateRenders.Pump(500);
+        // The switch's slot narrows to nothing as it fades.
+        TestWait.Until(() => navigation.ViewModeSlot.Bounds.Width < 0.5, "the switch to make way for the search row");
         Assert.IsType<EntryGrid>(workspace.EntriesView);
         Assert.False(navigation.ShowsViewModeSwitch);
         Assert.Equal(0, navigation.ViewModeSlot.Bounds.Width, 1);
@@ -286,7 +286,9 @@ public sealed class SearchViewTests : ExplorerTestBase
 
         // The search over, the grid comes back as it was.
         bridge.EndSearch();
-        ExplorerStateRenders.Pump(500);
+        TestWait.Until(() => navigation.ViewModeSwitch.Opacity == 1
+            && Math.Abs(navigation.ViewModeSwitch.TranslatePoint(new Point(navigation.ViewModeSwitch.Bounds.Width, 0), navigation)!.Value.X - barRight) < 0.5,
+            "the switch to come back");
         Assert.IsType<EntryGrid>(workspace.EntriesView);
         Assert.Equal(1, navigation.ViewModeSwitch.SelectedIndex);
         Assert.True(navigation.ShowsViewModeSwitch);
@@ -305,7 +307,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         EntryTable table = Assert.IsType<EntryTable>(workspace.EntriesView);
         bridge.SelectEntry(0);
         table.FocusTarget.Focus();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.False(navigation.QueryField.IsKeyboardFocusWithin);
 
         // A menu open over the search closes first.
@@ -313,7 +315,7 @@ public sealed class SearchViewTests : ExplorerTestBase
         window.MouseMove(at, RawInputModifiers.None);
         window.MouseDown(at, MouseButton.Left, RawInputModifiers.None);
         window.MouseUp(at, MouseButton.Left, RawInputModifiers.None);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         Assert.NotNull(navigation.ScopeMenu);
         Key(window, Avalonia.Input.Key.Escape, RawInputModifiers.None, PhysicalKey.Escape);
         Assert.Null(navigation.ScopeMenu);
@@ -371,32 +373,34 @@ public sealed class SearchViewTests : ExplorerTestBase
         // A row selected a screen down, then one near the end: the current row's highlight sets off on a glide of
         // thousands of pixels, which takes a while.
         bridge.SelectEntry(30);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         viewer.Offset = new Vector(0, viewer.Extent.Height - viewer.Viewport.Height);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         bridge.SelectEntry(bridge.EntriesModel.Count - 3);
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
 
         // Wheeled up from above that row, past where the glide is: the view goes where the wheel takes it, to the top,
         // instead of being caught by the glide and pulled down with it.
         viewer.Offset = new Vector(0, 2000);
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Point over = table.TranslatePoint(new Point(300, 200), window)!.Value;
         double last = viewer.Offset.Y;
         for (int notch = 0; notch < 50; notch++)
         {
             window.MouseWheel(over, new Vector(0, 1), RawInputModifiers.None);
-            ExplorerStateRenders.Pump(30);
+            TestWait.Pump(30);
             Assert.True(viewer.Offset.Y <= last + 0.5, $"notch {notch}: {last} -> {viewer.Offset.Y}");
             last = viewer.Offset.Y;
+            if (last < 0.5)
+                break;
         }
-        ExplorerStateRenders.Pump(300);
+        TestWait.Until(() => viewer.Offset.Y < 1, "the wheel to take the view to the top");
+        TestWait.Settle();
         Assert.Equal(0, viewer.Offset.Y, 1);
 
         // Moving the current row again follows it as before.
         bridge.SelectEntry(bridge.EntriesModel.Count - 1);
-        ExplorerStateRenders.Pump(300);
-        Assert.True(viewer.Offset.Y > 0);
+        TestWait.Until(() => viewer.Offset.Y > 0, "the view to follow the current row");
         window.Close();
     }
 
