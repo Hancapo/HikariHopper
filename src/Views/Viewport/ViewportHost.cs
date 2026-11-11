@@ -143,7 +143,15 @@ internal sealed partial class ViewportHost : NativeControlHost
     private (float Yaw, float Pitch) turned = (float.NaN, float.NaN);
 
     /// <summary>Looks from along a world axis, as the gizmo asks.</summary>
-    public void LookFrom(System.Numerics.Vector3 axis) => renderer?.Camera.LookFrom(axis);
+    public void LookFrom(System.Numerics.Vector3 axis)
+    {
+        if (renderer is null)
+            return;
+        // Framed first, as F frames it, so the view shows it whole from that side wherever the camera was.
+        renderer.Frame(framed);
+        renderer.Camera.LookFrom(axis);
+        CameraTurned?.Invoke();
+    }
 
     /// <summary>Orbits the camera (or turns it, flying) by a drag in pixels, as a drag on the view does.</summary>
     public void Turn(float dx, float dy)
