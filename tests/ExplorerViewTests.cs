@@ -1448,7 +1448,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump(20);
         double sliding = Offset(before[1]);
         Assert.InRange(sliding, -219.9, -0.1);  // on its way, not jumped
-        TestWait.Until(() => Math.Abs(Offset(before[1]) + 220) < 0.0005, "the tabs to slide aside");
+        TestWait.Until(() => Offset(before[1]) == -220 && Offset(before[2]) == -220, "the tabs to slide aside");
         Assert.Equal(-220, Offset(before[1]), 3);
         Assert.Equal(-220, Offset(before[2]), 3);
 
@@ -1499,7 +1499,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.InRange(Offset(before[1]), 0.1, 219.9);
         Assert.InRange(Offset(before[2]), 0.1, 219.9);
         Assert.InRange(TabStrip.SlideOffset(plus), 0.1, 219.9);
-        TestWait.Until(() => Math.Abs(Offset(before[1])) + Math.Abs(Offset(before[2])) + Math.Abs(TabStrip.SlideOffset(plus)) < 0.0005,
+        TestWait.Until(() => Offset(before[1]) == 0 && Offset(before[2]) == 0 && TabStrip.SlideOffset(plus) == 0,
             "the tabs to glide into place");
         Assert.Equal(new Point(14, 42), Drawn(before[1]).TranslatePoint(default, ui.Window)!.Value);
         Assert.Equal(plusLeft - 220, plus.TranslatePoint(default, ui.Window)!.Value.X, 3);
