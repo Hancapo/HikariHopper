@@ -270,9 +270,9 @@ public sealed class ViewportTests
         Vector4 close = Vector4.Transform(new Vector4(camera.Eye + camera.Forward * .01f, 1), camera.ViewProjection(16f / 9));
         Assert.InRange(close.Z / close.W, 0f, 1f);
 
-        // Orbiting keeps the distance; it stops short of the poles; zooming stays within the size's limits.
+        // Orbiting keeps the distance; it stops a hair short of the poles; zooming stays within the size's limits.
         camera.Orbit(400, 10000);
-        Assert.Equal(1.5f, camera.Pitch);
+        Assert.Equal(OrbitCamera.MaxPitch, camera.Pitch);
         Assert.Equal(camera.Distance, Vector3.Distance(camera.Eye, center), 0.01);
         camera.Zoom(1000);
         Assert.Equal(150 * .02f, camera.Distance, 0.001);
