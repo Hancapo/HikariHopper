@@ -662,14 +662,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(tab.ShowActivated);
 
         Views.Controls.ChromeToolButton[] strip = [viewer.ShadowsButton, viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
-        Assert.All(strip, button => Assert.Equal(new Avalonia.Size(30, 26), button.Bounds.Size));
-        // Side by side, joined by a one-pixel seam.
+        Assert.All(strip, button => Assert.Equal(new Avalonia.Size(28, 24), button.Bounds.Size));
+        // Side by side, two pixels apart, in one sunken well, as the footer's buttons are; the skeleton and lights this
+        // model hasn't have their glyphs faded right out, so they don't read as merely off, and their tooltips still
+        // show, to say why.
         for (int i = 1; i < strip.Length; i++)
-            Assert.Equal(new Avalonia.Point(31, 0), Avalonia.VisualExtensions.TranslatePoint(strip[i], default, strip[i - 1]));
-        // Joined segments with no panel behind them, as Blender's: the collision this model has is a solid segment; the
-        // skeleton and lights it hasn't have their glyphs faded right out, so they don't read as merely off, and their
-        // tooltips still show, to say why.
-        Assert.All(strip, button => Assert.True(button.Segment));
+            Assert.Equal(new Avalonia.Point(30, 0), Avalonia.VisualExtensions.TranslatePoint(strip[i], default, strip[i - 1]));
+        Assert.All(strip, button => Assert.True(button.InWell && !button.Segment));
+        Assert.Equal(Ui.Theme.InsetBg, viewer.ToolStrip.Background);
         Assert.True(viewer.SolidButton.IsEnabled);
         Assert.False(viewer.LightsButton.IsEnabled);
         Assert.True(Avalonia.Controls.ToolTip.GetShowOnDisabled(viewer.LightsButton));
