@@ -360,6 +360,31 @@ internal sealed class PartsPanel : UserControl
         }
     }
 
+    /// <summary>
+    /// The same parts read or built again (with more of their textures, or a geometry given a shader entry of its own):
+    /// the rows open and selected, and the keyboard's place, stay, by key.
+    /// </summary>
+    internal void Replace(IPartList value)
+    {
+        string[] open = [.. expanded], picked = [.. selected];
+        (string? at, string? from) = (cursor, anchor);
+        replacing = true;
+        try
+        {
+            Parts = value;
+        }
+        finally
+        {
+            replacing = false;
+        }
+        expanded.UnionWith(open);
+        selected.UnionWith(picked);
+        (cursor, anchor) = (at, from);
+        Refresh();
+    }
+
+    private bool replacing;
+
     private bool HasVariants => sections.Any(section => section.Kind == PartSectionKind.Variants);
 
     /// <summary>The rows of the sections listed as trees, every level down, for opening and closing them all.</summary>
@@ -697,7 +722,8 @@ internal sealed class PartsPanel : UserControl
         Rows = listed;
         selected.IntersectWith(listed.Select(row => row.Item1.Key));
         string[] now = [.. selected.Order(StringComparer.Ordinal)];
-        if (!now.SequenceEqual(toldSelection))
+        // Midway through a replace, the selection is put back before it's told.
+        if (!replacing && !now.SequenceEqual(toldSelection))
         {
             toldSelection = now;
             SelectionChanged?.Invoke();

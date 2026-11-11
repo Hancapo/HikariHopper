@@ -232,6 +232,12 @@ internal sealed class ShaderValuesCard : Border
     private readonly ScrollViewer scroller;
     private readonly ChromeToolButton resetAll;
     private readonly List<Row> rows = [];
+    // On a shared entry: whether a change goes to every geometry drawn with it, or to the picked one alone.
+    private readonly SegmentedSwitch applyTo;
+    private readonly DockPanel applyRow;
+    private int shared = 1;
+    // What else the picked geometry is drawn on: a geometry split by bone is a part under each.
+    private readonly TextBlock alsoOn;
 
     // A value's row: its fields, one per number, and its reset.
     private sealed record Row(ShaderValue Value, ScrubField[] Fields, ChromeToolButton Reset);
@@ -279,7 +285,24 @@ internal sealed class ShaderValuesCard : Border
         };
         Avalonia.Automation.AutomationProperties.SetName(resetAll, "Reset all the values");
         ThemedToolTip.Set(resetAll, "Put every value back as the file has it");
-        var header = new StackPanel { Children = { title, shader } };
+        applyTo = new SegmentedSwitch { Height = 22, VerticalAlignment = VerticalAlignment.Center };
+        applyTo.Sides.Add(new SwitchSide { Text = "All", Width = 64, Label = "All the geometries drawn with it" });
+        applyTo.Sides.Add(new SwitchSide { Text = "This one", Width = 72, Label = "This geometry alone" });
+        applyTo.RefreshSides();
+        applyTo.SideRequested += (_, side) => applyTo.SelectedIndex = side;
+        Avalonia.Automation.AutomationProperties.SetName(applyTo, "Apply to");
+        var applyLabel = new TextBlock { Text = "Apply to", FontSize = Ui.Theme.FontSize, Foreground = Ui.Theme.TextDim, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(applyTo, Dock.Right);
+        applyRow = new DockPanel { Margin = new Thickness(0, 8, FieldsGutter, 0), IsVisible = false, Children = { applyTo, applyLabel } };
+        alsoOn = new TextBlock
+        {
+            FontSize = Ui.Theme.SmallFontSize,
+            Foreground = Ui.Theme.TextFaint,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, FieldsGutter, 0),
+            IsVisible = false,
+        };
+        var header = new StackPanel { Children = { title, shader, alsoOn, applyRow } };
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(resetAll, Dock.Bottom);
         Child = new DockPanel { Children = { header, resetAll, scroller } };
@@ -326,6 +349,62 @@ internal sealed class ShaderValuesCard : Border
             edits.Reset(material, name);
     }
 
+    /// <summary>
+    /// Asked, at the first change in This one, to give the picked geometry an entry of its own: the viewer copies the
+    /// entry, hands it over with <see cref="Adopt"/>, and the change goes to the copy.
+    /// </summary>
+    public Action? SplitRequested { get; set; }
+
+    /// <summary>How many geometries are drawn with the entry shown: Apply to is offered when more than one.</summary>
+    internal int Shared => shared;
+
+    /// <summary>What the card says the geometry is also drawn on; empty when only on the part picked.</summary>
+    internal string AlsoOn => alsoOn.IsVisible ? alsoOn.Text ?? "" : "";
+
+    /// <summary>
+    /// Says what else the picked geometry is drawn on, the parts its bones split it into: a change to it, This one
+    /// included, shows on them too.
+    /// </summary>
+    public void SetAlsoOn(IReadOnlyList<string> parts)
+    {
+        alsoOn.IsVisible = parts.Count > 0;
+        alsoOn.Text = parts.Count switch
+        {
+            0 => "",
+            1 => $"Its geometry is also drawn on {parts[0]}.",
+            2 => $"Its geometry is also drawn on {parts[0]} and {parts[1]}.",
+            3 => $"Its geometry is also drawn on {parts[0]}, {parts[1]} and {parts[2]}.",
+            _ => $"Its geometry is also drawn on {parts[0]}, {parts[1]} and {parts.Count - 2} more parts.",
+        };
+    }
+
+    /// <summary>Whether Apply to is offered, the entry being shared.</summary>
+    internal bool ApplyToShown => applyRow.IsVisible;
+
+    /// <summary>Whether changes go to the picked geometry alone (This one), on a shared entry.</summary>
+    internal bool ApplyToOne
+    {
+        get => shared > 1 && applyTo.SelectedIndex == 1;
+        set => applyTo.SelectedIndex = value ? 1 : 0;
+    }
+
+    /// <summary>How many geometries are drawn with the entry shown, as the scene now counts them.</summary>
+    public void SetShared(int count)
+    {
+        shared = Math.Max(1, count);
+        applyTo.Sides[0].Text = $"All {shared}";
+        applyTo.Sides[0].Label = $"All {shared} geometries drawn with it";
+        applyTo.RefreshSides();
+        applyRow.IsVisible = shared > 1;
+    }
+
+    /// <summary>Takes the picked geometry's own copy of the entry shown, which its changes go to from now on.</summary>
+    public void Adopt(DrawableMaterial copy)
+    {
+        Material = copy;
+        SetShared(1);
+    }
+
     /// <summary>A field opened for typing, and needs the keyboard in the card's window.</summary>
     public event Action? TypingStarted;
 
@@ -338,9 +417,14 @@ internal sealed class ShaderValuesCard : Border
         set => scroller.MaxHeight = Math.Max(80, value - 64);
     }
 
-    /// <summary>Shows a shader entry's values, under <paramref name="name"/> (the geometry's), or nothing.</summary>
-    public void Show(string name, DrawableMaterial? material)
+    /// <summary>
+    /// Shows a shader entry's values, under <paramref name="name"/> (what the geometry belongs to), or nothing; drawn
+    /// with it are <paramref name="geometries"/> geometries, and a change goes to all of them until This one is picked.
+    /// </summary>
+    public void Show(string name, DrawableMaterial? material, int geometries = 1)
     {
+        applyTo.SelectedIndex = 0;
+        SetShared(geometries);
         // A field being typed in keeps what was typed, for the entry it was.
         foreach (Row row in rows)
             foreach (ScrubField field in row.Fields)
@@ -404,7 +488,7 @@ internal sealed class ShaderValuesCard : Border
             CornerRadius = Ui.Theme.InnerCorner,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        reset.Click += (_, _) => edits.Reset(material, value.Name);
+        reset.Click += (_, _) => edits.Reset(Material ?? material, value.Name);
         ThemedToolTip.Set(reset, "Put it back as the file has it");
         Avalonia.Automation.AutomationProperties.SetName(reset, $"Reset {value.Label}");
         var fields = new ScrubField[value.Components];
@@ -419,11 +503,15 @@ internal sealed class ShaderValuesCard : Border
             Avalonia.Automation.AutomationProperties.SetName(field, fields.Length == 1 ? value.Label : $"{value.Label} {component + 1}");
             field.Edited += (number, continuing) =>
             {
-                float[] values = ShaderEdits.Current(material, value.Name);
+                // In This one, the first change gives the geometry its own copy of the entry, which it then goes to.
+                if (!continuing && ApplyToOne)
+                    SplitRequested?.Invoke();
+                DrawableMaterial target = Material ?? material;
+                float[] values = ShaderEdits.Current(target, value.Name);
                 if (component < values.Length)
                 {
                     values[component] = number;
-                    edits.Set(material, value.Name, values, continuing);
+                    edits.Set(target, value.Name, values, continuing);
                 }
             };
             field.Ended += edits.Close;

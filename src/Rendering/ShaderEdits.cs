@@ -13,6 +13,9 @@ namespace HikariHopper.Rendering;
 /// <param name="Order">Where it comes in the card: by group, then within it.</param>
 internal sealed record ShaderValue(string Name, string Label, string Group, int Components, int Order);
 
+/// <summary>What a save wrote: the changed values as they were when it started, and how many geometries had entries of their own.</summary>
+internal sealed record ShaderSnapshot(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Values, int Splits);
+
 /// <summary>
 /// The shader values edited in a 3D viewer: each change goes into the shader entries read (so the next save writes it)
 /// and onto an undo list; what each value was when first changed is kept, to reset it to. A drag is one change.
@@ -21,17 +24,31 @@ internal sealed class ShaderEdits
 {
     private sealed record Change(DrawableMaterial Material, string Name, float[] Before, float[] After);
 
+    // A step to undo: its changes, and for a geometry moved to an entry of its own, how to move it back.
+    private sealed class Step
+    {
+        public List<Change> Changes { get; init; } = [];
+        public Action? Undo { get; init; }
+    }
+
     // The values as read (or last saved), by entry and name, from their first change: what a reset goes back to.
     private readonly Dictionary<DrawableMaterial, Dictionary<string, float[]>> originals = new(ReferenceEqualityComparer.Instance);
     // Steps to undo, each one or more changes (Reset all is one step); the last one's open while a drag goes on.
-    private readonly List<List<Change>> steps = [];
+    private readonly List<Step> steps = [];
     private bool open;
+    // Whether the next change joins the last step: the first change after a geometry was given an entry of its own.
+    private bool joinNext;
+    // Geometries given an entry of their own, now and as last saved: each adds an entry to the file.
+    private int splits, savedSplits;
 
     /// <summary>Raised after an entry's values changed, by an edit, a reset or an undo.</summary>
     public event Action<DrawableMaterial>? Changed;
 
-    /// <summary>Whether any value differs from the file's.</summary>
-    public bool Dirty => originals.Any(entry => entry.Value.Any(value => !Same(value.Value, Current(entry.Key, value.Key))));
+    /// <summary>Raised after an undo moved a geometry back to the entry it shared: what is drawn has to be built again.</summary>
+    public event Action? StructureChanged;
+
+    /// <summary>Whether any value differs from the file's, or a geometry was given an entry of its own since.</summary>
+    public bool Dirty => splits != savedSplits || originals.Any(entry => entry.Value.Any(value => !Same(value.Value, Current(entry.Key, value.Key))));
 
     /// <summary>Whether there is a step to undo.</summary>
     public bool CanUndo => steps.Count > 0;
@@ -86,10 +103,14 @@ internal sealed class ShaderEdits
         float[] before = Current(material, name);
         if (Same(before, values))
             return;
-        if (continuing && open && steps.Count > 0 && steps[^1] is [var last] && last.Material == material && last.Name == name)
-            steps[^1] = [last with { After = values }];
+        Step? last = steps.Count > 0 ? steps[^1] : null;
+        if (continuing && open && last is { Changes.Count: > 0 } && last.Changes[^1] is var change && change.Material == material && change.Name == name)
+            last.Changes[^1] = change with { After = values };
+        else if (joinNext && last is not null)
+            last.Changes.Add(new Change(material, name, before, values));
         else
-            steps.Add([new Change(material, name, before, values)]);
+            steps.Add(new Step { Changes = [new Change(material, name, before, values)] });
+        joinNext = false;
         // A drag's later steps join this one until it ends.
         open = true;
         Remember(material, name, before);
@@ -99,6 +120,35 @@ internal sealed class ShaderEdits
 
     /// <summary>Ends a drag: the next change is a step of its own.</summary>
     public void Close() => open = false;
+
+    /// <summary>
+    /// Gives a geometry a copy of its shader entry, added to the entry's list, so changes to it change that geometry
+    /// alone; its first change is one step with this. Undone, the geometry goes back to the entry it shared.
+    /// </summary>
+    public DrawableMaterial Split(DrawableGeometry geometry, List<DrawableMaterial> list, DrawableMaterial material)
+    {
+        Close();
+        DrawableMaterial copy = material.Clone();
+        ushort before = geometry.MaterialIndex;
+        list.Add(copy);
+        geometry.MaterialIndex = (ushort)(list.Count - 1);
+        splits++;
+        steps.Add(new Step
+        {
+            Undo = () =>
+            {
+                geometry.MaterialIndex = before;
+                list.Remove(copy);
+                originals.Remove(copy);
+                splits--;
+            },
+        });
+        joinNext = true;
+        return copy;
+    }
+
+    /// <summary>Whether a geometry was given an entry of its own that isn't saved yet.</summary>
+    public bool HasUnsavedSplits => splits != savedSplits;
 
     /// <summary>Puts a value back as the file has it, as a step of its own.</summary>
     public void Reset(DrawableMaterial material, string name)
@@ -125,7 +175,7 @@ internal sealed class ShaderEdits
         }
         if (step.Count == 0)
             return;
-        steps.Add(step);
+        steps.Add(new Step { Changes = step });
         Changed?.Invoke(material);
     }
 
@@ -135,11 +185,17 @@ internal sealed class ShaderEdits
         Close();
         if (steps.Count == 0)
             return false;
-        List<Change> step = steps[^1];
+        joinNext = false;
+        Step step = steps[^1];
         steps.RemoveAt(steps.Count - 1);
-        for (int i = step.Count - 1; i >= 0; i--)
-            Apply(step[i].Material, step[i].Name, step[i].Before);
-        foreach (DrawableMaterial material in step.Select(change => change.Material).Distinct(ReferenceEqualityComparer.Instance).Cast<DrawableMaterial>())
+        for (int i = step.Changes.Count - 1; i >= 0; i--)
+            Apply(step.Changes[i].Material, step.Changes[i].Name, step.Changes[i].Before);
+        if (step.Undo is { } undo)
+        {
+            undo();
+            StructureChanged?.Invoke();
+        }
+        foreach (DrawableMaterial material in step.Changes.Select(change => change.Material).Distinct(ReferenceEqualityComparer.Instance).Cast<DrawableMaterial>())
             Changed?.Invoke(material);
         return true;
     }
@@ -147,23 +203,24 @@ internal sealed class ShaderEdits
     /// <summary>The values as they are now become the file's, once it is saved: what a reset goes back to.</summary>
     public void MarkSaved() => MarkSaved(Snapshot());
 
-    /// <summary>The changed values as they are now, by entry and name: what a save writes, for <see cref="MarkSaved(IReadOnlyDictionary{DrawableMaterial, Dictionary{string, float[]}})"/>.</summary>
-    public IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Snapshot()
+    /// <summary>The changed values as they are now, by entry and name: what a save writes, for <see cref="MarkSaved(ShaderSnapshot)"/>.</summary>
+    public ShaderSnapshot Snapshot()
     {
         Close();
         var now = new Dictionary<DrawableMaterial, Dictionary<string, float[]>>(ReferenceEqualityComparer.Instance);
         foreach ((DrawableMaterial material, Dictionary<string, float[]> own) in originals)
             now[material] = own.Keys.ToDictionary(name => name, name => Current(material, name), StringComparer.Ordinal);
-        return now;
+        return new ShaderSnapshot(now, splits);
     }
 
     /// <summary>
     /// The values a save wrote (<see cref="Snapshot"/>, taken when it started) become the file's: changes made while it
     /// ran stay changed.
     /// </summary>
-    public void MarkSaved(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> saved)
+    public void MarkSaved(ShaderSnapshot saved)
     {
-        foreach ((DrawableMaterial material, Dictionary<string, float[]> values) in saved)
+        savedSplits = saved.Splits;
+        foreach ((DrawableMaterial material, Dictionary<string, float[]> values) in saved.Values)
             if (originals.TryGetValue(material, out var own))
                 foreach ((string name, float[] value) in values)
                     own[name] = value;
@@ -197,13 +254,14 @@ internal sealed class ShaderEdits
                 if (after[i] == now)
                     carried.Add(i);
         }
+        // A geometry given an entry of its own isn't in what was read again, so its step can't be undone there.
         for (int s = steps.Count - 1; s >= 0; s--)
         {
-            List<Change> step = [.. steps[s].Where(change => map.ContainsKey(change.Material)).Select(change => change with { Material = map[change.Material] })];
-            if (step.Count == 0)
+            List<Change> step = [.. steps[s].Changes.Where(change => map.ContainsKey(change.Material)).Select(change => change with { Material = map[change.Material] })];
+            if (step.Count == 0 || steps[s].Undo is not null)
                 steps.RemoveAt(s);
             else
-                steps[s] = step;
+                steps[s] = new Step { Changes = step };
         }
         return carried;
     }
