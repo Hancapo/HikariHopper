@@ -60,6 +60,8 @@ public partial class ModelViewer : UserControl, IModalContent
         shaderEdits.Changed += ShowEdited;
         shaderEdits.StructureChanged += Rebuild;
         card.SplitRequested = SplitPicked;
+        // Closed, the pick goes: no row selected, no outline, no card.
+        card.CloseRequested += () => Parts.ClearSelection();
         shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += (key, shift) => Command(key, shift);
         Viewport.PropertyChanged += (_, e) =>

@@ -265,6 +265,14 @@ public sealed class ShaderValuesTests
         Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
         Assert.False(viewer.Card.ResetAllShown);
 
+        // Its close mark lets go of the pick: no row selected, no outline, no card.
+        viewer.Card.RequestClose();
+        Assert.Empty(viewer.Parts.Selection);
+        Assert.Empty(viewer.Viewport.Picked);
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.CardOverlay.IsWanted);
+
         // Off the model: no card.
         Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
         Assert.False(viewer.CardOverlay.IsWanted);
