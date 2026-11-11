@@ -169,7 +169,8 @@ public sealed class PickingTests
         }
         Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
 
-        // Some pixels round the picked triangle take the accent, #5E8BD0, give or take the dither.
+        // Pixels round the picked triangle take the accent, #5E8BD0, give or take the dither; inside it nothing is
+        // drawn over it, so every pixel the pick changes is the outline's.
         int accent = 0, changed = 0;
         for (int at = 0; at < plain.Length; at += 4)
         {
@@ -181,6 +182,7 @@ public sealed class PickingTests
                 accent++;
         }
         Assert.True(accent > 20, $"{accent} accent pixels of {changed} changed");
+        Assert.Equal(changed, accent);
         Assert.True(changed < Size * Size / 3, $"{changed} pixels changed");
     }
 }
