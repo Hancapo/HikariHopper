@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Threading;
 using HikariHopper.Rendering;
 using HikariHopper.Views.Controls;
 
@@ -797,7 +798,11 @@ internal sealed class PartsPanel : UserControl
                 Focus();
                 if (!selected.Contains(node.Key))
                     Select(node);
-                OpenMenu(row, e.GetPosition(row));
+                // At the pointer in the panel, not on the row: picking a row draws the rows again, and the menu, anchored
+                // on a row gone from the window, didn't open; only a second right click, the row picked by then, opened
+                // it. And once what the new pick sets off has run, so a window it shows can't take the keyboard from it.
+                Point at = e.GetPosition(this);
+                Dispatcher.UIThread.Post(() => OpenMenu(this, at), DispatcherPriority.Background);
                 e.Handled = true;
             }
         };
@@ -829,7 +834,7 @@ internal sealed class PartsPanel : UserControl
         else
             Item("eye", "Show", "Space", () => SetShown(nodes, true));
         Item("eye", "Show all", "", ShowAll);
-        items.Children.Add(new Border { Height = 1, Margin = new Thickness(8, 4), Background = Ui.Theme.BorderSoft });
+        items.Children.Add(new RetroMenuSeparator());
         Item("focus", "Frame", "Enter", FrameSelection);
         Item("copy", nodes.Count == 1 ? "Copy name" : "Copy names", "Ctrl+C", () => _ = CopyNames());
         menu = DropdownWindow.OpenAt(anchor, at, items);

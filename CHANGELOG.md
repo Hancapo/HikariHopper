@@ -12,6 +12,9 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A right-click on a part in the 3D viewer's parts panel opens its menu at once, where it took a second right-click. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
+- The parts panel's menu shows the lines between its groups, as the app's other menus do. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09
