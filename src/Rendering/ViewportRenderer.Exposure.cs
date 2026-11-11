@@ -3,8 +3,9 @@ using Buffer = WebGpuSharp.Buffer;
 
 namespace HikariHopper.Rendering;
 
-// The frame's mean luminance (exposure.wgsl), measured each frame after the drawables are drawn, which the tone map
-// turns into GTA's exposure: per 16 by 16 tile, then their sum over the frame.
+// The mean luminance the tone map turns into GTA's exposure (exposure.wgsl): of a fixed view of the world at the hour
+// shown, all round the horizon, not of the frame, so where the camera is doesn't change it. Measured each frame, laid
+// out over the frame's size: per 16 by 16 tile, then their sum.
 internal sealed unsafe partial class ViewportRenderer
 {
     private const int MeasuredBytes = 16;
@@ -17,7 +18,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     private void CreateExposure()
     {
-        measured = device.CreateBuffer(new BufferDescriptor { Size = MeasuredBytes, Usage = BufferUsage.Storage });
+        measured = device.CreateBuffer(new BufferDescriptor { Size = MeasuredBytes, Usage = BufferUsage.Storage | BufferUsage.CopySrc });
         frameSkyBuffer = device.CreateBuffer(new BufferDescriptor { Size = SkyBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         exposureLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
@@ -82,7 +83,21 @@ internal sealed unsafe partial class ViewportRenderer
         });
     }
 
-    /// <summary>Measures the frame just drawn to the HDR target, for the tone map that follows.</summary>
+    /// <summary>The mean luminance last measured, which the exposure is worked out from: read back, for tests.</summary>
+    internal float MeasuredMean()
+    {
+        Buffer readback = device.CreateBuffer(new BufferDescriptor { Size = MeasuredBytes, Usage = BufferUsage.CopyDst | BufferUsage.MapRead });
+        CommandEncoder encoder = device.CreateCommandEncoder();
+        encoder.CopyBufferToBuffer(measured!, 0, readback, 0, MeasuredBytes);
+        queue.Submit(encoder.Finish());
+        readback.MapSync(MapMode.Read);
+        float mean = readback.GetConstMappedRange<float[], float>(0, 1, span => span.ToArray())[0];
+        readback.Unmap();
+        readback.Destroy();
+        return mean;
+    }
+
+    /// <summary>Measures the world's light at the hour shown, for the tone map that follows.</summary>
     private void MeasureFrame(CommandEncoder encoder)
     {
         var (x, y) = LuminanceTiles;

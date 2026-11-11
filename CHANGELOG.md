@@ -12,6 +12,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The 3D viewer's exposure no longer changes as the camera comes closer or goes further: it is set by the time of day, as the world would be lit then, not by how much of the view the model fills. ([#162](https://github.com/Hancapo/HikariHopper/pull/162))
 ### Removed
 
 ## [0.1.0] - 2026-11-09
