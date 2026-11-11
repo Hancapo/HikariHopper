@@ -3,22 +3,15 @@ using HikariHopper.Core;
 
 namespace HikariHopper.Tests;
 
-/// <summary>Checks against a real Legacy installation named by <c>HIKARI_TEST_LEGACY</c>; skipped otherwise.</summary>
+/// <summary>Checks against a real Legacy installation (<see cref="TestGames"/>); skipped without one.</summary>
 public sealed class RealGameTests
 {
-    private static string? LegacyRoot()
-    {
-        string? root = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY");
-        if (string.IsNullOrEmpty(root))
-            Assert.Skip("Set HIKARI_TEST_LEGACY to a GTA V Legacy installation to run real-asset checks.");
-        Assert.True(Directory.Exists(root), $"HIKARI_TEST_LEGACY does not exist: {root}");
-        return root;
-    }
+    private static string LegacyRoot() => TestGames.Legacy();
 
     [Fact]
     public void LoadsKeysAndBrowsesEncryptedAndNestedArchives()
     {
-        string root = LegacyRoot()!;
+        string root = LegacyRoot();
         var provider = new RpfProvider();
         provider.OpenGame(root);
         Assert.True(provider.HasGame);
@@ -48,7 +41,7 @@ public sealed class RealGameTests
     [Fact]
     public void RewritesACopiedEncryptedArchiveInPlace()
     {
-        string root = LegacyRoot()!;
+        string root = LegacyRoot();
         string scratch = Directory.CreateTempSubdirectory("hikari-rpf-").FullName;
         try
         {
