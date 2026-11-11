@@ -1,13 +1,12 @@
 // The geometries picked in the viewer, outlined over the frame as a 3D tool outlines its selection: first their shape
 // is drawn into a mask, all of it, seen through whatever is in front; then, across the frame, a pixel just outside the
-// mask takes the outline's colour and one inside it a faint wash of it.
+// mask takes the outline's colour, and the inside is left as it is drawn.
 // Scene, the colour helpers and the dither come from scene.wgsl.
 
 // The app's accent (Theme.Accent, #5E8BD0), in sRGB.
 const OUTLINE: vec3f = vec3f(0.369, 0.545, 0.816);
-// How far out from the shape the outline reaches, in pixels, and how strongly the inside is washed.
+// How far out from the shape the outline reaches, in pixels.
 const REACH: i32 = 2;
-const WASH: f32 = 0.12;
 
 @vertex
 fn vs_mask(@location(0) position: vec3f) -> @builtin(position) vec4f {
@@ -33,8 +32,9 @@ fn fs_outline(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let size = vec2i(textureDimensions(mask));
     let pixel = vec2i(position.xy);
     let colour = srgb_to_linear(OUTLINE);
+    // Inside the shape: nothing over it, so the picked geometry shows as it is drawn.
     if (textureLoad(mask, pixel, 0).r > 0.5) {
-        return vec4f(colour, WASH);
+        discard;
     }
     for (var dy = -REACH; dy <= REACH; dy++) {
         for (var dx = -REACH; dx <= REACH; dx++) {

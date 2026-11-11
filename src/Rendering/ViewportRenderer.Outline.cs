@@ -3,7 +3,7 @@ using WebGpuSharp;
 namespace HikariHopper.Rendering;
 
 // The outline round the geometries picked in the viewer (outline.wgsl): their shape drawn into a mask the frame's size,
-// all of it, then a pass over the frame that draws the outline just outside the mask and a faint wash inside it.
+// all of it, then a pass over the frame that draws the outline just outside the mask, leaving the inside as drawn.
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat MaskFormat = TextureFormat.R8Unorm;
