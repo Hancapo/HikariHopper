@@ -16,18 +16,6 @@ public sealed class SearchModeTests : ExplorerTestBase
     private static int Row(ExplorerViewModel bridge, string path) =>
         Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Path == path);
 
-    /// <summary>Waits for the index and the searches it sets off, and delivers their results.</summary>
-    private static async Task Searched(ExplorerViewModel bridge)
-    {
-        for (int round = 0; round < 4; round++)
-        {
-            await bridge.SearchIndexSettled;
-            Dispatcher.UIThread.RunJobs();
-            await bridge.SearchSettled;
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private string inner = "";
     private string update = "";
 

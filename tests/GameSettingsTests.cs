@@ -97,7 +97,7 @@ public sealed class GameSettingsTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ConfiguredGameOpensWithoutAFolderDialog() => OnUiThread(() =>
+    public void ConfiguredGameOpensWithoutAFolderDialog()
     {
         string legacy = MakeGame("Legacy");
         AppSettings.SetString(GameSettings.LegacyGameRootKey, legacy);
@@ -117,10 +117,10 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.Equal("", bridge.GameLoadingName);
         Assert.Equal(legacy, bridge.GamePath);
         Assert.Empty(Dialogs.Requests);
-    });
+    }
 
     [AvaloniaFact]
-    public void ManualGameLoadingKeepsTheCallingThreadResponsive() => OnUiThread(() =>
+    public void ManualGameLoadingKeepsTheCallingThreadResponsive()
     {
         string legacy = MakeGame("Legacy");
         using var entered = new ManualResetEventSlim();
@@ -148,10 +148,10 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.False(bridge.GameLoading);
         Assert.False(bridge.EntryOperationBusy);
         Assert.Equal("Loaded GTA V Legacy", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void FailedGameLoadReportsTheError() => OnUiThread(() =>
+    public void FailedGameLoadReportsTheError()
     {
         string folder = Directory.CreateDirectory(Path.Combine(Work, "Nothing")).FullName;
         var bridge = new ExplorerViewModel();
@@ -161,20 +161,20 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.Equal("Could not load game: Select the GTA V folder containing GTA5.exe or GTA5_Enhanced.exe", bridge.Status);
         Assert.False(bridge.GameLoading);
         Assert.False(bridge.HasGame);
-    });
+    }
 
     [AvaloniaFact]
-    public void MissingConfiguredGamePointsToSettings() => OnUiThread(() =>
+    public void MissingConfiguredGamePointsToSettings()
     {
         var bridge = new ExplorerViewModel();
         bridge.OpenConfiguredGame(GameSettings.EnhancedEdition);
         Assert.Equal("Configure the GTA V Enhanced path in Settings", bridge.Status);
         bridge.OpenConfiguredGame();
         Assert.Equal("Configure the game path in Settings", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void RestoreLastGameOpensTheSavedInstallation() => OnUiThread(() =>
+    public void RestoreLastGameOpensTheSavedInstallation()
     {
         string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
         AppSettings.SetString(GameSettings.LastGameRootKey, enhanced);
@@ -183,10 +183,10 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.True(tabs.ActiveBridge.HasGame);
         Assert.Equal(enhanced, tabs.ActiveBridge.GamePath);
         Assert.Equal("Home", tabs.ActiveBridge.TabTitle);
-    });
+    }
 
     [AvaloniaFact]
-    public void TabsRefreshGamePathSettingsAndRecentGamesAfterOpeningAGame() => OnUiThread(() =>
+    public void TabsRefreshGamePathSettingsAndRecentGamesAfterOpeningAGame()
     {
         string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
         string legacy = MakeGame("Legacy");
@@ -213,15 +213,15 @@ public sealed class GameSettingsTests : ExplorerTestBase
 
         Directory.Delete(legacy, recursive: true);
         Assert.Single(tabs.RecentGames);
-    });
+    }
 
     [AvaloniaFact]
-    public void RecentGamesKeepTheSixNewest() => OnUiThread(() =>
+    public void RecentGamesKeepTheSixNewest()
     {
         var tabs = new ExplorerTabsViewModel();
         var roots = Enumerable.Range(0, 8).Select(index => MakeGame($"Game{index}")).ToList();
         foreach (string root in roots)
             tabs.ActiveBridge.OpenGame(root);
         Assert.Equal(roots.AsEnumerable().Reverse().Take(6), AppSettings.GetStringList(GameSettings.RecentGameRootsKey));
-    });
+    }
 }

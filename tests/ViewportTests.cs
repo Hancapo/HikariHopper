@@ -388,13 +388,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void A_drawable_is_lit_at_the_time_of_day_its_slider_sets()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
 
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
@@ -510,18 +504,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void The_textures_button_opens_a_drawables_embedded_textures()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        // A textured material needs a UV set.
-        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
-            new FiveFury.Textures.Texture("tri_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]));
-        builder.Materials.Add(material);
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]));
 
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
@@ -542,17 +525,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     {
         byte[] Triangle(int size)
         {
-            var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-            var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-            var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-            material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
-                new FiveFury.Textures.Texture("tri_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
-            builder.Materials.Add(material);
-            var model = new FiveFury.Drawables.DrawableModelInput();
-            model.Meshes.Add(mesh);
-            builder.Models.Add(model);
-            return new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+            return TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
         }
         void Wait(Task task)
         {
@@ -593,13 +566,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void The_parts_arrow_and_the_tool_strip_are_drawn_over_the_viewports_left_edge()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle(bound: true);
         var window = new Views.MainWindow { Width = 1360, Height = 840 };
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
@@ -703,13 +670,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void A_drawables_collision_is_drawn_over_it_with_K()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle(bound: true);
 
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(viewer);
@@ -728,13 +689,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void The_time_of_day_opens_in_a_dropdown_window_over_the_viewport()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
         var window = new Views.MainWindow { Width = 1360, Height = 840 };
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
@@ -830,16 +785,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     public void A_drawable_shows_at_once_and_gets_the_games_textures_when_they_come()
     {
         // A triangle whose texture is only in the game's dictionaries, whose tables are still being worked out.
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "sign" };
-        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference("sign_d");
-        builder.Materials.Add(material);
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle("sign", diffuseName: "sign_d");
         var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
 
         var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr) { GameDictionaries = tables.Task });
@@ -891,13 +837,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void Typing_in_the_parts_filter_is_not_a_shortcut_and_a_framed_part_turns_the_camera()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         // In a window, so a key bubbles from the panel up through the viewer.
         var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };

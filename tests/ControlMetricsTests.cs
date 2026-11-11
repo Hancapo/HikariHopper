@@ -35,16 +35,7 @@ public sealed class ControlMetricsTests
         }
     }
 
-    private static Color Pixel(Window window, int x, int y)
-    {
-        using WriteableBitmap frame = window.CaptureRenderedFrame()!;
-        using ILockedFramebuffer buffer = frame.Lock();
-        var bytes = new byte[4];
-        System.Runtime.InteropServices.Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, bytes, 0, 4);
-        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
-            ? Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
-            : Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
-    }
+    private static Color Pixel(Window window, int x, int y) => TestPixels.At(window, x, y);
 
     private static Control TopLeft(Control control)
     {
@@ -54,7 +45,7 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
-    public void ChromeToolButtonHasQmlImplicitSizeAndVariantFills() => UiThread.Run(() =>
+    public void ChromeToolButtonHasQmlImplicitSizeAndVariantFills()
     {
         var ghost = (ChromeToolButton)TopLeft(new ChromeToolButton { Text = "A very long label that does not grow it" });
         var raised = (ChromeToolButton)TopLeft(new ChromeToolButton { Raised = true, Text = "Close", Margin = new Thickness(0, 40, 0, 0) });
@@ -78,10 +69,10 @@ public sealed class ControlMetricsTests
         Assert.Equal(T.Darker(T.Selection.Color, 1.12), Pixel(window, 4, 100));
         window.MouseUp(new Point(16, 94), MouseButton.Left);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void SelectedSegmentIsAPlainRaisedFill() => UiThread.Run(() =>
+    public void SelectedSegmentIsAPlainRaisedFill()
     {
         // Configured like the toolbar's segments (NavigationBar.axaml, ChromeToolButton.segment).
         var segment = (ChromeToolButton)TopLeft(new ChromeToolButton
@@ -95,7 +86,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(T.ChromeRaised.Color, Pixel(window, 15, 0));
         Assert.False(segment.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "PART_Bevel").IsVisible);
         window.Close();
-    });
+    }
 
     [Theory]
     [InlineData(0, 1, "Extracting 1 file")]
@@ -113,7 +104,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(icon, DragCountBadge.IconFor(folders, files));
 
     [AvaloniaFact]
-    public void DragBadgeShowsTheTotalCount() => UiThread.Run(() =>
+    public void DragBadgeShowsTheTotalCount()
     {
         Control badge = DragCountBadge.Badge(2, 3);
         Window window = Show(new Panel { Children = { TopLeft(badge) } }, 80, 60);
@@ -121,10 +112,10 @@ public sealed class ControlMetricsTests
         Assert.Equal("file-stack", badge.GetVisualDescendants().OfType<LucideIcon>().Single().IconName);
         Assert.Equal("Extracting 2 folders, 3 files", Avalonia.Automation.AutomationProperties.GetName(badge));
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void DragCursorIsTheArrowWithTheBadgeBesideIt() => UiThread.Run(() =>
+    public void DragCursorIsTheArrowWithTheBadgeBesideIt()
     {
         static int Alpha(byte[] pixels, int width, int x, int y) => pixels[(y * width + x) * 4 + 3];
         var (pixels, width, height) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 1);
@@ -146,10 +137,10 @@ public sealed class ControlMetricsTests
 
         var (_, wide, tall) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 2);
         Assert.Equal((2 * width, 2 * height), (wide, tall));
-    });
+    }
 
     [AvaloniaFact]
-    public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts() => UiThread.Run(() =>
+    public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts()
     {
         var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
         Window window = Show(bar, 400, 60);
@@ -191,10 +182,10 @@ public sealed class ControlMetricsTests
         Pump();
         Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void SheetsHaveAHeadingACloseMarkAndAFooter() => UiThread.Run(() =>
+    public void SheetsHaveAHeadingACloseMarkAndAFooter()
     {
         var about = new AboutDialog();
         Window window = Show(about, 520, 460);
@@ -206,10 +197,10 @@ public sealed class ControlMetricsTests
         // The version comes from the build, not a hard-coded number.
         Assert.Equal(StartPage.AppVersion, about.FindControl<TextBlock>("VersionText")!.Text);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void AboutSaysWhatItIsAndLinksToTheProject() => UiThread.Run(() =>
+    public void AboutSaysWhatItIsAndLinksToTheProject()
     {
         var about = new AboutDialog();
         Window window = Show(about, 520, 460);
@@ -233,12 +224,12 @@ public sealed class ControlMetricsTests
         Assert.Equal([AboutDialog.ProjectPage], opened);
         Assert.Equal("https://github.com/Hancapo/HikariHopper", AboutDialog.ProjectPage.ToString());
         window.Close();
-    });
+    }
 
     private static int Distance(Color a, Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
 
     [AvaloniaFact]
-    public void EveryWindowCarriesTheAppIcon() => UiThread.Run(() =>
+    public void EveryWindowCarriesTheAppIcon()
     {
         // The taskbar and Alt+Tab icon comes from one style, so every window class gets it.
         foreach (Window window in new Window[] { new MainWindow(), new SplashScreen() })
@@ -259,10 +250,10 @@ public sealed class ControlMetricsTests
         Assert.Equal(38, wordmark.Bounds.Height);
         Assert.Equal(38.0 * bitmap.PixelSize.Width / bitmap.PixelSize.Height, wordmark.Bounds.Width, 1);
         splash.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void QuietScrollBarThumbIsFourIdleEightActiveAndHiddenWhenContentFits() => UiThread.Run(() =>
+    public void QuietScrollBarThumbIsFourIdleEightActiveAndHiddenWhenContentFits()
     {
         var rows = new StackPanel();
         for (int i = 0; i < 60; i++)
@@ -299,7 +290,7 @@ public sealed class ControlMetricsTests
         }, 160, 200);
         Assert.Equal(T.AppBg.Color, Pixel(fits, 153, 10));
         fits.Close();
-    });
+    }
 
     [Fact]
     public void Windows11RoundsTheFramelessWindowsCorners()
@@ -327,7 +318,7 @@ public sealed class ControlMetricsTests
     private static extern bool DestroyWindow(nint handle);
 
     [AvaloniaFact]
-    public void TitleRowButtonsShowFocusOnlyFromTheKeyboard() => UiThread.Run(() =>
+    public void TitleRowButtonsShowFocusOnlyFromTheKeyboard()
     {
         var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
         var close = new WindowControlButton { Kind = "close", HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(60, 0, 0, 0) };
@@ -360,10 +351,10 @@ public sealed class ControlMetricsTests
         Assert.False(file.KeyboardFocused);
         Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void SubmenusOpenClearOfTheMenuWithTheirFirstRowLevel() => UiThread.Run(() =>
+    public void SubmenusOpenClearOfTheMenuWithTheirFirstRowLevel()
     {
         var root = new Panel { Background = T.ChromeBg };
         Window window = Show(root, 800, 400, T.WindowBg);
@@ -387,10 +378,10 @@ public sealed class ControlMetricsTests
         parent.IsSubMenuOpen = false;
         menu.Close();
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void FlatTextFieldPaddingFollowsIconAndKeyCap() => UiThread.Run(() =>
+    public void FlatTextFieldPaddingFollowsIconAndKeyCap()
     {
         var field = new FlatTextField();
         Assert.Equal(new Thickness(10, 0, 10, 0), field.Padding);
@@ -399,7 +390,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Thickness(32, 0, 40, 0), field.Padding);
         field.Text = "texture_01";
         Assert.Equal(10, field.CaretIndex);                               // Qt moves the cursor to the end
-    });
+    }
 
     [AvaloniaFact]
     public void FileGlyphResolvesTypeInks()
@@ -416,7 +407,7 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
-    public void EveryVendoredIconParsesAndEveryMappedNameExists() => UiThread.Run(() =>
+    public void EveryVendoredIconParsesAndEveryMappedNameExists()
     {
         foreach ((string name, IReadOnlyList<string> paths) in LucideIcons.Paths)
         {
@@ -427,10 +418,10 @@ public sealed class ControlMetricsTests
             Assert.True(LucideIcons.Paths.ContainsKey(name), name);
         foreach (string kind in new[] { "RPF Package", "Application", "Ped Definitions", "File" })
             Assert.True(LucideIcons.Paths.ContainsKey(FileGlyph.Resolve("file", kind).Icon), kind);
-    });
+    }
 
     [AvaloniaFact]
-    public void WindowsHaveTheQmlGeometry() => UiThread.Run(() =>
+    public void WindowsHaveTheQmlGeometry()
     {
         var main = new MainWindow();
         Assert.Equal((1360.0, 840.0, 940.0, 580.0), (main.Width, main.Height, main.MinWidth, main.MinHeight));
@@ -443,10 +434,10 @@ public sealed class ControlMetricsTests
         Assert.Equal(("Starting…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
         Assert.True(splash.Topmost);
 
-    });
+    }
 
     [AvaloniaFact]
-    public void SheetsAreSizedWithTheWindowWithinTheirBounds() => UiThread.Run(() =>
+    public void SheetsAreSizedWithTheWindowWithinTheirBounds()
     {
         // Their share of the window, within their least and most, never closer than 24px to an edge.
         var settings = new SettingsDialog();
@@ -462,10 +453,10 @@ public sealed class ControlMetricsTests
         // A small dialog keeps its own size.
         var fixedDialog = new Border { Width = 300, Height = 200 };
         Assert.Equal(new Size(300, 200), ModalOverlay.SizeFor(fixedDialog, new Size(1360, 800)));
-    });
+    }
 
     [AvaloniaFact]
-    public void GamePathRowKeepsItsSizeWhateverItsFolder() => UiThread.Run(() =>
+    public void GamePathRowKeepsItsSizeWhateverItsFolder()
     {
         // Not set, set and found, set and not found: the same height every time, so the card never moves. In a
         // window, whose layout rounding is what turned the check's taller line into a pixel.
@@ -484,10 +475,10 @@ public sealed class ControlMetricsTests
         row.PathValid = false;
         Assert.Equal(unset, Height());
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void GamePathRowReportsDetection() => UiThread.Run(() =>
+    public void GamePathRowReportsDetection()
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
         Assert.Equal("Not set", row.StatusMessage);
@@ -508,5 +499,5 @@ public sealed class ControlMetricsTests
         row.PathCommitted += (_, path) => committed = path;
         row.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.Equal("", committed);
-    });
+    }
 }

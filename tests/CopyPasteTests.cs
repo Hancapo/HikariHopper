@@ -8,9 +8,6 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class CopyPasteTests : ExplorerTestBase
 {
-    private static int Row(ExplorerViewModel bridge, string name) =>
-        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
-
     private static IEnumerable<string> Names(ExplorerViewModel bridge) => bridge.EntriesModel.Select(item => item.Name);
 
     private string Outside(string name)
@@ -28,7 +25,7 @@ public sealed class CopyPasteTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         Assert.True(await bridge.CopySelection());
         Assert.Equal([Path.Combine(Work, "notes.txt")], Clipboard.Files);
         Assert.Equal("Copied notes.txt", bridge.Status);
@@ -41,8 +38,8 @@ public sealed class CopyPasteTests : ExplorerTestBase
         string path = SaveArchive(Path.Combine(Work, "mods.rpf"), ("data/carcols.meta", "<Item />"), ("readme.txt", "hello"));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(path);
-        bridge.SelectEntry(Row(bridge, "data"));
-        bridge.SelectEntry(Row(bridge, "readme.txt"), Avalonia.Input.KeyModifiers.Control);
+        bridge.SelectEntry(RowFor(bridge, "data"));
+        bridge.SelectEntry(RowFor(bridge, "readme.txt"), Avalonia.Input.KeyModifiers.Control);
         Assert.True(await bridge.CopySelection());
         Settle(bridge);
         // The copies are real files a paste anywhere can read.
@@ -131,7 +128,7 @@ public sealed class CopyPasteTests : ExplorerTestBase
         string second = SaveArchive(Path.Combine(Work, "second.rpf"), ("keep.txt", "k"));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(first);
-        bridge.SelectEntry(Row(bridge, "textures"));
+        bridge.SelectEntry(RowFor(bridge, "textures"));
         Assert.True(await bridge.CopySelection());
         Settle(bridge);
         bridge.OpenArchive(second);

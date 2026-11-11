@@ -7,17 +7,7 @@ public sealed class GpuDeviceTests
     [Fact]
     public async Task Warming_up_compiles_the_viewport_pipelines_once_for_every_viewport()
     {
-        GpuDevice gpu;
-        try
-        {
-            gpu = GpuDevice.Shared;
-        }
-        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
-        {
-            Assert.Skip($"No GPU to test on: {error.Message}");
-            return;
-        }
+        GpuDevice gpu = TestGpu.Device();
         await GpuDevice.WarmUp();
         // A window's usual format: the pipelines a viewport needs are ready before one opens.
         foreach (string key in new[] { "backdrop", "meshes", "lines", "shadow", "shadow-masked", "ground-shadow", "tonemap", "luminance",
@@ -37,17 +27,7 @@ public sealed class GpuDeviceTests
     [Fact]
     public void Every_viewport_shader_and_pipeline_is_valid()
     {
-        GpuDevice gpu;
-        try
-        {
-            gpu = GpuDevice.Shared;
-        }
-        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
-        {
-            Assert.Skip($"No GPU to test on: {error.Message}");
-            return;
-        }
+        GpuDevice gpu = TestGpu.Device();
         // A shader that doesn't compile still makes a pipeline, an invalid one; the device only says so in an error scope.
         (WebGpuSharp.ErrorType Type, string Message) result;
         lock (gpu.Gate)
@@ -63,17 +43,7 @@ public sealed class GpuDeviceTests
     [Fact]
     public void Cmaa2_blends_the_pixels_along_hard_edges_from_their_neighbours_and_leaves_the_rest()
     {
-        GpuDevice gpu;
-        try
-        {
-            gpu = GpuDevice.Shared;
-        }
-        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
-        {
-            Assert.Skip($"No GPU to test on: {error.Message}");
-            return;
-        }
+        GpuDevice gpu = TestGpu.Device();
         const int Size = 128;
         byte[] plain, smoothed;
         (WebGpuSharp.ErrorType Type, string Message) result;

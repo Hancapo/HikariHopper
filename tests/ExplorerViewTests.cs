@@ -1668,15 +1668,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("", ui.Tabs.ActiveBridge.GameEdition);
     }
 
-    private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)
-    {
-        using Avalonia.Platform.ILockedFramebuffer buffer = frame.Lock();
-        var bytes = new byte[4];
-        System.Runtime.InteropServices.Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, bytes, 0, 4);
-        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
-            ? Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
-            : Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
-    }
+    private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y) => TestPixels.At(frame, x, y);
 
     private DataTransfer DroppedFile(TopLevel top, string name, bool fromExplorer = false)
     {

@@ -34,7 +34,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ANewTabAndAClosedWorkspaceAreEmpty() => OnUiThread(() =>
+    public void ANewTabAndAClosedWorkspaceAreEmpty()
     {
         var bridge = new ExplorerViewModel();
 
@@ -59,10 +59,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(".", closed.CurrentPath);
         Assert.Equal(-1, closed.TreeFocusIndex);
         Assert.Equal("No game loaded  ·  Configure game paths in Settings", closed.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void ViewModeAcceptsOnlyListAndGrid() => OnUiThread(() =>
+    public void ViewModeAcceptsOnlyListAndGrid()
     {
         var bridge = new ExplorerViewModel();
         int changes = PropertyChanges(bridge, nameof(ExplorerViewModel.ViewMode), () =>
@@ -77,10 +77,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         changes += PropertyChanges(bridge, nameof(ExplorerViewModel.ViewMode), () => bridge.SetViewMode("list"));
         Assert.Equal("list", bridge.ViewMode);
         Assert.Equal(2, changes);
-    });
+    }
 
     [AvaloniaFact]
-    public void EntrySelectionSupportsControlShiftAndSelectAll() => OnUiThread(() =>
+    public void EntrySelectionSupportsControlShiftAndSelectAll()
     {
         var bridge = OpenGameWith("a.txt", "b.txt", "c.txt", "d.txt");
 
@@ -99,10 +99,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(bridge.VisibleCount, bridge.SelectionCount);
         Assert.True(bridge.HasSelection);
         Assert.True(bridge.SelectionDeletable);
-    });
+    }
 
     [AvaloniaFact]
-    public void SingleSelectionReportsNameAndSize() => OnUiThread(() =>
+    public void SingleSelectionReportsNameAndSize()
     {
         var bridge = OpenGameWith("a.txt");
         bridge.SelectEntry(RowFor(bridge, "a.txt"));
@@ -112,10 +112,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("", bridge.SelectedName);
         Assert.Equal("", bridge.SelectedSize);
         Assert.All(bridge.EntriesModel, item => Assert.False(item.Selected));
-    });
+    }
 
     [AvaloniaFact]
-    public void HeadersSortByNameTypeAndNumericSize() => OnUiThread(() =>
+    public void HeadersSortByNameTypeAndNumericSize()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "z_folder"));
@@ -143,10 +143,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         bridge.SortEntries("unknown");
         Assert.Equal("type", bridge.SortColumn);
-    });
+    }
 
     [AvaloniaFact]
-    public void SortingPreservesSelection() => OnUiThread(() =>
+    public void SortingPreservesSelection()
     {
         MakeGame();
         File.WriteAllBytes(Path.Combine(Work, "small.txt"), new byte[1]);
@@ -161,10 +161,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(1, bridge.SelectionCount);
         Assert.Equal("small.txt", bridge.EntriesModel[bridge.SelectedIndex].Name);
         Assert.True(bridge.EntriesModel[bridge.SelectedIndex].Selected);
-    });
+    }
 
     [AvaloniaFact]
-    public void SearchFiltersCaseInsensitively() => OnUiThread(() =>
+    public void SearchFiltersCaseInsensitively()
     {
         var bridge = OpenGameWith("Alpha.txt", "beta.txt");
         bridge.SetSearch("ALP");
@@ -172,10 +172,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(["Alpha.txt"], ListedNames(bridge));
         Assert.Equal(1, bridge.VisibleCount);
         Assert.Equal(3, bridge.TotalCount);
-    });
+    }
 
     [AvaloniaFact]
-    public void MarqueeSelectionReplacesAddsAndToggles() => OnUiThread(() =>
+    public void MarqueeSelectionReplacesAddsAndToggles()
     {
         var bridge = OpenGameWith("a.txt", "b.txt", "c.txt", "d.txt");
         bridge.BeginMarqueeSelection(KeyModifiers.None);
@@ -195,10 +195,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(2, bridge.SelectionCount);
         Assert.True(bridge.EntriesModel[0].Selected);
         Assert.True(bridge.EntriesModel[3].Selected);
-    });
+    }
 
     [AvaloniaFact]
-    public void GridMarqueeSelectsNonContiguousRows() => OnUiThread(() =>
+    public void GridMarqueeSelectsNonContiguousRows()
     {
         var bridge = OpenGameWith("a.txt", "b.txt", "c.txt", "d.txt");
 
@@ -209,10 +209,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(3, bridge.SelectionCount);
         Assert.Equal([0, 2, 4], bridge.EntriesModel.Select((item, row) => (item, row))
             .Where(pair => pair.item.Selected).Select(pair => pair.row));
-    });
+    }
 
     [AvaloniaFact]
-    public void TreeSelectionUpdatesWithoutResettingTheModel() => OnUiThread(() =>
+    public void TreeSelectionUpdatesWithoutResettingTheModel()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods", "nested"));
@@ -230,10 +230,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Empty(actions);
         Assert.Same(mods, bridge.TreeModel[0]);
         Assert.True(mods.Selected);
-    });
+    }
 
     [AvaloniaFact]
-    public void TreeExpansionInsertsAndRemovesRowsWithoutReset() => OnUiThread(() =>
+    public void TreeExpansionInsertsAndRemovesRowsWithoutReset()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "a", "child"));
@@ -252,10 +252,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.ToggleTreeNode("game://a");
         Assert.Equal([NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Remove], actions);
         Assert.Equal(2, bridge.TreeModel.Count);
-    });
+    }
 
     [AvaloniaFact]
-    public void TreeClickNavigatesWithoutExpandingFolder() => OnUiThread(() =>
+    public void TreeClickNavigatesWithoutExpandingFolder()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods", "nested"));
@@ -268,10 +268,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.True(mods.Selected);
         Assert.False(mods.Expanded);
         Assert.Equal(1, bridge.TreeModel.Count);
-    });
+    }
 
     [AvaloniaFact]
-    public void TreeRowActivationNavigatesAndExpandsFolder() => OnUiThread(() =>
+    public void TreeRowActivationNavigatesAndExpandsFolder()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods", "nested"));
@@ -283,10 +283,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("mods", bridge.CurrentPath);
         Assert.True(bridge.TreeModel[0].Expanded);
         Assert.Equal("nested", bridge.TreeModel[1].Label);
-    });
+    }
 
     [AvaloniaFact]
-    public void OpensARealFiveFuryArchive() => OnUiThread(() =>
+    public void OpensARealFiveFuryArchive()
     {
         string path = SaveArchive(Path.Combine(Work, "sample.rpf"), ("folder/readme.txt", "hello"));
         var bridge = new ExplorerViewModel();
@@ -301,10 +301,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(["folder"], TreeLabels(bridge));
         Assert.Equal(-1, bridge.SelectedIndex);
         Assert.Equal("Opened sample.rpf", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void ArchivedFilesShowWhatTheyTakeAndWhetherTheyAreCompressed() => OnUiThread(() =>
+    public void ArchivedFilesShowWhatTheyTakeAndWhetherTheyAreCompressed()
     {
         string text = string.Concat(Enumerable.Repeat("the same line again and again\n", 400));
         var archive = new FiveFury.Rpf.RpfArchive("sizes.rpf");
@@ -339,10 +339,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.SortEntries("size");
         Assert.Equal(bridge.EntriesModel.OrderBy(item => item.Record.ShownSize).Select(item => item.Name),
             bridge.EntriesModel.Select(item => item.Name));
-    });
+    }
 
     [AvaloniaFact]
-    public void NestedArchiveOpensFromFolderTree() => OnUiThread(() =>
+    public void NestedArchiveOpensFromFolderTree()
     {
         string outer = SaveArchive(Path.Combine(Work, "outer.rpf"),
             ("nested.rpf", Archive("nested.rpf", ("inside/readme.txt", "nested"))));
@@ -368,10 +368,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(outer, bridge.Provider.ArchivePath);
         bridge.Refresh();
         Assert.Equal(outer, bridge.Provider.ArchivePath);
-    });
+    }
 
     [AvaloniaFact]
-    public void FolderActivationInsideNestedArchiveUsesLocalPath() => OnUiThread(() =>
+    public void FolderActivationInsideNestedArchiveUsesLocalPath()
     {
         var nested = Archive("netflix-force-4k-main.rpf", ("netflix-force-4k-main", null!));
         string outer = SaveArchive(Path.Combine(Work, "outer.rpf"), ("New folder/netflix-force-4k-main.rpf", nested));
@@ -387,10 +387,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
             bridge.NavigationPathSegments.Select(segment => segment.Label));
         Assert.Equal(["new folder", "netflix-force-4k-main.rpf", "netflix-force-4k-main"], TreeLabels(bridge));
         Assert.Equal("netflix-force-4k-main", bridge.TabTitle);
-    });
+    }
 
     [AvaloniaFact]
-    public void GameFolderIsThePrimaryWorkspace() => OnUiThread(() =>
+    public void GameFolderIsThePrimaryWorkspace()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods", "nested"));
@@ -449,10 +449,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.False(bridge.TreeModel[1].HasChildren);
         bridge.ToggleTreeNode("game://mods");
         Assert.Equal(2, bridge.TreeModel.Count);
-    });
+    }
 
     [AvaloniaFact]
-    public void AnRpfOpenedFromOutsideTheGameIsTheTabsRootUntilItCloses() => OnUiThread(() =>
+    public void AnRpfOpenedFromOutsideTheGameIsTheTabsRootUntilItCloses()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods"));
@@ -492,10 +492,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         {
             Directory.Delete(elsewhere, recursive: true);
         }
-    });
+    }
 
     [AvaloniaFact]
-    public void NestedArchiveKeepsCompleteGameTreeRoute() => OnUiThread(() =>
+    public void NestedArchiveKeepsCompleteGameTreeRoute()
     {
         MakeGame();
         string name = Path.GetFileName(Work);
@@ -525,10 +525,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("branch", bridge.CurrentPath);
         Assert.Equal(branchPath, bridge.TreeFocusPath);
         Assert.Equal(["outer.rpf", "branch", "inner.rpf", "final"], TreeLabels(bridge));
-    });
+    }
 
     [AvaloniaFact]
-    public void ComingBackToTheRootLeavesNoTreeRowFocused() => OnUiThread(() =>
+    public void ComingBackToTheRootLeavesNoTreeRowFocused()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods"));
@@ -559,10 +559,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.OpenGame(other);
         Assert.Equal(".", bridge.CurrentPath);
         Assert.Equal(-1, bridge.TreeFocusIndex);
-    });
+    }
 
     [AvaloniaFact]
-    public void TreeFocusFollowsPathWhenRowsAreInserted() => OnUiThread(() =>
+    public void TreeFocusFollowsPathWhenRowsAreInserted()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "a_folder", "child"));
@@ -577,10 +577,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         Assert.Equal(archivePath, bridge.TreeFocusPath);
         Assert.Equal(previousIndex + 1, bridge.TreeFocusIndex);
-    });
+    }
 
     [AvaloniaFact]
-    public void DeeplyNestedArchiveKeepsEveryArchiveNode() => OnUiThread(() =>
+    public void DeeplyNestedArchiveKeepsEveryArchiveNode()
     {
         MakeGame();
         string name = Path.GetFileName(Work);
@@ -600,10 +600,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(["outer.rpf", "branch", "middle.rpf", "next", "deepest.rpf", "final"], TreeLabels(bridge));
         Assert.Equal(deepestPath, bridge.TreeFocusPath);
         Assert.Equal(["outer.rpf", "branch", "middle.rpf", "next", "deepest.rpf"], bridge.ArchiveGamePathParts);
-    });
+    }
 
     [AvaloniaFact]
-    public void LoadedFlatRpfHasNoTreeExpansionControl() => OnUiThread(() =>
+    public void LoadedFlatRpfHasNoTreeExpansionControl()
     {
         var flat = Archive("flat.rpf", ("navmesh.ynv", "flat"));
         var structured = Archive("structured.rpf", ("folder/readme.txt", "structured"));
@@ -621,10 +621,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         TreeItem structuredRow = TreeRow(bridge, "structured.rpf");
         Assert.True(structuredRow.HasChildren);
         Assert.True(structuredRow.Expanded);
-    });
+    }
 
     [AvaloniaFact]
-    public void UnopenedFlatGameRpfsLoseTheirExpandArrow() => OnUiThread(() =>
+    public void UnopenedFlatGameRpfsLoseTheirExpandArrow()
     {
         MakeGame();
         SaveArchive(Path.Combine(Work, "flat.rpf"), ("navmesh.ynv", "flat"));
@@ -636,10 +636,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.True(TreeRow(bridge, "flat.rpf").HasChildren);
         WaitFor(() => !TreeRow(bridge, "flat.rpf").HasChildren);
         Assert.True(TreeRow(bridge, "structured.rpf").HasChildren);
-    });
+    }
 
     [AvaloniaFact]
-    public void UnopenedFlatNestedRpfsLoseTheirExpandArrow() => OnUiThread(() =>
+    public void UnopenedFlatNestedRpfsLoseTheirExpandArrow()
     {
         var flat = Archive("flat.rpf", ("navmesh.ynv", "flat"));
         var structured = Archive("structured.rpf", ("inner.rpf", Archive("inner.rpf", ("a.txt", "a"))));
@@ -651,7 +651,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         // A nested RPF counts as something to expand, like a folder.
         Assert.True(TreeRow(bridge, "structured.rpf").HasChildren);
         Assert.False(TreeRow(bridge, "flat.rpf").Expanded);
-    });
+    }
 
     /// <summary>Runs the UI thread's queued work until <paramref name="condition"/> holds, for up to five seconds.</summary>
     private static void WaitFor(Func<bool> condition)
@@ -666,7 +666,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ArchiveKeepsItsGameRelativeBreadcrumb() => OnUiThread(() =>
+    public void ArchiveKeepsItsGameRelativeBreadcrumb()
     {
         MakeGame();
         string archive = SaveArchive(Path.Combine(Work, "mods", "update", "update.rpf"), ("x64/data/example.xml", "<example />"));
@@ -684,10 +684,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(["mods", "update", "update.rpf", "x64", "data"],
             bridge.NavigationPathSegments.Select(segment => segment.Label));
         Assert.Equal("game://mods", bridge.NavigationPathSegments[0].Target);
-    });
+    }
 
     [AvaloniaFact]
-    public void DirectoryNamedRpfNavigatesAsFolder() => OnUiThread(() =>
+    public void DirectoryNamedRpfNavigatesAsFolder()
     {
         MakeGame();
         Directory.CreateDirectory(Path.Combine(Work, "mods", "update", "update.rpf", "x64"));
@@ -705,10 +705,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.False(bridge.InArchive);
         Assert.Equal("mods/update/update.rpf", bridge.CurrentPath);
         Assert.Equal(1, bridge.VisibleCount);
-    });
+    }
 
     [AvaloniaFact]
-    public void CopiesNamesAndPathsToTheClipboard() => OnUiThread(() =>
+    public void CopiesNamesAndPathsToTheClipboard()
     {
         var bridge = OpenGameWith("a.txt", "b.txt");
         bridge.SelectEntry(RowFor(bridge, "a.txt"));
@@ -727,10 +727,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.CopySelectedPath();
         Assert.Equal($"{archive}::data", Clipboard.Text);
         Assert.Equal("Copied path", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void ArchivedDragStagesStandaloneCopiesUntilTheNextDrag() => OnUiThread(() =>
+    public void ArchivedDragStagesStandaloneCopiesUntilTheNextDrag()
     {
         string archive = SaveArchive(Path.Combine(Work, "sample.rpf"),
             ("data/root.txt", "root"), ("data/nested/child.txt", "child"), ("loose.txt", "loose"));
@@ -750,19 +750,19 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(2, second.Count);
         Assert.False(Directory.Exists(Path.GetDirectoryName(folder)));
         Assert.Equal("Dragging 2 items as copies", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void LooseDragUsesTheGameFilesDirectly() => OnUiThread(() =>
+    public void LooseDragUsesTheGameFilesDirectly()
     {
         var bridge = OpenGameWith("a.txt");
         IReadOnlyList<string> paths = bridge.StartEntryDrag(RowFor(bridge, "a.txt"));
         Assert.Equal([Path.Combine(Work, "a.txt")], paths);
         Assert.Equal(1, bridge.SelectionCount);
-    });
+    }
 
     [AvaloniaFact]
-    public Task OpenArchiveDialogOpensThePickedArchive() => OnUiThreadAsync(async () =>
+    public async Task OpenArchiveDialogOpensThePickedArchive()
     {
         string archive = SaveArchive(Path.Combine(Work, "picked.rpf"), ("file.txt", "x"));
         var bridge = new ExplorerViewModel();
@@ -774,10 +774,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         var request = Assert.Single(Dialogs.Requests);
         Assert.Equal("Open RPF Archive", request.Title);
         Assert.Equal(["*.rpf"], request.Filters![0].Patterns);
-    });
+    }
 
     [AvaloniaFact]
-    public Task RpfSourcesSuggestArchiveNames() => OnUiThreadAsync(async () =>
+    public async Task RpfSourcesSuggestArchiveNames()
     {
         var bridge = new ExplorerViewModel();
         Assert.Equal(new RpfSource("", ""), await bridge.ChooseRpfFolderSource());
@@ -787,10 +787,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         string zip = Path.Combine(Work, "pack.zip");
         Dialogs.OpenFiles.Enqueue([zip]);
         Assert.Equal(new RpfSource(zip, "pack.rpf"), await bridge.ChooseRpfZipSource());
-    });
+    }
 
     [AvaloniaFact]
-    public void TabsKeepIndependentExplorerState() => OnUiThread(() =>
+    public void TabsKeepIndependentExplorerState()
     {
         string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
         Directory.CreateDirectory(Path.Combine(enhanced, "mods"));
@@ -831,10 +831,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Same(second, tabs.ActiveBridge);
         Assert.True(second.TabActive);
         Assert.Equal("update", second.CurrentPath);
-    });
+    }
 
     [AvaloniaFact]
-    public void ClosingTheLastTabClearsItsWorkspace() => OnUiThread(() =>
+    public void ClosingTheLastTabClearsItsWorkspace()
     {
         var tabs = new ExplorerTabsViewModel();
         MakeGame();
@@ -842,10 +842,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         tabs.CloseTab(0);
         Assert.Single(tabs.Tabs);
         Assert.False(tabs.ActiveBridge.HasWorkspace);
-    });
+    }
 
     [AvaloniaFact]
-    public void TabCloseUsesIdentityAfterAnotherTabCloses() => OnUiThread(() =>
+    public void TabCloseUsesIdentityAfterAnotherTabCloses()
     {
         var tabs = new ExplorerTabsViewModel();
         tabs.NewTab();
@@ -855,10 +855,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         tabs.CloseTab(0);
         Assert.Equal([survivor], tabs.Tabs);
         Assert.Equal(0, tabs.ActiveIndex);
-    });
+    }
 
     [AvaloniaFact]
-    public void FileKindsUseFiveFuryLabels() => OnUiThread(() =>
+    public void FileKindsUseFiveFuryLabels()
     {
         Assert.Equal("Drawable", RpfProvider.FileKind("model.ydr"));
         Assert.Equal("Texture Dictionary", RpfProvider.FileKind("textures.ytd"));
@@ -872,5 +872,5 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("Text Document", RpfProvider.FileKind("settings.ini"));
         Assert.Equal("Vehicle Definitions", RpfProvider.FileKind("vehicles.meta"));
         Assert.Equal("File", RpfProvider.FileKind("unknown.bin"));
-    });
+    }
 }

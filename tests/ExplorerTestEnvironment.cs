@@ -30,6 +30,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly string previousRegistryPath;
     private readonly string previousKeyCache;
     private readonly Func<string, LoadedGame> previousGameLoader;
+    private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
     private readonly string registryPath;
@@ -91,6 +92,7 @@ public abstract class ExplorerTestBase : IDisposable
         AppServices.Dialogs = previousDialogs;
         AppServices.Clipboard = previousClipboard;
         ExplorerViewModel.GameLoader = previousGameLoader;
+        ExplorerViewModel.SearchDelay = previousSearchDelay;
         GameKeys.CachePath = previousKeyCache;
         AppSettings.RegistryPath = previousRegistryPath;
         Registry.CurrentUser.DeleteSubKeyTree(registryPath, throwOnMissingSubKey: false);
@@ -188,10 +190,6 @@ public abstract class ExplorerTestBase : IDisposable
         ReadSavedEntry(archivePath, entryPath) is not null;
 
     /// <summary>Kept so explorer tests read as before; <c>[AvaloniaFact]</c> already runs them on the UI thread.</summary>
-    protected static void OnUiThread(Action body) => body();
-
-    protected static Task OnUiThreadAsync(Func<Task> body) => body();
-
     /// <summary>Waits for every queued operation and delivers results (Python's <c>waitForDone</c> + events).</summary>
     protected static void Settle(params ExplorerViewModel[] bridges)
     {
@@ -208,8 +206,22 @@ public abstract class ExplorerTestBase : IDisposable
     protected static List<string> ListedNames(ExplorerViewModel bridge) =>
         bridge.EntriesModel.Select(item => item.Name).ToList();
 
+    /// <summary>The row of the one entry called <paramref name="name"/>.</summary>
     protected static int RowFor(ExplorerViewModel bridge, string name) =>
-        bridge.EntriesModel.Select((item, index) => (item, index)).First(pair => pair.item.Name == name).index;
+        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
+
+    /// <summary>Waits for the search index and the searches it sets off, and delivers their results.</summary>
+    protected static async Task Searched(ExplorerViewModel bridge)
+    {
+        for (int round = 0; round < 4; round++)
+        {
+            await bridge.SearchIndexSettled;
+            Dispatcher.UIThread.RunJobs();
+            await bridge.SearchSettled;
+            Dispatcher.UIThread.RunJobs();
+        }
+        TestWait.Settle();
+    }
 
     protected static List<string> TreeLabels(ExplorerViewModel bridge) =>
         bridge.TreeModel.Select(item => item.Label).ToList();
