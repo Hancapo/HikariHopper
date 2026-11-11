@@ -24,7 +24,8 @@ public sealed class ExplorerStateRenders
 {
     private const string EnhancedPath = @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced";
 
-    [AvaloniaFact]
+    // A tool for PR screenshots, not a test: run only when asked for (--explicit only).
+    [AvaloniaFact(Explicit = true)]
     public void RenderAll()
     {
         string? states = Environment.GetEnvironmentVariable("HH_STATES");

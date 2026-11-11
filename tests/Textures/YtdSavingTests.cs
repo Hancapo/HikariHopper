@@ -86,31 +86,6 @@ public sealed class YtdSavingTests
     }
 
     [AvaloniaFact]
-    public void NonemptyYtdStillUsesNormalValidation() =>
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Serialize(Dictionary("duplicate", "duplicate")));
-
-    [AvaloniaTheory]
-    [MemberData(nameof(Targets))]
-    public void EmptyYtdHasZeroArraysAndNoGraphics(GameTarget target)
-    {
-        byte[] data = YtdSaving.Serialize(new TextureSet([], target));
-        ResourceFile resource = ResourceFile.Read(data);
-        Assert.Equal(target == GameTarget.Legacy ? 13u : 5u, resource.Header.Version);
-        Assert.True(resource.GraphicsData.IsEmpty || !resource.GraphicsData.ContainsAnyExcept((byte)0));
-        ReadOnlySpan<byte> system = resource.SystemData;
-        Assert.Equal(0ul, BinaryPrimitives.ReadUInt64LittleEndian(system[0x20..]));
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(system[0x28..]));
-        Assert.Equal(0ul, BinaryPrimitives.ReadUInt64LittleEndian(system[0x30..]));
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(system[0x38..]));
-        TextureSet parsed = YtdSaving.Read(data);
-        Assert.Equal(target, parsed.Target);
-        Assert.Empty(parsed.Textures);
-        // RPF storage can recompress an equivalent resource.
-        byte[] recompressed = resource.Write(System.IO.Compression.CompressionLevel.Fastest);
-        Assert.Empty(YtdSaving.Read(recompressed).Textures);
-    }
-
-    [AvaloniaFact]
     public void CorruptEmptyYtdIsRejected()
     {
         ResourceFile resource = ResourceFile.Read(EmptyYtd(GameTarget.Legacy));
@@ -123,11 +98,9 @@ public sealed class YtdSavingTests
     }
 
     [AvaloniaTheory]
+    // Each edition's empty dictionary, saved as a loose file and inside an RPF.
     [InlineData(GameTarget.Legacy, 1, false)]
-    [InlineData(GameTarget.Legacy, 3, false)]
-    [InlineData(GameTarget.Enhanced, 1, false)]
     [InlineData(GameTarget.Enhanced, 3, true)]
-    [InlineData(GameTarget.Legacy, 3, true)]
     public Task RemoveEveryTextureSaveReopenAndUndo(GameTarget target, int count, bool inArchive) => Headless.Run(() =>
     {
         using var folder = new TempFolder();

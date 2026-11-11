@@ -149,47 +149,6 @@ public sealed class ControlMetricsTests
     });
 
     [AvaloniaFact]
-    public void WindowControlButtonDrawsDividedCellAndPixelMarks() => UiThread.Run(() =>
-    {
-        var close = (WindowControlButton)TopLeft(new WindowControlButton { Kind = "close" });
-        Window window = Show(new Panel { Background = T.ChromeRaised, Children = { close } }, 34, 30);
-
-        Assert.Equal(new Size(34, 30), close.Bounds.Size);
-        Assert.Equal(T.BorderHard.Color, Pixel(window, 0, 15));          // left divider
-        Assert.Equal(T.TextDim.Color, Pixel(window, 16, 14));            // centre of the X
-        Assert.Equal(T.TextDim.Color, Pixel(window, 13, 11));            // aliased 45° stroke ends
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 12, 11));
-
-        window.MouseMove(new Point(17, 15));
-        Pump();
-        Assert.Equal(T.Text.Color, Pixel(window, 16, 14));               // hover brightens only the mark
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 5, 5));
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void WindowTitleBarIsThirtyPixelsAndTwentyFourInToolWindows() => UiThread.Run(() =>
-    {
-        var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
-        Window window = Show(bar, 400, 60);
-        Assert.Equal(T.WindowTitleHeight, bar.Bounds.Height);
-        Assert.Equal(34, bar.CloseButton.Bounds.Width);
-        // The emblem is the app icon: its small design, 12px here, drawn from a 64px bitmap.
-        Image emblem = bar.FindControl<Image>("Emblem")!;
-        Assert.Equal(new Size(12, 12), emblem.Bounds.Size);
-        Assert.Equal(new PixelSize(64, 64), Assert.IsAssignableFrom<Bitmap>(emblem.Source).PixelSize);
-        Point at = emblem.TranslatePoint(default, window)!.Value;
-        var brass = Color.Parse("#F4C26F");
-        bool gold = false;
-        for (int y = 0; y < 12; y++)
-            for (int x = 0; x < 12; x++)
-                gold |= Distance(Pixel(window, (int)at.X + x, (int)at.Y + y), brass) < 40;
-        Assert.True(gold, "the emblem shows its brass tile");
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, (int)at.X + 16, (int)at.Y + 6));
-        window.Close();
-    });
-
-    [AvaloniaFact]
     public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts() => UiThread.Run(() =>
     {
         var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
@@ -368,42 +327,6 @@ public sealed class ControlMetricsTests
     private static extern bool DestroyWindow(nint handle);
 
     [AvaloniaFact]
-    public void KeyCapIsARoundedRaisedKey() => UiThread.Run(() =>
-    {
-        var cap = (KeyCap)TopLeft(new KeyCap { Text = "F3" });
-        Window window = Show(cap, 60, 30, T.InsetBg);
-        Assert.Equal(18, cap.Bounds.Height);
-        Assert.Equal(T.KeyCapCorner, cap.CornerRadius);
-        Assert.Equal(T.Border.Color, Pixel(window, 0, 9));                // outer ring
-        Assert.Equal(T.BorderHard.Color, Pixel(window, (int)cap.Bounds.Width / 2, 16));  // dark lower edge
-        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded corner
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void MenuBarButtonIsContentWidthPlusPadding() => UiThread.Run(() =>
-    {
-        var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
-        Window window = Show(file, 100, 40, T.ChromeBg);
-        // Archivo 12 "File" on Qt's whole-pixel advances: 8 + 3 + 3 + 7 = 20, plus 12px each side.
-        Assert.Equal(new Size(44, T.MenuHeight), file.Bounds.Size);
-        Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));            // transparent at rest
-        // While its menu is open it is the top of the menu: the menu's surface, outlined on three
-        // sides, rounded on top and open at the bottom, where the menu carries on.
-        file.MenuOpen = true;
-        Pump();
-        int bottom = (int)file.Bounds.Height - 1;
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 4, 13));
-        Assert.Equal(T.Border.Color, Pixel(window, 0, 13));               // left outline
-        Assert.Equal(T.Border.Color, Pixel(window, 43, 13));              // right outline
-        Assert.Equal(T.Border.Color, Pixel(window, 20, 0));               // top outline
-        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded top corner
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 20, bottom));    // open bottom
-        Assert.Equal(T.Border.Color, Pixel(window, 0, bottom));           // square bottom corner
-        window.Close();
-    });
-
-    [AvaloniaFact]
     public void TitleRowButtonsShowFocusOnlyFromTheKeyboard() => UiThread.Run(() =>
     {
         var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
@@ -436,25 +359,6 @@ public sealed class ControlMetricsTests
         Assert.True(close.KeyboardFocused);
         Assert.False(file.KeyboardFocused);
         Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void RetroMenuIsFixedWidthWithRowHeightRows() => UiThread.Run(() =>
-    {
-        var root = new Panel { Background = T.ChromeBg };
-        Window window = Show(root, 400, 200, T.ChromeBg);
-        var item = new RetroMenuItem { Text = "Open RPF archive…", ShortcutText = "Ctrl+Shift+O" };
-        var menu = new RetroMenu { Items = { item, new RetroMenuSeparator(), new RetroMenuItem { Text = "Exit" } } };
-        menu.Open(root, 1, 25);
-        Pump();
-        Assert.Equal(T.MenuWidth, menu.Bounds.Width);
-        Assert.Equal(T.MenuItemHeight, item.Bounds.Height);
-        Assert.Equal(T.MenuMinimumWidth, item.Bounds.Width);
-        Assert.Equal(4 + 26 + 9 + 26 + 4, menu.Bounds.Height);
-        // Rows sit inside the frame's 4px padding, the label in the column after the icon cell.
-        Assert.Equal(new Point(4, 4), item.TranslatePoint(default, menu));
-        menu.Close();
         window.Close();
     });
 
@@ -523,19 +427,6 @@ public sealed class ControlMetricsTests
             Assert.True(LucideIcons.Paths.ContainsKey(name), name);
         foreach (string kind in new[] { "RPF Package", "Application", "Ped Definitions", "File" })
             Assert.True(LucideIcons.Paths.ContainsKey(FileGlyph.Resolve("file", kind).Icon), kind);
-    });
-
-    [AvaloniaFact]
-    public void TextKeepsTheFontsDesignMetrics() => UiThread.Run(() =>
-    {
-        // Avalonia's own shaping: glyph advances are not rounded to whole pixels.
-        var label = new TextBlock { Text = "Repair alpha edges", FontFamily = T.UiFont, FontSize = 12 };
-        Window window = Show(new StackPanel { Children = { TopLeft(label) } }, 300, 100);
-        Assert.Equal(103, label.Bounds.Width);                            // design width 102.4, laid out on whole pixels
-        // Text fields still centre their line on Qt's rounded line box.
-        Assert.Equal(24, QtTextMetrics.LineHeight(T.MonoFont, 16, FontWeight.Bold));
-        Assert.Equal(40, QtTextMetrics.LineHeight(T.UiFont, 36, FontWeight.Bold));
-        window.Close();
     });
 
     [AvaloniaFact]

@@ -677,13 +677,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.PartsTabOverlay.Covers(Middle(viewer.PartsArrow, tab)));
         Assert.True(viewer.ToolStripOverlay.Covers(Middle(viewer.SolidButton, tools)));
 
-        // It hides while the viewport does, under another overlay, and shows again after.
+        // It hides while the viewport does, under another overlay, and shows again after. The viewport is a native
+        // window, which would cover anything above it.
         Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
         TestWait.Pump(50);
+        Assert.False(viewer.Viewport.IsVisible);
         Assert.False(viewer.ToolStripOverlay.IsShown);
         Assert.False(viewer.PartsTabOverlay.IsShown);
         above.Close();
         TestWait.Settle();
+        Assert.True(viewer.Viewport.IsVisible);
         Assert.True(viewer.ToolStripOverlay.IsShown);
         Assert.True(viewer.PartsTabOverlay.IsShown);
         Centred();
@@ -720,30 +723,6 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.SolidButton.Sunken);
         Assert.True(viewer.Shortcut('k'));
         Assert.False(viewer.SolidButton.Sunken);
-    }
-
-    [AvaloniaFact]
-    public void The_viewport_hides_while_another_overlay_is_over_the_viewer()
-    {
-        var window = new Views.MainWindow { Width = 1360, Height = 840 };
-        window.Show();
-        var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
-        var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write())) { Anchor = window.ExplorerScreenHost };
-        viewer.Present();
-        TestWait.Settle();
-        Assert.True(viewer.Viewport.IsVisible);
-
-        // The viewport is a native window, which would cover anything above it: it hides while something is.
-        Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
-        TestWait.Pump(50);
-        Assert.False(viewer.Viewport.IsVisible);
-        above.Close();
-        TestWait.Settle();
-        Assert.True(viewer.Viewport.IsVisible);
-
-        viewer.Close();
-        TestWait.Settle();
-        window.Close();
     }
 
     [AvaloniaFact]

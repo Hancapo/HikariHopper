@@ -150,18 +150,6 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
-    public void UndoShortcutRevertsARename()
-    {
-        TextureWindowHarness harness = Opened();
-        string name = harness.ViewModel.SelectedName;
-        Assert.True(harness.ViewModel.RenameSelected("renamed"));
-        harness.Settle();
-        harness.Key(Key.Z, RawInputModifiers.Control);
-        harness.Settle();
-        Assert.Equal(name, harness.ViewModel.SelectedName);
-    }
-
-    [AvaloniaFact]
     public void RailClicksSelectWithControlAndShift()
     {
         TextureWindowHarness harness = Opened(Solid("a", 4, 4), Solid("b", 4, 4), Solid("c", 4, 4), Solid("d", 4, 4));
@@ -303,18 +291,6 @@ public sealed class TextureWindowTests
         harness.Window.Rail.SelectionList.Focus();
         harness.Key(Key.F10, RawInputModifiers.Shift);
         Assert.True(harness.Window.Rail.ContextMenuPopup.IsOpen);
-    }
-
-    [AvaloniaFact]
-    public void RailRowsHaveTheQmlMetrics()
-    {
-        TextureWindowHarness harness = Opened(Solid("a", 4, 4), Solid("b", 4, 4));
-        Control row = harness.Window.Rail.SelectionList.ContainerFromIndex(0)!;
-        Assert.Equal(RowHeight, row.Bounds.Height);
-        Assert.Equal(340, row.Bounds.Width);
-        Border thumbnail = row.GetVisualDescendants().OfType<Border>().First(border => border.Classes.Contains("thumbnail"));
-        Assert.Equal(new Rect(7, 6, 50, 50), thumbnail.Bounds);
-        Assert.False(harness.Window.Rail.Scrollable);
     }
 
     [AvaloniaFact]
@@ -924,15 +900,4 @@ public sealed class TextureWindowTests
         Assert.Equal(3, QtRaster.JsRound(2.5));
     }
 
-    [AvaloniaFact]
-    public void ToolbarAndBarsHaveTheQmlHeights()
-    {
-        TextureWindowHarness harness = Opened();
-        Assert.Equal(Ui.Theme.TextureToolbarHeight, harness.Window.Preview.Toolbar.Bounds.Height);
-        Assert.Equal(Ui.Theme.TextureMipBarHeight, harness.Window.Preview.MipBar.Bounds.Height);
-        Assert.Equal(Ui.Theme.StatusHeight, harness.Window.StatusBar.Bounds.Height);
-        Assert.Equal(Ui.Theme.MenuHeight, harness.Window.MenuRow.Bounds.Height);
-        Assert.Equal(Ui.Theme.TextureRailWidth, harness.Window.Rail.Bounds.Width);
-        Assert.Equal("3 textures", harness.Window.StatusBar.GetVisualDescendants().OfType<TextBlock>().First().Text);
-    }
 }

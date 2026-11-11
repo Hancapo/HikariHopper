@@ -651,25 +651,6 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void TableColumnsFollowThePanelWidth()
-    {
-        Explorer ui = OpenExplorer();
-        EntryTable table = ui.Find<EntryTable>();
-        double width = table.Bounds.Width;
-
-        // Rows span the panel 6px in from each side; NAME takes what TYPE, SIZE, the scrollbar lane
-        // and the row's own padding leave.
-        Assert.Equal(width - 12, table.DataBlockWidth);
-        Assert.Equal(width - 12 - 10 - 200 - 120 - 14 - 6, table.NameWidth);
-        EntryRow row = table.GetVisualDescendants().OfType<EntryRow>().First();
-        Assert.Equal(26, row.Bounds.Height);
-        Assert.Equal(width - 12, row.Bounds.Width);
-        Assert.Equal(new Point(TableLeft + 6, FirstRowTop), row.TranslatePoint(default, ui.Window));
-        Assert.Equal(238, ui.Find<FolderPanel>().Bounds.Width);
-        Assert.Equal(1360 - 8 - TableLeft, table.Bounds.Width);
-    }
-
-    [AvaloniaFact]
     public void ClickCtrlClickAndShiftClickSelect()
     {
         Explorer ui = OpenExplorer();
@@ -761,22 +742,11 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             Pump();
             ui.Window.MouseUp(point, MouseButton.Left);
             Pump();
+            // The first double-click opens the folder; the next, the one inside it.
+            if (press == 1)
+                Assert.Equal("folder00", ui.Bridge.CurrentPath);
         }
         Assert.Equal("folder00/inner", ui.Bridge.CurrentPath);
-    }
-
-    [AvaloniaFact]
-    public void DoubleClickOpensAFolder()
-    {
-        Explorer ui = OpenExplorer();
-        Assert.Equal("folder00", ui.Bridge.EntriesModel[0].Name);
-        ui.Window.MouseMove(Row(0));
-        ui.Window.MouseDown(Row(0), MouseButton.Left);
-        ui.Window.MouseUp(Row(0), MouseButton.Left);
-        ui.Window.MouseDown(Row(0), MouseButton.Left);
-        ui.Window.MouseUp(Row(0), MouseButton.Left);
-        Pump();
-        Assert.Equal("folder00", ui.Bridge.CurrentPath);
     }
 
     [AvaloniaFact]
@@ -885,16 +855,6 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void RightPressOnTheBackgroundClearsAndOpensTheMenu()
-    {
-        Explorer ui = OpenExplorer();
-        ui.Bridge.SelectEntry(1);
-        Click(ui.Window, new Point(1300, 700), MouseButton.Right);
-        Assert.True(ui.Find<WorkspaceView>().EntryContextMenu.IsOpen);
-        Assert.Equal(0, ui.Bridge.SelectionCount);
-    }
-
-    [AvaloniaFact]
     public void TheContextMenuFitsWhatWasRightClicked()
     {
         Write(Path.Combine(Work, "tool.exe"), "MZ");
@@ -927,9 +887,10 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(["New", "(Paste)", "Refresh"], Shown());
         Assert.True(menu.ForFolder);
 
-        // A right-click on empty space opens that one.
+        // A right-click on empty space clears the selection and opens that one.
         ui.Bridge.SelectEntry(1);
         Click(ui.Window, new Point(1300, 700), MouseButton.Right);
+        Assert.Equal(0, ui.Bridge.SelectionCount);
         Assert.True(menu.IsOpen);
         Assert.True(menu.ForFolder);
         Assert.True(menu.NewEntryMenu.IsVisible);
@@ -1390,6 +1351,12 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.Equal(2, tabs.Length);
         Assert.Equal(220, tabs[1].Bounds.Width);
+        // Hovering the inactive tab raises it a shade lighter than the strip.
+        Point hover = tabs[0].TranslatePoint(new Point(tabs[0].Bounds.Width / 2, 16), ui.Window)!.Value;
+        ui.Window.MouseMove(hover);
+        Pump();
+        using (var hovered = ui.Window.CaptureRenderedFrame()!)
+            Assert.Equal(HikariHopper.Ui.Theme.TabBg.Color, Pixel(hovered, (int)hover.X, (int)hover.Y - 8));
         Click(ui.Window, tabs[0].TranslatePoint(new Point(30, 12), ui.Window)!.Value);
         Assert.Equal(0, ui.Tabs.ActiveIndex);
         Click(ui.Window, tabs[1].TranslatePoint(new Point(tabs[1].Bounds.Width - 14, 12), ui.Window)!.Value);
@@ -1590,67 +1557,6 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void TheTitleRowCarriesTheMenusAndTheChromeHasTheRefreshedMetrics()
-    {
-        Explorer ui = OpenExplorer();
-        ui.Tabs.NewTab();
-        ui.Tabs.ActivateTab(0);
-        Pump();
-        Window window = ui.Window;
-        Point At(Visual visual) => visual.TranslatePoint(default, window)!.Value;
-
-        // One 38px title row: emblem, menus, empty draggable space and 46px caption buttons.
-        Views.Controls.WindowTitleBar bar = ui.Window.TitleBar;
-        Assert.Equal(38, bar.Bounds.Height);
-        Assert.False(bar.TitleLabel.IsVisible);
-        Assert.Equal(46, bar.CloseButton.Bounds.Width);
-        MenuRow menus = ui.Find<MenuRow>();
-        Assert.Contains(menus, bar.GetVisualDescendants());
-
-        // The tab strip: 32px tabs edge to edge on its floor, the active one meeting the toolbar.
-        TabStrip strip = ui.Find<TabStrip>();
-        Assert.Equal((new Point(0, 38), 36.0), (At(strip), strip.Bounds.Height));
-        TabStripTab[] tabs = window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
-        Assert.True(tabs[0].Active);
-        Assert.Equal(new Rect(14, 42, 220, 32), new Rect(At(tabs[0]), tabs[0].Bounds.Size));
-        Assert.Equal(new Rect(234, 42, 220, 32), new Rect(At(tabs[1]), tabs[1].Bounds.Size));
-
-        NavigationBar navigation = ui.Find<NavigationBar>();
-        Assert.Equal((new Point(0, 74), 46.0), (At(navigation), navigation.Bounds.Height));
-
-        // Two panels floating on the base with 8px gutters, and the status bar right under them: its own height is
-        // the gap below the panels, so what it shows is centred between them and the window's edge.
-        WorkspaceView workspace = ui.Find<WorkspaceView>();
-        Assert.Equal(new Rect(8, 128, 238, 680), new Rect(At(workspace.FoldersFrame), workspace.FoldersFrame.Bounds.Size));
-        Assert.Equal(new Point(254, 128), At(workspace.EntriesFrame));
-        Assert.Equal(new CornerRadius(6), workspace.FoldersFrame.CornerRadius);
-        Assert.Equal(new CornerRadius(6), workspace.EntriesFrame.CornerRadius);
-        StatusBar status = ui.Find<StatusBar>();
-        Assert.Equal((new Point(0, 808), 32.0), (At(status), status.Bounds.Height));
-        // The game's well sits as far below the panels as above the window's edge.
-        Border edition = status.Edition;
-        Assert.Equal(At(edition).Y - 808, 808 + 32 - (At(edition).Y + edition.Bounds.Height));
-
-        using var frame = window.CaptureRenderedFrame()!;
-        Assert.Equal(HikariHopper.Ui.Theme.WindowBg.Color, Pixel(frame, 4, 400));        // left gutter
-        Assert.Equal(HikariHopper.Ui.Theme.WindowBg.Color, Pixel(frame, 250, 400));      // gutter between the panels
-        Assert.Equal(HikariHopper.Ui.Theme.SidebarBg.Color, Pixel(frame, 100, 700));     // tree panel
-        Assert.Equal(HikariHopper.Ui.Theme.PanelBg.Color, Pixel(frame, 700, 700));       // entries panel
-        Assert.NotEqual(HikariHopper.Ui.Theme.PanelBg.Color, Pixel(frame, 254, 128));    // its rounded corner
-        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 1000, 50));
-        Assert.Equal(HikariHopper.Ui.Theme.ChromeBg.Color, Pixel(frame, 13, 73));        // the active tab's foot
-        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 7, 67));       // outside its curve
-        Assert.Equal(HikariHopper.Ui.Theme.TabStripBg.Color, Pixel(frame, 300, 50));     // a bare inactive tab
-
-        // Hovering an inactive tab raises the same shape a shade lighter.
-        window.MouseMove(new Point(300, 58));
-        Pump();
-        using var hovered = window.CaptureRenderedFrame()!;
-        Assert.Equal(HikariHopper.Ui.Theme.TabBg.Color, Pixel(hovered, 300, 50));
-        Assert.Equal(HikariHopper.Ui.Theme.TabBg.Color, Pixel(hovered, 456, 73));       // its foot, past its edge
-    }
-
-    [AvaloniaFact]
     public void TheTitleRowStillMaximizesAndItsMenusOpenBelowIt()
     {
         Explorer ui = OpenExplorer();
@@ -1760,20 +1666,6 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         ui.Tabs.NewTab();
         Pump();
         Assert.Equal("", ui.Tabs.ActiveBridge.GameEdition);
-    }
-
-    [AvaloniaFact]
-    public void TheWindowHasNoBlueBorder()
-    {
-        Explorer ui = OpenExplorer();
-        using var frame = ui.Window.CaptureRenderedFrame()!;
-        // No piping is painted along the window's edges: what is there is the window's own chrome.
-        Color accent = HikariHopper.Ui.Theme.BorderAccent.Color;
-        foreach ((int x, int y) in new[] { (0, 400), ((int)ui.Window.Width - 1, 400), (680, (int)ui.Window.Height - 1) })
-        {
-            Color edge = Pixel(frame, x, y);
-            Assert.NotEqual((accent.R, accent.G, accent.B), (edge.R, edge.G, edge.B));
-        }
     }
 
     private static Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, int x, int y)

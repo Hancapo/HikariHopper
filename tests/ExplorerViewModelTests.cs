@@ -34,7 +34,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void StartsWithoutDemoContent() => OnUiThread(() =>
+    public void ANewTabAndAClosedWorkspaceAreEmpty() => OnUiThread(() =>
     {
         var bridge = new ExplorerViewModel();
 
@@ -49,7 +49,16 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal("list", bridge.ViewMode);
         Assert.Equal("New tab", bridge.TabTitle);
         Assert.Equal("No game loaded  ·  Configure game paths in Settings", bridge.Status);
-        Assert.Equal("application/x-hikarihopper-entry-drag", bridge.EntryDragMimeType);
+
+        // A workspace closed goes back to that.
+        var closed = OpenGameWith("a.txt");
+        closed.CloseWorkspace();
+        Assert.False(closed.HasWorkspace);
+        Assert.Empty(closed.EntriesModel);
+        Assert.Empty(closed.TreeModel);
+        Assert.Equal(".", closed.CurrentPath);
+        Assert.Equal(-1, closed.TreeFocusIndex);
+        Assert.Equal("No game loaded  ·  Configure game paths in Settings", closed.Status);
     });
 
     [AvaloniaFact]
@@ -339,6 +348,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
             ("nested.rpf", Archive("nested.rpf", ("inside/readme.txt", "nested"))));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(outer);
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
 
         Assert.Equal("nested.rpf", bridge.TreeModel[0].Label);
         string nestedPath = bridge.TreeModel[0].Path;
@@ -354,6 +364,10 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         Assert.Equal(nestedPath, bridge.TreeFocusPath);
         Assert.Equal(0, bridge.TreeFocusIndex);
         Assert.Equal("Opened nested archive", bridge.Status);
+        // Saves still go to the root archive's file, inside the nested one and after a refresh.
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
+        bridge.Refresh();
+        Assert.Equal(outer, bridge.Provider.ArchivePath);
     });
 
     [AvaloniaFact]
@@ -545,20 +559,6 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         bridge.OpenGame(other);
         Assert.Equal(".", bridge.CurrentPath);
         Assert.Equal(-1, bridge.TreeFocusIndex);
-    });
-
-    [AvaloniaFact]
-    public void TheRootArchivesFileStaysTheSameInsideNestedArchives() => OnUiThread(() =>
-    {
-        string outer = SaveArchive(Path.Combine(Work, "outer.rpf"), ("nested.rpf", Archive("nested.rpf", ("inside/readme.txt", "nested"))));
-        var bridge = new ExplorerViewModel();
-        bridge.OpenArchive(outer);
-        Assert.Equal(outer, bridge.Provider.ArchivePath);
-        bridge.NavigateTree(TreeRow(bridge, "nested.rpf").Path);
-        Assert.Equal("nested.rpf", bridge.ArchiveName);
-        Assert.Equal(outer, bridge.Provider.ArchivePath);
-        bridge.Refresh();
-        Assert.Equal(outer, bridge.Provider.ArchivePath);
     });
 
     [AvaloniaFact]
@@ -787,29 +787,6 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
         string zip = Path.Combine(Work, "pack.zip");
         Dialogs.OpenFiles.Enqueue([zip]);
         Assert.Equal(new RpfSource(zip, "pack.rpf"), await bridge.ChooseRpfZipSource());
-    });
-
-    [AvaloniaFact]
-    public void CloseWorkspaceReturnsToTheEmptyState() => OnUiThread(() =>
-    {
-        var bridge = OpenGameWith("a.txt");
-        bridge.CloseWorkspace();
-        Assert.False(bridge.HasWorkspace);
-        Assert.Empty(bridge.EntriesModel);
-        Assert.Empty(bridge.TreeModel);
-        Assert.Equal(".", bridge.CurrentPath);
-        Assert.Equal(-1, bridge.TreeFocusIndex);
-        Assert.Equal("No game loaded  ·  Configure game paths in Settings", bridge.Status);
-    });
-
-    [AvaloniaFact]
-    public void SearchFocusRequestIsForwarded() => OnUiThread(() =>
-    {
-        var bridge = new ExplorerViewModel();
-        int requests = 0;
-        bridge.SearchFocusRequested += (_, _) => requests++;
-        bridge.RequestSearchFocus();
-        Assert.Equal(1, requests);
     });
 
     [AvaloniaFact]

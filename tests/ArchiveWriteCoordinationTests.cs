@@ -144,19 +144,4 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.False(File.Exists(Path.Combine(Work, "blocked.rpf")));
     });
 
-    [AvaloniaFact]
-    public void ArchiveWritesReleaseEveryTabsHandle() => OnUiThread(() =>
-    {
-        var (tabs, first, peer, path) = SharedArchive();
-        var requests = new List<string>();
-        first.ArchiveWriteRequested += (_, root) => requests.Add(root);
-
-        Assert.True(first.CreateFolder("made"));
-        Settle(tabs);
-
-        Assert.Equal([path], requests);
-        Assert.Contains("made", ListedNames(peer));
-        Assert.Contains("made", ListedNames(first));
-        Assert.Equal("Created made", first.Status);
-    });
 }

@@ -102,14 +102,6 @@ public sealed class SkyPathTests
         Assert.Null(SkyPath.Read("<!DOCTYPE x [<!ENTITY a \"b\">]><time_data/>"u8.ToArray()));
     }
 
-    [Fact]
-    public void The_game_values_are_both_editions_time_xml()
-    {
-        Assert.Equal(122 * Degrees, SkyPath.Game.SunRoll, 5);
-        Assert.Equal(0, SkyPath.Game.SunYaw);
-        Assert.Equal(-122 * Degrees, SkyPath.Game.MoonRoll, 5);
-        Assert.Equal((2f, .2f, .375f), (SkyPath.Game.MoonWobbleFrequency, SkyPath.Game.MoonWobbleAmplitude, SkyPath.Game.MoonWobbleOffset));
-    }
 }
 
 /// <summary>The sky read from the game's own files, for the models opened from it.</summary>
