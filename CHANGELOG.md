@@ -12,7 +12,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Pick a model's level of detail from a list that shows each level's triangles, and turn the mesh counts on or off; the viewer remembers which. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
 - An axes gizmo in the 3D viewer's top right corner: click an axis to look from it, again for the other side, or drag it to orbit. ([#155](https://github.com/Hancapo/HikariHopper/pull/155))
 - Click a model in the 3D viewer to pick a geometry: its row is selected in the parts panel and it is outlined; what is selected in the panel is outlined too. ([#156](https://github.com/Hancapo/HikariHopper/pull/156))
-- Edit a picked geometry's shader values in the 3D viewer, on a card over the view: drag or type a number to see it at once, reset one value or all of them, and undo with Ctrl+Z. ([#157](https://github.com/Hancapo/HikariHopper/pull/157))
+- Edit a picked geometry's shader values in the 3D viewer, on a card beside its row in the parts panel: drag or type a number to see it at once, reset one value or all of them, and undo with Ctrl+Z. ([#157](https://github.com/Hancapo/HikariHopper/pull/157), [#159](https://github.com/Hancapo/HikariHopper/pull/159))
 - Save the shader values changed in the 3D viewer with Ctrl+S, into the file's RPF or over the loose file; the title marks unsaved changes, and closing asks whether to save them. ([#158](https://github.com/Hancapo/HikariHopper/pull/158))
 - A shader entry shared by several geometries can be changed for all of them or for the picked one alone, which then gets an entry of its own; the card says what else the geometry is drawn on. ([#159](https://github.com/Hancapo/HikariHopper/pull/159))
 

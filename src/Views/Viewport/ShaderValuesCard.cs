@@ -69,6 +69,9 @@ internal sealed class ScrubField : Border
         get => value;
         set
         {
+            // Unchanged, it is left as it is: a drag refreshes every field at each step.
+            if (value == this.value && text.Text is not null)
+                return;
             this.value = value;
             text.Text = Segment ? Short(value) : Format(value);
             if (Segment)
@@ -83,7 +86,12 @@ internal sealed class ScrubField : Border
     /// <summary>Whether it differs from the file's: its number in full ink.</summary>
     public bool Changed
     {
-        set => text.Foreground = value ? Ui.Theme.Text : Ui.Theme.TextRow;
+        set
+        {
+            IBrush ink = value ? Ui.Theme.Text : Ui.Theme.TextRow;
+            if (text.Foreground != ink)
+                text.Foreground = ink;
+        }
     }
 
     /// <summary>The number changed, by a drag or by typing; <c>Continuing</c> while a drag goes on after its first step.</summary>
@@ -263,7 +271,13 @@ internal sealed class ScrubField : Border
 internal sealed class ShaderValuesCard : Border
 {
     // The card's width, the room a value's control has, and the room of a colour's numbers beside its swatch.
-    private const double CardWidth = 232, ControlWidth = 118, SwatchWidth = 30;
+    private const double CardWidth = 300, ControlWidth = 140, SwatchWidth = 30;
+
+    /// <summary>How far the notch that points at the picked row reaches out of the card's left edge.</summary>
+    public const double NotchWidth = 8;
+
+    // The notch, on the card's left edge, pointing at the row picked in the parts panel.
+    private readonly Avalonia.Controls.Shapes.Path notch;
 
     // The slots a vehicle paint's colour can be, (2, n, n), as SurfaceMaterial.PaintColour reads them.
     internal static readonly string[] PaintSlots = ["Primary", "Secondary", "Pearlescent", "Wheels", "Unpainted", "Interior", "Dashboard"];
@@ -292,12 +306,7 @@ internal sealed class ShaderValuesCard : Border
     public ShaderValuesCard(ShaderEdits edits)
     {
         this.edits = edits;
-        Width = CardWidth;
-        Background = Ui.Theme.ChromeBg;
-        BorderBrush = Ui.Theme.BorderHard;
-        BorderThickness = new Thickness(1);
-        CornerRadius = Ui.Theme.PanelCorner;
-        ClipToBounds = true;
+        Width = CardWidth + NotchWidth;
         title = new TextBlock { FontSize = Ui.Theme.FontSize, FontWeight = FontWeight.SemiBold, Foreground = Ui.Theme.Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         shader = new TextBlock
         {
@@ -360,7 +369,28 @@ internal sealed class ShaderValuesCard : Border
         };
         DockPanel.SetDock(head, Dock.Top);
         DockPanel.SetDock(foot, Dock.Bottom);
-        Child = new DockPanel { Children = { head, foot, scroller } };
+        var face = new Border
+        {
+            Background = Ui.Theme.ChromeBg,
+            BorderBrush = Ui.Theme.BorderHard,
+            BorderThickness = new Thickness(1),
+            CornerRadius = Ui.Theme.PanelCorner,
+            ClipToBounds = true,
+            Margin = new Thickness(NotchWidth, 0, 0, 0),
+            Child = new DockPanel { Children = { head, foot, scroller } },
+        };
+        // Its fill covers the card's edge where it meets it; its outline is the card's.
+        notch = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse($"M {NotchWidth + 1},0 L 1,7 L {NotchWidth + 1},14"),
+            Fill = Ui.Theme.ChromeBg,
+            Stroke = Ui.Theme.BorderHard,
+            StrokeThickness = 1,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            IsVisible = false,
+        };
+        Child = new Panel { Children = { face, notch } };
         Avalonia.Automation.AutomationProperties.SetName(this, "Shader values");
         edits.Changed += material =>
         {
@@ -370,6 +400,20 @@ internal sealed class ShaderValuesCard : Border
         // Saved, its values are the file's: no resets.
         edits.Saved += Refresh;
     }
+
+    /// <summary>
+    /// Points the notch at <paramref name="y"/>, down from the card's top (the middle of the row picked), kept clear of
+    /// its corners; none hides it.
+    /// </summary>
+    public void PointAt(double? y)
+    {
+        notch.IsVisible = y is not null;
+        if (y is { } at)
+            notch.Margin = new Thickness(0, Math.Clamp(at - 7, 8, Math.Max(8, Bounds.Height - 22)), 0, 0);
+    }
+
+    /// <summary>Where the notch points, down from the card's top; none while it's hidden.</summary>
+    internal double? PointedAt => notch.IsVisible ? notch.Margin.Top + 7 : null;
 
     /// <summary>The card's header, under the title: where what applies to the whole entry goes.</summary>
     private StackPanel Header { get; }
@@ -792,10 +836,12 @@ internal sealed class ShaderValuesCard : Border
     {
         if (Material is not { } material)
             return;
+        // Read once for every row: a drag refreshes the card at each step.
+        Dictionary<string, float[]> now = ShaderEdits.CurrentAll(material);
         foreach (Row row in rows)
         {
-            float[] values = ShaderEdits.Current(material, row.Value.Name);
-            bool changed = edits.IsChanged(material, row.Value.Name);
+            float[] values = now.GetValueOrDefault(row.Value.Name) ?? [];
+            bool changed = edits.IsChanged(material, row.Value.Name, values);
             for (int i = 0; i < row.Fields.Length; i++)
             {
                 if (!row.Fields[i].Typing && i < values.Length)

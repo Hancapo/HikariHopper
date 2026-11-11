@@ -24,9 +24,9 @@ internal sealed class ViewportOverlay
     private readonly Control content;
     // Where it goes: this far in from the viewport's left edge, or from its right, or centred across it; and this far
     // down from its top, or centred on its height.
-    private readonly double? left;
+    private double? left;
     private readonly double? right;
-    private readonly double? top;
+    private double? top;
     private Window? window;
     private Window? owner;
     private bool wanted;
@@ -52,6 +52,22 @@ internal sealed class ViewportOverlay
                 Place();
         };
     }
+
+    /// <summary>Moves it to this far in from the viewport's left and down from its top, as a row it points at moves.</summary>
+    public void MoveTo(double fromLeft, double fromTop)
+    {
+        if (left == fromLeft && top == fromTop)
+            return;
+        left = fromLeft;
+        top = fromTop;
+        Place();
+    }
+
+    /// <summary>How far in from the viewport's left it is put; none when it's centred or set from the right.</summary>
+    public double? Left => left;
+
+    /// <summary>How far down from the viewport's top it is put; none when it's centred on its height.</summary>
+    public double? Top => top;
 
     /// <summary>Its window, once it has been shown.</summary>
     public Window? Window => window;

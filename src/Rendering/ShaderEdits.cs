@@ -52,7 +52,11 @@ internal sealed class ShaderEdits
     public event Action? StructureChanged;
 
     /// <summary>Whether any value differs from the file's, or a geometry was given an entry of its own since.</summary>
-    public bool Dirty => splits != savedSplits || originals.Any(entry => entry.Value.Any(value => !Same(value.Value, Current(entry.Key, value.Key))));
+    public bool Dirty => splits != savedSplits || originals.Any(entry =>
+    {
+        Dictionary<string, float[]> now = CurrentAll(entry.Key);
+        return entry.Value.Any(value => !Same(value.Value, now.GetValueOrDefault(value.Key) ?? []));
+    });
 
     /// <summary>Whether there is a step to undo.</summary>
     public bool CanUndo => steps.Count > 0;
@@ -93,13 +97,26 @@ internal sealed class ShaderEdits
     public static float[] Current(DrawableMaterial material, string name) =>
         material.GetParameters().FirstOrDefault(value => value.Name == name)?.Values.ToArray() ?? [];
 
+    /// <summary>Every named value's numbers as the entry holds them now, read once: for showing all of them.</summary>
+    public static Dictionary<string, float[]> CurrentAll(DrawableMaterial material)
+    {
+        var all = new Dictionary<string, float[]>(StringComparer.Ordinal);
+        foreach (MaterialParameterValue value in material.GetParameters())
+            if (value.Name is { } name)
+                all.TryAdd(name, value.Values.ToArray());
+        return all;
+    }
+
     /// <summary>A value's numbers as the file has them: as read, or as last saved.</summary>
     public float[] Original(DrawableMaterial material, string name) =>
         originals.TryGetValue(material, out var own) && own.TryGetValue(name, out float[]? first) ? first : Current(material, name);
 
     /// <summary>Whether a value differs from the file's.</summary>
-    public bool IsChanged(DrawableMaterial material, string name) =>
-        originals.TryGetValue(material, out var own) && own.TryGetValue(name, out float[]? first) && !Same(first, Current(material, name));
+    public bool IsChanged(DrawableMaterial material, string name) => IsChanged(material, name, Current(material, name));
+
+    /// <summary>Whether a value whose numbers are <paramref name="now"/> differs from the file's.</summary>
+    public bool IsChanged(DrawableMaterial material, string name, float[] now) =>
+        originals.TryGetValue(material, out var own) && own.TryGetValue(name, out float[]? first) && !Same(first, now);
 
     /// <summary>
     /// Sets a value's numbers in its entry. While <paramref name="continuing"/> (a drag after its first step), the change

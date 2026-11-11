@@ -47,12 +47,18 @@ public partial class ModelViewer : UserControl, IModalContent
         card = new ShaderValuesCard(shaderEdits);
         WindowToolTip.SetIsEnabled(card, true);
         shaderCard = new ViewportOverlay(Viewport, card, left: Ui.Theme.ShaderCardLeft, top: Ui.Theme.ToolStripInset);
+        // It points at the row it shows, and follows it as the rows scroll and the card grows.
+        Parts.RowsMoved += PlaceCard;
+        card.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty)
+                PlaceCard();
+        };
         card.TypingStarted += shaderCard.TakeKeyboard;
         card.TypingEnded += shaderCard.ReturnKeyboard;
         shaderEdits.Changed += ShowEdited;
         shaderEdits.StructureChanged += Rebuild;
         card.SplitRequested = SplitPicked;
-        shaderEdits.Changed += _ => RefreshTitle();
         shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += key => Command(key);
         Viewport.PropertyChanged += (_, e) =>
@@ -388,6 +394,7 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsSide.Transitions ??= PartsSlide;
         PartsSide.Width = partsShown ? partsWidth : 0;
         PartsArrow.IconKind = partsShown ? "back" : "forward";
+        PlaceCard();
         ThemedToolTip.Set(PartsArrow, partsShown ? "Hide the parts  (P)" : "Show the parts  (P)");
         RefreshToggles();
     }
@@ -485,6 +492,7 @@ public partial class ModelViewer : UserControl, IModalContent
             card.Show(owner, material, geometries);
         card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
         shaderCard.IsWanted = material is not null;
+        PlaceCard();
     }
 
     /// <summary>
@@ -502,6 +510,35 @@ public partial class ModelViewer : UserControl, IModalContent
                 names.Add(name);
         return names;
     }
+
+    /// <summary>
+    /// Puts the card beside the row it shows, out of the parts panel's edge, its notch at the row's middle and the
+    /// whole of it in the view, below the parts arrow; with the panel closed, or the row scrolled away, at the view's
+    /// top left without a notch.
+    /// </summary>
+    private void PlaceCard()
+    {
+        if (!shaderCard.IsWanted)
+            return;
+        double inset = Ui.Theme.ToolStripInset, height = Viewport.Bounds.Height;
+        double cardHeight = card.Bounds.Height > 0 ? card.Bounds.Height : card.DesiredSize.Height;
+        if (partsShown && Parts.SelectedRow is { IsEffectivelyVisible: true } row
+            && row.TranslatePoint(new Point(0, row.Bounds.Height / 2), Viewport) is { } middle && middle.Y >= 0 && middle.Y <= height)
+        {
+            double first = Ui.Theme.PartsTabTop + PartsTab.Bounds.Height + 6;
+            double top = Math.Clamp(middle.Y - 20, first, Math.Max(first, height - cardHeight - inset));
+            shaderCard.MoveTo(0, Math.Round(top));
+            card.PointAt(middle.Y - Math.Round(top));
+        }
+        else
+        {
+            shaderCard.MoveTo(Ui.Theme.ShaderCardLeft, inset);
+            card.PointAt(null);
+        }
+    }
+
+    /// <summary>Where the card is put, from the view's left and top, and where its notch points (none when it doesn't).</summary>
+    internal (double? Left, double? Top, double? Notch) CardPlace => (shaderCard.Left, shaderCard.Top, card.PointedAt);
 
     // The name of the row a geometry's row is under: its model, or its drawable.
     private static string? OwnerOf(PartVisibility parts, PartNode node)
@@ -549,11 +586,30 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>An entry's values changed: every material drawn with it is drawn again with them.</summary>
     private void ShowEdited(FiveFury.Drawables.DrawableMaterial material)
     {
-        if (surfaces is not { } scene)
+        // A drag changes values at the pointer's rate: they are drawn, and the title marked, once a frame.
+        edited.Add(material);
+        if (frameAsked)
             return;
-        for (int i = 0; i < scene.Sources.Count; i++)
-            if (scene.Sources[i] == material && scene.Remake(i))
-                Viewport.UpdateMaterial(i);
+        frameAsked = true;
+        if (TopLevel.GetTopLevel(this) is { } top)
+            top.RequestAnimationFrame(_ => FlushEdits());
+        else
+            Dispatcher.UIThread.Post(FlushEdits, DispatcherPriority.Render);
+    }
+
+    private readonly HashSet<FiveFury.Drawables.DrawableMaterial> edited = new(ReferenceEqualityComparer.Instance);
+    private bool frameAsked;
+
+    /// <summary>Draws the entries changed since the last frame with their values now, and marks the title.</summary>
+    internal void FlushEdits()
+    {
+        frameAsked = false;
+        if (surfaces is { } scene && edited.Count > 0)
+            for (int i = 0; i < scene.Sources.Count; i++)
+                if (edited.Contains(scene.Sources[i]) && scene.Remake(i))
+                    Viewport.UpdateMaterial(i);
+        edited.Clear();
+        RefreshTitle();
     }
 
     /// <summary>The viewer's Ctrl keys: Z undoes the last change to the shader values, S saves them.</summary>
@@ -564,7 +620,9 @@ public partial class ModelViewer : UserControl, IModalContent
         switch (char.ToUpperInvariant(key))
         {
             case 'Z':
-                return shaderEdits.Undo();
+                bool undone = shaderEdits.Undo();
+                FlushEdits();
+                return undone;
             case 'S':
                 return Save();
         }

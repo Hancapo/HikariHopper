@@ -40,6 +40,7 @@ public sealed class ShaderApplyToTests
     // The bumpiness each triangle is drawn with: its material's uniform.
     private static (float Left, float Right) Drawn(Views.ModelViewer viewer)
     {
+        viewer.FlushEdits();
         DrawableScene scene = viewer.Surfaces!;
         float At(float x) => scene.Materials[scene.Parts[(int)new PartVisibility(scene).PartAt(new Vector3(x, .2f, 3), -Vector3.UnitZ)!].Material].Uniforms[3];
         return (At(.2f), At(2.2f));

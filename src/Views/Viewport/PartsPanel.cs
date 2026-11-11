@@ -179,6 +179,8 @@ internal sealed class PartsPanel : UserControl
         TexturesRow.IsVisible = false;
         DockPanel.SetDock(TexturesRow, Dock.Bottom);
 
+        // The rows move under what points at one of them (the shader card) as they scroll or are laid out again.
+        rows.LayoutUpdated += (_, _) => RowsMoved?.Invoke();
         rows.Margin = new Thickness(0, 4, 0, 4);
         rows.Background = Brushes.Transparent;
         rows.PointerMoved += (_, e) =>
@@ -384,6 +386,13 @@ internal sealed class PartsPanel : UserControl
     }
 
     private bool replacing;
+
+    /// <summary>The row selected, when one alone is and it's listed: what the shader card points at.</summary>
+    internal Control? SelectedRow => Selection is [var node]
+        ? rowControls.FirstOrDefault(row => row.Index < Rows.Count && Rows[row.Index].Node.Key == node.Key).Row : null;
+
+    /// <summary>The rows moved: scrolled, or laid out again.</summary>
+    public event Action? RowsMoved;
 
     private bool HasVariants => sections.Any(section => section.Kind == PartSectionKind.Variants);
 
