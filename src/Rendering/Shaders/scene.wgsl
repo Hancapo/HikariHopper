@@ -43,7 +43,8 @@ fn interleaved_gradient_noise(pixel: vec2f) -> f32 {
     return fract(52.9829189 * fract(dot(pixel, vec2f(0.06711056, 0.00583715))));
 }
 
-// A linear colour for the 8-bit sRGB target, dithered in display space so gradients don't band.
+// A linear colour for an 8-bit sRGB target, dithered in display space so gradients don't band. The viewport's frame is
+// half-float and dithered once, as it goes to the window (present.wgsl), so its own passes don't need it.
 fn dither(colour: vec3f, pixel: vec2f) -> vec3f {
     let noise = (interleaved_gradient_noise(pixel) - 0.5) / 255.0;
     return srgb_to_linear(clamp(linear_to_srgb(colour) + noise, vec3f(0.0), vec3f(1.0)));

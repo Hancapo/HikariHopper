@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A bright model's glow in the 3D viewer fades smoothly into the sky instead of in visible rings. ([#160](https://github.com/Hancapo/HikariHopper/pull/160))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09

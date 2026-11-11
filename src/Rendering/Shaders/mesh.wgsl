@@ -50,5 +50,5 @@ fn fs_mesh(input: MeshOutput, @builtin(front_facing) front: bool) -> @location(0
     let edge = 1.0 - min(min(inside.x, inside.y), inside.z);
     colour = mix(colour, colour * 0.45, edge * 0.7 * input.edges);
 
-    return vec4f(dither(colour, input.position.xy), 1.0);
+    return vec4f(colour, 1.0);
 }

@@ -1,6 +1,6 @@
 // The 3D viewport's backdrop, drawn as one full-screen triangle behind everything: a sky from horizon to zenith,
 // the void below the horizon, and an infinite grid on the ground plane with the X and Y axes along it.
-// Scene, the colour helpers and the dither come from scene.wgsl.
+// Scene and the colour helpers come from scene.wgsl; the frame is dithered as it goes to the window (present.wgsl).
 
 struct Backdrop {
     @builtin(position) position: vec4f,
@@ -59,5 +59,5 @@ fn fs_backdrop(input: Backdrop) -> @location(0) vec4f {
         colour = mix(colour, scene.axis_y.rgb, axis_y * scene.axis_y.a * fade);
     }
 
-    return vec4f(dither(colour, input.position.xy), 1.0);
+    return vec4f(colour, 1.0);
 }
