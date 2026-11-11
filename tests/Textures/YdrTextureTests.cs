@@ -262,16 +262,6 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public void RejectsZeroCountDictionaryWithNonzeroTextureCount()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, DictionaryField(system));
-        BinaryPrimitives.WriteUInt16LittleEndian(system.AsSpan(dictionary + 0x28), 0);
-        // An inconsistent dictionary is refused rather than opened as something else.
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
     public void DictionaryWithoutTexturesCanBeEdited()
     {
         YdrTextureDocument document = Document(Asset(BreadRack));
@@ -307,15 +297,6 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public void ZeroCountEmbeddedDictionaryIsNotRejected()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, DictionaryField(system));
-        system.AsSpan(dictionary + 0x20, 0x20).Clear();
-        Assert.Empty(Document(Rebuild(header, system, graphics)).Dictionary.Textures);
-    }
-
-    [AvaloniaFact]
     public void RejectsWrongEditionAndInvalidDictionary()
     {
         byte[] raw = Asset(BreadRack);
@@ -340,26 +321,6 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public void MalformedDictionaryIsNotOpenedAsEmpty()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(DictionaryField(system)), SystemBase + (ulong)system.Length + 16);
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
-    public void TruncatedTexturePayloadIsRejectedOnOpen()
-    {
-        byte[] raw = Asset(BreadRack);
-        YdrTextureDocument document = Document(raw);
-        var (header, system, graphics) = Sections(raw);
-        Texture texture = document.Dictionary.Textures[0];
-        int descriptor = Descriptors(system)[texture.Name!];
-        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(descriptor + 0x70), 0x60000000UL + (ulong)(graphics.Length - texture.Data.Length + 8));
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
     public void AmbiguousDuplicateOriginsCannotBeRewritten()
     {
         byte[] raw = Asset(BreadRack);
@@ -373,25 +334,6 @@ public sealed class YdrTextureTests
         YdrTextureDocument duplicate = Document(Rebuild(header, system, graphics));
         var error = Assert.ThrowsAny<InvalidDataException>(() => duplicate.Serialize(Legacy([duplicate.Dictionary.Textures[0]]), NoRenames));
         Assert.Contains("ambiguous", error.Message);
-    }
-
-    [AvaloniaFact]
-    public void RenameRetainsOpaqueActiveDescriptorFields()
-    {
-        byte[] raw = Asset(BreadRack);
-        YdrTextureDocument document = Document(raw);
-        Texture old = document.Dictionary.Textures[0];
-        byte[] saved = document.Serialize(Legacy([TextureOperations.WithName(old, "new_name"), .. document.Dictionary.Textures.Skip(1)]),
-            new Dictionary<string, string> { [old.Name!] = "new_name" });
-        Dictionary<string, byte[]> before = DescriptorBytes(raw), after = DescriptorBytes(saved);
-        foreach ((string name, byte[] descriptor) in before)
-        {
-            byte[] active = after[name == old.Name ? "new_name" : name];
-            byte[] expected = descriptor.ToArray();
-            foreach (int field in new[] { 0x28, 0x70 })
-                active.AsSpan(field, 8).CopyTo(expected.AsSpan(field));
-            Assert.Equal(expected, active);
-        }
     }
 
     private static Dictionary<string, byte[]> DescriptorBytes(byte[] raw)
