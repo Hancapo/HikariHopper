@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 
@@ -35,6 +36,10 @@ internal sealed class ViewportOverlay
     {
         this.viewport = viewport;
         this.content = content;
+        // Windows keeps a window at least about 39 px tall, more than the overlay row is: the content keeps its own
+        // size at the window's top left, and the rest of the window stays transparent, so nothing stretches into it.
+        content.HorizontalAlignment = HorizontalAlignment.Left;
+        content.VerticalAlignment = VerticalAlignment.Top;
         this.left = right is null ? left : null;
         this.right = right;
         this.top = top;
