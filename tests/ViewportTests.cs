@@ -663,6 +663,18 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         Views.Controls.ChromeToolButton[] strip = [viewer.ShadowsButton, viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
         Assert.All(strip, button => Assert.Equal(new Avalonia.Size(30, 26), button.Bounds.Size));
+        // Windows keeps a window about 39 px tall at least, taller than the row: the row keeps its own height at the
+        // window's top, its rounded ends on its buttons, and nothing of it stretches into the rest.
+        double natural = viewer.ToolStrip.Bounds.Height;
+        tools.SizeToContent = Avalonia.Controls.SizeToContent.Manual;
+        tools.Height = 39;
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal(39, tools.ClientSize.Height);
+        Assert.Equal(natural, viewer.ToolStrip.Bounds.Height);
+        Assert.Equal(26, viewer.ToolStrip.Bounds.Height);
+        Assert.Equal(0, viewer.ToolStrip.Bounds.Top);
+        tools.SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
+        ExplorerStateRenders.Pump(50);
         // Side by side, joined by a one-pixel seam.
         for (int i = 1; i < strip.Length; i++)
             Assert.Equal(new Avalonia.Point(31, 0), Avalonia.VisualExtensions.TranslatePoint(strip[i], default, strip[i - 1]));
