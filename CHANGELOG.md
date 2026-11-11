@@ -15,6 +15,10 @@ All notable changes to HikariHopper are documented here. The format follows
 - Edit a picked geometry's shader values in the 3D viewer, on a card beside its row in the parts panel: drag or type a number to see it at once, reset one value or all of them, and undo with Ctrl+Z. ([#157](https://github.com/Hancapo/HikariHopper/pull/157), [#159](https://github.com/Hancapo/HikariHopper/pull/159))
 - Save the shader values changed in the 3D viewer with Ctrl+S, into the file's RPF or over the loose file; the title marks unsaved changes, and closing asks whether to save them. ([#158](https://github.com/Hancapo/HikariHopper/pull/158))
 - A shader entry shared by several geometries can be changed for all of them or for the picked one alone, which then gets an entry of its own; the card says what else the geometry is drawn on. ([#159](https://github.com/Hancapo/HikariHopper/pull/159))
+- The 3D viewer and the text viewer have File and Edit menus, as the texture editor has. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- Save a drawable, fragment or drawable dictionary as another file from the 3D viewer, with its shader values as changed; one in an RPF can be saved out this way. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- Redo a change to the 3D viewer's shader values with Ctrl+Y or Ctrl+Shift+Z. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- Extract a 3D model's embedded textures to DDS files from the 3D viewer. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
 
 ### Changed
 

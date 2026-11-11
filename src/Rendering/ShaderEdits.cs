@@ -33,12 +33,15 @@ internal sealed class ShaderEdits
     {
         public List<Change> Changes { get; init; } = [];
         public Action? Undo { get; init; }
+        public Action? Redo { get; init; }
     }
 
     // The values as read (or last saved), by entry and name, from their first change: what a reset goes back to.
     private readonly Dictionary<DrawableMaterial, Dictionary<string, float[]>> originals = new(ReferenceEqualityComparer.Instance);
     // Steps to undo, each one or more changes (Reset all is one step); the last one's open while a drag goes on.
     private readonly List<Step> steps = [];
+    // Steps undone, the last first to redo; a new change forgets them.
+    private readonly List<Step> undone = [];
     private bool open;
     // Whether the next change joins the last step: the first change after a geometry was given an entry of its own.
     private bool joinNext;
@@ -60,6 +63,9 @@ internal sealed class ShaderEdits
 
     /// <summary>Whether there is a step to undo.</summary>
     public bool CanUndo => steps.Count > 0;
+
+    /// <summary>Whether there is an undone step to redo.</summary>
+    public bool CanRedo => undone.Count > 0;
 
     /// <summary>A shader entry's numeric values that have a name, as the card lists them: by group, then as values.json orders them.</summary>
     public static IReadOnlyList<ShaderValue> ValuesOf(DrawableMaterial material)
@@ -135,6 +141,7 @@ internal sealed class ShaderEdits
         else
             steps.Add(new Step { Changes = [new Change(material, name, before, values)] });
         joinNext = false;
+        undone.Clear();
         // A drag's later steps join this one until it ends.
         open = true;
         Remember(material, name, before);
@@ -157,6 +164,7 @@ internal sealed class ShaderEdits
         list.Add(copy);
         geometry.MaterialIndex = (ushort)(list.Count - 1);
         splits++;
+        undone.Clear();
         steps.Add(new Step
         {
             Undo = () =>
@@ -165,6 +173,12 @@ internal sealed class ShaderEdits
                 list.Remove(copy);
                 originals.Remove(copy);
                 splits--;
+            },
+            Redo = () =>
+            {
+                list.Add(copy);
+                geometry.MaterialIndex = (ushort)(list.Count - 1);
+                splits++;
             },
         });
         joinNext = true;
@@ -183,24 +197,41 @@ internal sealed class ShaderEdits
     }
 
     /// <summary>Puts every changed value of an entry back as the file has it, as one step.</summary>
-    public void ResetAll(DrawableMaterial material)
+    public void ResetAll(DrawableMaterial material) => ResetEntries([material]);
+
+    /// <summary>Puts every changed value of every entry back as the file has it, as one step.</summary>
+    public void ResetEverything() => ResetEntries([.. originals.Keys]);
+
+    /// <summary>Whether any value of any entry differs from the file's: what Reset every value has to do.</summary>
+    public bool AnyChanged => originals.Any(entry => entry.Value.Keys.Any(name => IsChanged(entry.Key, name)));
+
+    private void ResetEntries(IReadOnlyList<DrawableMaterial> materials)
     {
         Close();
-        if (!originals.TryGetValue(material, out var own))
-            return;
         var step = new List<Change>();
-        foreach ((string name, float[] first) in own)
+        var touched = new List<DrawableMaterial>();
+        foreach (DrawableMaterial material in materials)
         {
-            float[] now = Current(material, name);
-            if (Same(now, first))
+            if (!originals.TryGetValue(material, out var own))
                 continue;
-            step.Add(new Change(material, name, now, first));
-            Apply(material, name, first);
+            int before = step.Count;
+            foreach ((string name, float[] first) in own)
+            {
+                float[] now = Current(material, name);
+                if (Same(now, first))
+                    continue;
+                step.Add(new Change(material, name, now, first));
+                Apply(material, name, first);
+            }
+            if (step.Count > before)
+                touched.Add(material);
         }
         if (step.Count == 0)
             return;
         steps.Add(new Step { Changes = step });
-        Changed?.Invoke(material);
+        undone.Clear();
+        foreach (DrawableMaterial material in touched)
+            Changed?.Invoke(material);
     }
 
     /// <summary>Takes the last step back; false when there is none.</summary>
@@ -219,6 +250,33 @@ internal sealed class ShaderEdits
             undo();
             StructureChanged?.Invoke();
         }
+        undone.Add(step);
+        foreach (DrawableMaterial material in step.Changes.Select(change => change.Material).Distinct(ReferenceEqualityComparer.Instance).Cast<DrawableMaterial>())
+            Changed?.Invoke(material);
+        return true;
+    }
+
+    /// <summary>Does the last undone step again; false when there is none.</summary>
+    public bool Redo()
+    {
+        Close();
+        if (undone.Count == 0)
+            return false;
+        joinNext = false;
+        Step step = undone[^1];
+        undone.RemoveAt(undone.Count - 1);
+        // A geometry given an entry of its own gets it back first, then the changes made to it.
+        if (step.Redo is { } redo)
+        {
+            redo();
+            StructureChanged?.Invoke();
+        }
+        foreach (Change change in step.Changes)
+        {
+            Remember(change.Material, change.Name, change.Before);
+            Apply(change.Material, change.Name, change.After);
+        }
+        steps.Add(step);
         foreach (DrawableMaterial material in step.Changes.Select(change => change.Material).Distinct(ReferenceEqualityComparer.Instance).Cast<DrawableMaterial>())
             Changed?.Invoke(material);
         return true;
@@ -278,6 +336,8 @@ internal sealed class ShaderEdits
                 if (after[i] == now)
                     carried.Add(i);
         }
+        // Undone steps are forgotten, as a change forgets them.
+        undone.Clear();
         // A geometry given an entry of its own isn't in what was read again, so its step can't be undone there.
         for (int s = steps.Count - 1; s >= 0; s--)
         {
