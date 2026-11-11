@@ -135,6 +135,20 @@ public sealed class GameTexturesTests : IDisposable
         File.WriteAllBytes(rpf, [1, 2, 3, 4]);
         Assert.Null(GameTextures.Tables.Read(cache, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy)));
         Assert.NotEqual(stamp, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Enhanced));
+
+        // And a FiveFury built from other code: what it finds may differ, so tables an older one made are made again.
+        byte[] now = GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy);
+        string madeWith = GameTextures.MadeWith;
+        try
+        {
+            GameTextures.MadeWith = "another FiveFury";
+            Assert.NotEqual(now, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy));
+        }
+        finally
+        {
+            GameTextures.MadeWith = madeWith;
+        }
+        Assert.Equal(now, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy));
     }
 
     [Fact]

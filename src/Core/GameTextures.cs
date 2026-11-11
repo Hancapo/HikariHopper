@@ -191,12 +191,21 @@ public sealed class GameTextures
             return new ArchiveState(Path.GetRelativePath(root, file).ToUpperInvariant(), info.Length, info.LastWriteTimeUtc.Ticks);
         })];
 
-    /// <summary>What the tables are made from: every RPF of the game, by path, size and time written.</summary>
+    /// <summary>
+    /// The build of FiveFury (and of CommonFury, which names its hashes) the tables are made with: what FiveFury finds
+    /// changes with it, so tables an older one made are made again. Each changes only with their code, as their builds
+    /// are deterministic; tests set it.
+    /// </summary>
+    internal static string MadeWith { get; set; } =
+        $"{typeof(GameFileCache).Assembly.ManifestModule.ModuleVersionId}|{typeof(Hash32).Assembly.ManifestModule.ModuleVersionId}";
+
+    /// <summary>What the tables are made from: every RPF of the game, by path, size and time written, and the FiveFury
+    /// that read them (<see cref="MadeWith"/>).</summary>
     internal static byte[] Stamp(string root, GameTarget target) => Stamp(Archives(root), target);
 
     private static byte[] Stamp(IReadOnlyList<ArchiveState> archives, GameTarget target)
     {
-        var text = new StringBuilder($"{FormatVersion}|{target}\n");
+        var text = new StringBuilder($"{FormatVersion}|{target}|{MadeWith}\n");
         foreach (ArchiveState archive in archives)
             text.Append(archive.Path).Append('|').Append(archive.Length).Append('|').Append(archive.Written).Append('\n');
         return SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()));
