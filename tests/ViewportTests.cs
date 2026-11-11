@@ -591,6 +591,41 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void The_parts_panels_header_runs_across_its_edge()
+    {
+        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+        var model = new FiveFury.Drawables.DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
+        Settle(viewer);
+        viewer.SetPartsShown(true);
+        ExplorerStateRenders.Pump(400);
+        Assert.True(viewer.PartsHandle.IsVisible);
+
+        Avalonia.Media.Color At(double x, double y)
+        {
+            Avalonia.Point point = Avalonia.VisualExtensions.TranslatePoint(viewer.PartsHandle, new Avalonia.Point(x, y), window)!.Value;
+            using var frame = window.CaptureRenderedFrame()!;
+            using var buffer = frame.Lock();
+            var bytes = new byte[4];
+            System.Runtime.InteropServices.Marshal.Copy(buffer.Address + (int)point.Y * buffer.RowBytes + (int)point.X * 4, bytes, 0, 4);
+            return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
+                ? Avalonia.Media.Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
+                : Avalonia.Media.Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
+        }
+        // The panel's header goes on across its edge, up to the edge's line; below it, the edge is the body's colour.
+        Assert.Equal(Ui.Theme.ListHeaderBg.Color, At(1, Ui.Theme.ListHeaderHeight / 2));
+        Assert.Equal(Ui.Theme.AppBg.Color, At(1, Ui.Theme.ListHeaderHeight + 20));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void The_parts_arrow_and_the_tool_strip_are_drawn_over_the_viewports_left_edge()
     {
         var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");

@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The 3D viewer's parts panel header reaches the panel's edge, where it stopped a few pixels short. ([#170](https://github.com/Hancapo/HikariHopper/pull/170))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09
