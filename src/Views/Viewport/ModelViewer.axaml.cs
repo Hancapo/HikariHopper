@@ -41,7 +41,12 @@ public partial class ModelViewer : UserControl, IModalContent
         // Centred across the view's top.
         toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: null, top: Ui.Theme.ToolStripInset);
         gizmo = new ViewportOverlay(Viewport, Gizmo, top: Ui.Theme.GizmoInset, right: Ui.Theme.GizmoInset);
-        Gizmo.AxisPicked += axis => Viewport.LookFrom(axis);
+        // An axis looks at the model from that side, orbiting it: flying stops, as framing it does.
+        Gizmo.AxisPicked += axis =>
+        {
+            SetFreeCamera(false);
+            Viewport.LookFrom(axis);
+        };
         Gizmo.Dragged += (dx, dy) => Viewport.Turn(dx, dy);
         Viewport.CameraTurned += () => Gizmo.Basis = Viewport.CameraBasis;
         Gizmo.Basis = Viewport.CameraBasis;
