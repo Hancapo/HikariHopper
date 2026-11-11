@@ -169,30 +169,30 @@
                                 CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="back" IconSize="10"
                                 IconThickness="1.7" Cursor="Hand" AutomationProperties.Name="Parts" />
           </Border>
-          <!-- The overlay toggles in one sunken well, as the footer's and the texture viewer's toolbar's: one that is on
-               sits raised in full ink, one that is off is flat and dimmer, and one the model has nothing for is faded
-               (its tooltip says so). -->
-          <Border Name="ToolStrip" TextElement.Foreground="{x:Static ui:Theme.Text}"
-                  Background="{x:Static ui:Theme.InsetBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1"
-                  CornerRadius="{x:Static ui:Theme.ControlCorner}" Padding="2">
+          <!-- The overlay toggles, joined into one rounded row with no panel behind them, as Blender's viewport
+               buttons are: each a solid segment, the accent when on, its glyph faded when the model has nothing to
+               show (its tooltip says so). -->
+          <Border Name="ToolStrip" TextElement.Foreground="{x:Static ui:Theme.Text}">
             <Border.Styles>
               <Style Selector="c|ChromeToolButton.tool">
-                <Setter Property="Width" Value="28" />
-                <Setter Property="Height" Value="24" />
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="26" />
                 <Setter Property="Bordered" Value="False" />
-                <Setter Property="InWell" Value="True" />
-                <Setter Property="CornerRadius" Value="{x:Static ui:Theme.InnerCorner}" />
+                <Setter Property="Segment" Value="True" />
+                <Setter Property="CornerRadius" Value="0" />
                 <Setter Property="IconSize" Value="14" />
                 <Setter Property="IconThickness" Value="1.5" />
                 <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
               </Style>
             </Border.Styles>
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="shadows" AutomationProperties.Name="Shadows" />
-              <c:ChromeToolButton Name="SkeletonButton" Classes="tool" IconKind="skeleton" AutomationProperties.Name="Skeleton" />
-              <c:ChromeToolButton Name="SolidButton" Classes="tool" IconKind="collision" AutomationProperties.Name="Collision" />
-              <c:ChromeToolButton Name="LightsButton" Classes="tool" IconKind="lights" AutomationProperties.Name="Lights" />
-            </StackPanel>
+            <c:RoundedClip Radius="{x:Static ui:Theme.ControlRadius}">
+              <StackPanel Orientation="Horizontal" Spacing="1" Background="{x:Static ui:Theme.BorderHard}">
+                <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="shadows" AutomationProperties.Name="Shadows" />
+                <c:ChromeToolButton Name="SkeletonButton" Classes="tool" IconKind="skeleton" AutomationProperties.Name="Skeleton" />
+                <c:ChromeToolButton Name="SolidButton" Classes="tool" IconKind="collision" AutomationProperties.Name="Collision" />
+                <c:ChromeToolButton Name="LightsButton" Classes="tool" IconKind="lights" AutomationProperties.Name="Lights" />
+              </StackPanel>
+            </c:RoundedClip>
           </Border>
         </Panel>
 
