@@ -481,7 +481,11 @@ public sealed partial class ExplorerViewModel
         if (SearchShowsLocation && searchIndex is not null)
             searchIndexTask = searchIndex.Refresh();
         if (result.Success)
+        {
+            // Only a file's contents changed: the game's texture tables still hold, and are kept for next time.
+            _ = GameTextures.Rewritten(result.RootPath);
             SetStatus($"Saved {(TextureViewer.IsDrawable ? "YDR" : "YTD")} inside RPF");
+        }
     }
 
     /// <summary>Releases what the tab holds once it is closed (Python's object destruction).</summary>

@@ -30,6 +30,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly string previousRegistryPath;
     private readonly string previousKeyCache;
     private readonly Func<string, LoadedGame> previousGameLoader;
+    private readonly Func<string, GameTarget, GameCrypto, GameTextures.Tables> previousTableBuilder;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
     private readonly string registryPath;
@@ -55,6 +56,9 @@ public abstract class ExplorerTestBase : IDisposable
         // So are the game's texture tables.
         GameTextures.CacheFolder = Path.Combine(scratch, "texture-cache");
         GameTextures.ForgetAll();
+        // And a scratch game, which has no models, has empty ones, at once.
+        previousTableBuilder = GameTextures.Builder;
+        GameTextures.Builder = (_, _, _) => new GameTextures.Tables();
         // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
         Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
         Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(null);
@@ -91,6 +95,7 @@ public abstract class ExplorerTestBase : IDisposable
         AppServices.Dialogs = previousDialogs;
         AppServices.Clipboard = previousClipboard;
         ExplorerViewModel.GameLoader = previousGameLoader;
+        GameTextures.Builder = previousTableBuilder;
         GameKeys.CachePath = previousKeyCache;
         AppSettings.RegistryPath = previousRegistryPath;
         Registry.CurrentUser.DeleteSubKeyTree(registryPath, throwOnMissingSubKey: false);

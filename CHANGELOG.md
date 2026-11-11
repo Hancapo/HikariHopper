@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Models open in the 3D viewer with the game's textures straight away: the game's textures are indexed while the game loads, and saving a model or texture dictionary into an RPF no longer makes the next launch index them again. ([#164](https://github.com/Hancapo/HikariHopper/pull/164))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09
