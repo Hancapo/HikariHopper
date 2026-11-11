@@ -23,21 +23,32 @@ public sealed class AxesGizmoTests
         camera.LookFrom(-Vector3.UnitY);
         Assert.Equal(-1, Vector3.Normalize(camera.Eye - center).Y, 4);
         Assert.Equal(camera.Distance, Vector3.Distance(camera.Eye, center), 0.001);
-        // From above: as straight down as the camera goes, +Y up the screen; from below, the same way up.
+        // From above: straight down, +Y up the screen; from below, straight up, the same way up.
         camera.LookFrom(Vector3.UnitZ);
-        Assert.Equal(1.5f, camera.Pitch);
-        Assert.True(camera.Eye.Z > center.Z);
-        Assert.True(camera.Up.Y > .9f);
+        Assert.Equal(OrbitCamera.MaxPitch, camera.Pitch);
+        Assert.True(camera.Forward.Z < -.9999f);
+        Assert.True(camera.Up.Y > .9999f);
         camera.LookFrom(-Vector3.UnitZ);
-        Assert.Equal(-1.5f, camera.Pitch);
-        Assert.True(camera.Eye.Z < center.Z);
+        Assert.Equal(-OrbitCamera.MaxPitch, camera.Pitch);
+        Assert.True(camera.Forward.Z > .9999f);
+        // A drag from there tilts no further than the view does.
+        camera.Orbit(0, -500);
+        Assert.Equal(-OrbitCamera.MaxPitch, camera.Pitch);
+    }
 
-        // Flying, the eye stays and the view turns to look the other way along the axis.
-        camera.Free = true;
-        Vector3 eye = camera.Eye;
-        camera.LookFrom(Vector3.UnitX);
-        Assert.Equal(0, Vector3.Distance(eye, camera.Eye), 0.001);
-        Assert.Equal(-1, camera.Forward.X, 4);
+    [AvaloniaFact]
+    public void A_picked_axis_stops_flying_and_every_ball_is_one_size()
+    {
+        var viewer = new Views.ModelViewer();
+        viewer.SetFreeCamera(true);
+        Assert.True(viewer.Viewport.FreeCamera);
+        viewer.Gizmo.Pick(1);
+        Assert.False(viewer.Viewport.FreeCamera);
+        // Every ball, front or back, is under the pointer as far out from its centre.
+        var gizmo = new Views.AxesGizmo { Basis = From(Vector3.UnitX) };
+        Avalonia.Point back = gizmo.Place(-Vector3.UnitY).Centre, front = gizmo.Place(Vector3.UnitY).Centre;
+        Assert.Equal(4, gizmo.AxisAt(new Avalonia.Point(back.X + 8, back.Y)));
+        Assert.Equal(1, gizmo.AxisAt(new Avalonia.Point(front.X + 8, front.Y)));
     }
 
     // The camera's basis looking from a side.
