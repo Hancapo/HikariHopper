@@ -94,8 +94,33 @@ internal sealed class DrawableScene
     /// <summary>The shader entry each of <see cref="Materials"/> is made from, in the drawables read: what its values edit.</summary>
     public IReadOnlyList<DrawableMaterial> Sources { get; init; } = [];
 
-    // Makes a shader entry ready to draw, with the textures the scene found for it.
-    private Func<DrawableMaterial, SurfaceMaterial>? remake;
+    // Makes a shader entry ready to draw, with the textures the scene found for it, in a vehicle's paint.
+    private Func<DrawableMaterial, VehiclePaint, SurfaceMaterial>? remake;
+
+    /// <summary>The colours its vehicle's paint slots are drawn in; the game's grey until <see cref="Repaint"/>.</summary>
+    public VehiclePaint Paint { get; private set; } = VehiclePaint.Unset;
+
+    /// <summary>Whether a material reads a vehicle's paint slots, so <see cref="Paint"/> shows on it.</summary>
+    public bool Paintable => materials.Any(material => material.Vehicle);
+
+    /// <summary>
+    /// Draws its vehicle's paint slots in <paramref name="paint"/>'s colours: the vehicle materials made again, whose
+    /// indices it gives; none when the scene can't make its materials again.
+    /// </summary>
+    public IReadOnlyList<int> Repaint(VehiclePaint paint)
+    {
+        if (remake is null)
+            return [];
+        Paint = paint;
+        var changed = new List<int>();
+        for (int i = 0; i < materials.Length && i < Sources.Count; i++)
+            if (materials[i].Vehicle)
+            {
+                materials[i] = remake(Sources[i], paint);
+                changed.Add(i);
+            }
+        return changed;
+    }
 
     /// <summary>
     /// Makes <see cref="Materials"/>[<paramref name="index"/>] again from its shader entry, after its values changed,
@@ -105,7 +130,7 @@ internal sealed class DrawableScene
     {
         if (remake is null || index < 0 || index >= materials.Length || index >= Sources.Count)
             return false;
-        materials[index] = remake(Sources[index]);
+        materials[index] = remake(Sources[index], Paint);
         return true;
     }
 
@@ -280,7 +305,7 @@ internal sealed class DrawableScene
             SourceLists = sourceLists,
             Geometries = geometries,
             rebuild = () => Build(models, lookup, fragmentBound, fragmentLights),
-            remake = material => SurfaceMaterial.From(material, Resolve),
+            remake = (material, paint) => SurfaceMaterial.From(material, Resolve, paint),
             Diagnostics = diagnostics,
         };
     }

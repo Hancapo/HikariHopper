@@ -29,6 +29,11 @@ public sealed record ModelFile(string Name, byte[] Data)
     internal Task<Rendering.SkyPath>? GameSky { get; init; }
 
     /// <summary>
+    /// The game's car colours and the model's combinations of them, for a vehicle opened from a game; none outside one.
+    /// </summary>
+    internal Task<Rendering.CarPaints?>? GamePaints { get; init; }
+
+    /// <summary>
     /// Opens the file's embedded textures in the texture viewer, or none for a file that can't; the action given is
     /// told what was saved, once the editor closes after saving.
     /// </summary>

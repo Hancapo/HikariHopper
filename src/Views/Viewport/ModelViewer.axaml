@@ -119,6 +119,24 @@
                     <TextBlock Name="LodText" Classes="count" Foreground="{x:Static ui:Theme.Text}" FontSize="{x:Static ui:Theme.FontSize}" />
                   </DockPanel>
                 </Border>
+                <!-- A vehicle's paint, the game's colours for it: its primary over its secondary, which opens the paint above. -->
+                <Border Name="PaintWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" Padding="8,0,8,0" IsVisible="False"
+                        VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
+                        CornerRadius="{x:Static ui:Theme.ControlCorner}" Focusable="True" Cursor="Hand"
+                        AutomationProperties.Name="Paint">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border CornerRadius="{x:Static ui:Theme.InnerCorner}" ClipToBounds="True" VerticalAlignment="Center"
+                            BorderBrush="#2EFFFFFF" BorderThickness="1">
+                      <Grid RowDefinitions="*,*" Width="14" Height="14">
+                        <Border Name="PaintChipPrimary" Background="#969696" />
+                        <Border Name="PaintChipSecondary" Grid.Row="1" Background="#969696" />
+                      </Grid>
+                    </Border>
+                    <TextBlock Text="Paint" Foreground="{x:Static ui:Theme.Text}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
+                    <c:LucideIcon IconName="chevron-up" Width="9" Height="9" Weight="1.6" VerticalAlignment="Center"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                  </StackPanel>
+                </Border>
                 <Border Width="1" Height="14" VerticalAlignment="Center" Background="{x:Static ui:Theme.Border}" />
                 <Border Classes="well">
                   <StackPanel>
