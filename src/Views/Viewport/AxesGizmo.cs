@@ -9,14 +9,14 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// The world's axes as the camera sees them, as a 3D tool's navigation gizmo draws them over its view: X red, Y green,
-/// Z blue, each a labelled ball at the end of its arm, the opposite ends smaller and faded, the nearer drawn over the
-/// further. A click on a ball looks at what is framed from that side; on the one already faced, from the other side.
+/// Z blue, each a labelled ball at the end of its arm, the opposite ends the same size and faded, the nearer drawn over
+/// the further. A click on a ball looks at what is framed from that side; on the one already faced, from the other side.
 /// A drag on it orbits the camera, as a drag on the view does.
 /// </summary>
 public sealed class AxesGizmo : Control
 {
     internal const double Span = 72;
-    private const double Arm = 24, Ball = 7.5, BackBall = 5;
+    private const double Arm = 24, Ball = 7.5;
     private const double DragStart = 3;
 
     internal static readonly IImmutableSolidColorBrush XInk = new ImmutableSolidColorBrush(Color.FromRgb(0xE5, 0x64, 0x6B));
@@ -86,7 +86,7 @@ public sealed class AxesGizmo : Control
         for (int i = 0; i < Axes.Length; i++)
         {
             (Point centre, float depth) = Place(Axes[i].Axis);
-            double radius = (i < 3 ? Ball : BackBall) + 2;
+            double radius = Ball + 2;
             if ((point - centre).X * (point - centre).X + (point - centre).Y * (point - centre).Y <= radius * radius && depth < nearest)
             {
                 found = i;
@@ -122,7 +122,7 @@ public sealed class AxesGizmo : Control
             bool front = i < 3;
             IBrush fill = front ? ink : new ImmutableSolidColorBrush(ink.Color, .45);
             context.DrawLine(new Pen(fill, front ? 2.6 : 2, lineCap: PenLineCap.Round), centre, at);
-            context.DrawEllipse(fill, i == hovered ? new Pen(Ui.Theme.Text, 1.5) : null, at, front ? Ball : BackBall, front ? Ball : BackBall);
+            context.DrawEllipse(fill, i == hovered ? new Pen(Ui.Theme.Text, 1.5) : null, at, Ball, Ball);
             if (label.Length > 0)
             {
                 var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
