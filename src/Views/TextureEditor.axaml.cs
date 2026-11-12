@@ -43,6 +43,9 @@ public partial class TextureEditor : UserControl, IModalContent
     private TextureUnsavedChangesDialog? unsavedDialog;
     private TextureImportDialog? importDialog;
     private TexturePasteDialog? pasteDialog;
+    // An import shows the loading overlay only once it has run this long, so a quick one doesn't flash it.
+    internal static TimeSpan ImportOverlayDelay { get; set; } = TimeSpan.FromMilliseconds(400);
+    private readonly DispatcherTimer importReveal;
 
     /// <summary>For the XAML designer only: an editor over an empty view model.</summary>
     public TextureEditor() : this(new TextureViewerViewModel())
@@ -59,6 +62,13 @@ public partial class TextureEditor : UserControl, IModalContent
         SplitGrid.ColumnDefinitions[0].Width = new GridLength(Ui.Theme.TextureRailWidth);
 
         viewModel.PropertyChanged += ViewModelChanged;
+        importReveal = new DispatcherTimer { Interval = ImportOverlayDelay };
+        importReveal.Tick += (_, _) =>
+        {
+            importReveal.Stop();
+            RefreshImportOverlay(reveal: true);
+        };
+        ImportOverlay.CancelRequested += (_, _) => viewModel.CancelImageImport();
         viewModel.OpenRequested += (_, _) =>
         {
             closeApproved = false;
@@ -263,6 +273,42 @@ public partial class TextureEditor : UserControl, IModalContent
             RefreshTitle();
         if (e.PropertyName == nameof(TextureViewerViewModel.CanImportImages))
             RefreshDropEnabled();
+        if (e.PropertyName == nameof(TextureViewerViewModel.ImageImport))
+            RefreshImportOverlay(reveal: false);
+    }
+
+    /// <summary>
+    /// Shows the running image import on the loading overlay: the file being read, the share done and the count, with
+    /// Cancel. It appears <see cref="ImportOverlayDelay"/> into the import (<paramref name="reveal"/> is that moment)
+    /// and goes when the import ends.
+    /// </summary>
+    private void RefreshImportOverlay(bool reveal)
+    {
+        ImageImportProgress? import = viewModel.ImageImport;
+        if (import is null)
+        {
+            importReveal.Stop();
+            ImportOverlay.IsVisible = false;
+            ImportOverlay.IsRunning = false;
+            ImportOverlay.CanCancel = false;
+            return;
+        }
+        ImportOverlay.Detail = import.Current;
+        ImportOverlay.Progress = import.Fraction;
+        ImportOverlay.ProgressText = $"{Math.Min(import.Done + 1, import.Total)}/{import.Total}";
+        if (ImportOverlay.IsVisible)
+            return;
+        if (reveal || ImportOverlayDelay <= TimeSpan.Zero)
+        {
+            ImportOverlay.CanCancel = true;
+            ImportOverlay.IsVisible = true;
+            ImportOverlay.IsRunning = true;
+        }
+        else if (!importReveal.IsEnabled)
+        {
+            importReveal.Interval = ImportOverlayDelay;
+            importReveal.Start();
+        }
     }
 
     private void RefreshTitle()

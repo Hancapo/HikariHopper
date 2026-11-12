@@ -22,6 +22,9 @@ public sealed partial class TextureViewerViewModel
     /// <summary>Clipboard image conversion (Python <c>texture_from_clipboard_image</c>); replaceable by tests.</summary>
     internal Func<RgbaImage, string, Texture> TextureFromClipboardImage { get; set; } = TextureImport.TextureFromClipboardImage;
 
+    /// <summary>Reads one image an import adds; tests hold it to see an import part way.</summary>
+    internal Func<string, Texture> ReadImportImage { get; set; } = TextureImport.ReadTextureImage;
+
     /// <summary>Resizes every selected texture; <paramref name="filterName"/> is a mip filter such as <c>mitchell</c>.</summary>
     public bool ResizeSelected(int width, int height, string filterName, int minMipSize, bool generateMipmaps)
     {
@@ -598,9 +601,49 @@ public sealed partial class TextureViewerViewModel
         SetStatus($"Pasted {texture.Name}");
     }
 
+    /// <summary>The image import running now: how many files it has read, of how many, and the one it is on; none when
+    /// no import runs.</summary>
+    public ImageImportProgress? ImageImport => imageImport;
+
+    /// <summary>
+    /// Stops the running image import once the file in hand is read. Nothing it read is added: the dictionary stays as
+    /// it was. False when no import runs.
+    /// </summary>
+    public bool CancelImageImport()
+    {
+        if (imageImport is null || importCancel is null || importCancel.IsCancellationRequested)
+            return false;
+        importCancel.Cancel();
+        SetStatus("Cancelling the import…");
+        return true;
+    }
+
+    private ImageImportProgress? imageImport;
+    private CancellationTokenSource? importCancel;
+
+    private void ImageImportReached(int token, ImageImportProgress progress)
+    {
+        if (token != generation || imageImport is null)
+            return;
+        imageImport = progress;
+        OnPropertyChanged(nameof(ImageImport));
+    }
+
+    private void ImageImportCancelled(int token)
+    {
+        if (token != generation)
+            return;
+        operationBusy = false;
+        imageImport = null;
+        SetStatus("Import cancelled: no textures were added");
+        EmitStateChanged();
+    }
+
     private bool StartImageImport(IReadOnlyList<string> paths)
     {
         operationBusy = true;
+        imageImport = new ImageImportProgress(0, paths.Count, Path.GetFileName(paths[0]));
+        CancellationTokenSource cancel = importCancel = new CancellationTokenSource();
         SetStatus($"Importing {paths.Count} images…");
         EmitStateChanged();
         int token = generation;
@@ -613,11 +656,19 @@ public sealed partial class TextureViewerViewModel
             // Ordered by first occurrence; a later file with the same name replaces the earlier texture in place.
             var order = new List<string>();
             var imported = new Dictionary<string, Texture>(StringComparer.Ordinal);
-            foreach (string path in paths)
+            for (int index = 0; index < paths.Count; index++)
             {
+                string path = paths[index];
+                if (cancel.IsCancellationRequested)
+                {
+                    Post(() => ImageImportCancelled(token));
+                    return;
+                }
+                var reached = new ImageImportProgress(index, paths.Count, Path.GetFileName(path));
+                Post(() => ImageImportReached(token, reached));
                 try
                 {
-                    Texture decoded = TextureImport.ReadTextureImage(path);
+                    Texture decoded = ReadImportImage(path);
                     string key = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
                     if (!imported.ContainsKey(key))
                         order.Add(key);
@@ -630,17 +681,32 @@ public sealed partial class TextureViewerViewModel
                     return;
                 }
             }
+            // Cancelled while the last file was read: nothing is added, as for any other.
+            if (cancel.IsCancellationRequested)
+            {
+                Post(() => ImageImportCancelled(token));
+                return;
+            }
             var result = order.Select(key => KeyValuePair.Create(key, imported[key])).ToArray();
-            Post(() => ImageImportCompleted(token, result));
+            Post(() => ImageImportCompleted(token, cancel, result));
         }, PriorityTransform);
         return true;
     }
 
-    private void ImageImportCompleted(int token, IReadOnlyList<KeyValuePair<string, Texture>> imported)
+    private void ImageImportCompleted(int token, CancellationTokenSource cancel,
+        IReadOnlyList<KeyValuePair<string, Texture>> imported)
     {
         if (token != generation)
             return;
+        // A Cancel accepted after the worker's last look still wins: nothing is added.
+        if (cancel.IsCancellationRequested)
+        {
+            ImageImportCancelled(token);
+            return;
+        }
         operationBusy = false;
+        imageImport = null;
+        OnPropertyChanged(nameof(ImageImport));
         TextureSet original = dictionary!;
         var textures = new List<Texture>();
         var selected = new SortedSet<int>();
@@ -741,6 +807,7 @@ public sealed partial class TextureViewerViewModel
         if (token != generation)
             return;
         operationBusy = false;
+        imageImport = null;
         SetStatus($"{operation} failed: {message}");
         EmitStateChanged();
     }
@@ -840,4 +907,12 @@ public sealed partial class TextureViewerViewModel
             throw new FileNotFoundException($"No such file or directory: '{full}'");
         return full;
     }
+}
+
+/// <summary>How far an image import has got: <paramref name="Done"/> files read of <paramref name="Total"/>, reading
+/// <paramref name="Current"/> now.</summary>
+public sealed record ImageImportProgress(int Done, int Total, string Current)
+{
+    /// <summary>The share done, 0 to 1.</summary>
+    public double Fraction => Total == 0 ? 0 : (double)Done / Total;
 }

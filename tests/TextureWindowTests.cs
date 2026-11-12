@@ -1346,4 +1346,320 @@ public sealed class TextureWindowTests
         Assert.Equal(3, QtRaster.JsRound(2.5));
     }
 
+    // Pumps the UI until the condition holds, or fails after a few seconds.
+    private static void Until(Func<bool> condition, string what)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"Timed out waiting for {what}");
+            TextureWindowHarness.Pump();
+        }
+    }
+
+    [AvaloniaFact]
+    public void ALongImportShowsItsProgressAndCancelAddsNothing()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        // Each file waits to be let through, one at a time, so the import can be seen part way.
+        harness.ViewModel.ImportWorkers = 1;
+        using var gate = new SemaphoreSlim(0);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            return TextureImport.ReadTextureImage(path);
+        };
+        try
+        {
+            string[] before = [.. harness.ViewModel.Dictionary!.Names];
+            Assert.True(harness.ViewModel.ImportDroppedImages(files));
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("IMPORTING TEXTURES", overlay.Title);
+            Assert.Equal("alpha.png", overlay.Detail);
+            Assert.Equal("1/3", overlay.ProgressText);
+            Assert.True(overlay.Bar.IsVisible);
+            Assert.Equal(0, overlay.Fill.Width);
+            Assert.True(overlay.CancelButton.IsVisible && overlay.CancelButton.IsEnabled);
+
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second file");
+            Assert.Equal("beta.png", overlay.Detail);
+            Assert.Equal((LoadingOverlay.BarWidth - 2) / 3, overlay.Fill.Width, 3);
+
+            // Cancel stops it once the file in hand is read, and the dictionary is as it was.
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.False(overlay.CancelButton.IsEnabled);
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+            Assert.Null(harness.ViewModel.Work);
+            Assert.False(harness.ViewModel.OperationBusy);
+            Assert.False(overlay.Train.Animating);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastFileIsReadStillAddsNothing()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("late.png"))]));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.False(harness.ViewModel.CanUndo);
+    }
+
+    [AvaloniaFact]
+    public void AQuickImportNeverShowsTheOverlay()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        bool shown = false;
+        harness.Window.WorkOverlay.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.IsVisibleProperty && harness.Window.WorkOverlay.IsVisible)
+                shown = true;
+        };
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("quick.png"))]));
+        harness.Settle();
+        Assert.Contains("quick", harness.ViewModel.Dictionary!.Names);
+        Assert.False(shown);
+        Assert.False(harness.Window.WorkOverlay.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void ATransformShowsItsProgressAndCancelChangesNothing()
+    {
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        try
+        {
+            Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+            harness.ViewModel.SelectAllTextures();
+            Assert.True(harness.ViewModel.StartTransform("Resizing", texture =>
+            {
+                Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+                return TextureTestKit.Red(texture.Name);
+            }));
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("RESIZING", overlay.Title);
+            Assert.Equal(before[0].Name, overlay.Detail);
+            Assert.Equal("1/3", overlay.ProgressText);
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second texture");
+            Assert.Equal(before[1].Name, overlay.Detail);
+
+            // Cancelled, the transform keeps none of what it made.
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+            Assert.False(harness.ViewModel.Modified);
+            Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void AnExtractShowsItsProgressAndCancelKeepsWhatItWrote()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        var written = new List<string>();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            lock (written)
+                written.Add(texture.Name!);
+        };
+        try
+        {
+            _ = harness.ViewModel.ExtractAll();
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("EXTRACTING TEXTURES", overlay.Title);
+            Assert.Equal("1/3", overlay.ProgressText);
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second texture");
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            // The texture in hand is finished; the rest aren't started, and what was written stays.
+            Assert.Equal(2, written.Count);
+            Assert.Equal("Extract cancelled: 2 of 3 textures were written", harness.ViewModel.Status);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastTextureIsTransformedStillChangesNothing()
+    {
+        TextureWindowHarness harness = Opened();
+        Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+        harness.ViewModel.SelectAllTextures();
+        Assert.True(harness.ViewModel.StartTransform("Resizing", texture => TextureTestKit.Red(texture.Name)));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+        Assert.False(harness.ViewModel.Modified);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractStopsWritingWhenTheDocumentCloses()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        using var started = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
+        int written = 0;
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            started.Release();
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            Interlocked.Increment(ref written);
+        };
+        _ = harness.ViewModel.ExtractAll();
+        Until(() => started.CurrentCount > 0, "the first texture");
+        harness.ViewModel.CloseDocument();
+        gate.Release(3);
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        // The texture in hand finishes; none after it is written.
+        Assert.Equal(1, written);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractThatFailsOddlyStillEndsAndSaysWhy()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) => throw new OverflowException("too big");
+        _ = harness.ViewModel.ExtractAll();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Could not extract textures: too big", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
+    public void ASaveShowsTheTrainWithNothingToCountOrCancel()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        harness.ViewModel.Dialogs = new FakeDialogs { SaveFile = folder.File("copy.ytd") };
+        harness.ViewModel.WriteFile = (path, data) =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            File.WriteAllBytes(path, data);
+        };
+        try
+        {
+            _ = harness.ViewModel.SaveYtdAs();
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("SAVING", overlay.Title);
+            Assert.Equal("copy.ytd", overlay.Detail);
+            Assert.False(overlay.Bar.IsVisible);
+            Assert.False(overlay.CancelButton.IsVisible);
+            Assert.False(harness.ViewModel.CancelWork());
+            gate.Release();
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.True(File.Exists(folder.File("copy.ytd")));
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void AnImportReadsSeveralImagesAtOnce()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        // Each read waits until all three have started: it only finishes if they run side by side.
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            Assert.True(together.SignalAndWait(TimeSpan.FromSeconds(10)), "the images weren't read at the same time");
+            return TextureImport.ReadTextureImage(path);
+        };
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(["alpha", "beta", "gamma", "one", "three", "two"], harness.ViewModel.Dictionary!.Names.Order());
+    }
+
+    [AvaloniaFact]
+    public void When_images_read_side_by_side_fail_the_first_in_order_is_reported_and_nothing_is_added()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            together.SignalAndWait(TimeSpan.FromSeconds(10));
+            // Gamma fails first in time; beta, before it in the files, is the one named.
+            if (path.EndsWith("beta.png", StringComparison.Ordinal))
+            {
+                Thread.Sleep(50);
+                throw new InvalidDataException("beta is broken");
+            }
+            if (path.EndsWith("gamma.png", StringComparison.Ordinal))
+                throw new InvalidDataException("gamma is broken");
+            return TextureImport.ReadTextureImage(path);
+        };
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Equal("Import failed: beta.png: beta is broken", harness.ViewModel.Status);
+        Assert.False(harness.ViewModel.OperationBusy);
+    }
 }

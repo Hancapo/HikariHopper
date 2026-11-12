@@ -70,7 +70,7 @@ public static class Theme
     // Modals: the dim over the blurred window behind them.
     public static IImmutableSolidColorBrush ModalDim { get; } = Rgba(0.090, 0.094, 0.165, 0.38);
     // The loading overlay: a deeper dim, so the train and its caption stand clear of what is behind.
-    public static IImmutableSolidColorBrush LoadingDim { get; } = Rgba(0.090, 0.094, 0.165, 0.62);
+    public static IImmutableSolidColorBrush LoadingDim { get; } = Rgba(0.090, 0.094, 0.165, 0.78);
 
     public static IImmutableSolidColorBrush MarqueeFill { get; } = Rgba(0.173, 0.176, 0.263, 0.24);
     public static IImmutableSolidColorBrush MarqueeBorder { get; } = Rgba(0.776, 0.784, 0.855, 0.82);
