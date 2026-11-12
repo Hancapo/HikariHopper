@@ -8,8 +8,34 @@ namespace HikariHopper.Rendering;
 /// <param name="Triangles">The triangles under it, at the level shown.</param>
 /// <param name="Parts">The scene parts under it (<see cref="DrawableScene.Parts"/>), at the level shown.</param>
 /// <param name="Kind">What the row is: a group of drawables, a drawable, one of its bone-bound models, or a geometry.</param>
+/// <param name="Colour">For a mark of a flat mesh (a collision's material), the colour it is drawn in; the row wears it.</param>
 internal sealed record PartNode(string Key, string Name, int Depth, int Triangles, IReadOnlyList<int> Parts, IReadOnlyList<PartNode> Children,
-    PartKind Kind = PartKind.Drawable);
+    PartKind Kind = PartKind.Drawable, uint? Colour = null);
+
+/// <summary>What the parts panel lists, and shows or hides: a drawable's parts, or a flat mesh's marks.</summary>
+internal interface IPartList
+{
+    /// <summary>The panel's sections, each with its rows.</summary>
+    IReadOnlyList<PartSection> Sections();
+
+    /// <summary>Whether what is under a row is shown: all of it, none of it, or (null) part of it.</summary>
+    bool? State(PartNode node);
+
+    /// <summary>Shows or hides everything under a row.</summary>
+    void Show(PartNode node, bool shown);
+
+    /// <summary>Shows everything.</summary>
+    void ShowAll();
+
+    /// <summary>Shows what is under these rows only.</summary>
+    void ShowOnly(IEnumerable<PartNode> nodes);
+
+    /// <summary>How many of what the panel counts are shown, of how many there are.</summary>
+    (int Shown, int Total) Counts();
+
+    /// <summary>The world box around what is under these rows; none when there is nothing.</summary>
+    Aabb3? Bounds(IEnumerable<PartNode> nodes);
+}
 
 /// <summary>What a section of the parts panel holds.</summary>
 internal enum PartSectionKind
@@ -38,6 +64,8 @@ internal enum PartKind
     Child,
     /// <summary>A geometry, named by its shader.</summary>
     Geometry,
+    /// <summary>What a flat mesh's triangles are marked as, by colour: a collision's material, a navmesh's kind of ground.</summary>
+    Mark,
 }
 
 /// <summary>
@@ -45,7 +73,7 @@ internal enum PartKind
 /// closest it has, coarser first), less any the parts panel hides. Hidden parts are kept by name, so they stay hidden
 /// at the other levels that have them.
 /// </summary>
-internal sealed class PartVisibility
+internal sealed class PartVisibility : IPartList
 {
     private readonly DrawableScene scene;
     private readonly string[] keys;

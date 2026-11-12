@@ -64,6 +64,9 @@ internal static class NavmeshMesh
     private static readonly uint WallCover = Pack("#FACC15");
     private static readonly uint DisabledCover = ViewportMesh.Pack(T.TextFaint);
 
+    /// <summary>The headings the parts panel lists a navmesh's marks under.</summary>
+    internal const string GroundSection = "Ground", EdgeSection = "Edges", LinkSection = "Links", CoverSection = "Cover points";
+
     /// <summary>The navmesh, relative to the middle of its vertices.</summary>
     public static ViewportMesh Build(Ynv navmesh, Vector3 origin)
     {
@@ -71,6 +74,7 @@ internal static class NavmeshMesh
         AddPolygons(navmesh, mesh);
         AddPortals(navmesh, mesh);
         AddCoverPoints(navmesh, mesh);
+        mesh.Mark(-1);
         return mesh;
     }
 
@@ -96,7 +100,9 @@ internal static class NavmeshMesh
                 continue;
             }
             (string name, uint colour, _) = Grounds.First(ground => ground.Applies(polygon));
-            mesh.Explain(name, colour);
+            // The polygon and its outline wear its ground's mark; a ribbon along an edge wears the edge's.
+            int ground = mesh.Explain(name, colour, GroundSection);
+            mesh.Mark(ground);
             // Fanned into triangles whose own edges aren't drawn: they aren't the polygon's.
             for (int i = 1; i + 1 < count; i++)
                 mesh.Triangle(corners[0], corners[i], corners[i + 1], colour, edges: false);
@@ -110,8 +116,9 @@ internal static class NavmeshMesh
                 Vector3 a = corners[i], b = corners[(i + 1) % count];
                 if (first + i < edges.Count && Special(edges[first + i]) is { } special)
                 {
+                    mesh.Mark(mesh.Explain(special.Name, special.Colour, EdgeSection));
                     Ribbon(mesh, a, b, centroid, special.Colour == CoverEdge ? CoverRibbon : EdgeRibbon, special.Colour);
-                    mesh.Explain(special.Name, special.Colour);
+                    mesh.Mark(ground);
                 }
                 mesh.Line(a + Vector3.UnitZ * Lift, b + Vector3.UnitZ * Lift, Outline, OutlineWidth);
             }
@@ -189,7 +196,7 @@ internal static class NavmeshMesh
         foreach ((Vector3 from, Vector3 to, bool ladder, bool both) in links)
         {
             uint colour = ladder ? Ladder : ClimbObject;
-            mesh.Explain(ladder ? "Ladder" : "Climb over", colour);
+            mesh.Mark(mesh.Explain(ladder ? "Ladder" : "Climb over", colour, LinkSection));
             Link(mesh, from, to, colour, both);
         }
     }
@@ -371,7 +378,7 @@ internal static class NavmeshMesh
         (string name, uint colour) = disabled ? ("Cover point, disabled", DisabledCover)
             : low ? ("Cover point, low", LowCover)
             : ("Cover point, wall", WallCover);
-        mesh.Explain(name, colour);
+        mesh.Mark(mesh.Explain(name, colour, CoverSection));
         Vector3 foot = position + Vector3.UnitZ * Lift;
         // The heading turns from north (+Y) towards west, as the game's headings do.
         var facing = new Vector3(-MathF.Sin(direction), MathF.Cos(direction), 0);

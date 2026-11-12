@@ -280,15 +280,16 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         if (mesh is null)
             return;
         origin = mesh.Origin;
-        if (mesh.Vertices.Count > 0)
+        // What the mesh shows: its marks that the parts panel hides are left out.
+        ViewportVertex[] vertices = mesh.ToArray();
+        if (vertices.Length > 0)
         {
-            ViewportVertex[] vertices = mesh.ToArray();
             vertexBuffer = Upload((ReadOnlySpan<ViewportVertex>)vertices, ViewportVertex.Size);
             vertexCount = (uint)vertices.Length;
         }
-        if (mesh.Segments.Count > 0)
+        ViewportSegment[] segments = mesh.SegmentArray();
+        if (segments.Length > 0)
         {
-            ViewportSegment[] segments = mesh.SegmentArray();
             segmentBuffer = Upload((ReadOnlySpan<ViewportSegment>)segments, ViewportSegment.Size);
             segmentCount = (uint)segments.Length;
         }

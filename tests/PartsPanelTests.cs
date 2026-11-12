@@ -273,4 +273,79 @@ public sealed class PartsPanelVariantTests
         PartSection section = Assert.Single(panel.Sections);
         Assert.Equal("", section.Title);
     }
+
+    [AvaloniaFact]
+    public void A_collisions_materials_are_rows_with_their_colour_to_show_hide_and_find()
+    {
+        // Two boxes of tarmac and one of another material, apart from each other.
+        var composite = new FiveFury.Bounds.BoundComposite();
+        FiveFury.Bounds.BoundBox Box(float x, byte material)
+        {
+            var box = new FiveFury.Bounds.BoundBox(new CommonFury.Numerics.Aabb3(new System.Numerics.Vector3(x, 0, 0), new System.Numerics.Vector3(x + 1, 1, 1)));
+            box.Material.Type = (FiveFury.Bounds.BoundMaterialType)material;
+            return box;
+        }
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(0, 4)));
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(10, 1)));
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(20, 4)));
+        ViewportMesh mesh = CollisionMesh.Build(new FiveFury.Ybn.Ybn(composite));
+        var marks = new MeshParts(mesh);
+        var panel = new Views.PartsPanel { Parts = marks };
+
+        // One section, the materials, the one most shapes wear first; each row a mark with its colour and its shapes.
+        PartSection section = Assert.Single(panel.Sections);
+        Assert.Equal((CollisionMesh.Section, PartSectionKind.Tree), (section.Title, section.Kind));
+        string tarmac = CollisionMesh.Name((FiveFury.Bounds.BoundMaterialType)4), other = CollisionMesh.Name((FiveFury.Bounds.BoundMaterialType)1);
+        Assert.Equal([tarmac, other], panel.Rows.Select(row => row.Node.Name));
+        Assert.All(panel.Rows, row => Assert.Equal(PartKind.Mark, row.Node.Kind));
+        Assert.Equal([2, 1], panel.Rows.Select(row => row.Node.Triangles));
+        Assert.Equal(CollisionMesh.Colour((FiveFury.Bounds.BoundMaterialType)4), panel.Rows[0].Node.Colour);
+        Assert.Equal("2 / 2", panel.CountText);
+        Assert.False(panel.ModeRow.IsVisible);
+        // A flat list: nothing to expand, where a drawable's tree has the button.
+        Assert.False(panel.ExpandButton.IsVisible);
+        Assert.True(new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) }.ExpandButton.IsVisible);
+        Assert.Equal(36 * 3, mesh.ToArray().Length);
+
+        // Hidden, a material's triangles are left out of what is drawn; the rest stay.
+        bool changed = false;
+        panel.Changed += () => changed = true;
+        panel.Flip(panel.Rows[0].Node);
+        Assert.True(changed);
+        Assert.Equal("1 / 2", panel.CountText);
+        Assert.False(marks.State(panel.Rows[0].Node));
+        ViewportVertex[] left = mesh.ToArray();
+        Assert.Equal(12 * 3, left.Length);
+        Assert.All(left, vertex => Assert.Equal(CollisionMesh.Colour((FiveFury.Bounds.BoundMaterialType)1), vertex.Colour));
+        // The mesh itself keeps them, and the legend its counts.
+        Assert.Equal(36, mesh.TriangleCount);
+        Assert.Equal(2, mesh.Legend.Count);
+
+        // Only this one, then all of them again.
+        panel.ShowOnly([panel.Rows[0].Node]);
+        Assert.Equal(24 * 3, mesh.ToArray().Length);
+        Assert.False(marks.State(panel.Rows[1].Node));
+        panel.ShowAll();
+        Assert.Equal("2 / 2", panel.CountText);
+        Assert.Equal(36 * 3, mesh.ToArray().Length);
+
+        // A material is found by the box around what wears it: the other one's single box, in the world.
+        CommonFury.Numerics.Aabb3 box = Assert.NotNull(marks.Bounds([panel.Rows[1].Node]));
+        Assert.Equal(new System.Numerics.Vector3(10, 0, 0), box.Minimum);
+        Assert.Equal(new System.Numerics.Vector3(11, 1, 1), box.Maximum);
+        CommonFury.Numerics.Aabb3 both = Assert.NotNull(marks.Bounds([panel.Rows[0].Node]));
+        Assert.Equal((0f, 21f), (both.Minimum.X, both.Maximum.X));
+
+        // The filter narrows them by name, as it does parts.
+        panel.Filter.Text = other;
+        panel.Refresh();
+        Assert.Equal([other], panel.Rows.Select(row => row.Node.Name));
+    }
+}
+
+/// <summary>What the tests ask of a parts list that is a drawable's.</summary>
+internal static class PartListTestExtensions
+{
+    /// <summary>A drawable's parts' flags for the renderer.</summary>
+    public static bool[] Mask(this IPartList parts) => Assert.IsType<PartVisibility>(parts).Mask();
 }
