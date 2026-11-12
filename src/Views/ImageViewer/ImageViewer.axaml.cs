@@ -78,7 +78,7 @@ public partial class ImageViewer : UserControl, IModalContent
     {
         StatusText.Text = image.Status;
         StatusText.Foreground = image.Error.Length > 0 ? Ui.Theme.Error : Ui.Theme.TextFaint;
-        Facts.IsVisible = image.SelectedIndex >= 0;
+        Facts.IsVisible = FactsSeam.IsVisible = image.SelectedIndex >= 0;
         DimensionsText.Text = $"{image.Width} × {image.Height}";
         MipsText.Text = image.MipCount == 1 ? "1 MIP" : $"{image.MipCount} MIPS";
         MipsText.IsVisible = image.MipCount > 1;

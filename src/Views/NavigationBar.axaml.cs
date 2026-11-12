@@ -173,11 +173,12 @@ public partial class NavigationBar : UserControl
         ExplorerViewModel? model = Bridge;
         bool hasWorkspace = model?.HasWorkspace == true;
         IReadOnlyList<PathSegment> parts = model?.NavigationPathSegments ?? [];
-        // At the root the bar is empty: the tab already says where you are. Below it, the path starts with
-        // a home mark that goes back to the root, and the location you are in reads brightest.
-        RootSegment.IsVisible = !hasWorkspace || parts.Count > 0;
+        // At the root the bar names it beside the home mark, as the tab does. Below it, the path starts with the
+        // home mark alone, which goes back to the root, and the location you are in reads brightest.
+        RootSegment.IsVisible = true;
         if (hasWorkspace)
-            RootSegment.SetHome(Ui.Theme.TextDim, model!.ArchiveIsRoot || !model.HasGame ? model.ArchiveRootName : ExplorerViewModel.HomeTitle);
+            RootSegment.SetHome(parts.Count == 0 ? Ui.Theme.Text : Ui.Theme.TextDim,
+                model!.ArchiveIsRoot || !model.HasGame ? model.ArchiveRootName : ExplorerViewModel.HomeTitle, named: parts.Count == 0);
         else
             RootSegment.Set("Select a game folder", false, Ui.Theme.TextDim);
 
@@ -601,17 +602,26 @@ public sealed class NavigationSegment : Border
         AutomationProperties.SetName(this, text);
     }
 
-    /// <summary>Shows the home mark alone, which goes back to the root called <paramref name="root"/>.</summary>
-    public void SetHome(IBrush ink, string root)
+    /// <summary>
+    /// Shows the home mark, which goes back to the root called <paramref name="root"/>: alone in a path, or
+    /// <paramref name="named"/> when the root is the folder shown.
+    /// </summary>
+    public void SetHome(IBrush ink, string root, bool named = false)
     {
-        label.Text = "";
-        label.IsVisible = false;
+        label.Text = named ? root : "";
+        label.Foreground = ink;
+        label.IsVisible = named;
         package.IsVisible = false;
         home.IsVisible = true;
         home.Stroke = ink;
-        Padding = new Thickness(6, 0);
+        home.Margin = new Thickness(0, 0, named ? 6 : 0, 0);
+        Padding = new Thickness(named ? 7 : 6, 0);
         AutomationProperties.SetName(this, root);
-        ThemedToolTip.Set(this, root);
+        // Its name is a hover away when the mark is alone.
+        if (named)
+            ToolTip.SetTip(this, null);
+        else
+            ThemedToolTip.Set(this, root);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

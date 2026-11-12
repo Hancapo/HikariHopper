@@ -23,6 +23,8 @@ public sealed class PropertiesDialog : ModalSheet
         WindowShare = new Size(0.42, 0.8);
         MinSize = new Size(440, 320);
         MaxSize = new Size(520, 640);
+        // A file's are a few rows, an RPF's or a model's many: as tall as they are, not a sheet mostly empty.
+        FitsContent = true;
 
         var list = new StackPanel();
         list.Children.Add(Identity(properties));

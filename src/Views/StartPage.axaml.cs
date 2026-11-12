@@ -95,6 +95,8 @@ public partial class StartPage : UserControl
             foreach (LauncherEntry entry in entries)
                 Groups.Children.Add(new LauncherRow(entry, Activate));
         }
+        // A game that isn't set up already says "Settings…", and goes there: the button under it would say it twice.
+        SettingsButton.IsVisible = Entries.All(group => group.Entries.All(entry => entry.SetUp));
     }
 
     private void Activate(LauncherEntry entry)
@@ -113,7 +115,7 @@ public partial class StartPage : UserControl
 /// <summary>
 /// One launcher row: the game's mark tinted by edition, the edition (or folder) name and the path.
 /// A game that isn't set up shows a dimmed mark and a link to Settings instead. Click, Enter or Space
-/// activates it.
+/// activates it; to a screen reader it is a button, which it can invoke.
 /// </summary>
 public sealed class LauncherRow : Border
 {
@@ -176,6 +178,11 @@ public sealed class LauncherRow : Border
 
     public LauncherEntry Entry => entry;
 
+    /// <summary>Opens the game, or Settings for one that isn't set up, as a click does.</summary>
+    internal void Activate() => activate(entry);
+
+    protected override Avalonia.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new LauncherRowPeer(this);
+
     /// <summary>The game's mark, tinted by edition.</summary>
     public Control Mark { get; }
 
@@ -228,6 +235,18 @@ public sealed class LauncherRow : Border
             e.Handled = true;
         }
     }
+}
+
+/// <summary>A <see cref="LauncherRow"/> to screen readers: a button named for what it opens, which they can invoke.</summary>
+internal sealed class LauncherRowPeer(LauncherRow owner) : Avalonia.Automation.Peers.ControlAutomationPeer(owner), Avalonia.Automation.Provider.IInvokeProvider
+{
+    public void Invoke() => ((LauncherRow)Owner).Activate();
+
+    protected override Avalonia.Automation.Peers.AutomationControlType GetAutomationControlTypeCore() => Avalonia.Automation.Peers.AutomationControlType.Button;
+
+    protected override bool IsContentElementCore() => true;
+
+    protected override bool IsControlElementCore() => true;
 }
 
 /// <summary>

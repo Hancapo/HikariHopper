@@ -15,8 +15,8 @@ namespace HikariHopper.Views;
 /// <see cref="BodyMargin"/>; a footer carries <see cref="FooterText"/> and a Close button. Esc, the
 /// close mark and Close all dismiss it. The sheet keeps its state between showings, so it reopens as
 /// it was left. It is sized with the window: its <see cref="WindowShare"/> of it, within
-/// <see cref="MinSize"/> and <see cref="MaxSize"/>, and never closer than 24px to its edges. It can't
-/// be moved; it stays centred.
+/// <see cref="MinSize"/> and <see cref="MaxSize"/>, and never closer than 24px to its edges; one that
+/// <see cref="FitsContent"/> is no taller than what it holds. It can't be moved; it stays centred.
 /// </remarks>
 public class ModalSheet : ContentControl, IModalContent
 {
@@ -45,13 +45,24 @@ public class ModalSheet : ContentControl, IModalContent
     public static readonly StyledProperty<Size> MaxSizeProperty =
         AvaloniaProperty.Register<ModalSheet, Size>(nameof(MaxSize), new Size(1000, 760));
 
+    /// <summary>
+    /// The sheet is only as tall as what it holds, up to its share of the window, where it scrolls: for one whose
+    /// content is short or long by what it shows (a file's properties), so a short one isn't mostly empty.
+    /// </summary>
+    public static readonly StyledProperty<bool> FitsContentProperty =
+        AvaloniaProperty.Register<ModalSheet, bool>(nameof(FitsContent));
+
     private ModalOverlay? overlay;
+
+    /// <summary>How tall the sheet is with all of its content showing, as last measured; 0 before it is.</summary>
+    internal double FittedHeight { get; set; }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         // A sheet that changes size while it is up (the update sheet, from its check to a new version) is laid out again.
-        if (change.Property == WindowShareProperty || change.Property == MinSizeProperty || change.Property == MaxSizeProperty)
+        if (change.Property == WindowShareProperty || change.Property == MinSizeProperty || change.Property == MaxSizeProperty
+            || change.Property == FitsContentProperty)
             (this.GetVisualParent() as Avalonia.Layout.Layoutable)?.InvalidateMeasure();
     }
 
@@ -95,6 +106,12 @@ public class ModalSheet : ContentControl, IModalContent
     {
         get => GetValue(MaxSizeProperty);
         set => SetValue(MaxSizeProperty, value);
+    }
+
+    public bool FitsContent
+    {
+        get => GetValue(FitsContentProperty);
+        set => SetValue(FitsContentProperty, value);
     }
 
     /// <summary>Whether the sheet is showing.</summary>

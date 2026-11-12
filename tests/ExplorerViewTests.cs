@@ -150,6 +150,20 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         LauncherRow lone = Assert.Single(start.Rows);
         Assert.Equal((HikariHopper.Core.GameCatalog.GtaV, false), (lone.Entry.Game.Id, lone.Entry.SetUp));
         Assert.Contains("Settings", string.Concat(lone.Detail.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(run => run.Text)));
+        // The row is the way to Settings: the button under the list doesn't say it a second time.
+        Assert.False(start.SettingsButton.IsVisible);
+        // A screen reader has the row as a button it can invoke, named for where it leads.
+        var peer = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(lone);
+        Assert.Equal(Avalonia.Automation.Peers.AutomationControlType.Button, peer.GetAutomationControlType());
+        Assert.Equal("Set up Grand Theft Auto V in Settings", peer.GetName());
+        int asked = 0;
+        EventHandler count = (_, _) => asked++;
+        start.SettingsRequested += count;
+        Assert.IsAssignableFrom<Avalonia.Automation.Provider.IInvokeProvider>(peer).Invoke();
+        start.SettingsRequested -= count;
+        Assert.Equal(1, asked);
+        ui.Find<MenuRow>().Settings!.Close();
+        Pump(250);
         bool settings = false;
         start.SettingsRequested += (_, _) => settings = true;
         start.Focus();
@@ -172,6 +186,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Pump();
         LauncherRow[] rows = [.. start.Rows];
         Assert.Equal([("Enhanced", enhanced), ("Legacy", other)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
+        // With every game set up, Settings is the button.
+        Assert.True(start.SettingsButton.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
         Assert.Equal(HikariHopper.Ui.Theme.TextDim, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
         Assert.Equal(enhanced, rows[0].Detail.Text);
@@ -370,6 +386,51 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Key(ui.Window, PhysicalKey.Escape);
         Pump(250);
         Assert.False(about.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public void AboutsLicencesOpenTheNoticesOverItAndEscapeComesBack()
+    {
+        Explorer ui = OpenExplorer();
+        var about = new AboutDialog();
+        about.Present(ui.Find<MenuRow>());
+        Pump(250);
+        var licences = about.FindControl<Views.Controls.ChromeToolButton>("LicencesButton")!;
+        string folder = AboutDialog.NoticesFolder;
+        Action<TopLevel?, Uri> launch = AboutDialog.Launch;
+        var opened = new List<Uri>();
+        AboutDialog.Launch = (_, uri) => opened.Add(uri);
+        try
+        {
+            // The file that ships beside the app opens in the text viewer, over About.
+            AboutDialog.NoticesFolder = Work;
+            File.WriteAllText(Path.Combine(Work, AboutDialog.NoticesFile), "# Third-party notices\n\nCMAA2, Apache License 2.0\n");
+            licences.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Pump(250);
+            TextViewer notices = Assert.IsType<TextViewer>(about.Notices);
+            Assert.True(notices.IsOpen);
+            Assert.True(about.IsOpen);
+            Assert.Empty(opened);
+            Key(ui.Window, PhysicalKey.Escape);
+            Pump(250);
+            Assert.False(notices.IsOpen);
+            Assert.Null(about.Notices);
+            Assert.True(about.IsOpen);
+
+            // A build without the file opens the repository's.
+            File.Delete(Path.Combine(Work, AboutDialog.NoticesFile));
+            licences.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Pump(50);
+            Assert.Null(about.Notices);
+            Assert.Equal([AboutDialog.NoticesPage], opened);
+        }
+        finally
+        {
+            AboutDialog.NoticesFolder = folder;
+            AboutDialog.Launch = launch;
+        }
+        about.Close();
+        Pump(250);
     }
 
     [AvaloniaFact]
@@ -992,15 +1053,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             .Where(segment => segment != navigation.OverflowSegment).Select(segment => segment.Label)];
 
         // At the root: the tab says Home, the tree starts inside it with nothing focused, and the path bar
-        // is empty.
+        // names it beside the home mark, with no crumbs after it.
         Assert.Equal("Home", ui.Bridge.TabTitle);
         Assert.DoesNotContain(ui.Bridge.TreeModel, item => item.Label == game);
         Assert.All(ui.Bridge.TreeModel, item => Assert.False(item.Selected));
         Assert.Equal(-1, ui.Bridge.TreeFocusIndex);
-        Assert.False(navigation.RootSegment.IsVisible);
+        Assert.True(navigation.RootSegment.IsVisible);
+        Assert.Equal("Home", navigation.RootSegment.Label);
         Assert.Empty(Crumbs());
 
-        // In a folder: the tab names it, and the path starts with the home mark, which goes back.
+        // In a folder: the tab names it, and the path starts with the home mark alone, which goes back.
         ui.Bridge.Navigate("folder00");
         Pump();
         Assert.Equal("folder00", ui.Bridge.TabTitle);
@@ -1013,7 +1075,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Click(ui.Window, home);
         Assert.Equal(".", ui.Bridge.CurrentPath);
         Assert.Equal("Home", ui.Bridge.TabTitle);
-        Assert.False(navigation.RootSegment.IsVisible);
+        Assert.Equal("Home", navigation.RootSegment.Label);
     }
 
     [AvaloniaFact]
@@ -1110,7 +1172,9 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             Assert.True(ui.Bridge.ArchiveIsRoot);
             Assert.Equal(".", ui.Bridge.CurrentPath);
             Assert.Equal("addon.rpf", ui.Bridge.TabTitle);
-            Assert.False(navigation.RootSegment.IsVisible);
+            // At its root, the bar names the RPF.
+            Assert.True(navigation.RootSegment.IsVisible);
+            Assert.Equal("addon.rpf", navigation.RootSegment.Label);
             ui.Bridge.CloseArchive();
             Pump();
         }

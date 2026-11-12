@@ -1,40 +1,14 @@
 <v:ModalSheet xmlns="https://github.com/avaloniaui"
               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
               xmlns:v="using:HikariHopper.Views"
-              xmlns:c="using:HikariHopper.Views.Controls"
-              xmlns:ui="using:HikariHopper.Ui"
               x:Class="HikariHopper.Views.ShortcutsDialog"
-              x:DataType="v:ShortcutsDialog"
-              WindowShare="0.4,0.8" MinSize="440,460" MaxSize="560,700"
+              WindowShare="0.76,0.9" MinSize="440,320" MaxSize="1040,800" FitsContent="True"
               Heading="KEYBOARD SHORTCUTS">
-  <!-- Port of ShortcutsWindow.qml: the keyboard reference laid out as a table. Keys go in mono
-       at row weight, actions in the UI face — the status bar's key-then-action pairing. -->
-  <ScrollViewer Name="Flick" Theme="{StaticResource BareScrollViewer}"
-                VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-    <ItemsControl ItemsSource="{Binding Groups}">
-      <ItemsControl.ItemTemplate>
-        <DataTemplate x:DataType="v:ShortcutGroup">
-          <StackPanel>
-            <c:DottedRule Horizontal="True" Margin="0,16,0,8" IsVisible="{Binding !IsFirst}" />
-            <TextBlock Margin="0,0,0,6" Text="{Binding Name}" Foreground="{x:Static ui:Theme.TextFaint}"
-                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="9" FontWeight="Bold" LetterSpacing="1.2" />
-            <ItemsControl ItemsSource="{Binding Keys}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="v:ShortcutEntry">
-                  <Grid Height="24" ColumnDefinitions="116,*" ColumnSpacing="14">
-                    <TextBlock Text="{Binding Key}" Foreground="{x:Static ui:Theme.TextRow}"
-                               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}"
-                               VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding Action}" Foreground="{x:Static ui:Theme.TextDim}"
-                               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}"
-                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-        </DataTemplate>
-      </ItemsControl.ItemTemplate>
-    </ItemsControl>
+  <!-- The keyboard reference: every key the app binds, grouped by where it works, in as many columns as the
+       sheet has room for. Keys go in mono at row weight, actions in the UI face, the status bar's pairing. -->
+  <ScrollViewer Name="Scroller" Theme="{StaticResource QuietScrollViewer}" HorizontalScrollBarVisibility="Disabled">
+    <Border Background="Transparent" Padding="0,0,14,8">
+      <v:ShortcutColumns Name="Columns" />
+    </Border>
   </ScrollViewer>
 </v:ModalSheet>

@@ -206,6 +206,12 @@ public sealed class PropertiesTests : ExplorerTestBase
         Assert.True(sheet.IsOpen);
         Assert.Equal("PROPERTIES", sheet.Heading);
         Assert.Equal("notes.txt", sheet.Properties.Name);
+        // As tall as what it shows: a file's few rows, not its whole share of the window (560 here), and nothing to scroll.
+        Assert.True(sheet.FitsContent);
+        Assert.Equal(sheet.FittedHeight, sheet.Bounds.Height);
+        Assert.InRange(sheet.Bounds.Height, 200, 420);
+        var scroller = Assert.IsType<Avalonia.Controls.ScrollViewer>(sheet.Content);
+        Assert.True(scroller.Extent.Height <= scroller.Viewport.Height);
         window.Close();
     }
 }

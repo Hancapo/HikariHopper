@@ -319,8 +319,8 @@ public sealed class ModalOverlay : Panel
     /// <summary>
     /// How big <paramref name="dialog"/> is in a window of <paramref name="window"/>: a
     /// <see cref="ModalSheet"/> takes its share of the window within its own minimum and maximum, so it
-    /// grows and shrinks with the window; any other dialog keeps its own Width and Height. Either way it
-    /// stays <see cref="Inset"/> clear of the edges.
+    /// grows and shrinks with the window, and one that fits its content is no taller than that; any other dialog
+    /// keeps its own Width and Height. Either way it stays <see cref="Inset"/> clear of the edges.
     /// </summary>
     public static Size SizeFor(Control dialog, Size window)
     {
@@ -332,6 +332,9 @@ public sealed class ModalOverlay : Panel
         {
             double width = Math.Clamp(window.Width * sheet.WindowShare.Width, sheet.MinSize.Width, sheet.MaxSize.Width);
             double height = Math.Clamp(window.Height * sheet.WindowShare.Height, sheet.MinSize.Height, sheet.MaxSize.Height);
+            // Its share is the most a sheet that fits its content takes; with less to show, it is that tall.
+            if (sheet.FitsContent && sheet.FittedHeight > 0)
+                height = Math.Min(height, sheet.FittedHeight);
             return new Size(Math.Floor(Math.Min(width, roomWidth)), Math.Floor(Math.Min(height, roomHeight)));
         }
         double fixedWidth = double.IsNaN(dialog.Width) ? dialog.DesiredSize.Width : dialog.Width;
@@ -345,7 +348,15 @@ public sealed class ModalOverlay : Panel
         if (dialog.Parent != this)
             return availableSize;
         if ((dialog is ModalSheet || GetFillsWindow(dialog)) && !double.IsInfinity(availableSize.Width) && !double.IsInfinity(availableSize.Height))
+        {
+            // How tall its content makes it, at the width it gets, before the size that comes of it.
+            if (dialog is ModalSheet { FitsContent: true } fitted)
+            {
+                dialog.Measure(new Size(SizeFor(dialog, availableSize).Width, double.PositiveInfinity));
+                fitted.FittedHeight = Math.Ceiling(dialog.DesiredSize.Height);
+            }
             dialog.Measure(SizeFor(dialog, availableSize));
+        }
         else
             dialog.Measure(Size.Infinity);
         return availableSize;

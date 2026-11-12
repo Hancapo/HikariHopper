@@ -19,6 +19,12 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Foreground" Value="{x:Static ui:Theme.TextDim}" />
     </Style>
+    <Style Selector="TextBlock.key">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
+    </Style>
   </UserControl.Styles>
   <Border Background="{x:Static ui:Theme.AppBg}"
           CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
@@ -40,14 +46,36 @@
 
           <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.StatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
             <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-            <Grid Margin="0,1,0,0" ColumnDefinitions="*,Auto">
-              <TextBlock Name="StatusText" Grid.Column="0" Classes="status" Margin="10,0,0,0"
-                         Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
-              <StackPanel Name="Facts" Grid.Column="1" Orientation="Horizontal" Spacing="14" Margin="0,0,12,0">
+            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,Auto,*,Auto">
+              <!-- What the image is on the left, as the explorer's status bar has its counts; the keys on the right,
+                   as the texture editor's has them. -->
+              <StackPanel Name="Facts" Grid.Column="0" Orientation="Horizontal" Spacing="14" Margin="10,0,12,0">
                 <TextBlock Name="DimensionsText" Classes="status" />
                 <TextBlock Name="MipsText" Classes="status" />
                 <TextBlock Name="SizeText" Classes="status" />
                 <TextBlock Name="FormatText" Classes="status" Foreground="{x:Static ui:Theme.InkData}" />
+              </StackPanel>
+              <Border Name="FactsSeam" Grid.Column="1" Width="2" Background="{x:Static ui:Theme.BorderHard}"
+                      BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="0,0,1,0" />
+              <TextBlock Name="StatusText" Grid.Column="2" Classes="status" Margin="10,0,0,0"
+                         Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
+              <StackPanel Name="Hints" Grid.Column="3" Orientation="Horizontal" Spacing="14" Margin="10,0,24,0">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="status key" Text="Wheel" />
+                  <TextBlock Classes="status label" Text="Zoom" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="status key" Text="Drag" />
+                  <TextBlock Classes="status label" Text="Pan" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="status key" Text="F" />
+                  <TextBlock Classes="status label" Text="Fit" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="status key" Text="1" />
+                  <TextBlock Classes="status label" Text="Actual size" />
+                </StackPanel>
               </StackPanel>
             </Grid>
           </Panel>
