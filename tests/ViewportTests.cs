@@ -438,10 +438,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // No embedded textures: the parts panel has no row for them, and T does nothing.
         Assert.False(viewer.Parts.TexturesRow.IsVisible);
         Assert.False(viewer.Shortcut('T'));
-        // Of the model, the toolbar has its shadows, and its levels of detail when it has more than one: its state
-        // and textures are in the parts panel.
-        Assert.Equal([viewer.ShadowsButton], viewer.ModelTools.GetLogicalDescendants().OfType<Views.Controls.ChromeToolButton>());
-        Assert.False(viewer.LodSwitch.IsVisible);
+        // Of the model, the footer has its level of detail and the counts' button; its state and textures are in the
+        // parts panel. One level: shown as it is, with its triangles, and no list to open.
+        Assert.Equal([viewer.StatsButton], viewer.ModelTools.GetLogicalDescendants().OfType<Views.Controls.ChromeToolButton>());
+        Assert.Equal(("High", "1"), (viewer.LodText.Text, viewer.LodCount.Text));
+        Assert.False(viewer.LodCaret.IsVisible);
+        viewer.ToggleLevels();
+        Assert.False(viewer.LevelsOpen);
         Assert.Equal(0, opened);
         // The game's afternoon to start with, in quarter hours, on the time button and in its dropdown.
         Assert.Equal("14:30", viewer.TimeButton.Text);
@@ -450,16 +453,28 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.Equal(58, viewer.SunSlider.Value);
         Assert.Equal(14.5f, viewer.Hours);
 
-        // The toolbar and the stats: one triangle, three corners, three edges.
-        Assert.True(viewer.Toolbar.IsVisible);
-        // What is drawn over the model, in the tool strip over the viewport, as in Blender, not in the toolbar: its
-        // skeleton, collision and lights.
+        // No toolbar: what is drawn over the model is a row over the view, as in Blender: its shadows, skeleton,
+        // collision and lights.
         Assert.True(viewer.ToolStripOverlay.IsWanted);
         Assert.True(viewer.PartsTabOverlay.IsWanted);
         Views.Controls.ChromeToolButton[] strip = [.. viewer.ToolStrip.GetLogicalDescendants().OfType<Views.Controls.ChromeToolButton>()];
-        Assert.Equal([viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton], strip);
+        Assert.Equal([viewer.ShadowsButton, viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton], strip);
         Assert.DoesNotContain(viewer.SkeletonButton, viewer.GetLogicalDescendants());
+        // The counts: one triangle, three corners, three edges, beside their button while it's on; the next viewer
+        // opens as this one was left.
         Assert.Equal(("1", "3", "3"), (viewer.TrianglesText.Text, viewer.VerticesText.Text, viewer.EdgesText.Text));
+        bool counted = Views.ModelViewer.StatsShown;
+        viewer.SetStatsShown(false);
+        Assert.False(viewer.StatsPanel.IsVisible);
+        Assert.False(viewer.StatsButton.Sunken);
+        viewer.StatsButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Assert.True(viewer.StatsPanel.IsVisible);
+        Assert.True(viewer.StatsButton.Sunken);
+        Assert.True(Views.ModelViewer.StatsShown);
+        var next = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        Settle(next);
+        Assert.True(next.StatsPanel.IsVisible);
+        viewer.SetStatsShown(counted);
         // No material count or size, and nothing missing to say.
         Assert.Equal("", viewer.Location);
         // Shadows are on, and H turns them off and on; the button sits raised while they're on.
@@ -486,24 +501,31 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Shortcut('X'));
         // Off, the toggles keep the button's own faint ink.
         Assert.False(viewer.SkeletonButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
-        // The camera orbits to start with; V flies it, with its speed in the status bar, and F frames the model and
-        // orbits again.
+        // The camera orbits to start with, on the footer's Orbit | Fly switch; V flies it, with its speed beside the
+        // switch, and F frames the model and orbits again.
         Assert.False(viewer.Viewport.FreeCamera);
-        Assert.True(viewer.OrbitButton.Sunken);
+        Assert.Equal(["orbit", "fly"], viewer.CameraSwitch.Sides.Select(side => side.Icon));
+        Assert.Equal(0, viewer.CameraSwitch.SelectedIndex);
         Assert.False(viewer.SpeedStat.IsVisible);
         Assert.True(viewer.Shortcut('V'));
         Assert.True(viewer.Viewport.FreeCamera);
-        Assert.True(viewer.FreeButton.Sunken);
-        Assert.False(viewer.OrbitButton.Sunken);
+        Assert.Equal(1, viewer.CameraSwitch.SelectedIndex);
         Assert.True(viewer.SpeedStat.IsVisible);
+        viewer.CameraSwitch.Pick(0);
+        Assert.False(viewer.Viewport.FreeCamera);
+        viewer.CameraSwitch.Pick(1);
+        Assert.True(viewer.Viewport.FreeCamera);
         Assert.True(viewer.Shortcut('F'));
         Assert.False(viewer.Viewport.FreeCamera);
         Assert.False(viewer.SpeedStat.IsVisible);
         Assert.True(viewer.Shortcut('v'));
         Assert.True(viewer.Shortcut('V'));
         Assert.False(viewer.Viewport.FreeCamera);
-        // The parts panel shows the drawable, and P hides and shows it; the drawable has only the high level, so 2
-        // changes nothing.
+        // The parts panel is closed at first, the model alone in the view; P shows and hides it. The drawable has only
+        // the high level, so 2 changes nothing.
+        Assert.False(viewer.PartsShown);
+        Assert.False(viewer.PartsHandle.IsVisible);
+        Assert.True(viewer.Shortcut('P'));
         Assert.True(viewer.PartsShown);
         Assert.True(viewer.PartsHandle.IsVisible);
         Assert.Equal("1 / 1", viewer.Parts.CountText);
@@ -525,8 +547,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.ResizeParts(5000);
         Assert.Equal(520, Views.ModelViewer.PartsWidth);
         viewer.ResizeParts(width);
-        // Only the high level: no level segments, and 2 changes nothing.
-        Assert.False(viewer.LodSwitch.IsVisible);
+        // Only the high level: 2 changes nothing.
         viewer.Shortcut('2');
         Assert.Equal(0, viewer.Visibility!.Lod);
         // Hiding the drawable leaves nothing counted.
@@ -635,7 +656,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_parts_arrow_and_the_tool_strip_are_drawn_over_the_viewports_left_edge()
+    public void The_parts_arrow_and_the_overlay_row_are_drawn_over_the_viewport()
     {
         var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
         var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
@@ -663,11 +684,23 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(tools.ShowActivated);
         Assert.False(tab.ShowActivated);
 
-        Views.Controls.ChromeToolButton[] strip = [viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
-        Assert.All(strip, button => Assert.Equal(new Avalonia.Size(26, 26), button.Bounds.Size));
-        // One above the other, joined by a one-pixel seam.
-        Assert.Equal(new Avalonia.Point(0, 27), Avalonia.VisualExtensions.TranslatePoint(strip[1], default, strip[0]));
-        Assert.Equal(new Avalonia.Point(0, 27), Avalonia.VisualExtensions.TranslatePoint(strip[2], default, strip[1]));
+        Views.Controls.ChromeToolButton[] strip = [viewer.ShadowsButton, viewer.SkeletonButton, viewer.SolidButton, viewer.LightsButton];
+        Assert.All(strip, button => Assert.Equal(new Avalonia.Size(30, 26), button.Bounds.Size));
+        // Windows keeps a window about 39 px tall at least, taller than the row: the row keeps its own height at the
+        // window's top, its rounded ends on its buttons, and nothing of it stretches into the rest.
+        double natural = viewer.ToolStrip.Bounds.Height;
+        tools.SizeToContent = Avalonia.Controls.SizeToContent.Manual;
+        tools.Height = 39;
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal(39, tools.ClientSize.Height);
+        Assert.Equal(natural, viewer.ToolStrip.Bounds.Height);
+        Assert.Equal(26, viewer.ToolStrip.Bounds.Height);
+        Assert.Equal(0, viewer.ToolStrip.Bounds.Top);
+        tools.SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
+        ExplorerStateRenders.Pump(50);
+        // Side by side, joined by a one-pixel seam.
+        for (int i = 1; i < strip.Length; i++)
+            Assert.Equal(new Avalonia.Point(31, 0), Avalonia.VisualExtensions.TranslatePoint(strip[i], default, strip[i - 1]));
         // Joined segments with no panel behind them, as Blender's: the collision this model has is a solid segment; the
         // skeleton and lights it hasn't have their glyphs faded right out, so they don't read as merely off, and their
         // tooltips still show, to say why.
@@ -685,12 +718,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.Equal("No lights", Views.Controls.WindowToolTip.ShownText);
         tools.MouseMove(Avalonia.VisualExtensions.TranslatePoint(viewer.SolidButton, new Avalonia.Point(13, 13), tools)!.Value);
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
-        // The arrow on the viewport's left edge, at its top; the strip a little in from the edge, centred on its height.
+        // The arrow on the viewport's left edge, at its top; the row a little down from the top, centred across it.
         void Centred()
         {
             Avalonia.PixelPoint edge = Avalonia.VisualExtensions.PointToScreen(viewer.Viewport, default);
             double scale = tools.RenderScaling;
-            double middle = edge.Y / scale + viewer.Viewport.Bounds.Height / 2;
+            double middle = edge.X / scale + viewer.Viewport.Bounds.Width / 2;
             Avalonia.Rect On(Avalonia.Controls.Control control)
             {
                 Avalonia.PixelPoint corner = Avalonia.VisualExtensions.PointToScreen(control, default);
@@ -699,16 +732,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
             Avalonia.Rect arrow = On(viewer.PartsTab), well = On(viewer.ToolStrip);
             Assert.Equal(edge.X / scale, arrow.X, 0.5);
             Assert.Equal(edge.Y / scale + Ui.Theme.PartsTabTop, arrow.Y, 0.5);
-            Assert.Equal(edge.X / scale + Ui.Theme.ToolStripInset, well.X, 0.5);
-            Assert.Equal(middle, well.Center.Y, 1.0);
-            // Apart: the arrow takes nothing from the strip.
-            Assert.True(arrow.Bottom < well.Y);
+            Assert.Equal(edge.Y / scale + Ui.Theme.ToolStripInset, well.Y, 0.5);
+            Assert.Equal(middle, well.Center.X, 1.0);
+            // Apart: the arrow takes nothing from the row.
+            Assert.True(arrow.Right < well.X);
         }
         Centred();
-        // It follows the viewport: closing the parts panel moves the viewport's edge, and the tools with it.
-        viewer.SetPartsShown(false);
+        // It follows the viewport: opening the parts panel moves the viewport's edge, and the tools with it.
+        viewer.SetPartsShown(true);
         ExplorerStateRenders.Pump(400);
-        Assert.False(viewer.PartsHandle.IsVisible);
+        Assert.True(viewer.PartsHandle.IsVisible);
         Centred();
         // So does the main window, moved.
         window.Position = new Avalonia.PixelPoint(window.Position.X + 40, window.Position.Y + 30);
@@ -850,16 +883,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
         ExplorerStateRenders.Pump(300);
 
         // In the viewer: drawn in a window of its own, in place of the in-window tooltip the viewport would cover.
-        Avalonia.Controls.ToolTip.SetIsOpen(viewer.FrameButton, true);
-        Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.FrameButton));
-        Assert.Equal("Frame the model, orbiting it  (F)", Views.Controls.WindowToolTip.ShownText);
+        Avalonia.Controls.ToolTip.SetIsOpen(viewer.StatsButton, true);
+        Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.StatsButton));
+        Assert.Equal("Triangles, vertices and edges drawn", Views.Controls.WindowToolTip.ShownText);
         Assert.Contains(window.OwnedWindows, owned => owned.Content is Avalonia.Controls.Border);
         // Held at its own size in the window's corner: Windows keeps such a window at least 39 pixels high, which
         // stretched a one-line tooltip.
         var body = (Avalonia.Controls.Border)window.OwnedWindows.Single(owned => owned.Content is Avalonia.Controls.Border).Content!;
         Assert.Equal((Avalonia.Layout.HorizontalAlignment.Left, Avalonia.Layout.VerticalAlignment.Top), (body.HorizontalAlignment, body.VerticalAlignment));
         // A tooltip that changes, as the parts arrow's does when it's pressed, closes it.
-        Avalonia.Controls.ToolTip.SetTip(viewer.FrameButton, "Changed");
+        Avalonia.Controls.ToolTip.SetTip(viewer.StatsButton, "Changed");
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
         // So does the viewer closing.
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.TimeButton, true);
@@ -910,7 +943,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr) { GameDictionaries = tables.Task });
         Settle(viewer);
         // Shown without waiting, its texture missing for now; a part hidden meanwhile.
-        Assert.True(viewer.Toolbar.IsVisible);
+        Assert.True(viewer.ModelTools.IsVisible);
         Assert.Equal("1 texture not found", viewer.Location);
         Assert.False(viewer.GameTexturesAdded.IsCompleted);
         viewer.Parts.Flip(viewer.Parts.Rows[1].Node);
@@ -927,7 +960,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_levels_a_drawable_has_are_segments_and_picking_one_shows_it()
+    public void The_levels_a_drawable_has_are_listed_above_the_footer_and_picking_one_shows_it()
     {
         // A triangle at the high level and another at the medium one.
         var builder = new FiveFury.Drawables.DrawableBuilder { Name = "sign" };
@@ -941,16 +974,51 @@ public sealed class ModelViewerTests : ExplorerTestBase
         byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
 
         var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr));
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
         Settle(viewer);
-        Assert.True(viewer.LodSwitch.IsVisible);
-        Assert.Equal(["High", "Med"], viewer.LodSwitch.Sides.Select(side => side.Text));
-        Assert.Equal(0, viewer.LodSwitch.SelectedIndex);
+        ExplorerStateRenders.Pump(100);
+        // The level shown, with its triangles, and an arrow: there is a choice.
+        Assert.Equal(("High", "1"), (viewer.LodText.Text, viewer.LodCount.Text));
+        Assert.True(viewer.LodCaret.IsVisible);
         Assert.True(viewer.Shortcut('2'));
         Assert.Equal(1, viewer.Visibility!.Lod);
-        Assert.Equal(1, viewer.LodSwitch.SelectedIndex);
+        Assert.Equal("Medium", viewer.LodText.Text);
         // A level it lacks is left alone.
         viewer.Shortcut('3');
-        Assert.Equal(1, viewer.LodSwitch.SelectedIndex);
+        Assert.Equal(1, viewer.Visibility!.Lod);
+
+        // Its list, above the footer: all four, each with its key and triangles; the ones it lacks faded, and not picked.
+        viewer.ToggleLevels();
+        Assert.True(viewer.LevelsOpen);
+        Assert.Equal([(0, true, "1"), (1, true, "1"), (2, false, "none"), (3, false, "none")],
+            viewer.LevelRows.Select(row => (row.Lod, row.Available, row.Triangles)));
+        Avalonia.Controls.Window list = Assert.Single(window.OwnedWindows.OfType<Views.Controls.DropdownWindow>());
+        Assert.True(Avalonia.VisualExtensions.PointToScreen(viewer.LodWell, default).Y > list.Position.Y);
+        viewer.LevelRows[2].Trigger();
+        Assert.Equal(1, viewer.Visibility!.Lod);
+        Assert.True(viewer.LevelsOpen);
+        // From the keyboard: the level shown is marked; Down stops at the last one it has, Up goes back, Enter picks.
+        Assert.Equal([false, true, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Down));
+        Assert.Equal([false, true, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Up));
+        Assert.Equal([true, false, false, false], viewer.LevelRows.Select(row => row.Highlighted));
+        Assert.False(viewer.LevelsKey(Avalonia.Input.Key.A));
+        Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Enter));
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal(0, viewer.Visibility!.Lod);
+        Assert.False(viewer.LevelsOpen);
+        viewer.Shortcut('2');
+        ExplorerStateRenders.Pump(450);
+        viewer.ToggleLevels();
+        Assert.True(viewer.LevelsOpen);
+        viewer.LevelRows[0].Trigger();
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal(0, viewer.Visibility!.Lod);
+        Assert.Equal("High", viewer.LodText.Text);
+        Assert.False(viewer.LevelsOpen);
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -993,30 +1061,27 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
         Settle(viewer);
-        // Of the toolbar, a collision or a navmesh has the camera: orbit or fly, and frame. Nothing of a drawable's.
-        Assert.True(viewer.Toolbar.IsVisible);
+        // Of the footer, a collision or a navmesh has the camera: orbit or fly. Nothing of a drawable's.
         Assert.False(viewer.ModelTools.IsVisible);
         Assert.False(viewer.TimeWell.IsVisible);
-        Assert.True(viewer.OrbitButton.Sunken);
-        Assert.False(viewer.StatsPanel.IsVisible);
+        Assert.True(viewer.CameraSwitch.IsVisible);
+        Assert.Equal(0, viewer.CameraSwitch.SelectedIndex);
         Assert.True(viewer.Shortcut('V'));
         Assert.True(viewer.Viewport.FreeCamera);
-        Assert.True(viewer.FreeButton.Sunken);
-        // Flying, the status bar says how fast, without a drawable's counts.
-        Assert.True(viewer.StatsPanel.IsVisible);
+        Assert.Equal(1, viewer.CameraSwitch.SelectedIndex);
+        // Flying, the footer says how fast.
         Assert.True(viewer.SpeedStat.IsVisible);
-        Assert.False(viewer.TrianglesStat.IsVisible);
-        Assert.False(viewer.VerticesStat.IsVisible);
-        Assert.False(viewer.EdgesStat.IsVisible);
         Assert.True(viewer.Shortcut('f'));
         Assert.False(viewer.Viewport.FreeCamera);
+        Assert.False(viewer.SpeedStat.IsVisible);
         Assert.False(viewer.Shortcut('T'));
         Assert.False(viewer.ToolStripOverlay.IsWanted);
-        Assert.False(viewer.StatsPanel.IsVisible);
         Assert.False(viewer.Shortcut('H'));
 
-        // Its materials are in the parts panel, open, each with its colour: the box's one, the default.
+        // Its materials are in the parts panel, closed at first, each with its colour: the box's one, the default.
         Assert.True(viewer.PartsTabOverlay.IsWanted);
+        Assert.False(viewer.PartsShown);
+        Assert.True(viewer.Shortcut('P'));
         Assert.True(viewer.PartsShown);
         Assert.True(viewer.PartsHandle.IsVisible);
         MeshParts marks = Assert.IsType<MeshParts>(viewer.Parts.Parts);

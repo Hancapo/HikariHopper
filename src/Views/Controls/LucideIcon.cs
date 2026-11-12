@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 
 namespace HikariHopper.Views.Controls;
 
@@ -28,7 +29,7 @@ public class LucideIcon : Control
     public static readonly StyledProperty<double> WeightProperty =
         AvaloniaProperty.Register<LucideIcon, double>(nameof(Weight), 1.8);
 
-    private static readonly Dictionary<(string Name, double Span), Geometry[]> GeometryCache = new();
+    private static readonly Dictionary<(string Name, double Span), (Geometry, bool)[]> GeometryCache = new();
 
     static LucideIcon()
     {
@@ -66,21 +67,31 @@ public class LucideIcon : Control
         if (span <= 0 || string.IsNullOrEmpty(name) || !LucideIcons.Paths.ContainsKey(name))
             return;
         var pen = new Pen(stroke, weight, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
-        foreach (Geometry geometry in Geometries(name, span))
-            context.DrawGeometry(null, pen, geometry);
+        IBrush? fill = null;
+        foreach ((Geometry geometry, bool filled) in Geometries(name, span))
+            if (filled)
+                context.DrawGeometry(fill ??= Faded(stroke), null, geometry);
+            else
+                context.DrawGeometry(null, pen, geometry);
     }
 
-    private static Geometry[] Geometries(string name, double span)
+    // A filled part (a shadow) in the stroke's colour, faded so the strokes read over it.
+    private static IBrush Faded(IBrush stroke) => stroke is ISolidColorBrush solid
+        ? new ImmutableSolidColorBrush(solid.Color, solid.Opacity * .55)
+        : stroke;
+
+    private static (Geometry Geometry, bool Filled)[] Geometries(string name, double span)
     {
-        if (GeometryCache.TryGetValue((name, span), out Geometry[]? cached))
+        if (GeometryCache.TryGetValue((name, span), out (Geometry, bool)[]? cached))
             return cached;
         var transform = new MatrixTransform(Matrix.CreateScale(span / 24, span / 24));
-        Geometry[] geometries = LucideIcons.Paths[name]
+        (Geometry, bool)[] geometries = LucideIcons.Paths[name]
             .Select(data =>
             {
-                Geometry geometry = Geometry.Parse(data);
+                bool filled = data.StartsWith("fill:", StringComparison.Ordinal);
+                Geometry geometry = Geometry.Parse(filled ? data[5..] : data);
                 geometry.Transform = transform;
-                return geometry;
+                return (geometry, filled);
             })
             .ToArray();
         if (GeometryCache.Count > 512)

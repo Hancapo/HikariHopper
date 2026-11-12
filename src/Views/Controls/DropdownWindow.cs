@@ -66,6 +66,26 @@ internal sealed class DropdownWindow : Window
     }
 
     /// <summary>
+    /// Opens <paramref name="body"/> above <paramref name="anchor"/>, <paramref name="gap"/> over it, its left edge on the
+    /// anchor's, or its right edge with <paramref name="right"/>; none when the anchor isn't in a window. For a footer.
+    /// </summary>
+    public static DropdownWindow? OpenAbove(Control anchor, Control body, double gap, bool right = false)
+    {
+        if (TopLevel.GetTopLevel(anchor) is not Window owner)
+            return null;
+        PixelPoint corner = anchor.PointToScreen(new Point(right ? anchor.Bounds.Width : 0, 0));
+        var dropdown = new DropdownWindow(body);
+        Thickness margin = Ui.Theme.MenuShadowMargin;
+        body.Measure(Size.Infinity);
+        double scale = owner.RenderScaling;
+        double x = right ? corner.X - (body.DesiredSize.Width + margin.Left) * scale : corner.X - margin.Left * scale;
+        double y = corner.Y - (gap + body.DesiredSize.Height + margin.Top) * scale;
+        dropdown.Position = new PixelPoint((int)Math.Round(x), (int)Math.Round(y));
+        dropdown.Show(owner);
+        return dropdown;
+    }
+
+    /// <summary>
     /// Opens <paramref name="body"/> under <paramref name="anchor"/>, its right edge on the anchor's, <paramref name="gap"/>
     /// below it; none when the anchor isn't in a window.
     /// </summary>

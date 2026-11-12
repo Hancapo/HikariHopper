@@ -32,7 +32,8 @@ public partial class ModelViewer : UserControl, IModalContent
         WindowToolTip.SetIsEnabled(this, true);
         ToolsHolder.Children.Clear();
         partsTab = new ViewportOverlay(Viewport, PartsTab, top: Ui.Theme.PartsTabTop);
-        toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: Ui.Theme.ToolStripInset);
+        // Centred across the view's top.
+        toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: null, top: Ui.Theme.ToolStripInset);
         WindowToolTip.SetIsEnabled(PartsTab, true);
         WindowToolTip.SetIsEnabled(ToolStrip, true);
         TitleText.Text = file.Name;
@@ -68,30 +69,48 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsHandle.PointerReleased += (_, e) => EndResize(e.Pointer);
         PartsHandle.PointerCaptureLost += (_, _) => EndResize(null);
         Parts.Width = partsWidth;
-        LodSwitch.SideRequested += (_, index) =>
+        LodWell.PointerPressed += (_, e) =>
         {
-            if (visibility is { } shown && index >= 0 && index < shown.Levels.Count)
-                SetLevel(shown.Levels[index]);
+            if (e.GetCurrentPoint(LodWell).Properties.IsLeftButtonPressed)
+            {
+                ToggleLevels();
+                e.Handled = true;
+            }
         };
+        LodWell.PointerEntered += (_, _) => PaintLevelWell();
+        LodWell.PointerExited += (_, _) => PaintLevelWell();
+        LodWell.KeyDown += (_, e) =>
+        {
+            if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space)
+            {
+                ToggleLevels();
+                e.Handled = true;
+            }
+        };
+        StatsButton.Click += (_, _) => SetStatsShown(!statsShown);
+        CameraSwitch.Sides.Add(new SwitchSide { Icon = "orbit", Label = "Orbit", ToolTip = "Orbit  (V)" });
+        CameraSwitch.Sides.Add(new SwitchSide
+        {
+            Icon = "fly",
+            Label = "Fly",
+            ToolTip = "Fly  (V)\nW A S D to move, Q and E down and up, Shift faster\nDrag to look, wheel for speed",
+        });
+        CameraSwitch.RefreshSides();
+        CameraSwitch.SideRequested += (_, index) => SetFreeCamera(index == 1);
+        Avalonia.Automation.AutomationProperties.SetName(CameraSwitch, "Camera");
         this.file = file;
         Parts.Changed += ShowParts;
         Parts.FrameRequested += FrameParts;
         Parts.TexturesRequested += () => OpenTextures();
-        FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
         LightsButton.Click += (_, _) => SetOverlay(Overlay.Lights, !lightsShown);
-        OrbitButton.Click += (_, _) => SetFreeCamera(false);
-        FreeButton.Click += (_, _) => SetFreeCamera(true);
         Viewport.SpeedChanged += ShowSpeed;
-        ThemedToolTip.Set(OrbitButton, "Orbit camera  (V)");
-        ThemedToolTip.Set(FreeButton, "Free camera  (V)\nW A S D to move, Q and E down and up, Shift faster\nDrag to look, wheel for speed");
-        ThemedToolTip.Set(SpeedStat, "Free camera speed");
+        ThemedToolTip.Set(SpeedStat, "How fast the camera flies");
         ThemedToolTip.Set(ShadowsButton, "Shadows  (H)");
-        ThemedToolTip.Set(FrameButton, "Frame the model, orbiting it  (F)");
-        ThemedToolTip.Set(TrianglesStat, "Triangles");
-        ThemedToolTip.Set(VerticesStat, "Vertices");
-        ThemedToolTip.Set(EdgesStat, "Edges");
+        ThemedToolTip.Set(StatsButton, "Triangles, vertices and edges drawn");
+        ThemedToolTip.Set(LodWell, "Level of detail  (1 to 4)");
+        PaintLevelWell();
         RefreshToggles();
         Viewport.ShortcutPressed += key => Shortcut(key);
     }
@@ -137,8 +156,22 @@ public partial class ModelViewer : UserControl, IModalContent
         Set(SkeletonButton, skeletonShown);
         Set(SolidButton, solidShown);
         Set(LightsButton, lightsShown);
-        Set(OrbitButton, !Viewport.FreeCamera);
-        Set(FreeButton, Viewport.FreeCamera);
+        Set(StatsButton, statsShown);
+        CameraSwitch.SelectedIndex = Viewport.FreeCamera ? 1 : 0;
+    }
+
+    // Whether the footer shows what is drawn counted, kept for the next viewer.
+    private static bool statsShown;
+
+    /// <summary>Whether the footer counts what is drawn: its triangles, vertices and edges.</summary>
+    internal static bool StatsShown => statsShown;
+
+    /// <summary>Shows the counts beside their button, or only the button; the next viewer opens the same way.</summary>
+    internal void SetStatsShown(bool shown)
+    {
+        statsShown = shown;
+        StatsPanel.IsVisible = shown;
+        RefreshToggles();
     }
 
     /// <summary>What can be drawn over the model.</summary>
@@ -199,16 +232,13 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>
-    /// Orbits the model or flies: flying, the viewport takes the keyboard for W, A, S, D, Q and E, and the status bar
-    /// says how fast it goes.
+    /// Orbits the model or flies: flying, the viewport takes the keyboard for W, A, S, D, Q and E, and the footer says
+    /// how fast it goes, beside the switch.
     /// </summary>
     internal void SetFreeCamera(bool on)
     {
         Viewport.FreeCamera = on;
         SpeedStat.IsVisible = on;
-        // A collision or a navmesh has no counts beside the status line: the speed is there alone, while it flies.
-        if (surfaces is null)
-            StatsPanel.IsVisible = on;
         if (on)
         {
             ShowSpeed(Viewport.FreeSpeed);
@@ -384,33 +414,175 @@ public partial class ModelViewer : UserControl, IModalContent
         if (visibility is null || !visibility.Levels.Contains(lod))
             return;
         visibility.Lod = lod;
-        LodSwitch.SelectedIndex = IndexOf(visibility.Levels, lod);
+        levelsDropdown?.Close();
         Parts.Refresh();
         ShowParts();
     }
 
-    /// <summary>The levels the drawable has as segments, the one shown raised; none when it has only the one.</summary>
+    private DropdownWindow? levelsDropdown;
+    private long levelsClosedAt;
+
+    /// <summary>Whether the list of levels is open.</summary>
+    internal bool LevelsOpen => levelsDropdown is not null;
+
+    /// <summary>The rows of the open list of levels: each level's key, name and triangles, and whether the drawable has it.</summary>
+    internal IReadOnlyList<LevelRow> LevelRows { get; private set; } = [];
+
+    /// <summary>Whether the drawable has more than one level, so its well opens a list of them.</summary>
+    private bool LevelsChoosable => visibility is { Levels.Count: > 1 };
+
+    /// <summary>The level shown, with its triangles, in the footer; the well opens a list only when there is a choice.</summary>
     private void ShowLevels()
     {
-        LodSwitch.Sides.Clear();
-        IReadOnlyList<int> levels = visibility?.Levels ?? [];
-        foreach (int lod in levels)
-        {
-            string name = PartVisibility.LevelName(lod);
-            string shortName = PartVisibility.ShortLevelName(lod);
-            LodSwitch.Sides.Add(new SwitchSide { Text = shortName, Width = 14 + 7 * shortName.Length, Label = name, ToolTip = $"{name} detail  ({lod + 1})" });
-        }
-        LodSwitch.RefreshSides();
-        LodSwitch.IsVisible = LodSeparator.IsVisible = levels.Count > 1;
-        LodSwitch.SelectedIndex = visibility is null ? -1 : IndexOf(levels, visibility.Lod);
+        if (visibility is null)
+            return;
+        LodText.Text = PartVisibility.LevelName(visibility.Lod);
+        LodCount.Text = PartsPanel.Compact(visibility.Stats().Triangles);
+        LodCaret.IsVisible = LevelsChoosable;
+        LodWell.Cursor = LevelsChoosable ? new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) : null;
+        LodWell.Focusable = LevelsChoosable;
+        PaintLevelWell();
     }
 
-    private static int IndexOf(IReadOnlyList<int> levels, int lod)
+    // A dropdown's well under the pointer, as the app's comboboxes have it.
+    private static readonly Avalonia.Media.Immutable.ImmutableSolidColorBrush HoverWell = new(Ui.Theme.Lighter(Ui.Theme.InsetBg.Color, 1.35));
+
+    // The well brightens under the pointer, and while its list is open, when it has one.
+    private void PaintLevelWell() =>
+        LodWell.Background = LevelsChoosable && (LodWell.IsPointerOver || levelsDropdown is not null) ? HoverWell : Ui.Theme.InsetBg;
+
+    /// <summary>Opens the list of the four levels above the footer, or closes it; a level the drawable lacks is faded.</summary>
+    internal void ToggleLevels()
     {
-        for (int i = 0; i < levels.Count; i++)
-            if (levels[i] == lod)
-                return i;
-        return -1;
+        if (levelsDropdown is not null)
+        {
+            levelsDropdown.Close();
+            return;
+        }
+        if (!LevelsChoosable || Environment.TickCount64 - levelsClosedAt < 400)
+            return;
+        var rows = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 196 };
+        var listed = new List<LevelRow>();
+        for (int lod = 0; lod < 4; lod++)
+        {
+            int level = lod;
+            bool has = visibility!.Levels.Contains(lod);
+            var row = new LevelRow(lod, has ? visibility.TrianglesAt(lod).ToString("N0", System.Globalization.CultureInfo.InvariantCulture) : "none", has, lod == visibility.Lod);
+            row.Triggered += () => SetLevel(level);
+            rows.Children.Add(row);
+            listed.Add(row);
+        }
+        LevelRows = listed;
+        levelsDropdown = DropdownWindow.OpenAbove(LodWell, rows, 4);
+        if (levelsDropdown is null)
+            return;
+        // From the keyboard: the level shown marked to start with, Up and Down to another, Enter or Space to pick it.
+        foreach (LevelRow row in listed)
+            row.Highlighted = row.Lod == visibility!.Lod;
+        levelsDropdown.KeyDown += (_, e) => e.Handled |= LevelsKey(e.Key);
+        PaintLevelWell();
+        levelsDropdown.Closed += (_, _) =>
+        {
+            levelsDropdown = null;
+            levelsClosedAt = Environment.TickCount64;
+            LevelRows = [];
+            PaintLevelWell();
+        };
+    }
+
+    /// <summary>
+    /// A key in the open list of levels: Up and Down move the mark over the levels the drawable has, Enter or Space picks
+    /// the one marked, 1 to 4 a level. False for any other key.
+    /// </summary>
+    internal bool LevelsKey(Avalonia.Input.Key key)
+    {
+        if (LevelRows.Count == 0)
+            return false;
+        int marked = LevelRows.ToList().FindIndex(row => row.Highlighted);
+        switch (key)
+        {
+            case Avalonia.Input.Key.Up or Avalonia.Input.Key.Down:
+                int step = key == Avalonia.Input.Key.Down ? 1 : -1;
+                for (int at = marked + step; at >= 0 && at < LevelRows.Count; at += step)
+                    if (LevelRows[at].Available)
+                    {
+                        foreach (LevelRow row in LevelRows)
+                            row.Highlighted = row == LevelRows[at];
+                        break;
+                    }
+                return true;
+            case Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space:
+                if (marked >= 0)
+                    LevelRows[marked].Trigger();
+                return true;
+            case >= Avalonia.Input.Key.D1 and <= Avalonia.Input.Key.D4:
+                LevelRows[key - Avalonia.Input.Key.D1].Trigger();
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>A level in the footer's list: its key, its name, its triangles; faded, and not picked, when the drawable lacks it.</summary>
+    internal sealed class LevelRow : Border
+    {
+        private readonly TextBlock name;
+        private bool highlighted;
+
+        public LevelRow(int lod, string triangles, bool available, bool current)
+        {
+            Lod = lod;
+            Available = available;
+            Height = Ui.Theme.MenuItemHeight;
+            CornerRadius = Ui.Theme.InnerCorner;
+            Background = Avalonia.Media.Brushes.Transparent;
+            Opacity = available ? 1 : Views.Controls.ChromeToolButton.DisabledOpacity;
+            if (available)
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            var key = new TextBlock { Text = (lod + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), Width = 22, Margin = new Thickness(9, 0, 0, 0), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            var count = new TextBlock { Text = triangles, Margin = new Thickness(18, 0, 10, 0), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextDim, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            name = new TextBlock { Text = PartVisibility.LevelName(lod), FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize, Foreground = current ? Ui.Theme.Text : Ui.Theme.TextRow, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            DockPanel.SetDock(key, Dock.Left);
+            DockPanel.SetDock(count, Dock.Right);
+            Child = new DockPanel { Children = { key, count, name } };
+            Triangles = triangles;
+            PointerEntered += (_, _) => Paint();
+            PointerExited += (_, _) => Paint();
+            PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton == Avalonia.Input.MouseButton.Left)
+                    Trigger();
+            };
+        }
+
+        public int Lod { get; }
+
+        public bool Available { get; }
+
+        /// <summary>Whether the keyboard's mark is on it: it fills as under the pointer.</summary>
+        public bool Highlighted
+        {
+            get => highlighted;
+            set
+            {
+                highlighted = value;
+                Paint();
+            }
+        }
+
+        private void Paint() =>
+            Background = highlighted || (Available && IsPointerOver) ? Ui.Theme.HoverChrome : Avalonia.Media.Brushes.Transparent;
+
+        /// <summary>Its triangles as listed, or "none".</summary>
+        public string Triangles { get; }
+
+        public event Action? Triggered;
+
+        /// <summary>Picks the level, as a click does, when the drawable has it.</summary>
+        internal void Trigger()
+        {
+            if (Available)
+                Triggered?.Invoke();
+        }
     }
 
     /// <summary>Draws what the parts panel and the level say, and counts it.</summary>
@@ -427,15 +599,17 @@ public partial class ModelViewer : UserControl, IModalContent
         TrianglesText.Text = Count(triangles);
         VerticesText.Text = Count(vertices);
         EdgesText.Text = Count(edges);
+        ShowLevels();
     }
 
     /// <summary>
-    /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// X damaged, B skeleton, C bounds, K solid collision, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// The viewer's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
+    /// X damaged, B skeleton, K collision, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free
+    /// camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
-        if (!Toolbar.IsVisible)
+        if (!contentShown)
             return false;
         // A collision or a navmesh has the camera's keys, and the parts panel's when it has something to list.
         if (surfaces is null && char.ToUpperInvariant(key) is not ('V' or 'F') && !(marks is not null && char.ToUpperInvariant(key) == 'P'))
@@ -537,7 +711,7 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>
-    /// Opens the time of day's slider under its button, a window of its own so the viewport doesn't cover it, or closes
+    /// Opens the time of day's slider above its button, a window of its own so the viewport doesn't cover it, or closes
     /// it; the button sits raised while it is open.
     /// </summary>
     internal void ToggleTime()
@@ -550,7 +724,7 @@ public partial class ModelViewer : UserControl, IModalContent
         // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
         if (Environment.TickCount64 - timeClosedAt < 400)
             return;
-        timeDropdown = DropdownWindow.OpenUnder(TimeButton, timeBody, 2);
+        timeDropdown = DropdownWindow.OpenAbove(TimeWell, timeBody, 4, right: true);
         if (timeDropdown is null)
             return;
         TimeButton.Sunken = true;
@@ -580,6 +754,8 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     private bool started;
+    // Whether something was read to show, which the keys act on.
+    private bool contentShown;
 
     /// <summary>What the file holds, where and how big, or why it can't be read: the status bar's line, once read.</summary>
     internal string Location { get; private set; } = "";
@@ -686,18 +862,20 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Box.IsEmpty)
             return "Nothing in it";
         Viewport.Frame(content.Box);
+        contentShown = true;
         System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
         if (content.Surfaces is { } surfaces)
         {
             Viewport.Show(surfaces);
-            // A drawable is lit by the game's light, and has the whole toolbar.
-            Toolbar.IsVisible = ModelTools.IsVisible = TimeWell.IsVisible = true;
+            // A drawable is lit by the game's light, and has the whole footer and the overlays; its parts panel opens
+            // when asked for.
+            ModelTools.IsVisible = TimeWell.IsVisible = true;
             partsTab.IsWanted = toolStrip.IsWanted = true;
             ShowStats(surfaces);
             visibility = new PartVisibility(surfaces);
             ShowLevels();
             Parts.Parts = visibility;
-            SetPartsShown(true);
+            SetPartsShown(false);
             ShowTextures(surfaces);
             ShowOverlayButtons(surfaces);
             this.surfaces = surfaces;
@@ -707,17 +885,15 @@ public partial class ModelViewer : UserControl, IModalContent
             return Describe(surfaces);
         }
         Viewport.Show(content.Mesh);
-        // Collisions and navmeshes are drawn flat: of the toolbar, they have the camera's buttons, and the parts panel
-        // lists what their colours mean (a collision's materials), to show, hide and find each.
-        Toolbar.IsVisible = true;
+        // Collisions and navmeshes are drawn flat: of the footer, they have the camera, and the parts panel lists what
+        // their colours mean (a collision's materials), to show, hide and find each, when asked for.
         ModelTools.IsVisible = TimeWell.IsVisible = false;
-        TrianglesStat.IsVisible = VerticesStat.IsVisible = EdgesStat.IsVisible = false;
         var listed = new MeshParts(content.Mesh);
         marks = listed.Any ? listed : null;
         Parts.Parts = marks;
         Parts.ShowTextures(0);
         partsTab.IsWanted = marks is not null;
-        SetPartsShown(marks is not null);
+        SetPartsShown(false);
         RefreshToggles();
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
@@ -725,14 +901,14 @@ public partial class ModelViewer : UserControl, IModalContent
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
     }
 
-    /// <summary>A drawable's triangles, vertices and edges, beside the status line.</summary>
+    /// <summary>A drawable's triangles, vertices and edges, beside their button while it is on.</summary>
     private void ShowStats(DrawableScene scene)
     {
         static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         TrianglesText.Text = Count(scene.TriangleCount);
         VerticesText.Text = Count(scene.VertexCount);
         EdgesText.Text = Count(scene.EdgeCount);
-        StatsPanel.IsVisible = true;
+        StatsPanel.IsVisible = statsShown;
     }
 
     /// <summary>
@@ -761,7 +937,7 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The parts arrow, drawn over the viewport's top left in a window of its own.</summary>
     internal ViewportOverlay PartsTabOverlay => partsTab;
 
-    /// <summary>The tool strip, drawn over the viewport's left edge, centred on its height, in a window of its own.</summary>
+    /// <summary>The overlay row, drawn over the viewport's top, centred across it, in a window of its own.</summary>
     internal ViewportOverlay ToolStripOverlay => toolStrip;
 
     /// <summary>The viewer closed; its GPU resources are let go.</summary>
@@ -816,6 +992,7 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         closed = true;
         timeDropdown?.Close();
+        levelsDropdown?.Close();
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();

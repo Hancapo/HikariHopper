@@ -162,6 +162,21 @@ internal sealed class PartVisibility : IPartList
         return (shown.Sum(part => part.TriangleCount), shown.Sum(part => part.VertexCount), shown.Sum(part => part.EdgeCount));
     }
 
+    /// <summary>The triangles that would be drawn at a level of detail, with the parts hidden as they are.</summary>
+    public int TrianglesAt(int lod)
+    {
+        int shown = Lod;
+        Lod = lod;
+        try
+        {
+            return Stats().Triangles;
+        }
+        finally
+        {
+            Lod = shown;
+        }
+    }
+
     /// <summary>How many of the level's geometries are drawn, of how many there are.</summary>
     public (int Shown, int Total) Counts()
     {

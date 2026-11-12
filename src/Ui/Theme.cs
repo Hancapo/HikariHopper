@@ -182,7 +182,12 @@ public static class Theme
     public const double TextureRowHeight = 62;
     public const double TextureThumbnailSize = 50;
     public const double TextureToolbarHeight = 38;
-    public const double ModelToolbarHeight = TextureToolbarHeight;
+
+    /// <summary>The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time.</summary>
+    public const double ModelFooterHeight = ExplorerStatusHeight;
+
+    /// <summary>The controls in it, as the explorer's view switch in a shorter bar.</summary>
+    public const double ModelFooterControlHeight = 24;
 
     /// <summary>The 3D viewer's parts panel's edge, dragged to resize it.</summary>
     public const double PartsEdgeWidth = 5;
@@ -190,7 +195,7 @@ public static class Theme
     /// <summary>How far the 3D viewer's parts arrow sits below the viewport's top.</summary>
     public const double PartsTabTop = 8;
 
-    /// <summary>How far the 3D viewer's tool strip sits in from the viewport's left edge.</summary>
+    /// <summary>How far the 3D viewer's overlay row sits below the viewport's top, centred across it.</summary>
     public const double ToolStripInset = 8;
     public const double TextureMipBarHeight = 32;
     public const double TextureCheckerCellSize = 16;
