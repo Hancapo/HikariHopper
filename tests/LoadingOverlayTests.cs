@@ -97,7 +97,7 @@ public sealed class LoadingOverlayTests
     {
         var overlay = new LoadingOverlay { Title = "LOADING GAME", Detail = "Grand Theft Auto V Enhanced" };
         Window window = Show(overlay);
-        TextBlock[] texts = [.. overlay.GetLogicalDescendants().OfType<TextBlock>()];
+        TextBlock[] texts = [.. overlay.GetLogicalDescendants().OfType<TextBlock>().Where(text => text.IsEffectivelyVisible)];
         Assert.Equal(["LOADING GAME", "Grand Theft Auto V Enhanced"], texts.Select(text => text.Text));
         Assert.True(texts[0].Bounds.Bottom <= texts[1].Bounds.Top);
         // The train stands over the caption, the whole centred across the window.
@@ -105,6 +105,38 @@ public sealed class LoadingOverlayTests
         Assert.Equal(new Size(LoadingTrain.FrameWidth, LoadingTrain.FrameHeight), train.Size);
         Assert.Equal(window.Width / 2, overlay.Train.TranslatePoint(new Point(train.Width / 2, 0), window)!.Value.X, 1);
         Assert.Equal("LOADING GAME Grand Theft Auto V Enhanced", AutomationProperties.GetName(overlay));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_long_task_shows_its_bar_and_count_and_can_be_cancelled()
+    {
+        var overlay = new LoadingOverlay { Title = "IMPORTING TEXTURES", Detail = "adder_paint_d.png" };
+        Window window = Show(overlay);
+        // Work of no known length has no bar, and nothing to cancel unless it says so.
+        Assert.False(overlay.Bar.IsVisible);
+        Assert.False(overlay.CancelButton.IsVisible);
+        overlay.Progress = .5;
+        overlay.ProgressText = "7/12";
+        overlay.CanCancel = true;
+        Pump();
+        Assert.True(overlay.Bar.IsVisible);
+        Assert.Equal(new Size(LoadingOverlay.BarWidth, LoadingOverlay.BarHeight), overlay.Bar.Bounds.Size);
+        Assert.Equal((LoadingOverlay.BarWidth - 2) / 2, overlay.Fill.Bounds.Width, 3);
+        Assert.Contains(overlay.Bar.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == "7/12");
+        // The bar sits under the caption, Cancel under the bar.
+        Assert.True(overlay.Bar.TranslatePoint(default, window)!.Value.Y > overlay.Train.TranslatePoint(new Point(0, overlay.Train.Bounds.Height), window)!.Value.Y);
+        Assert.True(overlay.CancelButton.TranslatePoint(default, window)!.Value.Y > overlay.Bar.TranslatePoint(new Point(0, overlay.Bar.Bounds.Height), window)!.Value.Y);
+        int asked = 0;
+        overlay.CancelRequested += (_, _) => asked++;
+        overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(1, asked);
+        Assert.False(overlay.CancelButton.IsEnabled);
+        // A sliver done still shows both rounded ends; nothing done shows no fill.
+        overlay.Progress = .001;
+        Assert.Equal(2 * (T.ControlRadius - 1), overlay.Fill.Width);
+        overlay.Progress = 0;
+        Assert.Equal(0, overlay.Fill.Width);
         window.Close();
     }
 }

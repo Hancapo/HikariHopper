@@ -8,6 +8,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Importing images into a texture dictionary shows the loading train over the editor once it takes a moment, with the file being read, a progress bar counting the files, and Cancel, which stops the import without adding anything. ([#177](https://github.com/Hancapo/HikariHopper/pull/177))
+
 ### Changed
 
 - While a game loads, a steam train runs along a short track over the caption, its wheels and rods turning and its stack puffing smoke, in place of a sliding bar; it stands still when Windows turns animations off. ([#176](https://github.com/Hancapo/HikariHopper/pull/176))
