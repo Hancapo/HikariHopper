@@ -60,9 +60,18 @@ public sealed class ShaderApplyToTests
         return viewer;
     }
 
-    private static void PickLeft(Views.ModelViewer viewer) => Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+    // Picked, with the shader values open: once opened, the card follows the pick.
+    private static void PickLeft(Views.ModelViewer viewer)
+    {
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.ShaderValuesOpen || viewer.OpenShaderValues());
+    }
 
-    private static void PickRight(Views.ModelViewer viewer) => Assert.True(viewer.PickAt(new Vector3(2.2f, .2f, 3), -Vector3.UnitZ));
+    private static void PickRight(Views.ModelViewer viewer)
+    {
+        Assert.True(viewer.PickAt(new Vector3(2.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.ShaderValuesOpen || viewer.OpenShaderValues());
+    }
 
     // The bumpiness each triangle is drawn with: its material's uniform.
     private static (float Left, float Right) Drawn(Views.ModelViewer viewer)

@@ -252,8 +252,11 @@ public sealed class ShaderValuesTests
         Assert.Null(viewer.Card.Material);
         Assert.False(viewer.CardOverlay.IsWanted);
 
-        // Picked on the model: the card shows its shader's values, under the drawable's name.
+        // Picked on the model: no card until it's asked for; M opens it, with its shader's values, under the drawable's name.
         Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.Shortcut('M'));
+        Assert.True(viewer.ShaderValuesOpen);
         Assert.True(viewer.CardOverlay.IsWanted);
         Assert.Same(viewer.Surfaces!.Sources[0], viewer.Card.Material);
         Assert.Equal("tri", viewer.Card.Title);
@@ -281,16 +284,23 @@ public sealed class ShaderValuesTests
         Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
         Assert.False(viewer.Card.ResetAllShown);
 
-        // Its close mark lets go of the pick: no row selected, no outline, no card.
+        // Its close mark closes the card; the pick stays. M opens it again, and closes it.
         viewer.Card.RequestClose();
-        Assert.Empty(viewer.Parts.Selection);
-        Assert.Empty(viewer.Viewport.Picked);
         Assert.False(viewer.CardOverlay.IsWanted);
-        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.Single(viewer.Parts.Selection);
+        Assert.NotEmpty(viewer.Viewport.Picked);
+        Assert.True(viewer.Shortcut('M'));
         Assert.True(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.Shortcut('M'));
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.OpenShaderValues());
 
-        // Off the model: no card.
+        // Off the model: no card, and none on the next pick until it's asked for again.
         Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.False(viewer.ShaderValuesOpen);
+        Assert.False(viewer.OpenShaderValues());
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
         Assert.False(viewer.CardOverlay.IsWanted);
         viewer.Close();
     }
@@ -307,6 +317,7 @@ public sealed class ShaderValuesTests
         viewer.SetPartsShown(true);
         ExplorerStateRenders.Pump(300);
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        Assert.True(viewer.OpenShaderValues());
         ExplorerStateRenders.Pump(100);
 
         // Out of the panel's edge, its notch at the row's middle.
@@ -325,10 +336,51 @@ public sealed class ShaderValuesTests
     }
 
     [AvaloniaFact]
+    public void The_parts_menu_opens_the_picked_geometrys_shader_values_first()
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", Triangle()));
+        var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
+        window.Show();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Views.PartsPanel.MenuRowItem[] Items()
+        {
+            viewer.Parts.OpenMenu(viewer.Parts, new Point(20, 40));
+            Assert.NotNull(viewer.Parts.Menu);
+            return [.. Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(viewer.Parts.Menu).OfType<Views.PartsPanel.MenuRowItem>()];
+        }
+
+        // A geometry picked: the menu's first item, in a group of its own, opens its shader values.
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Views.PartsPanel.MenuRowItem[] items = Items();
+        Assert.Equal(["Shader values…", "Show only", "Hide", "Show all", "Frame", "Copy name"], items.Select(item => item.Text));
+        Assert.True(items[0].IsEnabled);
+        // Its groups are parted as the app's other menus are.
+        Assert.Equal(2, Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(viewer.Parts.Menu!).OfType<Views.Controls.RetroMenuSeparator>().Count());
+        items[0].Trigger();
+        Assert.Null(viewer.Parts.Menu);
+        Assert.True(viewer.ShaderValuesOpen);
+        Assert.True(viewer.CardOverlay.IsWanted);
+
+        // The drawable's row picked, which has no one shader: the card closes, and the item is there but off.
+        viewer.Parts.Select(viewer.Parts.Rows[0].Node);
+        Assert.False(viewer.CardOverlay.IsWanted);
+        items = Items();
+        Assert.Equal("Shader values…", items[0].Text);
+        Assert.False(items[0].IsEnabled);
+        items[0].Trigger();
+        Assert.False(viewer.ShaderValuesOpen);
+        viewer.Parts.Menu?.Close();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_value_reset_on_the_card_puts_back_the_files()
     {
         Views.ModelViewer viewer = Open(Triangle());
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        Assert.True(viewer.OpenShaderValues());
         Views.ScrubField bump = viewer.Card.Field("bumpiness")!;
         float before = bump.Value;
         bump.StartTyping();

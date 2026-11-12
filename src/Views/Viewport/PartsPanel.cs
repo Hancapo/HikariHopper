@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Threading;
 using HikariHopper.Rendering;
 using HikariHopper.Views.Controls;
 
@@ -261,6 +262,15 @@ internal sealed class PartsPanel : UserControl
 
     /// <summary>Raised when which rows are selected changes.</summary>
     public event Action? SelectionChanged;
+
+    /// <summary>
+    /// Whether the menu offers the picked geometry's shader values: null for none (a collision, a navmesh), else
+    /// whether they can be shown for what is picked. <see cref="ShaderValuesRequested"/> shows them.
+    /// </summary>
+    internal Func<bool?>? ShaderValues { get; set; }
+
+    /// <summary>The menu's Shader values… was picked.</summary>
+    internal event Action? ShaderValuesRequested;
 
     // The selection last told, to tell only when it changes.
     private string[] toldSelection = [];
@@ -1016,7 +1026,11 @@ internal sealed class PartsPanel : UserControl
                 Focus();
                 if (!selected.Contains(node.Key))
                     Select(node);
-                OpenMenu(row, e.GetPosition(row));
+                // At the pointer in the panel, not on the row: picking a row draws the rows again, and the menu, anchored
+                // on a row gone from the window, didn't open; only a second right click, the row picked by then, opened
+                // it. And once what the new pick sets off has run, so a window it shows can't take the keyboard from it.
+                Point at = e.GetPosition(this);
+                Dispatcher.UIThread.Post(() => OpenMenu(this, at), DispatcherPriority.Background);
                 e.Handled = true;
             }
         };
@@ -1032,9 +1046,9 @@ internal sealed class PartsPanel : UserControl
             return;
         bool allShown = nodes.All(node => parts.State(node) == true);
         var items = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 200 };
-        void Item(string icon, string text, string shortcut, Action action)
+        void Item(string icon, string text, string shortcut, Action action, bool enabled = true)
         {
-            var row = new MenuRowItem(icon, text, shortcut);
+            var row = new MenuRowItem(icon, text, shortcut) { IsEnabled = enabled };
             row.Triggered += () =>
             {
                 menu?.Close();
@@ -1042,13 +1056,19 @@ internal sealed class PartsPanel : UserControl
             };
             items.Children.Add(row);
         }
+        // First, the shader values of the one geometry picked; there but off for anything else picked.
+        if (ShaderValues?.Invoke() is { } canShow)
+        {
+            Item("palette", "Shader values…", "M", () => ShaderValuesRequested?.Invoke(), enabled: canShow);
+            items.Children.Add(new RetroMenuSeparator());
+        }
         Item("eye", "Show only", "Alt+click", () => ShowOnly(nodes));
         if (allShown)
             Item("eye-off", "Hide", "Del", () => SetShown(nodes, false));
         else
             Item("eye", "Show", "Space", () => SetShown(nodes, true));
         Item("eye", "Show all", "", ShowAll);
-        items.Children.Add(new Border { Height = 1, Margin = new Thickness(8, 4), Background = Ui.Theme.BorderSoft });
+        items.Children.Add(new RetroMenuSeparator());
         Item("focus", "Frame", "Enter", FrameSelection);
         Item("copy", nodes.Count == 1 ? "Copy name" : "Copy names", "Ctrl+C", () => _ = CopyNames());
         menu = DropdownWindow.OpenAt(anchor, at, items);
@@ -1176,12 +1196,21 @@ internal sealed class PartsPanel : UserControl
             DockPanel.SetDock(key, Dock.Right);
             Child = new Panel { Children = { icon, new DockPanel { Margin = new Thickness(32, 0, 10, 0), Children = { key, label } } } };
             Paint(false);
-            PointerEntered += (_, _) => Paint(true);
+            PointerEntered += (_, _) => Paint(IsEnabled);
             PointerExited += (_, _) => Paint(false);
             PointerReleased += (_, e) =>
             {
-                if (e.InitialPressMouseButton == MouseButton.Left)
+                if (IsEnabled && e.InitialPressMouseButton == MouseButton.Left)
                     Triggered?.Invoke();
+            };
+            // Off, it's there to say what could be done, faded as the app's buttons that can't be used are.
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property == IsEnabledProperty)
+                {
+                    Opacity = IsEnabled ? 1 : ChromeToolButton.DisabledOpacity;
+                    Cursor = IsEnabled ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
+                }
             };
         }
 
@@ -1190,8 +1219,12 @@ internal sealed class PartsPanel : UserControl
 
         public event Action? Triggered;
 
-        /// <summary>Runs the item, as a click on it does.</summary>
-        internal void Trigger() => Triggered?.Invoke();
+        /// <summary>Runs the item, as a click on it does, unless it's off.</summary>
+        internal void Trigger()
+        {
+            if (IsEnabled)
+                Triggered?.Invoke();
+        }
 
         private void Paint(bool highlighted)
         {
