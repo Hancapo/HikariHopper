@@ -64,6 +64,10 @@ public sealed class PartVisibilityTests
         var parts = new PartVisibility(Scene());
         PartNode drawable = Assert.Single(parts.Tree());
         Assert.Equal(("sign", 3), (drawable.Name, drawable.Triangles));
+        // Each node says what it is.
+        Assert.Equal(PartKind.Drawable, drawable.Kind);
+        Assert.All(drawable.Children, child => Assert.Equal(PartKind.Child, child.Kind));
+        Assert.All(drawable.Children.SelectMany(child => child.Children), geometry => Assert.Equal(PartKind.Geometry, geometry.Kind));
         // Two models without a skeleton: by number, each with its geometry.
         Assert.Equal(["model 1", "model 2"], drawable.Children.Select(child => child.Name));
         Assert.Equal(["default", "normal_spec"], drawable.Children.Select(child => Assert.Single(child.Children).Name));

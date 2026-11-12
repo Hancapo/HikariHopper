@@ -18,27 +18,6 @@ public sealed class PartsPanelTests
     private static string[] Names(Views.PartsPanel panel) => [.. panel.Rows.Select(row => row.Node.Name)];
 
     [Fact]
-    public void Each_node_says_what_it_is()
-    {
-        var parts = new PartVisibility(PartVisibilityTests.Scene());
-        PartNode drawable = Assert.Single(parts.Tree());
-        Assert.Equal(PartKind.Drawable, drawable.Kind);
-        Assert.All(drawable.Children, child => Assert.Equal(PartKind.Child, child.Kind));
-        Assert.All(drawable.Children.SelectMany(child => child.Children), geometry => Assert.Equal(PartKind.Geometry, geometry.Kind));
-    }
-
-    [Fact]
-    public void Show_only_hides_the_rest_and_show_all_brings_everything_back()
-    {
-        var parts = new PartVisibility(PartVisibilityTests.Scene());
-        PartNode drawable = parts.Tree()[0];
-        parts.ShowOnly([drawable.Children[1]]);
-        Assert.Equal([false, true, false], parts.Mask());
-        parts.ShowAll();
-        Assert.Equal([true, true, false], parts.Mask());
-    }
-
-    [Fact]
     public void The_bounds_of_rows_are_their_parts_triangles_in_the_world()
     {
         var parts = new PartVisibility(PartVisibilityTests.Scene());

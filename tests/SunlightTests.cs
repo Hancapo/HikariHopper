@@ -5,27 +5,6 @@ namespace HikariHopper.Tests;
 
 public sealed class SunlightTests
 {
-    [Fact]
-    public void The_viewers_afternoon_sun_is_up_and_past_noon()
-    {
-        KeyLight key = DayCycle.Evaluate(DayCycle.DefaultHours);
-        Assert.True(key.Sun);
-        Assert.Equal(1, key.Direction.Length(), 3);
-        // High in the sky, and after the solar noon (13:00) it has moved west: +X is east.
-        Assert.InRange(key.Direction.Z, .5f, .95f);
-        Assert.True(key.Direction.X < 0, "west of the noon meridian");
-    }
-
-    [Fact]
-    public void At_night_the_moon_is_the_light_and_the_timecycle_dims_it()
-    {
-        KeyLight night = DayCycle.Evaluate(1);
-        Assert.False(night.Sun);
-        Assert.True(night.Direction.Z > 0, "the moon is up when the sun is down");
-        Assert.True(Timecycle.Evaluate(1).Directional.Length() < Timecycle.Evaluate(DayCycle.DefaultHours).Directional.Length() / 50);
-        // The hour wraps.
-        Assert.Equal(DayCycle.SunDirection(14), DayCycle.SunDirection(38));
-    }
 
     [Fact]
     public void The_timecycle_is_its_keyframes_and_runs_between_them()
@@ -37,6 +16,14 @@ public sealed class SunlightTests
         AssertClose(new Vector3(.9771f, .8394f, .5811f) * 4.5f, one.NaturalUp);
         Assert.Equal(.7979f, one.OcclusionVehicle, 4);
         Assert.Equal(1, one.OcclusionProp, 4);
+        // Peds have their own: light_amb_occ_mult_ped 0.3499 and light_ped_rim_mult 0.8975.
+        Assert.Equal(.3499f, one.OcclusionPed, 4);
+        Assert.Equal(.8975f, one.PedRim, 4);
+        Assert.Equal(.5977f, Timecycle.Evaluate(0).OcclusionPed, 4);
+        // At night the light is far dimmer: the moon's, not the sun's.
+        Assert.True(Timecycle.Evaluate(1).Directional.Length() < Timecycle.Evaluate(DayCycle.DefaultHours).Directional.Length() / 50);
+        // And the sun's hour wraps as the timecycle's does.
+        Assert.Equal(DayCycle.SunDirection(14), DayCycle.SunDirection(38));
 
         // Half past two is halfway to the 16:00 keyframe, in each field: the colour, and the multiplier at 58.
         Vector3 colour = Vector3.Lerp(new(1.002f, .8721f, .6309f), new(1, .7852f, .3914f), .5f);

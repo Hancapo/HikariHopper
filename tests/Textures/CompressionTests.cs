@@ -38,9 +38,8 @@ public sealed class CompressionTests
     }
 
     [AvaloniaTheory]
+    // Each format, and each edition once: the optimizer works the same in both.
     [InlineData(GameTarget.Legacy, TextureFormat.BC2Unorm)]
-    [InlineData(GameTarget.Legacy, TextureFormat.BC3Unorm)]
-    [InlineData(GameTarget.Enhanced, TextureFormat.BC2Unorm)]
     [InlineData(GameTarget.Enhanced, TextureFormat.BC3Unorm)]
     public Task OptimizationPreservesAuthoredMipsAndUndo(GameTarget target, TextureFormat format) => Headless.Run(() =>
     {

@@ -22,7 +22,8 @@ public sealed class RenderScenarios
 {
     private const string LegacyPath = @"D:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V";
 
-    [AvaloniaFact]
+    // A tool for PR screenshots, not a test: run only when asked for (--explicit only).
+    [AvaloniaFact(Explicit = true)]
     public void RenderAll()
     {
         string? scenarios = Environment.GetEnvironmentVariable("HH_SCENARIOS");

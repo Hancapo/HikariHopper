@@ -133,13 +133,4 @@ public sealed class PedShaderTests
         Assert.DoesNotContain(scene.Diagnostics, line => line.Contains("default material"));
     }
 
-    [Fact]
-    public void The_timecycle_gives_peds_their_own_occlusion_and_rim_light()
-    {
-        // EXTRASUNNY at 13:00: light_amb_occ_mult_ped 0.3499, light_ped_rim_mult 0.8975.
-        TimecycleLight noon = Timecycle.Evaluate(13);
-        Assert.Equal(.3499f, noon.OcclusionPed, 4);
-        Assert.Equal(.8975f, noon.PedRim, 4);
-        Assert.Equal(.5977f, Timecycle.Evaluate(0).OcclusionPed, 4);
-    }
 }

@@ -15,7 +15,8 @@ namespace HikariHopper.Tests;
 /// </summary>
 public sealed class RenderTextureScenarios
 {
-    [AvaloniaFact]
+    // A tool for PR screenshots, not a test: run only when asked for (--explicit only).
+    [AvaloniaFact(Explicit = true)]
     public void RenderAll()
     {
         string? scenarios = Environment.GetEnvironmentVariable("HH_TEX_SCENARIOS");
