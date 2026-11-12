@@ -29,9 +29,13 @@ internal sealed class OrbitCamera
     /// <summary>Elevation in radians, kept a hair from the poles (<see cref="MaxPitch"/>).</summary>
     public float Pitch { get; private set; } = .35f;
 
-    public Vector3 Eye => Center + new Vector3(MathF.Cos(Pitch) * MathF.Cos(Yaw), MathF.Cos(Pitch) * MathF.Sin(Yaw), MathF.Sin(Pitch)) * Distance;
+    public Vector3 Eye => Center - Forward * Distance;
 
-    public Vector3 Forward => Vector3.Normalize(Center - Eye);
+    /// <summary>
+    /// Where it looks, from its yaw and pitch alone: taking it from the centre and the eye would lose the level part far
+    /// from the origin near the poles, and leave no right.
+    /// </summary>
+    public Vector3 Forward => -new Vector3(MathF.Cos(Pitch) * MathF.Cos(Yaw), MathF.Cos(Pitch) * MathF.Sin(Yaw), MathF.Sin(Pitch));
 
     public Vector3 Right => Vector3.Normalize(Vector3.Cross(Forward, Vector3.UnitZ));
 
@@ -92,14 +96,14 @@ internal sealed class OrbitCamera
 
     /// <summary>
     /// Turns to look from along a world axis (+X, -Y, +Z…), as a 3D tool's axis gizmo does: from the side, level; from
-    /// above or below, straight down or up, with +Y up the screen. It looks at the centre from there, at the distance it
+    /// above or below, straight down or up, with +Y up the screen (so from below +X is on the left). It looks at the centre from there, at the distance it
     /// is at; the viewer frames what it shows first, so a click shows it whole from that side.
     /// </summary>
     public void LookFrom(Vector3 axis)
     {
         if (MathF.Abs(axis.Z) > MathF.Abs(axis.X) && MathF.Abs(axis.Z) > MathF.Abs(axis.Y))
         {
-            Yaw = -MathF.PI / 2;
+            Yaw = -MathF.Sign(axis.Z) * MathF.PI / 2;
             Pitch = MathF.Sign(axis.Z) * MaxPitch;
         }
         else
