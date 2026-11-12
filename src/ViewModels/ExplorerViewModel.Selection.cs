@@ -405,6 +405,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
             Nearby = NearbyDictionaries(entry),
@@ -418,6 +419,11 @@ public sealed partial class ExplorerViewModel
     /// their parents, each read when the search reaches it, with a reader of its own, off the UI thread. None outside a
     /// game, for other files, or for a drawable no archetype names.
     /// </summary>
+    /// <summary>The game's car colours and a vehicle's combinations of them, for a fragment opened from a game.</summary>
+    private Task<Rendering.CarPaints?>? GamePaints(string modelName) =>
+        modelName.EndsWith(".yft", StringComparison.OrdinalIgnoreCase) && LoadedGameOfProvider() is { } game
+            ? GameTextures.ForGame(game).PaintsFor(modelName) : null;
+
     private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(string modelName)
     {
         if (!ModelFile.IsDrawableName(modelName) || LoadedGameOfProvider() is not { } game)

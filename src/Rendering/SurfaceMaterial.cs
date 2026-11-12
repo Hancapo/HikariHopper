@@ -129,9 +129,13 @@ internal sealed class SurfaceMaterial
     private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
         .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Makes a material ready to draw, finding its textures with <paramref name="resolve"/>.</summary>
-    public static SurfaceMaterial From(DrawableMaterial material, Func<TextureReference, Texture?> resolve)
+    /// <summary>
+    /// Makes a material ready to draw, finding its textures with <paramref name="resolve"/>; a vehicle's paint slots in
+    /// <paramref name="paint"/>'s colours, the game's grey without.
+    /// </summary>
+    public static SurfaceMaterial From(DrawableMaterial material, Func<TextureReference, Texture?> resolve, VehiclePaint? paint = null)
     {
+        paint ??= VehiclePaint.Unset;
         bool enhanced = material.Gen9Parameters is not null;
         ShaderDefinition? definition = (enhanced ? ShaderCatalog.Enhanced : ShaderCatalog.Legacy).Find(material.ShaderHash)
             ?? ShaderCatalog.Legacy.Find(material.ShaderHash) ?? ShaderCatalog.Enhanced.Find(material.ShaderHash);
@@ -382,8 +386,7 @@ internal sealed class SurfaceMaterial
         // fills them when no vehicle's colours apply.
         void Vehicle(Span<float> v)
         {
-            float[] paint = Constant("paint_colour", 1, 1, 1);
-            Vector3 colour = PaintColour(paint);
+            Vector3 colour = PaintColour(Constant("paint_colour", 1, 1, 1), paint);
             v[16] = colour.X;
             v[17] = colour.Y;
             v[18] = colour.Z;
@@ -400,7 +403,7 @@ internal sealed class SurfaceMaterial
             // taken to be the pearlescent paint's, and only how far its light swings overhead is the material's.
             bool second = Declares("constants", "specular2");
             float[] lobe = Constant("specular2", 0, 0, 0, 0);
-            Vector3 pearl = second ? Layer(Pearlescent) : Vector3.Zero;
+            Vector3 pearl = second ? paint.Layer(Pearlescent) : Vector3.Zero;
             v[28] = pearl.X;
             v[29] = pearl.Y;
             v[30] = pearl.Z;
@@ -412,24 +415,19 @@ internal sealed class SurfaceMaterial
     }
 
     private const int Pearlescent = 3;
-    private const int Unpainted = 5;
 
     /// <summary>
     /// A vehicle material's diffuse colour. matDiffuseColor (2, n, n) isn't a colour but one of the vehicle's seven
     /// paint slots, n - 1, which the game fills in: 0 primary, 1 secondary, 2 pearlescent, 3 wheels, 4 left as it is,
-    /// 5 interior and 6 dashboard. Any other value is the colour itself.
+    /// 5 interior and 6 dashboard, drawn in <paramref name="paint"/>'s colours (the game's grey for each, the fifth
+    /// white, without). Any other value is the colour itself.
     /// </summary>
-    internal static Vector3 PaintColour(ReadOnlySpan<float> value)
+    internal static Vector3 PaintColour(ReadOnlySpan<float> value, VehiclePaint? paint = null)
     {
         Vector3 colour = new(value.Length > 0 ? value[0] : 1, value.Length > 1 ? value[1] : 1, value.Length > 2 ? value[2] : 1);
-        return MathF.Abs(colour.X - 2) < .001f && MathF.Round(colour.Y) is >= 1 and <= 7 ? Layer((int)MathF.Round(colour.Y)) : colour;
+        return MathF.Abs(colour.X - 2) < .001f && MathF.Round(colour.Y) is >= 1 and <= 7
+            ? (paint ?? VehiclePaint.Unset).Layer((int)MathF.Round(colour.Y)) : colour;
     }
-
-    /// <summary>
-    /// A paint slot's colour with no vehicle's colours to fill it, as the game sets them: grey 0x96 for every slot
-    /// but the fifth, which is white (the game greys it only for some vehicles).
-    /// </summary>
-    private static Vector3 Layer(int layer) => layer == Unpainted ? Vector3.One : new Vector3(150 / 255f);
 
     private static IEnumerable<string> Names(string group, string role) =>
         Mapping.RootElement.GetProperty(group).TryGetProperty(role, out JsonElement names) ? names.EnumerateArray().Select(n => n.GetString()!) : [];

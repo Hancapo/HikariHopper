@@ -615,6 +615,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = named,
             GameDictionaries = GameDictionaries(name),
+            GamePaints = GamePaints(name),
             GameSky = game is not null ? SkyOf(game) : null,
             Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>
             {

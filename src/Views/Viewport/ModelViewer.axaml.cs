@@ -123,6 +123,24 @@ public partial class ModelViewer : UserControl, IModalContent
                 e.Handled = true;
             }
         };
+        PaintWell.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(PaintWell).Properties.IsLeftButtonPressed)
+            {
+                TogglePaint();
+                e.Handled = true;
+            }
+        };
+        PaintWell.PointerEntered += (_, _) => PaintPaintWell();
+        PaintWell.PointerExited += (_, _) => PaintPaintWell();
+        PaintWell.KeyDown += (_, e) =>
+        {
+            if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space)
+            {
+                TogglePaint();
+                e.Handled = true;
+            }
+        };
         LodWell.PointerEntered += (_, _) => PaintLevelWell();
         LodWell.PointerExited += (_, _) => PaintLevelWell();
         LodWell.KeyDown += (_, e) =>
@@ -1000,6 +1018,82 @@ public partial class ModelViewer : UserControl, IModalContent
         ShowParts();
     }
 
+    private CarPaints? carPaints;
+    private int?[] paintIndices = new int?[VehiclePaint.Slots.Length];
+    private DropdownWindow? paintDropdown;
+    private long paintClosedAt;
+
+    /// <summary>The game's colours for the vehicle shown and its combinations of them; none for anything else.</summary>
+    internal CarPaints? CarPaints => carPaints;
+
+    /// <summary>The six paint slots' colour numbers the vehicle is drawn in.</summary>
+    internal IReadOnlyList<int?> PaintIndices => paintIndices;
+
+    /// <summary>The paint's dropdown, while it's open.</summary>
+    internal PaintPanel? PaintPanel { get; private set; }
+
+    private static int?[] Slots(IReadOnlyList<int?> indices) =>
+        [.. Enumerable.Range(0, VehiclePaint.Slots.Length).Select(slot => slot < indices.Count ? indices[slot] : null)];
+
+    /// <summary>The paint's well, for a vehicle the game has colours for: its primary over its secondary.</summary>
+    private void ShowPaint()
+    {
+        PaintWell.IsVisible = carPaints is not null;
+        if (carPaints is null)
+            return;
+        Avalonia.Media.IBrush Chip(int slot) => carPaints.Colour(paintIndices[slot]) is { } colour
+            ? new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb((byte)(colour.Argb >> 16), (byte)(colour.Argb >> 8), (byte)colour.Argb))
+            : new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb(150, 150, 150));
+        PaintChipPrimary.Background = Chip(0);
+        PaintChipSecondary.Background = Chip(1);
+        string Named(int slot) => carPaints.Colour(paintIndices[slot])?.Name ?? "the game's grey";
+        ThemedToolTip.Set(PaintWell, $"Paint: {Named(0)} over {Named(1)}");
+        PaintPaintWell();
+    }
+
+    // The well brightens under the pointer, and while its dropdown is open.
+    private void PaintPaintWell() =>
+        PaintWell.Background = PaintWell.IsPointerOver || paintDropdown is not null ? HoverWell : Ui.Theme.InsetBg;
+
+    /// <summary>Paints the vehicle with the six slots' colour numbers <paramref name="indices"/>.</summary>
+    internal void SetPaint(IReadOnlyList<int?> indices)
+    {
+        if (carPaints is null || surfaces is not { } scene)
+            return;
+        paintIndices = Slots(indices);
+        foreach (int index in scene.Repaint(VehiclePaint.Of(carPaints, paintIndices)))
+            Viewport.UpdateMaterial(index);
+        ShowPaint();
+    }
+
+    /// <summary>Opens the paint above its well, or closes it.</summary>
+    internal void TogglePaint()
+    {
+        if (paintDropdown is not null)
+        {
+            paintDropdown.Close();
+            return;
+        }
+        // The press on the well that just closed it, by taking the keyboard from it, doesn't open it again.
+        if (carPaints is null || Environment.TickCount64 - paintClosedAt < 400)
+            return;
+        var panel = new PaintPanel(carPaints, paintIndices);
+        panel.Changed += SetPaint;
+        paintDropdown = DropdownWindow.OpenAbove(PaintWell, panel, 4);
+        if (paintDropdown is null)
+            return;
+        PaintPanel = panel;
+        panel.Focus();
+        PaintPaintWell();
+        paintDropdown.Closed += (_, _) =>
+        {
+            paintDropdown = null;
+            PaintPanel = null;
+            paintClosedAt = Environment.TickCount64;
+            PaintPaintWell();
+        };
+    }
+
     private DropdownWindow? levelsDropdown;
     private long levelsClosedAt;
 
@@ -1336,14 +1430,25 @@ public partial class ModelViewer : UserControl, IModalContent
         // Shown at once with the textures at hand (its own, the ones beside it, and the game's if its texture tables are
         // ready); while the tables are still being worked out, the game's are added when they come.
         Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
-        IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
+        // Whether the read has the game's: the tables may be done by the time it is, and it still wouldn't.
+        bool gameIncluded = pending is { IsCompletedSuccessfully: true };
+        IReadOnlyList<NearbyDictionary> game = gameIncluded ? pending!.Result : [];
         data = file.Data;
         gameDictionaries = game;
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
+        // A vehicle from a game is painted in the first of its colour combinations, as the game spawns it, from the first
+        // frame on; read with the game's texture tables, so at hand by now.
+        if (content?.Surfaces is { Paintable: true } painted && file.GamePaints is { } asked && await asked is { } paints)
+        {
+            carPaints = paints;
+            paintIndices = paints.Combinations.Count > 0 ? Slots(paints.Combinations[0]) : new int?[VehiclePaint.Slots.Length];
+            painted.Repaint(VehiclePaint.Of(paints, paintIndices));
+        }
         Location = content is not null ? Locate(content) : failure!;
+        ShowPaint();
         if (started)
             StatusText.Text = Location;
-        if (content?.Surfaces is { } first && pending is { IsCompleted: false } && Missing(first) > 0)
+        if (content?.Surfaces is { } first && pending is not null && !gameIncluded && Missing(first) > 0)
             GameTexturesAdded = AddGameTextures(file, pending);
     }
 
@@ -1412,6 +1517,9 @@ public partial class ModelViewer : UserControl, IModalContent
         if (carry && surfaces is { } shown)
             foreach (int index in shaderEdits.Carry(shown.Sources, after.Sources))
                 after.Remake(index);
+        // In the paint it had.
+        if (carPaints is not null)
+            after.Repaint(VehiclePaint.Of(carPaints, paintIndices));
         Viewport.Show(after);
         surfaces = after;
         visibility = new PartVisibility(after);
@@ -1603,6 +1711,7 @@ public partial class ModelViewer : UserControl, IModalContent
         closed = true;
         timeDropdown?.Close();
         levelsDropdown?.Close();
+        paintDropdown?.Close();
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();

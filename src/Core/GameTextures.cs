@@ -23,7 +23,8 @@ public sealed class GameTextures
 {
     // 4: RPFs the game doesn't mount itself are in the tables too (3 also had loose files, which tools' caches in the
     // game folder made stale on every run and which ranked stray copies over the game's own files).
-    private const int FormatVersion = 4;
+    // 5: the game's car colours and each vehicle's combinations of them.
+    private const int FormatVersion = 5;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -92,6 +93,24 @@ public sealed class GameTextures
         }
     }
 
+    /// <summary>
+    /// The game's car colours and <paramref name="modelName"/>'s combinations of them (a vehicle's .yft name); none when
+    /// the game has no colours, or the tables couldn't be made. A vehicle that carvariations doesn't list has the
+    /// colours and no combinations.
+    /// </summary>
+    public async Task<Rendering.CarPaints?> PaintsFor(string modelName)
+    {
+        try
+        {
+            await Load().ConfigureAwait(false);
+            return loading!.Result.PaintsFor(modelName);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
     private static Tables LoadTables(string root, GameTarget target, GameCrypto crypto)
     {
         byte[] stamp = Stamp(root, target);
@@ -150,6 +169,26 @@ public sealed class GameTextures
         public Dictionary<uint, uint> Parents { get; } = [];
         // Model name hash → the dictionaries its archetypes name.
         public Dictionary<uint, uint[]> Models { get; } = [];
+
+        // Car colour number → its name as carcols has it, and its colour.
+        public Dictionary<int, (string Name, uint Argb)> Colours { get; } = [];
+        // Vehicle model name hash → its colour combinations (carvariations): each the slots' colour numbers, -1 for none.
+        public Dictionary<uint, int[][]> Combinations { get; } = [];
+        private IReadOnlyList<Rendering.CarColour>? colours;
+
+        public Rendering.CarPaints? PaintsFor(string modelName)
+        {
+            if (Colours.Count == 0)
+                return null;
+            colours ??= [.. Colours.OrderBy(pair => pair.Key).Select(pair =>
+                new Rendering.CarColour(pair.Key, Rendering.CarColourNames.Tidy(pair.Value.Name), pair.Value.Argb, Rendering.CarColourNames.Finish(pair.Value.Name)))];
+            string stem = Path.GetFileNameWithoutExtension(modelName);
+            if (!Combinations.TryGetValue(new Hash32(stem).Value, out int[][]? combinations)
+                // A vehicle's high-detail model is the vehicle's.
+                && !(stem.EndsWith("_hi", StringComparison.OrdinalIgnoreCase) && Combinations.TryGetValue(new Hash32(stem[..^3]).Value, out combinations)))
+                combinations = [];
+            return new(colours, [.. combinations.Select(combination => combination.Select(index => index < 0 ? (int?)null : index).ToArray())]);
+        }
 
         public IReadOnlyList<GameDictionary> For(string modelName)
         {
@@ -229,6 +268,13 @@ public sealed class GameTextures
                     tables.Parents[child] = edge.ParentHash.Value;
                     pending.Enqueue(edge.ParentHash.Value);
                 }
+            // The car colours (carcols) and each vehicle's combinations of them (carvariations), as the game has them now.
+            FiveFury.VehicleMeta.VehicleAppearanceIndex vehicles = cache.GetVehicleAppearanceIndex();
+            foreach (FiveFury.VehicleMeta.ResolvedVehicleColor colour in vehicles.Colors())
+                tables.Colours[colour.Index] = (colour.Name, colour.PackedArgb);
+            foreach (Hash32 model in vehicles.VariationModels)
+                if (vehicles.FindVariation(model) is { Colors.Count: > 0 } variation)
+                    tables.Combinations[model.Value] = [.. variation.Colors.Select(combination => combination.Indices.ToArray())];
             return tables;
         }
 
@@ -282,6 +328,25 @@ public sealed class GameTextures
                     foreach (uint dictionary in declared)
                         writer.Write(dictionary);
                 }
+                writer.Write(Colours.Count);
+                foreach (var (index, (name, argb)) in Colours)
+                {
+                    writer.Write(index);
+                    writer.Write(name);
+                    writer.Write(argb);
+                }
+                writer.Write(Combinations.Count);
+                foreach (var (model, combinations) in Combinations)
+                {
+                    writer.Write(model);
+                    writer.Write(combinations.Length);
+                    foreach (int[] combination in combinations)
+                    {
+                        writer.Write((byte)combination.Length);
+                        foreach (int index in combination)
+                            writer.Write(index);
+                    }
+                }
             }
             File.Move(temporary, path, overwrite: true);
         }
@@ -310,6 +375,23 @@ public sealed class GameTextures
                 for (int j = 0; j < count; j++)
                     declared[j] = reader.ReadUInt32();
                 tables.Models[model] = declared;
+            }
+            for (int i = reader.ReadInt32(); i > 0; i--)
+                tables.Colours[reader.ReadInt32()] = (reader.ReadString(), reader.ReadUInt32());
+            for (int i = reader.ReadInt32(); i > 0; i--)
+            {
+                uint model = reader.ReadUInt32();
+                int count = reader.ReadInt32();
+                if (count is < 0 or > 1024)
+                    throw new InvalidDataException("Corrupt texture tables.");
+                var combinations = new int[count][];
+                for (int j = 0; j < count; j++)
+                {
+                    combinations[j] = new int[reader.ReadByte()];
+                    for (int k = 0; k < combinations[j].Length; k++)
+                        combinations[j][k] = reader.ReadInt32();
+                }
+                tables.Combinations[model] = combinations;
             }
             return tables;
         }
