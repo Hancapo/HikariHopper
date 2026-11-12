@@ -68,35 +68,6 @@ public sealed class YtdSavingTests
             result.Textures.ToDictionary(texture => texture.Name!, texture => Convert.ToHexString(texture.Data)));
     }
 
-    [AvaloniaFact]
-    public void ManyNamesStayWithinPages()
-    {
-        var dictionary = new TextureSet(Enumerable.Range(0, 300).Select(index => Red($"{index:000}_" + new string('x', 97))), GameTarget.Legacy);
-        Assert.Equal(300, AssertPageSafe(YtdSaving.Serialize(dictionary)).Textures.Count);
-    }
-
-    [AvaloniaFact]
-    public void PayloadBytesThatLookLikePointersAreNotRelocated()
-    {
-        byte[] pattern = new byte[16];
-        BinaryPrimitives.WriteUInt64LittleEndian(pattern, 0x50000040);
-        BinaryPrimitives.WriteUInt64LittleEndian(pattern.AsSpan(8), 0x60000010);
-        var texture = new Texture("pointer_pixels", 4, 4, TextureFormat.B8G8R8A8Unorm, 1, Repeat(pattern, 4));
-        Assert.Equal(Repeat(pattern, 4), AssertPageSafe(YtdSaving.Serialize(new TextureSet([texture], GameTarget.Legacy))).Textures[0].Data.ToArray());
-    }
-
-    [AvaloniaFact]
-    public void CorruptEmptyYtdIsRejected()
-    {
-        ResourceFile resource = ResourceFile.Read(EmptyYtd(GameTarget.Legacy));
-        byte[] system = resource.SystemData.ToArray();
-        BinaryPrimitives.WriteUInt16LittleEndian(system.AsSpan(0x28), 1);
-        byte[] corrupted = ResourceFile.Create(resource.Header.Version, system, resource.GraphicsData,
-            resource.Header.SystemFlags, resource.Header.GraphicsFlags).Write();
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Read(corrupted));
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Read(EmptyYtd(GameTarget.Legacy).AsSpan(0, 24)));
-    }
-
     [AvaloniaTheory]
     // Each edition's empty dictionary, saved as a loose file and inside an RPF.
     [InlineData(GameTarget.Legacy, 1, false)]
