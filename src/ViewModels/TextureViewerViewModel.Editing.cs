@@ -22,6 +22,16 @@ public sealed partial class TextureViewerViewModel
     /// <summary>Clipboard image conversion (Python <c>texture_from_clipboard_image</c>); replaceable by tests.</summary>
     internal Func<RgbaImage, string, Texture> TextureFromClipboardImage { get; set; } = TextureImport.TextureFromClipboardImage;
 
+    /// <summary>
+    /// How many images an import reads at a time: half the processors, at most eight, as a big image holds tens of
+    /// megabytes while it is compressed.
+    /// </summary>
+    internal static int DefaultImportWorkers { get; } = Math.Clamp(Environment.ProcessorCount / 2, 1, 8);
+
+    /// <summary>How many images an import reads at a time; none for <see cref="DefaultImportWorkers"/>. Tests set one to
+    /// see an import step by step.</summary>
+    internal int ImportWorkers { get; set; }
+
     /// <summary>Reads one image an import adds; tests hold it to see an import part way.</summary>
     internal Func<string, Texture> ReadImportImage { get; set; } = TextureImport.ReadTextureImage;
 
@@ -559,38 +569,63 @@ public sealed partial class TextureViewerViewModel
         EmitStateChanged();
         int token = generation;
         Texture[] original = [.. dictionary!.Textures];
+        int workers = ImportWorkers > 0 ? ImportWorkers : DefaultImportWorkers;
         pool.Start(() =>
         {
             var sources = new Dictionary<string, Texture>(StringComparer.Ordinal);
             foreach (Texture texture in original)
                 sources.TryAdd(TextureSet.Lower(texture.Name), texture);
+            // Read several at a time: each file's decode and compression is its own, and they take nearly all of an
+            // import's time. A Cancel stops new files from starting; a failure stops the rest, and the first in the
+            // files' order is the one reported.
+            var read = new Texture[paths.Count];
+            int finished = 0, failedAt = int.MaxValue;
+            string? failure = null;
+            var failing = new Lock();
+            try
+            {
+                Parallel.For(0, paths.Count, new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = cancel }, (index, loop) =>
+                {
+                    if (Volatile.Read(ref failedAt) != int.MaxValue)
+                    {
+                        loop.Stop();
+                        return;
+                    }
+                    (int done, string name) = (Volatile.Read(ref finished), Path.GetFileName(paths[index]));
+                    Post(() => WorkReached(token, done, name));
+                    try
+                    {
+                        read[index] = ReadImportImage(paths[index]);
+                        Interlocked.Increment(ref finished);
+                    }
+                    catch (Exception exception)
+                    {
+                        lock (failing)
+                            if (index < failedAt)
+                                (failedAt, failure) = (index, $"{name}: {exception.Message}");
+                        loop.Stop();
+                    }
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                Post(() => ImageImportCancelled(token));
+                return;
+            }
+            if (failure is { } message)
+            {
+                Post(() => TransformFailed(token, "Import", message));
+                return;
+            }
             // Ordered by first occurrence; a later file with the same name replaces the earlier texture in place.
             var order = new List<string>();
             var imported = new Dictionary<string, Texture>(StringComparer.Ordinal);
             for (int index = 0; index < paths.Count; index++)
             {
-                string path = paths[index];
-                if (cancel.IsCancellationRequested)
-                {
-                    Post(() => ImageImportCancelled(token));
-                    return;
-                }
-                (int done, string name) = (index, Path.GetFileName(path));
-                Post(() => WorkReached(token, done, name));
-                try
-                {
-                    Texture decoded = ReadImportImage(path);
-                    string key = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
-                    if (!imported.ContainsKey(key))
-                        order.Add(key);
-                    imported[key] = TextureOperations.Adopt(decoded, sources.GetValueOrDefault(key));
-                }
-                catch (Exception exception)
-                {
-                    string message = $"{Path.GetFileName(path)}: {exception.Message}";
-                    Post(() => TransformFailed(token, "Import", message));
-                    return;
-                }
+                string key = Path.GetFileNameWithoutExtension(paths[index]).ToLowerInvariant();
+                if (!imported.ContainsKey(key))
+                    order.Add(key);
+                imported[key] = TextureOperations.Adopt(read[index], sources.GetValueOrDefault(key));
             }
             // Cancelled while the last file was read: nothing is added, as for any other.
             if (cancel.IsCancellationRequested)

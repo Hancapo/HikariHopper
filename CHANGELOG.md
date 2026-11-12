@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Importing images into a texture dictionary is much faster: several are read and compressed at once, and the compressor runs at a quality whose difference from its best is too small to see, so twelve 2048² images take about 2 seconds instead of over a minute. ([#182](https://github.com/Hancapo/HikariHopper/pull/182))
 - While a game loads, a steam train runs along a short track over the caption, its wheels and rods turning and its stack puffing smoke, in place of a sliding bar; it stands still when Windows turns animations off. ([#176](https://github.com/Hancapo/HikariHopper/pull/176))
 
 ### Fixed

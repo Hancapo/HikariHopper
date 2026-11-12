@@ -956,7 +956,8 @@ public sealed class TextureWindowTests
         TextureWindowHarness harness = Opened();
         TimeSpan delay = TextureEditor.WorkOverlayDelay;
         TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
-        // Each file waits to be let through, so the import can be seen part way.
+        // Each file waits to be let through, one at a time, so the import can be seen part way.
+        harness.ViewModel.ImportWorkers = 1;
         using var gate = new SemaphoreSlim(0);
         harness.ViewModel.ReadImportImage = path =>
         {
@@ -1200,5 +1201,55 @@ public sealed class TextureWindowTests
         {
             TextureEditor.WorkOverlayDelay = delay;
         }
+    }
+
+    [AvaloniaFact]
+    public void AnImportReadsSeveralImagesAtOnce()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        // Each read waits until all three have started: it only finishes if they run side by side.
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            Assert.True(together.SignalAndWait(TimeSpan.FromSeconds(10)), "the images weren't read at the same time");
+            return TextureImport.ReadTextureImage(path);
+        };
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(["alpha", "beta", "gamma", "one", "three", "two"], harness.ViewModel.Dictionary!.Names.Order());
+    }
+
+    [AvaloniaFact]
+    public void When_images_read_side_by_side_fail_the_first_in_order_is_reported_and_nothing_is_added()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            together.SignalAndWait(TimeSpan.FromSeconds(10));
+            // Gamma fails first in time; beta, before it in the files, is the one named.
+            if (path.EndsWith("beta.png", StringComparison.Ordinal))
+            {
+                Thread.Sleep(50);
+                throw new InvalidDataException("beta is broken");
+            }
+            if (path.EndsWith("gamma.png", StringComparison.Ordinal))
+                throw new InvalidDataException("gamma is broken");
+            return TextureImport.ReadTextureImage(path);
+        };
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Equal("Import failed: beta.png: beta is broken", harness.ViewModel.Status);
+        Assert.False(harness.ViewModel.OperationBusy);
     }
 }
