@@ -268,8 +268,11 @@ public partial class TextureResizeDialog : TextureToolDialog
     private static string AspectSize(string? text, int numerator, int denominator) =>
         Math.Max(1, QtRaster.JsRound((double)QtIntValidator.NumberOf(text ?? "") * numerator / denominator)).ToString("0");
 
-    private bool Run() => ViewModel is { } vm
-        && vm.ResizeSelection(Plan, (string)FilterCombo.CurrentValue!, MipCombo.Minimum, MipCombo.Generate);
+    private bool Run()
+    {
+        TextureFilterCombo.Remember(FilterCombo.CurrentValue as string);
+        return ViewModel is { } vm && vm.ResizeSelection(Plan, (string)FilterCombo.CurrentValue!, MipCombo.Minimum, MipCombo.Generate);
+    }
 
     // On, a toggle sits raised in its well in full ink.
     private void RefreshToggles()

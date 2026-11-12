@@ -20,11 +20,18 @@
       <ControlTemplate>
         <Panel>
           <Border Name="PART_Background" BorderThickness="1" CornerRadius="{x:Static ui:Theme.ControlCorner}" />
-          <TextBlock Name="PART_Display" Margin="10,0,8,0"
-                     FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
-                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-          <c:ChromeIcon Name="PART_Caret" Kind="caretDown" Thickness="1.6" Width="14" Height="14" Margin="0,0,8,0"
-                        HorizontalAlignment="Right" VerticalAlignment="Center" />
+          <DockPanel>
+            <c:ChromeIcon Name="PART_Caret" DockPanel.Dock="Right" Kind="caretDown" Thickness="1.6" Width="14" Height="14" Margin="0,0,8,0"
+                          VerticalAlignment="Center" />
+            <!-- The selected option's note, if it has one: what it costs, say. -->
+            <TextBlock Name="PART_DisplayNote" DockPanel.Dock="Right" Margin="8,0,10,0" Text="{TemplateBinding CurrentNote}"
+                       Foreground="{x:Static ui:Theme.TextFaint}"
+                       FontFamily="{TemplateBinding FontFamily}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                       VerticalAlignment="Center" />
+            <TextBlock Name="PART_Display" Margin="10,0,0,0"
+                       FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          </DockPanel>
           <Popup Name="PART_Popup"
                  IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}"
                  Placement="BottomEdgeAlignedLeft"

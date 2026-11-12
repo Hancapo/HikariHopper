@@ -492,10 +492,12 @@ public sealed class TextureWindowTests
         TextureWindowHarness harness = Opened();
         TextureToolDialog dialog = harness.Window.OpenToolDialog(TextureTool.Format);
         harness.Settle();
-        Assert.Equal(new Size(520, Ui.Theme.SheetHeaderHeight + 292 + Ui.Theme.DialogFooterHeight), dialog.Bounds.Size);
+        // As tall as what is in it: the header and footer around a body fitted to its content.
+        Assert.InRange(dialog.BodyHeight, 150, 292);
+        Assert.Equal(new Size(520, Ui.Theme.SheetHeaderHeight + dialog.BodyHeight + Ui.Theme.DialogFooterHeight), dialog.Bounds.Size);
         Assert.Equal(Math.Floor((1250 - 520) / 2.0 + 0.5), dialog.Bounds.X);
         Assert.Equal(Math.Floor((738 - dialog.Bounds.Height) / 2 + 0.5), dialog.Bounds.Y);
-        Assert.Equal("CHANGE TEXTURE FORMAT", dialog.Heading);
+        Assert.Equal("CHANGE FORMAT", dialog.Heading);
         // Its header's close mark cancels it, as the sheets' does.
         ChromeToolButton close = Assert.IsType<ChromeToolButton>(dialog.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_CloseMark"));
         Assert.False(close.IsTabStop);
@@ -540,9 +542,21 @@ public sealed class TextureWindowTests
         // A dialog that focuses nothing itself still holds the focus, so Esc closes it.
         dialog.Close();
         harness.Settle();
-        TextureToolDialog mipmaps = harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+        TextureToolDialog remove = harness.Window.OpenToolDialog(TextureTool.Remove);
         harness.Settle();
-        Assert.True(mipmaps.IsFocused);
+        Assert.True(remove.IsFocused);
+        harness.Key(Key.Tab);
+        Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
+        harness.Key(Key.Escape);
+        harness.Settle();
+        Assert.False(remove.IsOpen);
+
+        // One that starts on its first choice keeps the same round: the footer, then back to it.
+        var mipmaps = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+        harness.Settle();
+        Assert.True(mipmaps.MipCombo.IsFocused);
+        harness.Key(Key.Tab);
+        Assert.Same(mipmaps.FilterCombo, harness.Host.FocusManager!.GetFocusedElement());
         harness.Key(Key.Tab);
         Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
         harness.Key(Key.Escape);
@@ -827,6 +841,150 @@ public sealed class TextureWindowTests
         dialog.WidthField.Text = "64";
         dialog.HeightField.Text = "64";
         Assert.Equal("64 × 64", dialog.Outcome.AfterValue);
+    }
+
+    [AvaloniaFact]
+    public void FormatDialogSaysWhatEachFormatCostsAndWhatTheChangeLoses()
+    {
+        // 256 × 64, uncompressed, half transparent.
+        TextureWindowHarness harness = Opened(TextureTestKit.Bgra("wide", 256, 64, [40, 80, 160, 128]));
+        var dialog = (TextureFormatDialog)harness.Window.OpenToolDialog(TextureTool.Format);
+        harness.Settle();
+        Assert.Equal("CHANGE FORMAT", dialog.Heading);
+        // The header has the name and the format now; the dropdown opens on it.
+        Assert.Equal(("wide", "ARGB 32-bit (A8R8G8B8)"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal("A8R8G8B8", dialog.TargetName);
+        Assert.True(dialog.FormatCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        // Each format says what it costs and keeps, in the list and, for the one picked, in the box.
+        var options = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToDictionary(option => (string)option.Value!, option => option.Note);
+        Assert.Equal("4 bpp · no alpha", options["BC1"]);
+        Assert.Equal("8 bpp · sharp alpha", options["BC2"]);
+        Assert.Equal("8 bpp · alpha", options["BC3"]);
+        Assert.Equal("4 bpp · one channel", options["BC4"]);
+        Assert.Equal("8 bpp · two channels", options["BC5"]);
+        Assert.Equal("8 bpp · alpha", options["BC7"]);
+        Assert.Equal("32 bpp · alpha", options["A8R8G8B8"]);
+        Assert.Equal("32 bpp · alpha", dialog.FormatCombo.CurrentNote);
+        // Open, every row shows its own.
+        dialog.FormatCombo.IsDropDownOpen = true;
+        harness.Settle();
+        FlatComboBoxItem[] rows = [.. dialog.FormatCombo.GetRealizedContainers().OfType<FlatComboBoxItem>()];
+        Assert.Equal(7, rows.Length);
+        Assert.All(rows, row => Assert.True(row.NoteShown, row.Label));
+        Assert.Equal("4 bpp · no alpha", rows.Single(row => row.Label == "DXT1 (BC1)").Note);
+        dialog.FormatCombo.IsDropDownOpen = false;
+        harness.Settle();
+        // An uncompressed format has no quality to pick.
+        Assert.False(dialog.QualitySwitch.IsVisible);
+        double plain = dialog.BodyHeight;
+
+        // To DXT5: an eighth of the bytes a pixel, the chain's third more, and a quality to pick.
+        dialog.FormatCombo.SelectedIndex = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, "BC3"));
+        Assert.True(dialog.QualitySwitch.IsVisible);
+        Assert.True(dialog.BodyHeight > plain);
+        Assert.Equal(0.7, dialog.Quality);
+        dialog.QualitySwitch.Pick(2);
+        Assert.Equal(1.0, dialog.Quality);
+        Assert.Equal(("ARGB 32-bit (A8R8G8B8)", "DXT5 (BC3)"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        long now = harness.ViewModel.SelectionFacts[0].DataSize;
+        long after = HikariHopper.Textures.ResizePlan.EstimatedSize(256, 64, TextureFormat.BC3Unorm, harness.ViewModel.EstimatedMipCount(256, 64, 4));
+        Assert.Equal((Core.Formatting.FormatSize(now), Core.Formatting.FormatSize(after)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.True(dialog.Outcome.Saves);
+        Assert.Empty(dialog.Outcome.Warnings);
+        // Without mipmaps, the full size alone.
+        dialog.MipCombo.SelectedIndex = 0;
+        Assert.Equal(Core.Formatting.FormatSize(256 * 64), dialog.Outcome.AfterMemory);
+        dialog.MipCombo.SelectedIndex = 3;
+
+        // A format that loses what the texture has says so: DXT1 its alpha, the one and two channel formats its colour.
+        void Pick(string name) => dialog.FormatCombo.SelectedIndex = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, name));
+        Pick("BC1");
+        Assert.Equal(["DXT1 (BC1) has no alpha here, and this texture uses it."], dialog.Outcome.Warnings);
+        Pick("BC4");
+        Assert.Equal(["ATI1 (BC4) keeps the red channel only."], dialog.Outcome.Warnings);
+        Pick("BC5");
+        Assert.Equal(["ATI2 (BC5) keeps red and green only, as a normal map needs."], dialog.Outcome.Warnings);
+
+        // Applied, it is that format, with its chain.
+        Pick("BC3");
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal("DXT5 (BC3)", harness.ViewModel.SelectedFormat);
+        Assert.Equal(harness.ViewModel.EstimatedMipCount(256, 64, 4), harness.ViewModel.MipCount);
+        Assert.Equal(after, harness.ViewModel.SelectionFacts[0].DataSize);
+
+        // An opaque texture loses nothing to DXT1.
+        TextureWindowHarness opaque = Opened(Solid("solid", 64, 64));
+        var second = (TextureFormatDialog)opaque.Window.OpenToolDialog(TextureTool.Format);
+        opaque.Settle();
+        second.FormatCombo.SelectedIndex = second.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, "BC1"));
+        Assert.Empty(second.Outcome.Warnings);
+    }
+
+    [AvaloniaFact]
+    public void MipmapsDialogMakesTheChainOrDropsIt()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        string filter = TextureFilterCombo.Remembered;
+        try
+        {
+            var dialog = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+            harness.Settle();
+            Assert.Equal("MIPMAPS", dialog.Heading);
+            Assert.Equal(("wide", "1 mip"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+            Assert.True(dialog.MipCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+            int full = harness.ViewModel.EstimatedMipCount(256, 64, 4);
+            Assert.Equal(("1 mip", $"{full} mips"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+            // It grows: the larger bar is the one after, and no saving is drawn.
+            Assert.Equal(1, dialog.Outcome.Bars.After);
+            Assert.True(dialog.Outcome.Bars.Now < 1);
+            Assert.False(dialog.Outcome.Saves);
+            // Further down is more levels.
+            dialog.MipCombo.SelectedIndex = 1;
+            Assert.Equal($"{harness.ViewModel.EstimatedMipCount(256, 64, 1)} mips", dialog.Outcome.AfterValue);
+            dialog.MipCombo.SelectedIndex = 3;
+            dialog.FilterCombo.SelectedIndex = 3;
+            Assert.Equal("box", dialog.FilterCombo.CurrentValue);
+            dialog.Apply();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+                harness.Settle();
+            harness.Settle();
+            Assert.Equal(full, harness.ViewModel.MipCount);
+
+            // The filter applied with is the one the next dialog opens on, and the one Change format uses.
+            Assert.Equal("box", TextureFilterCombo.Remembered);
+            var resize = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+            harness.Settle();
+            Assert.Equal("box", resize.FilterCombo.CurrentValue);
+            resize.Close();
+            harness.Settle();
+
+            // None drops the chain: the full size alone is left.
+            dialog = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+            harness.Settle();
+            Assert.Equal($"{full} mips", dialog.Summary.FactShown);
+            dialog.MipCombo.SelectedIndex = 0;
+            Assert.Equal(($"{full} mips", "1 mip"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+            Assert.True(dialog.Outcome.Saves);
+            dialog.Apply();
+            clock.Restart();
+            while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+                harness.Settle();
+            harness.Settle();
+            Assert.Equal(1, harness.ViewModel.MipCount);
+            Assert.Equal((256, 64), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
+        }
+        finally
+        {
+            TextureFilterCombo.Remember(filter);
+        }
+        // Several chains are said by their range.
+        Assert.Equal("1 to 9 mips", TextureMipmapsDialog.Chains([9, 1, 4]));
+        Assert.Equal("7 mips", TextureMipmapsDialog.Chains([7, 7]));
     }
 
     [AvaloniaFact]
