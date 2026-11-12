@@ -63,6 +63,7 @@ public class ChromeIcon : Control
         ["expand-all"] = "chevrons-up-down",
         ["collapse-all"] = "chevrons-down-up",
         ["show-all"] = "eye",
+        ["link"] = "link",
     };
 
     static ChromeIcon()

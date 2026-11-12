@@ -4,47 +4,42 @@
                      xmlns:c="using:HikariHopper.Views.Controls"
                      xmlns:ui="using:HikariHopper.Ui"
                      x:Class="HikariHopper.Views.TextureResizeDialog"
-                     BodyHeight="330">
-  <!-- Port of TextureResizeDialog.qml: free resize, or power-of-two rounding with PowerOfTwo. The
-       grid rows of the other mode are hidden and take no space, as in a Qt GridLayout. -->
-  <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:TextureDialogSummary />
+                     Heading="RESIZE TEXTURE">
+  <!-- Resizes the selection. One Size row: the width and the height with the aspect lock between them, and at its end
+       whether they are pixels or percent; under it, the sizes asked for most often. Then how it is resampled and what
+       mipmaps it gets, and what it is now beside what it would be. -->
+  <c:QtColumnLayout Margin="12,12,12,13" Spacing="10">
+    <v:TextureDialogSummary Name="Summary" Fact="Size" />
     <Border Classes="rule" />
-    <v:QtGrid Name="OptionsGrid" ColumnDefinitions="Auto,12,*"
-          RowDefinitions="Auto,8,Auto,8,Auto,8,Auto,8,Auto,8,Auto,8,Auto">
-      <TextBlock Name="ResolutionLabel" Classes="label" Text="Resolution" />
-      <v:QtGrid Name="ResolutionRow" Grid.Column="2" ColumnDefinitions="*,8,Auto,8,*">
-        <c:FlatTextField Name="WidthField" Grid.Column="0" Height="28" VerticalAlignment="Center" />
-        <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextDim}"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-        <c:FlatTextField Name="HeightField" Grid.Column="4" Height="28" VerticalAlignment="Center" />
+    <v:QtGrid Name="OptionsGrid" ColumnDefinitions="112,12,*" RowDefinitions="Auto,6,Auto,8,Auto,8,Auto">
+      <TextBlock Classes="label" Text="Size" />
+      <v:QtGrid Grid.Column="2" ColumnDefinitions="*,6,Auto,6,*,8,Auto">
+        <c:FlatTextField Name="WidthField" Grid.Column="0" Height="28" VerticalAlignment="Center"
+                         AutomationProperties.Name="Width" />
+        <Border Grid.Column="2" Classes="well">
+          <c:ChromeToolButton Name="LockButton" Width="24" Height="24" Bordered="False" InWell="True"
+                              CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="link" IconSize="13" IconThickness="1.7"
+                              AutomationProperties.Name="Lock aspect ratio" />
+        </Border>
+        <c:FlatTextField Name="HeightField" Grid.Column="4" Height="28" VerticalAlignment="Center"
+                         AutomationProperties.Name="Height" />
+        <c:SegmentedSwitch Name="UnitSwitch" Grid.Column="6" Height="28" VerticalAlignment="Center"
+                           AutomationProperties.Name="Size in" />
       </v:QtGrid>
 
-      <Panel Name="LockSpacer" Grid.Row="2" Width="112" Height="1" HorizontalAlignment="Left" VerticalAlignment="Center" />
-      <c:SquareCheckBox Name="LockAspect" Grid.Row="2" Grid.Column="2" Text="Lock aspect ratio" IsChecked="True" />
+      <StackPanel Name="QuickSizes" Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Spacing="4">
+        <c:ChromeToolButton Name="QuarterButton" Classes="quick" Width="44" Text="25%" AutomationProperties.Name="A quarter of the size" />
+        <c:ChromeToolButton Name="HalfButton" Classes="quick" Width="44" Text="50%" AutomationProperties.Name="Half the size" />
+        <c:ChromeToolButton Name="DoubleButton" Classes="quick" Width="50" Text="200%" AutomationProperties.Name="Double the size" />
+        <c:ChromeToolButton Name="SnapButton" Classes="quick" Width="104" Text="Power of two" AutomationProperties.Name="Round to a power of two" />
+      </StackPanel>
 
-      <TextBlock Name="RoundingLabel" Classes="label" Grid.Row="4" Text="Rounding" />
-      <c:FlatComboBox Name="RoundingCombo" Grid.Row="4" Grid.Column="2" />
+      <TextBlock Classes="label" Grid.Row="4" Text="Resampling" />
+      <v:TextureFilterCombo Name="FilterCombo" Grid.Row="4" Grid.Column="2" />
 
-      <TextBlock Name="RoundingNote" Grid.Row="6" Grid.ColumnSpan="3"
-                 Text="Each dimension is rounded separately; proportions may change."
-                 Foreground="{x:Static ui:Theme.TextDim}" TextWrapping="Wrap"
-                 FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
-
-      <TextBlock Classes="label" Grid.Row="8" Text="Resampling" />
-      <v:TextureFilterCombo Name="FilterCombo" Grid.Row="8" Grid.Column="2" />
-
-      <TextBlock Classes="label" Grid.Row="10" Text="Mipmaps" />
-      <c:SquareCheckBox Name="MipCheck" Grid.Row="10" Grid.Column="2" Text="Recalculate full chain" IsChecked="True" />
-
-      <TextBlock Name="SmallestLabel" Classes="label" Grid.Row="12" Text="Smallest level" />
-      <v:TextureMipSizeCombo Name="MipSizeCombo" Grid.Row="12" Grid.Column="2" />
+      <TextBlock Classes="label" Grid.Row="6" Text="Mipmaps" />
+      <v:TextureMipChainCombo Name="MipCombo" Grid.Row="6" Grid.Column="2" />
     </v:QtGrid>
-    <Panel Height="56">
-      <Border Classes="result" />
-      <TextBlock Classes="caption" Text="RESULT" />
-      <TextBlock Name="ResultText" Classes="result" Margin="9,25,9,0" TextTrimming="CharacterEllipsis" />
-    </Panel>
-    <Panel c:QtColumnLayout.FillHeight="True" />
+    <v:TextureOutcome Name="Outcome" />
   </c:QtColumnLayout>
 </v:TextureToolDialog>

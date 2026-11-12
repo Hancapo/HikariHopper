@@ -32,6 +32,29 @@ public sealed partial class TextureViewerViewModel
         return StartTransform("Resizing", texture => TextureOperations.Resize(texture, width, height, filter, stop, generateMipmaps));
     }
 
+    /// <summary>
+    /// Resizes every selected texture as <paramref name="plan"/> says: to one size in pixels, or each by a percentage
+    /// of its own, rounded to powers of two if the plan asks. A texture the plan leaves at its size is left alone.
+    /// </summary>
+    public bool ResizeSelection(ResizePlan plan, string filterName, int minMipSize, bool generateMipmaps)
+    {
+        foreach ((_, TextureItem item) in SelectionRecords())
+        {
+            (int width, int height) = plan.Target(item.Texture.Width, item.Texture.Height);
+            if (!ValidDimensions(width, height))
+                return false;
+        }
+        ImageFilter filter = TextureOperations.MipFilter(filterName);
+        return StartTransform("Resizing", texture =>
+        {
+            if (plan.Keeps(texture.Width, texture.Height))
+                return texture;
+            (int width, int height) = plan.Target(texture.Width, texture.Height);
+            return TextureOperations.Resize(texture, width, height, filter,
+                TextureDimensions.MipStopSize(width, height, minMipSize), generateMipmaps);
+        });
+    }
+
     /// <summary>Rounds every selected texture to powers of two (<c>nearest</c>, <c>down</c> or <c>up</c>).</summary>
     public bool ResizeSelectionToPowerOfTwo(string mode, string filterName, int minMipSize, bool generateMipmaps)
     {
