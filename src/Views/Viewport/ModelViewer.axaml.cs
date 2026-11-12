@@ -375,13 +375,21 @@ public partial class ModelViewer : UserControl, IModalContent
         // the drawable shown has the textures as they were, and isn't saved over them.
         if (shaderEdits.HasUnsavedSplits)
             return;
-        byte[] current = data;
-        IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
-        IReadOnlyList<NearbyDictionary> game = gameDictionaries;
-        (ModelContent? again, string? failure) = await Task.Run(() => Read(file, current, game, edited));
-        // Nor when one was given while it was read, or the textures were saved again meanwhile: that read shows them.
-        if (closed || shaderEdits.HasUnsavedSplits || read != generation)
-            return;
+        ModelContent? again;
+        string? failure;
+        IReadOnlyList<NearbyDictionary> game;
+        do
+        {
+            byte[] current = data;
+            IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
+            game = gameDictionaries;
+            (again, failure) = await Task.Run(() => Read(file, current, game, edited));
+            // Nor when one was given while it was read, or the textures were saved again meanwhile: that read shows them.
+            if (closed || shaderEdits.HasUnsavedSplits || read != generation)
+                return;
+        }
+        // The game's dictionaries came meanwhile, and may be shown already: it is read again with them.
+        while (!ReferenceEquals(game, gameDictionaries));
         if (again?.Surfaces is { } after)
         {
             ShowAgain(after);
