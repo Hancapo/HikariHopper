@@ -241,6 +241,30 @@ public sealed class CarPaintTests
     }
 
     [AvaloniaFact]
+    public void A_vehicle_whose_tables_are_done_while_it_is_first_shown_is_still_painted()
+    {
+        // The tables are done after the drawable is read but before it is shown: as its footer's tools appear.
+        var paints = new TaskCompletionSource<CarPaints?>();
+        var viewer = new Views.ModelViewer(new ModelFile("car.ydr", Car()) { GamePaints = paints.Task });
+        viewer.ModelTools.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Avalonia.Visual.IsVisibleProperty && viewer.ModelTools.IsVisible)
+                paints.TrySetResult(Paints);
+        };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        Assert.True(viewer.Reading.IsCompletedSuccessfully);
+        Assert.True(paints.Task.IsCompleted);
+        while (!viewer.PaintsAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        Vector3 silver = Srgb(0xFF5A5E66);
+        Assert.Equal([silver.X, silver.Y, silver.Z], viewer.Surfaces!.Materials[0].Uniforms[16..19]);
+        Assert.Equal([4, 12, 111, 156, 0, 0], viewer.PaintIndices);
+        Assert.True(viewer.PaintWell.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void A_vehicle_from_a_game_opens_in_its_first_combination_and_its_paint_is_picked_in_the_footer()
     {
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });

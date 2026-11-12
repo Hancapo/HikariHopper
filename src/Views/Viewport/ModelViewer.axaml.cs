@@ -1473,11 +1473,16 @@ public partial class ModelViewer : UserControl, IModalContent
         // frame on when the game's texture tables are ready, otherwise once they are. It doesn't wait for them, which
         // can take seconds while they are worked out afresh.
         Task<CarPaints?>? asked = content?.Surfaces is { Paintable: true } ? file.GamePaints : null;
+        // Decided once: the tables can be done while it is shown, and then it is painted as if they had come later.
+        bool paintedNow = false;
         if (asked is { IsCompletedSuccessfully: true, Result: { } paints } && content?.Surfaces is { } painted)
+        {
             ChoosePaint(paints, painted);
+            paintedNow = true;
+        }
         Location = content is not null ? Locate(content) : failure!;
         ShowPaint();
-        if (asked is { IsCompleted: false })
+        if (asked is not null && !paintedNow)
             PaintsAdded = PaintWhenReady(asked);
         if (started)
             StatusText.Text = Location;
