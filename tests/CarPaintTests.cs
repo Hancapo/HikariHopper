@@ -264,18 +264,46 @@ public sealed class CarPaintTests
         Assert.Equal([red.X, red.Y, red.Z], Drawn());
         Assert.Equal(1, panel.Combination);
 
-        // A slot's own colour: the picker opens in the finish of the colour it has, and a colour picked shows the slots again.
+        // A slot's own colour: the picker opens in the finish of the colour it has, and stays open on it once one is
+        // picked, so another can be tried; Escape goes back to the slots.
         panel.ShowPicker(0);
         Assert.Equal(0, panel.PickingSlot);
+        Assert.Equal("Metallic", panel.Finish);
         panel.PickColour(0, 0);
-        Assert.Null(panel.PickingSlot);
+        Assert.Equal(0, panel.PickingSlot);
+        Assert.Equal("Metallic", panel.Finish);
         Assert.Equal([black.X, black.Y, black.Z], Drawn());
         Assert.Null(panel.Combination);
+        panel.PickColour(0, 4);
+        Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
+        panel.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape });
+        Assert.Null(panel.PickingSlot);
 
         viewer.TogglePaint();
         ExplorerStateRenders.Pump(50);
         Assert.Null(viewer.PaintPanel);
         viewer.Close();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_colour_picker_keeps_its_size_from_one_finish_to_another()
+    {
+        // Thirty metallics, three rows of them, and one matte.
+        CarPaints many = new(
+            [.. Enumerable.Range(0, 30).Select(i => new CarColour(i, $"Metallic {i}", 0xFF000000u | (uint)(i * 8), "Metallic")),
+             new CarColour(30, "Matte Black", 0xFF131313, "Matte")],
+            []);
+        var panel = new Views.PaintPanel(many, [0, 0, 0, 0, 0, 0]);
+        var window = new Avalonia.Controls.Window { Width = 600, Height = 600, Content = panel };
+        window.Show();
+        panel.ShowPicker(0);
+        ExplorerStateRenders.Pump(20);
+        double metallic = panel.DesiredSize.Height;
+        panel.ShowFinish("Matte");
+        ExplorerStateRenders.Pump(20);
+        Assert.Equal("Matte", panel.Finish);
+        Assert.Equal(metallic, panel.DesiredSize.Height);
         window.Close();
     }
 

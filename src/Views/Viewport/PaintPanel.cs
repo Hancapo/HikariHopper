@@ -70,12 +70,28 @@ internal sealed class PaintPanel : Border
         ShowSlots();
     }
 
-    /// <summary>Paints <paramref name="slot"/> in the colour numbered <paramref name="colour"/>, and shows the slots again.</summary>
+    /// <summary>
+    /// Paints <paramref name="slot"/> in the colour numbered <paramref name="colour"/>; the colours stay open on the same
+    /// finish, so another can be tried straight after.
+    /// </summary>
     public void PickColour(int slot, int colour)
     {
         indices[slot] = colour;
         Changed?.Invoke(indices);
-        ShowSlots();
+        if (PickingSlot == slot)
+            Child = Picker(slot, paints.Colour(colour), paints.Finishes);
+    }
+
+    /// <summary>The finish whose colours the picker shows.</summary>
+    public string Finish => finish;
+
+    /// <summary>Shows the picker's colours of <paramref name="name"/>, one of the game's finishes.</summary>
+    public void ShowFinish(string name)
+    {
+        if (PickingSlot is not { } slot || name == finish || !paints.Finishes.Contains(name))
+            return;
+        finish = name;
+        Child = Picker(slot, paints.Colour(indices[slot]), paints.Finishes);
     }
 
     /// <summary>Shows the game's colours to pick <paramref name="slot"/>'s from, in the finish of the one it has.</summary>
@@ -227,8 +243,11 @@ internal sealed class PaintPanel : Border
             e.Handled = true;
         };
         body.Children.Add(back);
-        var swatches = new WrapPanel { ItemWidth = SwatchCell, ItemHeight = SwatchCell, Width = SwatchColumns * SwatchCell };
-        var hovered = new DockPanel();
+        // As tall as the finish with the most colours needs, so the picker keeps its size from one finish to another and
+        // a short one leaves room in the well.
+        int rows = Math.Max(1, finishes.Select(name => (paints.Colours.Count(colour => colour.Finish == name) + SwatchColumns - 1) / SwatchColumns).DefaultIfEmpty(1).Max());
+        var swatches = new WrapPanel { ItemWidth = SwatchCell, ItemHeight = SwatchCell, Width = SwatchColumns * SwatchCell, Height = rows * SwatchCell };
+        var hovered = new DockPanel { MinHeight = 16 };
         void Name(CarColour? colour)
         {
             hovered.Children.Clear();
@@ -286,6 +305,7 @@ internal sealed class PaintPanel : Border
                 finish = finishes[side];
                 switcher.SelectedIndex = side;
                 Fill();
+                Name(current);
             };
             body.Children.Add(switcher);
         }
