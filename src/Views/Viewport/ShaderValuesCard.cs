@@ -25,6 +25,8 @@ internal sealed class ScrubField : Border
     private readonly Grid body;
     private readonly Border fill;
     private TextBox? editor;
+    // What the field opened with for typing.
+    private string shownText = "";
     private Point? pressedAt;
     private float pressedValue;
     private bool dragging;
@@ -198,9 +200,10 @@ internal sealed class ScrubField : Border
     {
         if (editor is not null)
             return;
+        shownText = Format(value);
         editor = new TextBox
         {
-            Text = Format(value),
+            Text = shownText,
             FontFamily = Ui.Theme.MonoFont,
             FontSize = Ui.Theme.SmallFontSize,
             Foreground = Ui.Theme.Text,
@@ -239,7 +242,9 @@ internal sealed class ScrubField : Border
         Child = body;
         Cursor = new Cursor(StandardCursorType.SizeWestEast);
         Paint();
-        if (keep && float.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) && float.IsFinite(parsed)
+        // Left as it opened, it isn't typed: the number shown is rounded, and kept it would change the value.
+        if (keep && typed != shownText
+            && float.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) && float.IsFinite(parsed)
             && parsed != value)
         {
             Value = parsed;
