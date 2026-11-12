@@ -246,8 +246,8 @@ internal sealed partial class ViewportHost : NativeControlHost
     /// <summary>Escape was pressed while the viewport had the keyboard.</summary>
     public event Action? EscapePressed;
 
-    /// <summary>A letter was pressed with Ctrl, without Alt, while the viewport had the keyboard: Ctrl+Z, say.</summary>
-    public event Action<char>? CommandPressed;
+    /// <summary>A letter was pressed with Ctrl, without Alt, while the viewport had the keyboard (Ctrl+Z, say), and whether with Shift.</summary>
+    public event Action<char, bool>? CommandPressed;
 
     /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
     public event Action<char>? ShortcutPressed;
@@ -492,7 +492,8 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case KeyPressed when (uint)wParam is >= 0x41 and <= 0x5A && GetKeyState(0x11) < 0 && GetKeyState(0x12) >= 0:
                 char command = (char)wParam;
-                Dispatcher.UIThread.Post(() => CommandPressed?.Invoke(command));
+                bool shift = GetKeyState(0x10) < 0;
+                Dispatcher.UIThread.Post(() => CommandPressed?.Invoke(command, shift));
                 return 0;
             case KeyPressed when (uint)wParam is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A && GetKeyState(0x11) >= 0 && GetKeyState(0x12) >= 0:
                 char key = (char)wParam;

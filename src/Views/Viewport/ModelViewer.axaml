@@ -78,6 +78,9 @@
                                 AutomationProperties.Name="Close the 3D viewer" />
           </Panel>
 
+          <!-- The menu bar, as the texture editor's: File and Edit, opening over the viewport. -->
+          <Panel Name="MenuHolder" DockPanel.Dock="Top" />
+
           <!-- The footer. On the left, for a drawable: its level of detail, which opens a list of them upward, and the
                counts of what is drawn, behind a button. Then the status line. On the right: how fast the camera flies,
                while it does; whether it orbits or flies; and, for a drawable, the time of day it is lit at. -->

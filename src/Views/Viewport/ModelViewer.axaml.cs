@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using HikariHopper.Core;
+using HikariHopper.Infrastructure;
 using HikariHopper.Rendering;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
@@ -67,7 +68,7 @@ public partial class ModelViewer : UserControl, IModalContent
         // Closed, the pick goes: no row selected, no outline, no card.
         card.CloseRequested += () => Parts.ClearSelection();
         shaderEdits.Saved += RefreshTitle;
-        Viewport.CommandPressed += key => Command(key);
+        Viewport.CommandPressed += (key, shift) => Command(key, shift);
         Viewport.PropertyChanged += (_, e) =>
         {
             if (e.Property == BoundsProperty)
@@ -75,7 +76,11 @@ public partial class ModelViewer : UserControl, IModalContent
         };
         WindowToolTip.SetIsEnabled(PartsTab, true);
         WindowToolTip.SetIsEnabled(ToolStrip, true);
+        documentName = file.Name;
+        saveTarget = file.SaveTarget;
         TitleText.Text = file.Name;
+        Menus = BuildMenus();
+        MenuHolder.Children.Add(Menus);
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
         StatusText.Text = file.Data.Length > 0 ? $"Reading {file.Name}…" : "Starting the GPU…";
@@ -648,28 +653,60 @@ public partial class ModelViewer : UserControl, IModalContent
         RefreshTitle();
     }
 
-    /// <summary>The viewer's Ctrl keys: Z undoes the last change to the shader values, S saves them.</summary>
-    internal bool Command(char key)
+    /// <summary>
+    /// The viewer's Ctrl keys: Z undoes the last change to the shader values, Y (or Shift+Z) redoes it, S saves them,
+    /// Shift+S saves them as another file, and W closes the viewer.
+    /// </summary>
+    internal bool Command(char key, bool shift = false)
     {
+        if (char.ToUpperInvariant(key) == 'W')
+        {
+            Close();
+            return true;
+        }
         if (!contentShown || surfaces is null)
             return false;
-        switch (char.ToUpperInvariant(key))
+        switch (char.ToUpperInvariant(key), shift)
         {
-            case 'Z':
-                bool undone = shaderEdits.Undo();
-                FlushEdits();
-                return undone;
-            case 'S':
+            case ('Z', false):
+                return Undo();
+            case ('Y', _) or ('Z', true):
+                return Redo();
+            case ('S', false):
                 return Save();
+            case ('S', true):
+                _ = SaveAs();
+                return true;
         }
         return false;
     }
 
+    /// <summary>Takes the last change to the shader values back, and draws it at once.</summary>
+    internal bool Undo()
+    {
+        bool undone = shaderEdits.Undo();
+        FlushEdits();
+        return undone;
+    }
+
+    /// <summary>Does the last change undone again, and draws it at once.</summary>
+    internal bool Redo()
+    {
+        bool redone = shaderEdits.Redo();
+        FlushEdits();
+        return redone;
+    }
+
+    // The file's name as shown, and where Save puts it: as opened, until it is saved as another file.
+    private string documentName;
+    private ModelSaveTarget? saveTarget;
+    private bool savedElsewhere;
+
     /// <summary>The file's name in the title, marked with an asterisk while it has unsaved changes.</summary>
-    private void RefreshTitle() => TitleText.Text = shaderEdits.Dirty ? $"{file.Name} *" : file.Name;
+    private void RefreshTitle() => TitleText.Text = shaderEdits.Dirty ? $"{documentName} *" : documentName;
 
     /// <summary>Whether the file can be saved where it lives: it was opened from one, and can be written again.</summary>
-    internal bool CanSave => file.SaveTarget is not null && surfaces?.Writer is not null;
+    internal bool CanSave => saveTarget is not null && surfaces?.Writer is not null;
 
     private bool saving;
 
@@ -683,11 +720,49 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal bool Save()
     {
-        if (saving || !shaderEdits.Dirty || file.SaveTarget is not { } target || surfaces?.Writer is not { } write)
+        if (saving || !shaderEdits.Dirty || saveTarget is not { } target)
+            return false;
+        return SaveTo(target, documentName, null);
+    }
+
+    /// <summary>
+    /// Saves the drawable as it is now, its shader values included, as a loose file picked for it (Ctrl+Shift+S), which
+    /// Save then saves to; changed or not, so a file in an RPF can be saved out as it is. False when it can't be written
+    /// or nothing was picked.
+    /// </summary>
+    internal async Task<bool> SaveAs()
+    {
+        if (saving || surfaces?.Writer is null)
+            return false;
+        string extension = Path.GetExtension(file.Name);
+        string kind = extension.ToLowerInvariant() switch { ".yft" => "Fragment", ".ydd" => "Drawable dictionary", _ => "Drawable" };
+        string? path = await Dialogs.PickSaveFileAsync($"Save {documentName} as", documentName,
+            [new FileFilter(kind, [$"*{extension}"])]);
+        if (string.IsNullOrEmpty(path) || closed)
+            return false;
+        string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : Path.ChangeExtension(path, extension);
+        var target = new ModelSaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
+        string name = Path.GetFileName(destination);
+        if (!SaveTo(target, name, () =>
+            {
+                // From now on it is that file: Save saves there, and the title says so.
+                saveTarget = target;
+                documentName = name;
+                savedElsewhere = true;
+                RefreshTitle();
+            }))
+            return false;
+        return await Saving;
+    }
+
+    // Writes the file as it is now through a target, off the UI thread; then, once it is written, runs afterwards.
+    private bool SaveTo(ModelSaveTarget target, string name, Action? afterwards)
+    {
+        if (surfaces?.Writer is not { } write)
             return false;
         if (texturesStale)
         {
-            ShowSaveFailure("its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values");
+            ShowSaveFailure(name, "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values");
             return false;
         }
         // What is written is what the values are now; a change made while it is put in place stays a change.
@@ -700,12 +775,12 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
-            ShowSaveFailure(error.Message);
+            ShowSaveFailure(name, error.Message);
             return false;
         }
         saving = true;
         StatusText.Foreground = Ui.Theme.TextFaint;
-        StatusText.Text = $"Saving {file.Name}…";
+        StatusText.Text = $"Saving {name}…";
         Saving = Finish();
         return true;
 
@@ -725,6 +800,7 @@ public partial class ModelViewer : UserControl, IModalContent
             {
                 // Read again from what was saved, from now on.
                 data = bytes;
+                afterwards?.Invoke();
                 shaderEdits.MarkSaved(saved);
                 if (gameTexturesWaiting && !closed && !shaderEdits.HasUnsavedSplits)
                 {
@@ -734,18 +810,80 @@ public partial class ModelViewer : UserControl, IModalContent
             }
             target.Finished?.Invoke(failure is null);
             if (failure is not null)
-                ShowSaveFailure(failure);
+                ShowSaveFailure(name, failure);
             else if (!closed)
-                StatusText.Text = $"Saved {file.Name}";
+                StatusText.Text = $"Saved {name}";
             return failure is null;
         }
     }
 
-    private void ShowSaveFailure(string message)
+    private void ShowSaveFailure(string name, string message)
     {
-        StatusText.Text = $"Couldn't save {file.Name}: {message}";
+        StatusText.Text = $"Couldn't save {name}: {message}";
         StatusText.Foreground = Ui.Theme.Error;
     }
+
+    /// <summary>The file pickers Save as and Extract ask; the app's, unless a test gives its own.</summary>
+    internal IFileDialogs Dialogs { get; set; } = AppServices.Dialogs;
+
+    /// <summary>Whether the drawable has textures of its own to extract.</summary>
+    internal bool HasEmbeddedTextures => surfaces is { EmbeddedTextureCount: > 0 };
+
+    /// <summary>
+    /// Extracts the drawable's own textures, as they are now, to DDS files in a folder picked for them, as the texture
+    /// editor's Extract all does; false when there are none or no folder was picked.
+    /// </summary>
+    internal async Task<bool> ExtractTextures()
+    {
+        if (!HasEmbeddedTextures)
+            return false;
+        string? folder = await Dialogs.PickFolderAsync("Extract embedded textures");
+        if (string.IsNullOrEmpty(folder) || closed)
+            return false;
+        int count;
+        try
+        {
+            (IReadOnlyList<FiveFury.Textures.Texture> own, _) = ModelContent.EmbeddedTextures(file.Name, data);
+            // A fragment's or dictionary's textures as last saved in the texture editor, over its own.
+            IReadOnlyList<FiveFury.Textures.Texture> textures = savedTextures is { Count: > 0 } saved ? saved : own;
+            var dictionary = new FiveFury.Textures.TextureDictionary();
+            dictionary.Textures.AddRange(textures);
+            count = FiveFury.Textures.TextureDirectory.ExportDds(dictionary, folder).Count;
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            StatusText.Text = $"Couldn't extract the textures: {error.Message}";
+            StatusText.Foreground = Ui.Theme.Error;
+            return false;
+        }
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = count == 1 ? "Extracted 1 texture" : $"Extracted {count} textures";
+        return true;
+    }
+
+    /// <summary>The menu bar under the title: File and Edit.</summary>
+    internal ViewerMenuRow Menus { get; }
+
+    private ViewerMenuRow BuildMenus() => new(
+        ("File",
+        [
+            new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
+            new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => surfaces?.Writer is not null && !saving),
+            null,
+            new("Embedded textures…", "T", () => OpenTextures(), () => texturesAvailable && !savedElsewhere),
+            new("Extract embedded textures…", "", () => _ = ExtractTextures(), () => HasEmbeddedTextures),
+            null,
+            new("Close", "Ctrl+W", Close),
+        ]),
+        ("Edit",
+        [
+            new("Undo", "Ctrl+Z", () => Undo(), () => shaderEdits.CanUndo),
+            new("Redo", "Ctrl+Y", () => Redo(), () => shaderEdits.CanRedo),
+            null,
+            new("Reset the picked shader's values", "", () => { if (card.Material is { } material) shaderEdits.ResetAll(material); },
+                () => card.Material is { } material && ShaderEdits.ValuesOf(material).Any(value => shaderEdits.IsChanged(material, value.Name))),
+            new("Reset every shader value", "", shaderEdits.ResetEverything, () => shaderEdits.AnyChanged),
+        ]));
 
     // Whether the viewer may close with its changes unsaved: the dialog was told not to save them.
     private bool closeApproved;
@@ -767,7 +905,7 @@ public partial class ModelViewer : UserControl, IModalContent
             return;
         Viewport.IsVisible = false;
         int request = closeRequest;
-        var dialog = new TextureUnsavedChangesDialog { DocumentName = file.Name };
+        var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
         dialog.SaveRequested += async (_, _) =>
         {
             bool saved = Save() && await Saving;
@@ -1051,6 +1189,12 @@ public partial class ModelViewer : UserControl, IModalContent
         if (e.KeyModifiers == Avalonia.Input.KeyModifiers.Control && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z)
         {
             if (Command((char)('A' + (e.Key - Avalonia.Input.Key.A))))
+                e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers == (Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift) && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z)
+        {
+            if (Command((char)('A' + (e.Key - Avalonia.Input.Key.A)), shift: true))
                 e.Handled = true;
             return;
         }

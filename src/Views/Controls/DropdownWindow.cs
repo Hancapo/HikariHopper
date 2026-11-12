@@ -14,7 +14,8 @@ internal sealed class DropdownWindow : Window
 {
     private readonly Control body;
 
-    private DropdownWindow(Control body)
+    /// <param name="frame">Whether it draws a menu's frame round <paramref name="body"/>; a menu draws its own.</param>
+    private DropdownWindow(Control body, bool frame = true)
     {
         this.body = body;
         WindowDecorations = WindowDecorations.None;
@@ -26,11 +27,9 @@ internal sealed class DropdownWindow : Window
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         // The frame and its shadow, with room for the shadow around it, as a menu's.
-        Content = new Panel
-        {
-            Margin = Ui.Theme.MenuShadowMargin,
-            Children = { new RetroMenuFrame { ConnectionWidth = 0 }, body },
-        };
+        Content = frame
+            ? new Panel { Margin = Ui.Theme.MenuShadowMargin, Children = { new RetroMenuFrame { ConnectionWidth = 0 }, body } }
+            : new Panel { Children = { body } };
         Deactivated += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (IsVisible) Close(); });
         KeyDown += (_, e) =>
         {
@@ -41,6 +40,25 @@ internal sealed class DropdownWindow : Window
             }
         };
         Closed += (_, _) => ((Panel)Content!).Children.Remove(body);
+    }
+
+    /// <summary>
+    /// Opens a menu hanging from a menu bar's title, as the texture editor's do: its frame's open top edge one pixel up
+    /// into the title, which draws the rest of the outline; none when the title isn't in a window. A window of its own,
+    /// so it is drawn over the 3D viewport.
+    /// </summary>
+    public static DropdownWindow? OpenMenu(Control title, RetroMenu menu)
+    {
+        if (TopLevel.GetTopLevel(title) is not Window owner)
+            return null;
+        menu.ConnectionWidth = title.Bounds.Width;
+        var dropdown = new DropdownWindow(menu, frame: false);
+        Thickness margin = menu.Margin;
+        double scale = owner.RenderScaling;
+        PixelPoint corner = title.PointToScreen(new Point(0, title.Bounds.Height - 1));
+        dropdown.Position = new PixelPoint((int)Math.Round(corner.X - margin.Left * scale), (int)Math.Round(corner.Y - margin.Top * scale));
+        dropdown.Show(owner);
+        return dropdown;
     }
 
     /// <summary>

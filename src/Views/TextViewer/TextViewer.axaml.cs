@@ -57,6 +57,17 @@ public partial class TextViewer : UserControl, IModalContent
         }
 
         CloseMark.Click += (_, _) => Close();
+        Menus = new ViewerMenuRow(
+            ("File", [new("Close", "Ctrl+W", Close)]),
+            ("Edit",
+            [
+                new("Copy", "Ctrl+C", () => Copy()),
+                null,
+                new("Find…", "Ctrl+F", FocusFind),
+                new("Find next", "F3", () => StepMatch(1), () => (FindField.Text ?? "").Length > 0),
+                new("Find previous", "Shift+F3", () => StepMatch(-1), () => (FindField.Text ?? "").Length > 0),
+            ]));
+        MenuHolder.Children.Add(Menus);
         WrapButton.Click += (_, _) => SetWrap(!Lines.Wrap);
         ZoomOutButton.Click += (_, _) => SetZoom(zoomStep - 1);
         ZoomInButton.Click += (_, _) => SetZoom(zoomStep + 1);
@@ -293,6 +304,16 @@ public partial class TextViewer : UserControl, IModalContent
         return menu;
     }
 
+    /// <summary>The menu bar under the title: File and Edit.</summary>
+    internal ViewerMenuRow Menus { get; }
+
+    // Find: the field takes the keyboard, what it holds selected.
+    private void FocusFind()
+    {
+        FindField.Focus();
+        FindField.SelectAll();
+    }
+
     private void FocusBody()
     {
         if (ShowingTable)
@@ -317,8 +338,10 @@ public partial class TextViewer : UserControl, IModalContent
         switch (e.Key)
         {
             case Key.F when ctrl:
-                FindField.Focus();
-                FindField.SelectAll();
+                FocusFind();
+                break;
+            case Key.W when ctrl:
+                Close();
                 break;
             case Key.F3:
                 StepMatch(modifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
