@@ -53,16 +53,3 @@ public sealed partial class TextureViewerViewModel
         OnPropertyChanged(nameof(Work));
     }
 }
-
-/// <summary>
-/// How far a long task has got: <paramref name="Done"/> items of <paramref name="Total"/> (none for a task of one
-/// step, which shows no bar), on <paramref name="Current"/> now, under a <paramref name="Title"/> in small capitals.
-/// </summary>
-public sealed record WorkProgress(string Title, int Done, int Total, string Current, bool Cancellable)
-{
-    /// <summary>The share done, 0 to 1; none for a task of one step.</summary>
-    public double? Fraction => Total > 0 ? (double)Done / Total : null;
-
-    /// <summary>Which item it is on, of how many: "3/12"; none for a task of one step.</summary>
-    public string? Count => Total > 0 ? $"{Math.Min(Done + 1, Total)}/{Total}" : null;
-}

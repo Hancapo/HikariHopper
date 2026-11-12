@@ -84,10 +84,14 @@ public static class ArchiveWriter
                 for (ArchiveNode? node = edit(root); node?.Parent is not null; node = node.Parent)
                     node.Entry!.Replace(node.Archive.Write(crypto), node.Entry.Compression);
                 using var output = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                root.Archive.Write(output, crypto);
+                // Measured against the archive as it was, and stopped mid-write if asked: the staging file goes, and
+                // the archive is as it was.
+                root.Archive.Write(OperationProgress.Current.Track(output, new FileInfo(path).Length, Path.GetFileName(path)), crypto);
                 output.Flush(flushToDisk: true);
             }
             finally { root.Close(); }
+            // The last moment to stop: after this the archive is the new one.
+            OperationProgress.Current.Check();
             File.Move(staging, path, overwrite: true);
         }
         finally
