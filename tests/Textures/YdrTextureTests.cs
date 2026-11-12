@@ -11,8 +11,8 @@ using static HikariHopper.Tests.Textures.TextureTestKit;
 
 namespace HikariHopper.Tests.Textures;
 
-/// <summary>Port of test_ydr_textures.py and test_texture_remove_dialog.py: opt-in preservation checks on original Legacy
-/// assets from <c>x64c.rpf</c>, read into memory; writes go only to memory or temporary copies.</summary>
+/// <summary>Preservation checks on original Legacy assets from <c>x64c.rpf</c> (<see cref="TestGames"/>), read into
+/// memory; writes go only to memory or temporary copies.</summary>
 public sealed class YdrTextureTests
 {
     private const ulong SystemBase = 0x50000000;
@@ -20,17 +20,14 @@ public sealed class YdrTextureTests
     private const string BreadRack = Props + "commercial/v_fastfood.rpf/prop_bread_rack_01.ydr";
     private static readonly Lazy<(string Root, GameCrypto Crypto)> Game = new(() =>
     {
-        string root = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY")!;
+        string root = TestGames.Legacy();
         return (root, RpfProvider.LoadGame(root).Crypto);
     });
     private static readonly Dictionary<string, byte[]> Assets = [];
 
     private static byte[] Asset(string path)
     {
-        string? root = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY");
-        if (string.IsNullOrEmpty(root))
-            Assert.Skip("Set HIKARI_TEST_LEGACY to run real-asset preservation checks.");
-        Assert.True(Directory.Exists(root), $"HIKARI_TEST_LEGACY does not exist: {root}");
+        TestGames.Legacy();
         lock (Assets)
         {
             if (Assets.TryGetValue(path, out byte[]? cached))
@@ -372,15 +369,8 @@ public sealed class YdrTextureTests
         int array = Offset(system, dictionary + 0x30);
         int first = Offset(system, array), second = Offset(system, array + 8);
         system.AsSpan(second + 0x28, 8).CopyTo(system.AsSpan(first + 0x28));
-        YdrTextureDocument duplicate;
-        try
-        {
-            duplicate = Document(Rebuild(header, system, graphics));
-        }
-        catch (Exception)
-        {
-            return; // FiveFury.NET may already refuse the inconsistent dictionary on open.
-        }
+        // It opens; what can't be done is to write it back, as which texture an edit is for is ambiguous.
+        YdrTextureDocument duplicate = Document(Rebuild(header, system, graphics));
         var error = Assert.ThrowsAny<InvalidDataException>(() => duplicate.Serialize(Legacy([duplicate.Dictionary.Textures[0]]), NoRenames));
         Assert.Contains("ambiguous", error.Message);
     }
@@ -539,13 +529,9 @@ public sealed class YdrTextureTests
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
-        // A NUL cannot be represented in resource C strings. It must never be saved.
-        if (viewer.RenameSelected("broken\0name"))
-        {
-            Assert.True(viewer.SaveYtd());
-            Settle(viewer);
-            Assert.True(viewer.Modified);
-        }
+        // A NUL cannot be represented in resource C strings: the name is refused, nothing changes and nothing is saved.
+        Assert.False(viewer.RenameSelected("broken\0name"));
+        Assert.False(viewer.Modified);
         Assert.Equal(Asset(BreadRack), File.ReadAllBytes(destination));
     });
 
