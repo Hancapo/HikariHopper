@@ -281,6 +281,11 @@ public sealed class TextLinesView : Control
             int after = document.ToShown(line, index + 1);
             column = column - before <= after - column ? before : after;
         }
+        else if (index > 0 && document.RawLine(line) is var own && index < own.Length && char.IsSurrogatePair(own[index - 1], own[index]))
+        {
+            // Between the two halves of a surrogate pair (an emoji, say): to before the pair, so it is never split.
+            column = document.ToShown(line, index - 1);
+        }
         return new TextPosition(line, column);
     }
 
@@ -803,8 +808,6 @@ public sealed class TextLinesView : Control
     private void OnDocumentChanged(object? sender, TextChange change)
     {
         TextDocument text = document!;
-        int oldRows = wrap && rowStarts.Length > change.Line + change.RemovedLines
-            ? rowStarts[change.Line + change.RemovedLines] - rowStarts[change.Line] : -1;
         if (change.RemovedLines != change.InsertedLines)
         {
             states.RemoveRange(change.Line + 1, change.RemovedLines - 1);
@@ -829,11 +832,13 @@ public sealed class TextLinesView : Control
         else if (change.RemovedLongest >= maxColumns)
             maxColumns = text.Lines.Max(line => line.Length);
 
-        // Wrapped, a line that still takes as many rows leaves every row where it was.
-        int newRows = 0;
-        for (int line = change.Line; wrap && line < change.Line + change.InsertedLines; line++)
-            newRows += Math.Max(1, (int)(((long)text.Lines[line].Length + columnsPerRow - 1) / columnsPerRow));
-        if (!wrap || oldRows != newRows || change.RemovedLines != change.InsertedLines)
+        // Wrapped, lines that each still take as many rows leave every row where it was.
+        bool rowsMoved = !wrap || change.RemovedLines != change.InsertedLines
+            || rowStarts.Length <= change.Line + change.RemovedLines;
+        for (int line = change.Line; !rowsMoved && line < change.Line + change.InsertedLines; line++)
+            rowsMoved = Math.Max(1, (int)(((long)text.Lines[line].Length + columnsPerRow - 1) / columnsPerRow))
+                != rowStarts[line + 1] - rowStarts[line];
+        if (rowsMoved)
             InvalidateMeasure();
         InvalidateVisual();
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -595,6 +596,100 @@ public sealed class TextEditingTests : ExplorerTestBase
         viewer.ShowTable(true);
         Assert.Equal("2 rows", viewer.LinesText.Text);
         Assert.Equal("blista", viewer.Table.Table!.Rows[2][0]);
+        window.Close();
+    }
+
+    // ---------------- Review fixes ----------------
+
+    [AvaloniaFact]
+    public void TheCaretNeverStopsBetweenASurrogatePairsHalves()
+    {
+        (MainWindow window, TextViewer viewer) = Open("notes.txt", "a\n😀");
+        TextLinesView lines = viewer.Lines;
+        // Down from after the "a" would land between the emoji's halves: it goes to before the emoji.
+        lines.MoveCaret(new TextPosition(0, 1));
+        Key(window, PhysicalKey.ArrowDown);
+        Assert.Equal(new TextPosition(1, 0), lines.Caret);
+        // So does a place put there by hand, and a selection's end.
+        lines.MoveCaret(new TextPosition(1, 1));
+        Assert.Equal(new TextPosition(1, 0), lines.Caret);
+        lines.MoveCaret(new TextPosition(0, 0));
+        lines.MoveCaret(new TextPosition(1, 1), extend: true);
+        Assert.Equal((new TextPosition(0, 0), new TextPosition(1, 0)), lines.Selection);
+
+        // Typed there, the emoji stays whole and the text saves.
+        lines.MoveCaret(new TextPosition(1, 1));
+        Type(window, "x");
+        Assert.Equal("a\nx😀", viewer.Document.Text);
+        Assert.Equal("a\nx😀"u8.ToArray(), viewer.Document.Encode());
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void WrappedLinesThatSwapTheirRowsAreLaidOutAgain()
+    {
+        // A long line that wraps over several rows, then a short one; pasted over, they swap, taking as many rows in all.
+        string longLine = new('x', 1000);
+        (MainWindow window, TextViewer viewer) = Open("notes.txt", $"{longLine}\nb");
+        TextLinesView lines = viewer.Lines;
+        lines.Wrap = true;
+        Pump(50);
+        lines.MoveCaret(new TextPosition(0, 0));
+        lines.MoveCaret(new TextPosition(1, 1), extend: true);
+        lines.Paste($"b\n{longLine}");
+        Pump(50);
+        Assert.Equal($"b\n{longLine}", viewer.Document.Text);
+
+        // The second row is now the long line's first, not the short line's second piece.
+        double charWidth = TextViewerInk.CharWidth(lines.FontSize);
+        Point point = lines.TranslatePoint(new Point(lines.GutterWidth + 10 + 0.25 * charWidth, 10 + 1.5 * lines.LineHeight), window)!.Value;
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Assert.Equal(new TextPosition(1, 0), lines.Caret);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void AnEditMadeWhileTheCloseTimeSaveIsWrittenKeepsTheViewerOpen()
+    {
+        using var gate = new ManualResetEventSlim();
+        byte[]? written = null;
+        (MainWindow window, TextViewer viewer) = Open("notes.txt", "one", new SaveTarget(bytes =>
+        {
+            gate.Wait(10_000);
+            written = bytes;
+        }));
+        viewer.Lines.MoveCaret(new TextPosition(0, 3));
+        Type(window, "!");
+        viewer.Close();
+        Click(viewer.UnsavedDialog!.SaveButton);
+        // A paste that comes in while the save is written, after what it writes was taken.
+        viewer.Lines.Paste("?");
+        gate.Set();
+        Wait(viewer.Saving);
+        Pump(400);
+        Assert.Equal("one!"u8.ToArray(), written);
+        Assert.True(viewer.IsOpen);
+        Assert.Equal("notes.txt *", viewer.TitleText.Text);
+        Assert.Equal("one!?", viewer.Document.Text);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void TheFindLookingAgainLeavesASaveFailureInTheStatus()
+    {
+        (MainWindow window, TextViewer viewer) = Open("a.txt", [(byte)'c', (byte)'a', (byte)'f', 0xE9],
+            new SaveTarget(_ => { }));
+        viewer.FindField.Text = "caf";
+        Pump();
+        viewer.Lines.Focus();
+        viewer.Lines.MoveCaret(new TextPosition(0, 4));
+        Type(window, "ł");
+        Assert.False(viewer.Save());
+        // The find looks again once typing stops; why the save failed is still what the status says.
+        Pump(400);
+        Assert.Equal(1, viewer.MatchCount);
+        Assert.StartsWith("Couldn't save a.txt:", viewer.StatusText.Text);
         window.Close();
     }
 }

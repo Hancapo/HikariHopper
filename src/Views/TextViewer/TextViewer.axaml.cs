@@ -220,7 +220,8 @@ public partial class TextViewer : UserControl, IModalContent
         dialog.SaveRequested += async (_, _) =>
         {
             bool saved = saveTarget is not null ? Save() && await Saving : await SaveAs();
-            if (saved)
+            // An edit that landed while it was written (a paste coming in late, say) isn't in the file: it stays open.
+            if (saved && !Lines.IsModified)
             {
                 closeApproved = true;
                 Close();
@@ -404,8 +405,8 @@ public partial class TextViewer : UserControl, IModalContent
         MatchText.Text = count == 0 ? "No matches" : $"{currentMatch + 1:N0} of {count:N0}{(count >= MaxMatches ? "+" : "")}";
         MatchText.Foreground = count == 0 ? Ui.Theme.Warning : Ui.Theme.TextDim;
         PreviousButton.IsEnabled = NextButton.IsEnabled = count > 0;
-        // Looking again after an edit leaves what the status says (a save, say) alone.
-        if (select || any)
+        // Looking again after an edit leaves what the status says (a save, or why it failed) alone.
+        if (select)
             ShowStatus(!any ? IdleStatus : count == 0 ? $"No matches for \"{query}\"" : $"{count:N0}{(count >= MaxMatches ? "+" : "")} matches for \"{query}\"");
         RefreshFindField();
     }
