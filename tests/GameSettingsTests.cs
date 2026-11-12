@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using HikariHopper.Core;
 using HikariHopper.ViewModels;
 
@@ -147,6 +148,52 @@ public sealed class GameSettingsTests : ExplorerTestBase
         Assert.Equal(legacy, bridge.GamePath);
         Assert.False(bridge.GameLoading);
         Assert.False(bridge.EntryOperationBusy);
+        Assert.Equal("Loaded GTA V Legacy", bridge.Status);
+    });
+
+    [AvaloniaFact]
+    public void A_game_load_reads_the_games_texture_tables_before_it_ends() => OnUiThread(() =>
+    {
+        string legacy = MakeGame("Legacy");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        // No cache yet: the tables are made from the game, which takes a while.
+        GameTextures.Builder = (_, _, _) =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(5));
+            return new GameTextures.Tables();
+        };
+        var bridge = new ExplorerViewModel();
+
+        Assert.True(bridge.OpenGameAsync(legacy));
+        Assert.Equal("LOADING GAME", bridge.GameLoadingStage);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        Dispatcher.UIThread.RunJobs();
+        // The loading screen stays, and says what it's doing.
+        Assert.True(bridge.GameLoading);
+        Assert.False(bridge.HasGame);
+        Assert.Equal("INDEXING TEXTURES", bridge.GameLoadingStage);
+        Assert.Equal("Indexing the textures of Grand Theft Auto V Legacy…", bridge.Status);
+
+        release.Set();
+        Settle(bridge);
+        // A model opened now has the game's textures at once.
+        Assert.True(bridge.HasGame);
+        Assert.True(GameTextures.ForGame(FakeLoadedGame(legacy)).Ready);
+        Assert.Equal("LOADING GAME", bridge.GameLoadingStage);
+        Assert.Equal("Loaded GTA V Legacy", bridge.Status);
+    });
+
+    [AvaloniaFact]
+    public void Texture_tables_that_cannot_be_made_dont_stop_the_game_loading() => OnUiThread(() =>
+    {
+        string legacy = MakeGame("Legacy");
+        GameTextures.Builder = (_, _, _) => throw new InvalidDataException("a broken archive");
+        var bridge = new ExplorerViewModel();
+        Assert.True(bridge.OpenGameAsync(legacy));
+        Settle(bridge);
+        Assert.True(bridge.HasGame);
         Assert.Equal("Loaded GTA V Legacy", bridge.Status);
     });
 

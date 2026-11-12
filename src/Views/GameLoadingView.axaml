@@ -10,7 +10,7 @@
   <!-- Port of GameLoadingView.qml: shown 200ms into a game load, a shuttling 56px mark on a
        220px rail. The column is centred 28px above the middle (see LoadingColumn). -->
   <v:LoadingColumn>
-    <TextBlock Text="LOADING GAME" Foreground="{x:Static ui:Theme.TextDim}"
+    <TextBlock Text="{Binding GameLoadingStage}" Foreground="{x:Static ui:Theme.TextDim}"
                FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                FontWeight="Bold" LetterSpacing="1.2" />
     <TextBlock Text="{Binding GameLoadingName}" Foreground="{x:Static ui:Theme.Text}"

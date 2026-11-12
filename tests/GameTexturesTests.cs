@@ -4,11 +4,20 @@ using HikariHopper.Core;
 
 namespace HikariHopper.Tests;
 
+// The cache folder is process-wide, as in the explorer's tests.
+[Collection(ExplorerCollection.Name)]
 public sealed class GameTexturesTests : IDisposable
 {
     private readonly string scratch = Directory.CreateTempSubdirectory("hh-game-textures-").FullName;
+    private readonly string previousCache = GameTextures.CacheFolder;
 
-    public void Dispose() => Directory.Delete(scratch, recursive: true);
+    public GameTexturesTests() => GameTextures.CacheFolder = Path.Combine(scratch, "cache");
+
+    public void Dispose()
+    {
+        GameTextures.CacheFolder = previousCache;
+        Directory.Delete(scratch, recursive: true);
+    }
 
     private static uint H(string name) => new Hash32(name).Value;
 
@@ -91,7 +100,7 @@ public sealed class GameTexturesTests : IDisposable
     {
         int attempts = 0;
         // Whatever stops the tables, the model still opens, without the game's dictionaries; the attempt isn't repeated.
-        var textures = new GameTextures(scratch, () =>
+        var textures = new GameTextures(scratch, GameTarget.Legacy, () =>
         {
             Interlocked.Increment(ref attempts);
             throw new IndexOutOfRangeException("a broken archive");
@@ -126,5 +135,81 @@ public sealed class GameTexturesTests : IDisposable
         File.WriteAllBytes(rpf, [1, 2, 3, 4]);
         Assert.Null(GameTextures.Tables.Read(cache, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy)));
         Assert.NotEqual(stamp, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Enhanced));
+
+        // And a FiveFury built from other code: what it finds may differ, so tables an older one made are made again.
+        byte[] now = GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy);
+        string madeWith = GameTextures.MadeWith;
+        try
+        {
+            GameTextures.MadeWith = "another FiveFury";
+            Assert.NotEqual(now, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy));
+        }
+        finally
+        {
+            GameTextures.MadeWith = madeWith;
+        }
+        Assert.Equal(now, GameTextures.Stamp(Path.Combine(scratch, "game"), GameTarget.Legacy));
+    }
+
+    [Fact]
+    public async Task Saving_a_files_contents_into_an_rpf_keeps_the_cached_tables()
+    {
+        string game = Directory.CreateDirectory(Path.Combine(scratch, "game")).FullName;
+        string x64a = Path.Combine(game, "x64a.rpf"), update = Path.Combine(Directory.CreateDirectory(Path.Combine(game, "update")).FullName, "update.rpf");
+        File.WriteAllBytes(x64a, [1]);
+        File.WriteAllBytes(update, [2]);
+        int builds = 0;
+        GameTextures.Tables Build()
+        {
+            Interlocked.Increment(ref builds);
+            var tables = new GameTextures.Tables();
+            tables.Files[H("mapdetail")] = ("x64a.rpf/mapdetail.ytd", 42);
+            return tables;
+        }
+        async Task<GameTextures> Loaded()
+        {
+            var textures = new GameTextures(game, GameTarget.Legacy, Build);
+            await textures.Load();
+            return textures;
+        }
+        void Write(string path, byte[] bytes)
+        {
+            DateTime before = File.GetLastWriteTimeUtc(path);
+            File.WriteAllBytes(path, bytes);
+            File.SetLastWriteTimeUtc(path, before.AddSeconds(5));
+        }
+
+        // Made once, then read from the cache.
+        GameTextures first = await Loaded();
+        Assert.Equal(1, builds);
+        await Loaded();
+        Assert.Equal(1, builds);
+
+        // HikariHopper saves a texture dictionary into an RPF, twice: the cache holds for the game as it is now.
+        Write(x64a, [1, 1]);
+        first.Restamp(x64a);
+        Write(x64a, [1, 1, 1]);
+        first.Restamp(x64a);
+        GameTextures second = await Loaded();
+        Assert.Equal(1, builds);
+        Assert.Equal(("x64a.rpf/mapdetail.ytd", 42L), Assert.Single((await second.DictionariesFor("x.ydr")).Select(d => (d.Path, d.Size))));
+
+        // Another archive written meanwhile, by anything else, or one added: the tables are made again next time.
+        Write(update, [2, 2]);
+        Write(x64a, [1]);
+        second.Restamp(x64a);
+        GameTextures third = await Loaded();
+        Assert.Equal(2, builds);
+        File.WriteAllBytes(Path.Combine(game, "x64b.rpf"), [3]);
+        Write(x64a, [1, 1]);
+        third.Restamp(x64a);
+        await Loaded();
+        Assert.Equal(3, builds);
+
+        // Before the tables are read, there's nothing to keep.
+        Write(x64a, [1]);
+        new GameTextures(game, GameTarget.Legacy, Build).Restamp(x64a);
+        await Loaded();
+        Assert.Equal(4, builds);
     }
 }

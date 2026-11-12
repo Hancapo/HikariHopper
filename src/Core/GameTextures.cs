@@ -15,9 +15,11 @@ namespace HikariHopper.Core;
 /// the shared ones in levels/gta5/generic/gtxd.rpf, and last the detail maps' mapdetail.ytd; each dictionary as the
 /// game streams it, DLC overrides included. RPFs in the game folder the game doesn't mount itself (a mod's, such as
 /// fix/touhou.rpf, or OpenIV's mods folder) take part too, over the game's own files.
-/// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done once in the
-/// background when the game loads, and what it gives is kept as a few tables, cached on disk until the game's archives
-/// change.
+/// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done while the game loads,
+/// and what it gives is kept as a few tables, cached on disk until the game's archives change. HikariHopper's own saves
+/// of a file's contents into an RPF keep the cache (<see cref="Rewritten"/>), as they change no table.
+/// FiveFury's own index of what each archive holds and declares is kept beside them, so making the tables again
+/// after an archive changes reads only that archive, not the whole game.
 /// </summary>
 public sealed class GameTextures
 {
@@ -35,39 +37,80 @@ public sealed class GameTextures
     private static readonly ConcurrentDictionary<string, GameTextures> Shared = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string root;
-    private readonly Func<Tables> make;
+    private readonly GameTarget target;
+    private readonly Func<Tables> build;
     private readonly object gate = new();
+    private readonly object writing = new();
     private Task<Tables>? loading;
+    // The game's archives as they were when the tables in memory were read or made; null until then.
+    private IReadOnlyList<ArchiveState>? madeFrom;
 
-    private GameTextures(string root, GameTarget target, GameCrypto crypto) : this(root, () => LoadTables(root, target, crypto))
-    {
-    }
-
-    /// <summary>Tables made by <paramref name="make"/>, not shared; for tests.</summary>
-    internal GameTextures(string root, Func<Tables> make) => (this.root, this.make) = (root, make);
+    /// <summary>Tables made by <paramref name="build"/> when the cache has none for the game as it is, not shared; for tests.</summary>
+    internal GameTextures(string root, GameTarget target, Func<Tables> build) => (this.root, this.target, this.build) = (root, target, build);
 
     /// <summary>Where the tables are cached; tests point it elsewhere.</summary>
     public static string CacheFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HikariHopper", "Textures");
 
-    /// <summary>The tables of the game at <paramref name="gameRoot"/>, shared by every caller.</summary>
+    /// <summary>Makes a game's tables from the game itself (its folder, edition and keys); tests replace it.</summary>
+    internal static Func<string, GameTarget, GameCrypto, Tables> Builder { get; set; } =
+        (root, target, crypto) => Tables.Build(root, target, crypto, new GameIndexCache(IndexFolder));
+
+    /// <summary>The tables of <paramref name="game"/>, shared by every caller.</summary>
     public static GameTextures ForGame(LoadedGame game) =>
-        Shared.GetOrAdd(Path.TrimEndingDirectorySeparator(Path.GetFullPath(game.Root)), path => new GameTextures(path, game.Target, game.Crypto));
+        Shared.GetOrAdd(Path.TrimEndingDirectorySeparator(Path.GetFullPath(game.Root)),
+            path => new GameTextures(path, game.Target, () => Builder(path, game.Target, game.Crypto)));
+
+    /// <summary>Where FiveFury keeps its index of each archive the tables are made from, for every game.</summary>
+    internal static string IndexFolder => Path.Combine(CacheFolder, "Index");
 
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
+
+    /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
+    internal static GameTextures Share(string gameRoot, Func<Tables> make) =>
+        Shared[Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot))] = new GameTextures(Path.GetFullPath(gameRoot), GameTarget.Legacy, make);
+
+    /// <summary>
+    /// Waits while the tables of a game whose folder holds <paramref name="path"/> are being made: that reads the game's
+    /// RPFs, mods' included, and holds each open until it's done, and Windows doesn't replace, rename or delete an open
+    /// file. Making them takes seconds on a real game, and is only done when its archives changed since the tables
+    /// were cached. Returns at once for anything but an RPF or a folder, which may hold some.
+    /// </summary>
+    public static void WaitForArchiveReaders(string path)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (!full.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) && !Directory.Exists(full))
+            return;
+        foreach (GameTextures textures in Shared.Values)
+        {
+            string root = Path.TrimEndingDirectorySeparator(textures.root);
+            bool inside = full.Equals(root, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                // A folder over the game's holds its archives too.
+                || root.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            Task? running;
+            lock (textures.gate)
+                running = textures.loading;
+            if (!inside || running is null)
+                continue;
+            // Whether the tables could be made doesn't matter here, only that nothing reads the archives any more.
+            Task.WhenAny(running).Wait();
+        }
+    }
 
     /// <summary>The game folder.</summary>
     public string Root => root;
 
     /// <summary>
     /// Starts reading the tables in the background, from the cache when the game's archives haven't changed since,
-    /// else from the game; does nothing while that runs or once it's done.
+    /// else from the game, calling <paramref name="building"/> first, as that takes a while; does nothing while that
+    /// runs or once it's done.
     /// </summary>
-    public Task Load()
+    public Task Load(Action? building = null)
     {
         lock (gate)
-            return loading ??= Task.Run(make);
+            return loading ??= Task.Run(() => LoadTables(building));
     }
 
     /// <summary>Whether the tables are ready.</summary>
@@ -111,40 +154,117 @@ public sealed class GameTextures
         }
     }
 
-    private static Tables LoadTables(string root, GameTarget target, GameCrypto crypto)
+    private string CachePath =>
+        Path.Combine(CacheFolder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..16] + ".bin");
+
+    private Tables LoadTables(Action? building)
     {
-        byte[] stamp = Stamp(root, target);
-        string cache = Path.Combine(CacheFolder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant())))[..16] + ".bin");
+        IReadOnlyList<ArchiveState> archives = Archives(root);
+        byte[] stamp = Stamp(archives, target);
+        Tables? tables = null;
         try
         {
-            if (Tables.Read(cache, stamp) is { } cached)
-                return cached;
+            tables = Tables.Read(CachePath, stamp);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or EndOfStreamException)
         {
         }
-        Tables made = Tables.Build(root, target, crypto);
+        if (tables is null)
+        {
+            building?.Invoke();
+            tables = build();
+            Keep(tables, stamp);
+        }
+        lock (writing)
+            madeFrom = archives;
+        return tables;
+    }
+
+    private void Keep(Tables tables, byte[] stamp)
+    {
         try
         {
             Directory.CreateDirectory(CacheFolder);
-            made.Write(cache, stamp);
+            tables.Write(CachePath, stamp);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
         }
-        return made;
     }
 
-    /// <summary>What the tables are made from: every RPF of the game, by path, size and time written.</summary>
-    internal static byte[] Stamp(string root, GameTarget target)
+    /// <summary>
+    /// HikariHopper wrote <paramref name="archivePath"/>, an RPF on disk, changing only the contents of files in it (a
+    /// texture dictionary or a model saved): the tables still hold, so each game's cache that holds that RPF is kept for
+    /// the game as it is now, rather than made again the next time the game loads. Not when anything else of the
+    /// game's archives changed since its tables were read: they're made again then.
+    /// </summary>
+    public static Task Rewritten(string archivePath)
     {
-        var text = new StringBuilder($"{FormatVersion}|{target}\n");
-        foreach (string file in Directory.EnumerateFiles(root, "*.rpf", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase))
+        string written = Path.GetFullPath(archivePath);
+        GameTextures[] games = [.. Shared.Values.Where(game => written.StartsWith(game.root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))];
+        return games.Length == 0 ? Task.CompletedTask : Task.Run(() =>
+        {
+            foreach (GameTextures game in games)
+                game.Restamp(written);
+        });
+    }
+
+    /// <summary>Keeps the cache for the game as it is now when only <paramref name="archivePath"/> changed since the
+    /// tables were read; see <see cref="Rewritten"/>.</summary>
+    internal void Restamp(string archivePath)
+    {
+        lock (writing)
+        {
+            if (madeFrom is not { } before || loading is not { IsCompletedSuccessfully: true } done)
+                return;
+            string written = Path.GetRelativePath(root, archivePath).ToUpperInvariant();
+            IReadOnlyList<ArchiveState> now;
+            try
+            {
+                now = Archives(root);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return;
+            }
+            if (now.Count != before.Count)
+                return;
+            for (int i = 0; i < now.Count; i++)
+                if (now[i].Path != before[i].Path || (now[i] != before[i] && now[i].Path != written))
+                    return;
+            Keep(done.Result, Stamp(now, target));
+            madeFrom = now;
+        }
+    }
+
+    /// <summary>An RPF of the game: its path from the game folder, upper case, its size and when it was written.</summary>
+    internal readonly record struct ArchiveState(string Path, long Length, long Written);
+
+    /// <summary>Every RPF of the game, in path order.</summary>
+    internal static IReadOnlyList<ArchiveState> Archives(string root) =>
+        [.. Directory.EnumerateFiles(root, "*.rpf", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase).Select(file =>
         {
             var info = new FileInfo(file);
-            text.Append(Path.GetRelativePath(root, file).ToUpperInvariant()).Append('|').Append(info.Length).Append('|')
-                .Append(info.LastWriteTimeUtc.Ticks).Append('\n');
-        }
+            return new ArchiveState(Path.GetRelativePath(root, file).ToUpperInvariant(), info.Length, info.LastWriteTimeUtc.Ticks);
+        })];
+
+    /// <summary>
+    /// The build of FiveFury (and of CommonFury, which names its hashes) the tables are made with: what FiveFury finds
+    /// changes with it, so tables an older one made are made again. Each changes only with their code, as their builds
+    /// are deterministic; tests set it.
+    /// </summary>
+    internal static string MadeWith { get; set; } =
+        $"{typeof(GameFileCache).Assembly.ManifestModule.ModuleVersionId}|{typeof(Hash32).Assembly.ManifestModule.ModuleVersionId}";
+
+    /// <summary>What the tables are made from: every RPF of the game, by path, size and time written, and the FiveFury
+    /// that read them (<see cref="MadeWith"/>).</summary>
+    internal static byte[] Stamp(string root, GameTarget target) => Stamp(Archives(root), target);
+
+    private static byte[] Stamp(IReadOnlyList<ArchiveState> archives, GameTarget target)
+    {
+        var text = new StringBuilder($"{FormatVersion}|{target}|{MadeWith}\n");
+        foreach (ArchiveState archive in archives)
+            text.Append(archive.Path).Append('|').Append(archive.Length).Append('|').Append(archive.Written).Append('\n');
         return SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()));
     }
 
@@ -225,10 +345,14 @@ public sealed class GameTextures
         private static readonly uint MapDetail = new Hash32("mapdetail").Value;
         private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
-        public static Tables Build(string root, GameTarget target, GameCrypto crypto)
+        /// <summary>
+        /// The tables, from the whole game mounted; with <paramref name="index"/>, FiveFury takes each archive it has seen
+        /// unchanged from there, which gives the same tables in under half the time.
+        /// </summary>
+        public static Tables Build(string root, GameTarget target, GameCrypto crypto, GameIndexCache? index = null)
         {
             var tables = new Tables();
-            using GameInstallation game = GameInstallation.Open(root, target, crypto);
+            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index });
             // The RPFs the game doesn't mount itself, over its own files; one that can't be read is left out.
             var mounted = new HashSet<string>(game.FileSystem.Mounts.Select(mount => mount.SourcePath), StringComparer.OrdinalIgnoreCase);
             int priority = ExtraArchivePriority;
