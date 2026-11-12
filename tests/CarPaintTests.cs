@@ -299,11 +299,11 @@ public sealed class CarPaintTests
         window.Show();
         panel.ShowPicker(0);
         ExplorerStateRenders.Pump(20);
-        double metallic = panel.Bounds.Height;
+        double metallic = panel.DesiredSize.Height;
         panel.ShowFinish("Matte");
         ExplorerStateRenders.Pump(20);
         Assert.Equal("Matte", panel.Finish);
-        Assert.Equal(metallic, panel.Bounds.Height);
+        Assert.Equal(metallic, panel.DesiredSize.Height);
         window.Close();
     }
 
