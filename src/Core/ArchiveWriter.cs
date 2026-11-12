@@ -100,6 +100,7 @@ public static class ArchiveWriter
                 output.Flush(flushToDisk: true);
             }
             finally { root.Close(); }
+            GameTextures.WaitForArchiveReaders(path);
             // The last moment to stop: after this the archive is the new one.
             OperationProgress.Current.Check();
             File.Move(staging, path, overwrite: true);

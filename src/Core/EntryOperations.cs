@@ -80,6 +80,7 @@ public static class EntryOperations
             string destination = Path.Combine(target.Directory, newName);
             if (!Path.Exists(source))
                 throw new FileNotFoundException($"Not found: {name}", source);
+            GameTextures.WaitForArchiveReaders(source);
             bool caseOnly = string.Equals(name, newName, StringComparison.OrdinalIgnoreCase);
             // Every other entry, so a case-only rename is checked too: a case-sensitive folder can hold "pack" and "Pack".
             EntryNames.EnsureEntryNameAvailable(newName,
@@ -335,6 +336,7 @@ public static class EntryOperations
             try
             {
                 CopyStat(source, staging);
+                GameTextures.WaitForArchiveReaders(destination);
                 File.Move(destination, backup, overwrite: true);
             }
             catch
@@ -451,6 +453,7 @@ public static class EntryOperations
             OperationProgress.Current.Item(Path.GetFileName(path));
             if (!Path.Exists(path))
                 continue;
+            GameTextures.WaitForArchiveReaders(path);
             if (IsLinkedPath(path) || !RecycleBin.MoveToTrash(path))
             {
                 failed.Add(Path.GetFileName(path));

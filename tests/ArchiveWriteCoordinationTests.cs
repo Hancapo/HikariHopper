@@ -1,3 +1,4 @@
+using HikariHopper.Core;
 using HikariHopper.ViewModels;
 
 namespace HikariHopper.Tests;
@@ -144,4 +145,71 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.False(File.Exists(Path.Combine(Work, "blocked.rpf")));
     }
 
+    /// <summary>
+    /// The game's texture tables made in the background, holding <paramref name="archive"/> open as making them does
+    /// until <paramref name="release"/> is set; <paramref name="reading"/> is set once it's open.
+    /// </summary>
+    private Task TablesReading(string archive, ManualResetEventSlim reading, ManualResetEventSlim release) =>
+        GameTextures.Share(Work, () =>
+        {
+            using var held = new FileStream(archive, FileMode.Open, FileAccess.Read, FileShare.Read);
+            reading.Set();
+            release.Wait(TimeSpan.FromSeconds(30));
+            return new GameTextures.Tables();
+        }).Load();
+
+    [Fact]
+    public void AnArchiveTheGamesTablesAreReadFromIsRewrittenOnceTheyAreMade()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        Task tables = TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
+
+        // Windows can't replace the archive while the tables hold it, so the write waits for them rather than fail.
+        Task write = Task.Run(() => ArchiveWriter.ReplaceEntry(archive, null, "data/handling.meta", "<Item edited=\"1\" />"u8.ToArray()));
+        Assert.False(write.Wait(TimeSpan.FromMilliseconds(300)));
+        release.Set();
+        write.Wait(TimeSpan.FromSeconds(10));
+        Assert.True(tables.IsCompletedSuccessfully);
+        Assert.Equal("<Item edited=\"1\" />", System.Text.Encoding.UTF8.GetString(ReadSavedEntry(archive, "data/handling.meta")!));
+    }
+
+    [Fact]
+    public void AnArchiveTheGamesTablesAreReadFromIsRenamedOnceTheyAreMade()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
+
+        var folder = new EntryCreationTarget(Directory: Path.Combine(Work, "mods"));
+        Task rename = Task.Run(() => EntryOperations.RenameAt(folder, "mod.rpf", "renamed.rpf"));
+        Assert.False(rename.Wait(TimeSpan.FromMilliseconds(300)));
+        release.Set();
+        rename.Wait(TimeSpan.FromSeconds(10));
+        Assert.True(File.Exists(Path.Combine(Work, "mods", "renamed.rpf")));
+    }
+
+    [Fact]
+    public void ALooseFileIsntHeldUpByTheGamesTables()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        Write(Path.Combine(Work, "mods", "readme.txt"), "notes");
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
+        try
+        {
+            EntryOperations.RenameAt(new EntryCreationTarget(Directory: Path.Combine(Work, "mods")), "readme.txt", "notes.txt");
+            Assert.True(File.Exists(Path.Combine(Work, "mods", "notes.txt")));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
 }
