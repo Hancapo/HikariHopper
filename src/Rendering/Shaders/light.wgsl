@@ -28,9 +28,15 @@ struct Light {
     filmic_dark1: vec4f,
     // The reflection map's mip count (gReflectionMipCount), in x.
     reflection: vec4f,
-    // From origin-relative positions to the shadow map's clip space.
-    shadow: mat4x4f,
-    // The shadow map's texel in metres, its depth range in metres, its resolution, and whether shadows are on.
+    // From origin-relative positions to each of the shadow's cascades' clip space (ViewportRenderer.FitCascades).
+    shadow: array<mat4x4f, 4>,
+    // How far from the camera, along its view, each cascade reaches; past the last, nothing casts.
+    shadow_splits: vec4f,
+    // Each cascade's texel in metres.
+    shadow_texels: vec4f,
+    // Each cascade's depth range in metres.
+    shadow_depths: vec4f,
+    // The cascades' resolution in z, and whether shadows are on in w.
     shadow_parameters: vec4f,
     // The bloom (BloomParams): the exposed luminance its bright pass starts at, the timecycle's bloom intensity, and
     // one over the luminance range it fades in over.
@@ -40,7 +46,7 @@ struct Light {
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
-@group(2) @binding(1) var shadow_map: texture_depth_2d;
+@group(2) @binding(1) var shadow_map: texture_depth_2d_array;
 @group(2) @binding(2) var shadow_compare: sampler_comparison;
 @group(2) @binding(3) var reflection_map: texture_2d<f32>;
 @group(2) @binding(4) var reflection_sampler: sampler;
@@ -69,7 +75,8 @@ fn gta_ambient(n: vec3f) -> vec3f {
     return natural + directional;
 }
 
-// The key light's shadow at a point, as RedFury's cascade_pcf for its one map: nine bilinear comparison taps one
+// The key light's shadow at a point, from the cascade its distance from the camera falls in, as RedFury's cascade_pcf
+// reads one: nine bilinear comparison taps one
 // texel apart (a smooth 4x4 tent), offset along the normal by the texel's footprint, which keeps grazing surfaces
 // from shadowing themselves in stripes. n is the geometric normal of the side being shaded (the back of a surface
 // drawn from both sides faces the other way). A side facing away from the sun is offset away from it too, into its
@@ -82,19 +89,32 @@ fn sun_shadow(p: vec3f, n: vec3f) -> f32 {
     if (light.shadow_parameters.w < 0.5 || terminator <= 0.0) {
         return terminator;
     }
-    let texel_world = light.shadow_parameters.x;
+    // The cascade: the first that reaches as far from the camera as the point is (a perspective clip w is the depth
+    // along the view).
+    let distance = (scene.view_projection * vec4f(p, 1.0)).w;
+    var cascade = 3u;
+    if (distance < light.shadow_splits.z) {
+        cascade = 2u;
+    }
+    if (distance < light.shadow_splits.y) {
+        cascade = 1u;
+    }
+    if (distance < light.shadow_splits.x) {
+        cascade = 0u;
+    }
+    let texel_world = light.shadow_texels[cascade];
     let offset = p + n * texel_world * (0.75 + 1.75 * (1.0 - abs(facing))) + sun * texel_world * 0.5 * saturate(facing * 10.0);
-    let clip = light.shadow * vec4f(offset, 1.0);
+    let clip = light.shadow[cascade] * vec4f(offset, 1.0);
     let uvz = vec3f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5, clip.z);
     if (any(uvz.xy <= vec2f(0.0)) || any(uvz.xy >= vec2f(1.0)) || uvz.z >= 1.0 || uvz.z <= 0.0) {
         return terminator;
     }
     let texel = 1.0 / light.shadow_parameters.z;
-    let reference = uvz.z - texel_world / light.shadow_parameters.y;
+    let reference = uvz.z - texel_world / light.shadow_depths[cascade];
     var sum = 0.0;
     for (var y = -1; y <= 1; y++) {
         for (var x = -1; x <= 1; x++) {
-            sum += textureSampleCompareLevel(shadow_map, shadow_compare, uvz.xy + vec2f(f32(x), f32(y)) * texel, reference);
+            sum += textureSampleCompareLevel(shadow_map, shadow_compare, uvz.xy + vec2f(f32(x), f32(y)) * texel, i32(cascade), reference);
         }
     }
     return sum / 9.0 * terminator;
