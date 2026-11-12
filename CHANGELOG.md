@@ -42,6 +42,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The Type column shows only what a file is, without "(Compressed)" after the files an RPF keeps compressed. ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
 ### Fixed
 
+- Closing HikariHopper, or a tab, with files unsaved in the text editor, the 3D viewer or a texture editor asks first, listing them all: Save all saves them where their editors would and then closes, Don't save closes, Cancel keeps everything open; before, the changes were lost without a word. ([#195](https://github.com/Hancapo/HikariHopper/pull/195))
 - A vehicle opened while the game's texture tables were still being worked out (after the game or the app changed) took several seconds to appear, waiting for its paint; it now appears at once in the game's grey and takes its colours when the tables are ready. ([#184](https://github.com/Hancapo/HikariHopper/pull/184))
 - Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - Clicking HikariHopper's taskbar button minimizes it, as it does for other apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
