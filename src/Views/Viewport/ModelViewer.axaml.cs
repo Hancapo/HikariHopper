@@ -808,9 +808,15 @@ public partial class ModelViewer : UserControl, IModalContent
             [new FileFilter(kind, [$"*{extension}"])]);
         if (string.IsNullOrEmpty(path) || closed)
             return false;
-        string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : Path.ChangeExtension(path, extension);
-        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
+        // Another extension is kept, with the file's added after it.
+        string destination = SaveNames.WithExtension(path, extension);
         string name = Path.GetFileName(destination);
+        if (SaveNames.ReplacesUnpicked(path, destination))
+        {
+            ShowSaveFailure(name, "a file of that name is already there. Pick it in Save as to replace it");
+            return false;
+        }
+        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
         if (!SaveTo(target, name, () =>
             {
                 // From now on it is that file: Save saves there, and the title says so.

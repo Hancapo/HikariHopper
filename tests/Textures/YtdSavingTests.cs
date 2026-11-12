@@ -150,6 +150,30 @@ public sealed class YtdSavingTests
         { node.Close(); }
     }
 
+    [AvaloniaFact]
+    public async Task SaveAsKeepsAnotherExtensionAndNeverReplacesAFileThatWasntPicked()
+    {
+        using var folder = new TempFolder();
+        string beside = folder.File("textures.ytd");
+        File.WriteAllBytes(beside, [1, 2, 3]);
+        var dialogs = new FakeDialogs { SaveFile = folder.File("textures.backup") };
+        TextureViewerViewModel viewer = Opened("empty.ytd", EmptyYtd(GameTarget.Legacy), dialogs: dialogs);
+
+        // Typed with another extension: the dictionary's is added after it, and the one beside it is left alone.
+        Assert.True(await viewer.SaveYtdAs());
+        Settle(viewer);
+        Assert.Equal(folder.File("textures.backup.ytd"), viewer.SourcePath);
+        Assert.True(File.Exists(folder.File("textures.backup.ytd")));
+        Assert.Equal([(byte)1, 2, 3], File.ReadAllBytes(beside));
+
+        // Typed without one, a file of the name it gets is there, which the dialog didn't ask about replacing.
+        dialogs.SaveFile = folder.File("textures");
+        Assert.False(await viewer.SaveYtdAs());
+        Settle(viewer);
+        Assert.Equal([(byte)1, 2, 3], File.ReadAllBytes(beside));
+        Assert.Contains("already there", viewer.Status);
+    }
+
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]

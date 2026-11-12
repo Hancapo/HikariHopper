@@ -135,6 +135,39 @@ public sealed class ViewerMenuTests
     }
 
     [AvaloniaFact]
+    public void Save_as_keeps_another_extension_and_never_replaces_a_file_that_wasnt_picked()
+    {
+        using var folder = new TempFolder();
+        string beside = folder.File("tri.ydr");
+        File.WriteAllBytes(beside, [1, 2, 3]);
+        Views.ModelViewer viewer = Open(Textured());
+
+        // Typed with another extension: the file's is added after it, and the drawable beside it is left alone.
+        viewer.Dialogs = new FakeDialogs { SaveFile = folder.File("tri.backup") };
+        Task<bool> saving = viewer.SaveAs();
+        Wait(saving);
+        Assert.True(saving.Result, viewer.StatusText.Text);
+        Assert.True(File.Exists(folder.File("tri.backup.ydr")));
+        Assert.Equal([(byte)1, 2, 3], File.ReadAllBytes(beside));
+        Assert.Equal("tri.backup.ydr", viewer.TitleText.Text);
+
+        // Typed without one, a file of the name it gets is there, which the dialog didn't ask about replacing.
+        viewer.Dialogs = new FakeDialogs { SaveFile = folder.File("tri") };
+        saving = viewer.SaveAs();
+        Wait(saving);
+        Assert.False(saving.Result);
+        Assert.Equal([(byte)1, 2, 3], File.ReadAllBytes(beside));
+        Assert.Contains("already there", viewer.StatusText.Text);
+
+        // Picked itself, it is replaced.
+        viewer.Dialogs = new FakeDialogs { SaveFile = beside };
+        saving = viewer.SaveAs();
+        Wait(saving);
+        Assert.True(saving.Result, viewer.StatusText.Text);
+        Assert.NotEqual([(byte)1, 2, 3], File.ReadAllBytes(beside));
+    }
+
+    [AvaloniaFact]
     public void Extract_embedded_textures_writes_them_as_dds_files()
     {
         using var folder = new TempFolder();

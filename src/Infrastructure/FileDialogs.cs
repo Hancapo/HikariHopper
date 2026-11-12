@@ -15,6 +15,24 @@ public interface IFileDialogs
         string? startPath = null);
 }
 
+/// <summary>Where a Save as writes a file that must keep its type.</summary>
+public static class SaveNames
+{
+    /// <summary>
+    /// The path picked, with <paramref name="extension"/> added unless it already ends in it: "adder.backup" saves as
+    /// "adder.backup.yft", never over an "adder.yft" that wasn't picked.
+    /// </summary>
+    public static string WithExtension(string path, string extension) =>
+        string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : path.TrimEnd('.') + extension;
+
+    /// <summary>
+    /// Whether writing <paramref name="destination"/> would replace a file other than the one picked: the dialog asked
+    /// before replacing that one, not this.
+    /// </summary>
+    public static bool ReplacesUnpicked(string picked, string destination) =>
+        !string.Equals(picked, destination, StringComparison.OrdinalIgnoreCase) && File.Exists(destination);
+}
+
 /// <summary>Process-wide services, replaced by fakes in tests.</summary>
 public static class AppServices
 {

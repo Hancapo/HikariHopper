@@ -48,8 +48,13 @@ public sealed partial class TextureViewerViewModel
             suggested, [drawable ? new FileFilter("Drawable", ["*.ydr"]) : new FileFilter("Texture Dictionary", ["*.ytd"])]);
         if (string.IsNullOrEmpty(path) || dictionary is null)
             return false;
-        string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase)
-            ? path : Path.ChangeExtension(path, extension);
+        // Another extension is kept, with the file's added after it.
+        string destination = SaveNames.WithExtension(path, extension);
+        if (SaveNames.ReplacesUnpicked(path, destination))
+        {
+            SetStatus($"Could not save {Path.GetFileName(destination)}: a file of that name is already there. Pick it in Save as to replace it");
+            return false;
+        }
         Func<TextureSet, byte[]> serialize = Serializer();
         TextureSet snapshot = dictionary;
         Action<string, byte[]> write = WriteFile;
