@@ -449,7 +449,9 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
             told(saved);
         pendingImageImport = null;
         pendingPaste = null;
+        // A task still running stops at its next look, so an extract writes nothing more once the document is gone.
         work = null;
+        workCancel?.Cancel();
         workCancel = null;
         generation++;
         pool.Clear();

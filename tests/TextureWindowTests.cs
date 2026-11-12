@@ -1113,6 +1113,30 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void AnExtractStopsWritingWhenTheDocumentCloses()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        using var started = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
+        int written = 0;
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            started.Release();
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            Interlocked.Increment(ref written);
+        };
+        _ = harness.ViewModel.ExtractAll();
+        Until(() => started.CurrentCount > 0, "the first texture");
+        harness.ViewModel.CloseDocument();
+        gate.Release(3);
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        // The texture in hand finishes; none after it is written.
+        Assert.Equal(1, written);
+    }
+
+    [AvaloniaFact]
     public void ASaveShowsTheTrainWithNothingToCountOrCancel()
     {
         using var folder = new TempFolder();
