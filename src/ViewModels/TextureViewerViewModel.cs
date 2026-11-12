@@ -370,6 +370,27 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         }
     }
 
+    /// <summary>
+    /// Saves the document as its Save does when it is asked to before it closes: into its source, or as a file picked
+    /// for it when it has none. True once it is written; false when it couldn't start, nothing was picked, or the
+    /// write failed, which the status then says.
+    /// </summary>
+    public async Task<bool> SaveDocument()
+    {
+        var finished = new TaskCompletionSource<bool>();
+        EventHandler<bool> done = (_, saved) => finished.TrySetResult(saved);
+        SaveFinished += done;
+        try
+        {
+            bool started = CanSaveSource ? SaveYtd() : await SaveYtdAs();
+            return started && await finished.Task;
+        }
+        finally
+        {
+            SaveFinished -= done;
+        }
+    }
+
     /// <summary>Closes the document after resolving unsaved changes.</summary>
     public void RequestClose() => RequestDocumentChange(CloseDocument);
 

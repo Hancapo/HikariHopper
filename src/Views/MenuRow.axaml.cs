@@ -104,8 +104,10 @@ public partial class MenuRow : UserControl
 
     private void OnExit(object? sender, RoutedEventArgs e)
     {
-        // Qt.quit()
-        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        // As the close button does: the window asks about unsaved files first, and the app ends when it has closed.
+        if (TopLevel.GetTopLevel(this) is Window window)
+            window.Close();
+        else if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.Shutdown();
     }
 

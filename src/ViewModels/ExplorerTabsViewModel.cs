@@ -151,7 +151,14 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Closes a tab once its texture document's unsaved changes are resolved.</summary>
+    /// <summary>
+    /// Asked before a tab closes, with what closes it: the view asks about every file the tab has unsaved, in its
+    /// texture editor and in the viewers it opened, and closes it once they are saved or let go. Unset, only the
+    /// texture document is asked about.
+    /// </summary>
+    public Action<ExplorerViewModel, Action>? ConfirmClose { get; set; }
+
+    /// <summary>Closes a tab once its unsaved changes are resolved.</summary>
     public void CloseTab(int row)
     {
         if (row < 0 || row >= tabs.Count)
@@ -159,7 +166,10 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         ExplorerViewModel bridge = tabs[row];
         if (bridge.EntryOperationBusy && !bridge.TextureViewer.Saving)
             return;
-        bridge.TextureViewer.RequestDocumentChange(() => CloseTabCore(bridge));
+        if (ConfirmClose is { } confirm)
+            confirm(bridge, () => CloseTabCore(bridge));
+        else
+            bridge.TextureViewer.RequestDocumentChange(() => CloseTabCore(bridge));
     }
 
     private void CloseTabCore(ExplorerViewModel bridge)
