@@ -1,5 +1,10 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
+  auto_review:
+    # Stacked PRs target the branch of the PR below them rather than master, and CodeRabbit only reviews PRs into the
+    # default branch unless told otherwise. Review them all.
+    base_branches:
+      - ".*"
   pre_merge_checks:
     # Counts doc comments on every touched function with a branch, private helpers included,
     # which says nothing about whether a change is understandable.
