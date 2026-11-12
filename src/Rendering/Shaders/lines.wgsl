@@ -55,5 +55,5 @@ fn vs_line(input: Segment) -> LineOutput {
 
 @fragment
 fn fs_line(input: LineOutput) -> @location(0) vec4f {
-    return vec4f(dither(input.colour, input.position.xy), 1.0);
+    return vec4f(input.colour, 1.0);
 }
