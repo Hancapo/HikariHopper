@@ -146,8 +146,9 @@ public sealed partial class TextureViewerViewModel
                 {
                     export(items[index], target, folder);
                 }
-                catch (Exception exception) when (IsFileError(exception) || exception is ArgumentException)
+                catch (Exception exception)
                 {
+                    // Any failure ends the extract with its reason, so the editor never stays busy.
                     string message = exception.Message;
                     Post(() => ExtractFinished(token, done, items.Length, message, cancelled: false));
                     return;

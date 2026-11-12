@@ -1154,6 +1154,20 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void AnExtractThatFailsOddlyStillEndsAndSaysWhy()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) => throw new OverflowException("too big");
+        _ = harness.ViewModel.ExtractAll();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Could not extract textures: too big", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
     public void ASaveShowsTheTrainWithNothingToCountOrCancel()
     {
         using var folder = new TempFolder();
