@@ -1430,7 +1430,9 @@ public partial class ModelViewer : UserControl, IModalContent
         // Shown at once with the textures at hand (its own, the ones beside it, and the game's if its texture tables are
         // ready); while the tables are still being worked out, the game's are added when they come.
         Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
-        IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
+        // Whether the read has the game's: the tables may be done by the time it is, and it still wouldn't.
+        bool gameIncluded = pending is { IsCompletedSuccessfully: true };
+        IReadOnlyList<NearbyDictionary> game = gameIncluded ? pending!.Result : [];
         data = file.Data;
         gameDictionaries = game;
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
@@ -1446,7 +1448,7 @@ public partial class ModelViewer : UserControl, IModalContent
         ShowPaint();
         if (started)
             StatusText.Text = Location;
-        if (content?.Surfaces is { } first && pending is { IsCompleted: false } && Missing(first) > 0)
+        if (content?.Surfaces is { } first && pending is not null && !gameIncluded && Missing(first) > 0)
             GameTexturesAdded = AddGameTextures(file, pending);
     }
 

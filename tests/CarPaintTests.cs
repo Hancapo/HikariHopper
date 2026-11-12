@@ -161,6 +161,38 @@ public sealed class CarPaintTests
     }
 
     [AvaloniaFact]
+    public void The_games_textures_found_while_its_paints_are_read_are_still_added()
+    {
+        // The car's texture is only in the game's dictionaries, whose tables are done once the drawable is read, while its
+        // paints are still being looked up: the drawable was read without them, so it is read again with them.
+        var mesh = new DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(1, 1, 0)], [0, 1, 2], "surface");
+        mesh.SetChannel(VertexSemantic.Normal, [.. Enumerable.Repeat(Vector4.UnitZ, 3)]);
+        mesh.SetChannel(VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(1, 1, 0, 0)]);
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "vehicle_paint1" };
+        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference("car_d");
+        var builder = new DrawableBuilder { Name = "car" };
+        builder.Materials.Add(material);
+        var model = new DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] car = new Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
+        var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
+        var paints = new TaskCompletionSource<CarPaints?>();
+        var viewer = new Views.ModelViewer(new ModelFile("car.ydr", car) { GameDictionaries = tables.Task, GamePaints = paints.Task });
+        ExplorerStateRenders.Pump(300);
+        byte[] dictionary = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("car_d"));
+        tables.SetResult([new NearbyDictionary("car_txd.ytd", dictionary.Length, () => dictionary)]);
+        paints.SetResult(Paints);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        while (!viewer.GameTexturesAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Assert.True(viewer.GameTexturesAdded.IsCompletedSuccessfully);
+        Assert.Equal("", viewer.Location);
+    }
+
+    [AvaloniaFact]
     public void A_vehicle_from_a_game_opens_in_its_first_combination_and_its_paint_is_picked_in_the_footer()
     {
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
