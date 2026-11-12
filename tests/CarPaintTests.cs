@@ -12,13 +12,16 @@ namespace HikariHopper.Tests;
 
 public sealed class CarPaintTests
 {
+    // Three of carcols' metallic settings: the metallics', the black metallics' and the mattes'.
+    private static readonly CarMetallic Metallic = new(.8f, 510, .96f), BlackMetallic = new(.5f, 500, .96f), Matte = new(.5f, 5, .96f);
+
     // A few of the game's colours, named as carcols has them.
     private static readonly CarPaints Paints = new(
     [
-        new(0, CarColourNames.Tidy("0 Metallic Black"), 0xFF080808, "Metallic"),
-        new(4, CarColourNames.Tidy("4 Metallic Silver"), 0xFF5A5E66, "Metallic"),
-        new(12, CarColourNames.Tidy("12 Matte Black"), 0xFF131313, "Matte"),
-        new(27, CarColourNames.Tidy("27 Metallic Red"), 0xFFC00E1A, "Metallic"),
+        new(0, CarColourNames.Tidy("0 Metallic Black"), 0xFF080808, "Metallic", BlackMetallic),
+        new(4, CarColourNames.Tidy("4 Metallic Silver"), 0xFF5A5E66, "Metallic", Metallic),
+        new(12, CarColourNames.Tidy("12 Matte Black"), 0xFF131313, "Matte", Matte),
+        new(27, CarColourNames.Tidy("27 Metallic Red"), 0xFFC00E1A, "Metallic", Metallic),
         new(111, CarColourNames.Tidy("111 Metallic White"), 0xFFF0F0F0, "Metallic"),
         new(156, CarColourNames.Tidy("156 DEFAULT ALLOY COLOR"), 0xFF414347, "Other"),
     ],
@@ -109,17 +112,38 @@ public sealed class CarPaintTests
     }
 
     [Fact]
+    public void A_paint_slot_takes_its_colours_metallic_setting_in_place_of_its_materials_specular()
+    {
+        DrawableScene scene = ModelContent.Read("car.ydr", Car()).Surfaces!;
+        float[] own = scene.Materials[0].Uniforms[0..3];
+        // Red's setting, the metallics': fresnel, falloff and intensity as specFresnel, specFalloff and specInt.
+        scene.Repaint(VehiclePaint.Of(Paints, [27]));
+        Assert.Equal([.96f, 510, .8f], scene.Materials[0].Uniforms[0..3]);
+        scene.Repaint(VehiclePaint.Of(Paints, [12]));
+        Assert.Equal([.96f, 5, .5f], scene.Materials[0].Uniforms[0..3]);
+        // A colour without one, or no colours at all, keeps the material's.
+        scene.Repaint(VehiclePaint.Of(Paints, [156]));
+        Assert.Equal(own, scene.Materials[0].Uniforms[0..3]);
+        scene.Repaint(VehiclePaint.Unset);
+        Assert.Equal(own, scene.Materials[0].Uniforms[0..3]);
+        // The slot the game leaves white has none, and each other slot is its own colour's.
+        VehiclePaint paint = VehiclePaint.Of(Paints, [27, 0, 12, 156, 4, 12]);
+        Assert.Equal([Metallic, BlackMetallic, Matte, null, null, Metallic, Matte], Enumerable.Range(1, 7).Select(paint.Metallic));
+    }
+
+    [Fact]
     public void The_tables_give_a_vehicle_the_games_colours_and_its_combinations()
     {
         var tables = new GameTextures.Tables();
         // No colours, no paint: a game whose carcols couldn't be read.
         Assert.Null(tables.PaintsFor("adder.yft"));
-        tables.Colours[0] = ("0 Metallic Black", 0xFF080808);
-        tables.Colours[156] = ("156 DEFAULT ALLOY COLOR", 0xFF414347);
+        tables.Colours[0] = ("0 Metallic Black", 0xFF080808, BlackMetallic);
+        tables.Colours[156] = ("156 DEFAULT ALLOY COLOR", 0xFF414347, null);
         tables.Combinations[new Hash32("adder").Value] = [[0, 0, 0, 156], [0, -1, 0, 156, 0, 0]];
 
         CarPaints adder = tables.PaintsFor("adder.yft")!;
         Assert.Equal(["Metallic Black", "Default Alloy"], adder.Colours.Select(colour => colour.Name));
+        Assert.Equal([BlackMetallic, null], adder.Colours.Select(colour => colour.Metallic));
         Assert.Equal([0, 0, 0, 156], adder.Combinations[0]);
         // A slot carvariations leaves out is none.
         Assert.Equal([0, null, 0, 156, 0, 0], adder.Combinations[1]);
@@ -136,13 +160,15 @@ public sealed class CarPaintTests
         try
         {
             var tables = new GameTextures.Tables();
-            tables.Colours[27] = ("27 Metallic Red", 0xFFC00E1A);
+            tables.Colours[27] = ("27 Metallic Red", 0xFFC00E1A, Metallic);
+            tables.Colours[156] = ("156 DEFAULT ALLOY COLOR", 0xFF414347, null);
             tables.Combinations[new Hash32("sultan").Value] = [[27, 27, 5, 156, 0, 0], [0, 0, 10, 156]];
             byte[] stamp = [1, 2, 3];
             string cache = Path.Combine(folder, "tables.bin");
             tables.Write(cache, stamp);
             GameTextures.Tables read = GameTextures.Tables.Read(cache, stamp)!;
-            Assert.Equal(("27 Metallic Red", 0xFFC00E1AU), read.Colours[27]);
+            Assert.Equal(("27 Metallic Red", 0xFFC00E1AU, Metallic), read.Colours[27]);
+            Assert.Equal(("156 DEFAULT ALLOY COLOR", 0xFF414347U, (CarMetallic?)null), read.Colours[156]);
             Assert.Equal([[27, 27, 5, 156, 0, 0], [0, 0, 10, 156]], read.Combinations[new Hash32("sultan").Value]);
         }
         finally

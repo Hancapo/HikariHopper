@@ -358,12 +358,15 @@ internal sealed class SurfaceMaterial
             JsonElement own = table.TryGetProperty(shader, out JsonElement found) ? found : default;
             JsonElement Setting(string name) => own.ValueKind == JsonValueKind.Object && own.TryGetProperty(name, out JsonElement value)
                 ? value : table.GetProperty("default").TryGetProperty(name, out JsonElement fallback) ? fallback : default;
-            float Number(string name, string role, float fallback) => Setting(name) is { ValueKind: JsonValueKind.Number } n ? n.GetSingle() : Constant(role, fallback)[0];
             string? Word(string name) => Setting(name) is { ValueKind: JsonValueKind.String } w ? w.GetString() : null;
 
-            v[2] = Number("scale", "specular_intensity", .125f);
-            v[1] = Number("power_scale", "specular_falloff", 100);
-            v[0] = Setting("fresnel").ValueKind == JsonValueKind.Number ? Setting("fresnel").GetSingle() : Constant("fresnel", .97f)[0];
+            // A paint slot's material is drawn with its colour's metallic setting in place of its own specular, as the
+            // game sets it on each draw: specInt, specFalloff and specFresnel for whichever of the three it has.
+            CarMetallic? metallic = paint.Metallic(PaintLayer(Constant("paint_colour", 1, 1, 1)));
+            float Own(string role, float fallback, float? metal) => Declares("constants", role) && metal is { } value ? value : Constant(role, fallback)[0];
+            v[2] = Setting("scale") is { ValueKind: JsonValueKind.Number } scale ? scale.GetSingle() : Own("specular_intensity", .125f, metallic?.Intensity);
+            v[1] = Setting("power_scale") is { ValueKind: JsonValueKind.Number } power ? power.GetSingle() : Own("specular_falloff", 100, metallic?.Falloff);
+            v[0] = Setting("fresnel").ValueKind == JsonValueKind.Number ? Setting("fresnel").GetSingle() : Own("fresnel", .97f, metallic?.Fresnel);
             if (Setting("bump") is { ValueKind: JsonValueKind.Number } bump)
                 v[3] = bump.GetSingle();
             v[36] = Word("map") switch { "masked" => 1, "red" => 2, _ => 0 };
@@ -422,12 +425,14 @@ internal sealed class SurfaceMaterial
     /// 5 interior and 6 dashboard, drawn in <paramref name="paint"/>'s colours (the game's grey for each, the fifth
     /// white, without). Any other value is the colour itself.
     /// </summary>
-    internal static Vector3 PaintColour(ReadOnlySpan<float> value, VehiclePaint? paint = null)
-    {
-        Vector3 colour = new(value.Length > 0 ? value[0] : 1, value.Length > 1 ? value[1] : 1, value.Length > 2 ? value[2] : 1);
-        return MathF.Abs(colour.X - 2) < .001f && MathF.Round(colour.Y) is >= 1 and <= 7
-            ? (paint ?? VehiclePaint.Unset).Layer((int)MathF.Round(colour.Y)) : colour;
-    }
+    internal static Vector3 PaintColour(ReadOnlySpan<float> value, VehiclePaint? paint = null) =>
+        PaintLayer(value) is int layer and > 0
+            ? (paint ?? VehiclePaint.Unset).Layer(layer)
+            : new(value.Length > 0 ? value[0] : 1, value.Length > 1 ? value[1] : 1, value.Length > 2 ? value[2] : 1);
+
+    /// <summary>The paint slot, 1 to 7, a vehicle material's matDiffuseColor (2, n, n) names; 0 for a colour.</summary>
+    internal static int PaintLayer(ReadOnlySpan<float> value) =>
+        value.Length > 1 && MathF.Abs(value[0] - 2) < .001f && MathF.Round(value[1]) is >= 1 and <= 7 and var layer ? (int)layer : 0;
 
     private static IEnumerable<string> Names(string group, string role) =>
         Mapping.RootElement.GetProperty(group).TryGetProperty(role, out JsonElement names) ? names.EnumerateArray().Select(n => n.GetString()!) : [];

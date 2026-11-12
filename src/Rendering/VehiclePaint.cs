@@ -6,13 +6,20 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// One of the game's car colours (carcols.ymt): its number, which carvariations and the game's scripts name it by, its
-/// name as the viewer shows it, its colour, and the finish it's sold as.
+/// name as the viewer shows it, its colour, the finish it's sold as, and the specular carcols gives it (its metallicID's
+/// setting), none for a colour that keeps its material's.
 /// </summary>
-public sealed record CarColour(int Index, string Name, uint Argb, string Finish)
+public sealed record CarColour(int Index, string Name, uint Argb, string Finish, CarMetallic? Metallic = null)
 {
     /// <summary>Its colour in sRGB, 0 to 1, as a paint slot takes it.</summary>
     public Vector3 Srgb => new(((Argb >> 16) & 0xFF) / 255f, ((Argb >> 8) & 0xFF) / 255f, (Argb & 0xFF) / 255f);
 }
+
+/// <summary>
+/// One of carcols' metallic settings: the specular a paint slot is drawn with in place of its material's, the game's
+/// specInt for SpecularColor (the intensity), specFalloff for Specular (the power) and specFresnel for Fresnel.
+/// </summary>
+public sealed record CarMetallic(float Intensity, float Falloff, float Fresnel);
 
 /// <summary>
 /// What a car can be painted with: the game's colours, and the model's combinations of them (carvariations.ymt), each
@@ -32,9 +39,10 @@ public sealed record CarPaints(IReadOnlyList<CarColour> Colours, IReadOnlyList<i
 /// <summary>
 /// The colours a vehicle's paint slots are drawn in: primary, secondary, pearlescent, wheels, interior and dashboard,
 /// each the game's grey where nothing sets it. A vehicle shader's matDiffuseColor (2, n, n) names slot n: 1 to 4 these
-/// first four, 5 one the game leaves white, 6 and 7 the last two.
+/// first four, 5 one the game leaves white, 6 and 7 the last two. Each slot's colour may carry a metallic setting, which
+/// the game draws that slot's paint materials with.
 /// </summary>
-public sealed record VehiclePaint(IReadOnlyList<Vector3?> Colours)
+public sealed record VehiclePaint(IReadOnlyList<Vector3?> Colours, IReadOnlyList<CarMetallic?>? Metallics = null)
 {
     /// <summary>The slots, in the order carvariations lists their colours.</summary>
     public static readonly string[] Slots = ["Primary", "Secondary", "Pearlescent", "Wheels", "Interior", "Dashboard"];
@@ -45,8 +53,11 @@ public sealed record VehiclePaint(IReadOnlyList<Vector3?> Colours)
     private static readonly Vector3 Grey = new(150 / 255f);
 
     /// <summary>The colours of the six slots, numbered as <paramref name="paints"/> lists them.</summary>
-    public static VehiclePaint Of(CarPaints paints, IReadOnlyList<int?> indices) =>
-        new([.. Enumerable.Range(0, Slots.Length).Select(slot => slot < indices.Count ? paints.Colour(indices[slot])?.Srgb : null)]);
+    public static VehiclePaint Of(CarPaints paints, IReadOnlyList<int?> indices)
+    {
+        CarColour?[] colours = [.. Enumerable.Range(0, Slots.Length).Select(slot => slot < indices.Count ? paints.Colour(indices[slot]) : null)];
+        return new([.. colours.Select(colour => colour?.Srgb)], [.. colours.Select(colour => colour?.Metallic)]);
+    }
 
     /// <summary>What matDiffuseColor (2, <paramref name="layer"/>, n) draws: the slot's colour, white for the fifth.</summary>
     public Vector3 Layer(int layer) => layer switch
@@ -55,6 +66,17 @@ public sealed record VehiclePaint(IReadOnlyList<Vector3?> Colours)
         5 => Vector3.One,
         6 or 7 => Colours[layer - 2] ?? Grey,
         _ => Grey,
+    };
+
+    /// <summary>
+    /// The metallic setting matDiffuseColor (2, <paramref name="layer"/>, n) is drawn with: its slot's colour's, none
+    /// for the fifth or a colour without one, which keeps the material's own specular.
+    /// </summary>
+    public CarMetallic? Metallic(int layer) => Metallics is null ? null : layer switch
+    {
+        >= 1 and <= 4 when layer - 1 < Metallics.Count => Metallics[layer - 1],
+        6 or 7 when layer - 2 < Metallics.Count => Metallics[layer - 2],
+        _ => null,
     };
 }
 

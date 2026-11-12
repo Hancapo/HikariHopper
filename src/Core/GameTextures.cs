@@ -24,7 +24,7 @@ public sealed class GameTextures
     // 4: RPFs the game doesn't mount itself are in the tables too (3 also had loose files, which tools' caches in the
     // game folder made stale on every run and which ranked stray copies over the game's own files).
     // 5: the game's car colours and each vehicle's combinations of them.
-    private const int FormatVersion = 5;
+    private const int FormatVersion = 6;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -170,8 +170,8 @@ public sealed class GameTextures
         // Model name hash → the dictionaries its archetypes name.
         public Dictionary<uint, uint[]> Models { get; } = [];
 
-        // Car colour number → its name as carcols has it, and its colour.
-        public Dictionary<int, (string Name, uint Argb)> Colours { get; } = [];
+        // Car colour number → its name as carcols has it, its colour, and its metallic setting if it has one.
+        public Dictionary<int, (string Name, uint Argb, Rendering.CarMetallic? Metallic)> Colours { get; } = [];
         // Vehicle model name hash → its colour combinations (carvariations): each the slots' colour numbers, -1 for none.
         public Dictionary<uint, int[][]> Combinations { get; } = [];
         private IReadOnlyList<Rendering.CarColour>? colours;
@@ -181,7 +181,7 @@ public sealed class GameTextures
             if (Colours.Count == 0)
                 return null;
             colours ??= [.. Colours.OrderBy(pair => pair.Key).Select(pair =>
-                new Rendering.CarColour(pair.Key, Rendering.CarColourNames.Tidy(pair.Value.Name), pair.Value.Argb, Rendering.CarColourNames.Finish(pair.Value.Name)))];
+                new Rendering.CarColour(pair.Key, Rendering.CarColourNames.Tidy(pair.Value.Name), pair.Value.Argb, Rendering.CarColourNames.Finish(pair.Value.Name), pair.Value.Metallic))];
             string stem = Path.GetFileNameWithoutExtension(modelName);
             if (!Combinations.TryGetValue(new Hash32(stem).Value, out int[][]? combinations)
                 // A vehicle's high-detail model is the vehicle's.
@@ -271,7 +271,8 @@ public sealed class GameTextures
             // The car colours (carcols) and each vehicle's combinations of them (carvariations), as the game has them now.
             FiveFury.VehicleMeta.VehicleAppearanceIndex vehicles = cache.GetVehicleAppearanceIndex();
             foreach (FiveFury.VehicleMeta.ResolvedVehicleColor colour in vehicles.Colors())
-                tables.Colours[colour.Index] = (colour.Name, colour.PackedArgb);
+                tables.Colours[colour.Index] = (colour.Name, colour.PackedArgb, colour.Metallic is { } metallic
+                    ? new Rendering.CarMetallic(metallic.SpecularIntensity, metallic.SpecularFalloff, metallic.SpecularFresnel) : null);
             foreach (Hash32 model in vehicles.VariationModels)
                 if (vehicles.FindVariation(model) is { Colors.Count: > 0 } variation)
                     tables.Combinations[model.Value] = [.. variation.Colors.Select(combination => combination.Indices.ToArray())];
@@ -329,11 +330,18 @@ public sealed class GameTextures
                         writer.Write(dictionary);
                 }
                 writer.Write(Colours.Count);
-                foreach (var (index, (name, argb)) in Colours)
+                foreach (var (index, (name, argb, metallic)) in Colours)
                 {
                     writer.Write(index);
                     writer.Write(name);
                     writer.Write(argb);
+                    writer.Write(metallic is not null);
+                    if (metallic is not null)
+                    {
+                        writer.Write(metallic.Intensity);
+                        writer.Write(metallic.Falloff);
+                        writer.Write(metallic.Fresnel);
+                    }
                 }
                 writer.Write(Combinations.Count);
                 foreach (var (model, combinations) in Combinations)
@@ -377,7 +385,8 @@ public sealed class GameTextures
                 tables.Models[model] = declared;
             }
             for (int i = reader.ReadInt32(); i > 0; i--)
-                tables.Colours[reader.ReadInt32()] = (reader.ReadString(), reader.ReadUInt32());
+                tables.Colours[reader.ReadInt32()] = (reader.ReadString(), reader.ReadUInt32(),
+                    reader.ReadBoolean() ? new Rendering.CarMetallic(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()) : null);
             for (int i = reader.ReadInt32(); i > 0; i--)
             {
                 uint model = reader.ReadUInt32();
