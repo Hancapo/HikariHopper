@@ -56,6 +56,38 @@ public sealed class GameTextures
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
+    /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
+    internal static GameTextures Share(string gameRoot, Func<Tables> make) =>
+        Shared[Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot))] = new GameTextures(Path.GetFullPath(gameRoot), make);
+
+    /// <summary>
+    /// Waits while the tables of a game whose folder holds <paramref name="path"/> are being made: that reads the game's
+    /// RPFs, mods' included, and holds each open until it's done, and Windows doesn't replace, rename or delete an open
+    /// file. Making them takes seconds on a real game, and is only done when its archives changed since the tables
+    /// were cached. Returns at once for anything but an RPF or a folder, which may hold some.
+    /// </summary>
+    public static void WaitForArchiveReaders(string path)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (!full.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) && !Directory.Exists(full))
+            return;
+        foreach (GameTextures textures in Shared.Values)
+        {
+            string root = Path.TrimEndingDirectorySeparator(textures.root);
+            bool inside = full.Equals(root, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                // A folder over the game's holds its archives too.
+                || root.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            Task? running;
+            lock (textures.gate)
+                running = textures.loading;
+            if (!inside || running is null)
+                continue;
+            // Whether the tables could be made doesn't matter here, only that nothing reads the archives any more.
+            Task.WhenAny(running).Wait();
+        }
+    }
+
     /// <summary>The game folder.</summary>
     public string Root => root;
 

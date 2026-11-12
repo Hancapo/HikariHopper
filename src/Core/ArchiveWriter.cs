@@ -88,6 +88,7 @@ public static class ArchiveWriter
                 output.Flush(flushToDisk: true);
             }
             finally { root.Close(); }
+            GameTextures.WaitForArchiveReaders(path);
             File.Move(staging, path, overwrite: true);
         }
         finally
