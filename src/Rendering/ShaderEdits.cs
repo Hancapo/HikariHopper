@@ -44,6 +44,8 @@ internal sealed class ShaderEdits
     private bool joinNext;
     // Geometries given an entry of their own, now and as last saved: each adds an entry to the file.
     private int splits, savedSplits;
+    // What the last save writes (its snapshot), until it is marked saved: entries read again meanwhile take its values.
+    private Dictionary<DrawableMaterial, Dictionary<string, float[]>>? writing;
 
     /// <summary>Raised after an entry's values changed, by an edit, a reset or an undo.</summary>
     public event Action<DrawableMaterial>? Changed;
@@ -234,16 +236,19 @@ internal sealed class ShaderEdits
         var now = new Dictionary<DrawableMaterial, Dictionary<string, float[]>>(ReferenceEqualityComparer.Instance);
         foreach ((DrawableMaterial material, Dictionary<string, float[]> own) in originals)
             now[material] = own.Keys.ToDictionary(name => name, name => Current(material, name), StringComparer.Ordinal);
+        writing = now;
         return new ShaderSnapshot(now, splits);
     }
 
     /// <summary>
     /// The values a save wrote (<see cref="Snapshot"/>, taken when it started) become the file's: changes made while it
-    /// ran stay changed.
+    /// ran stay changed. Drawables read again while it ran have its values under their new entries.
     /// </summary>
     public void MarkSaved(ShaderSnapshot saved)
     {
         savedSplits = saved.Splits;
+        if (ReferenceEquals(saved.Values, writing))
+            writing = null;
         foreach ((DrawableMaterial material, Dictionary<string, float[]> values) in saved.Values)
             if (originals.TryGetValue(material, out var own))
                 foreach ((string name, float[] value) in values)
@@ -277,6 +282,14 @@ internal sealed class ShaderEdits
             for (int i = 0; i < after.Count; i++)
                 if (after[i] == now)
                     carried.Add(i);
+        }
+        // A save under way marks its values saved on the entries they now live in.
+        if (writing is not null)
+        {
+            var moved = writing.Where(entry => map.ContainsKey(entry.Key)).Select(entry => (Now: map[entry.Key], entry.Value)).ToList();
+            writing.Clear();
+            foreach ((DrawableMaterial now, Dictionary<string, float[]> values) in moved)
+                writing[now] = values;
         }
         // A geometry given an entry of its own isn't in what was read again, so its step can't be undone there.
         for (int s = steps.Count - 1; s >= 0; s--)
