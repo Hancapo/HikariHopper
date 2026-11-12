@@ -99,11 +99,16 @@ public sealed class LoadingTrain : Control
     private readonly Stopwatch clock = new();
     private readonly DispatcherTimer ticker;
 
+    // While it runs with motion reduced, a slow look at the Windows setting, so turning animations back on mid-load
+    // sets it going again.
+    private readonly DispatcherTimer watcher;
+
     public LoadingTrain()
     {
         Width = FrameWidth;
         Height = FrameHeight;
         ticker = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => InvalidateVisual());
+        watcher = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => WatchMotion());
     }
 
     /// <summary>Set by tests to draw the train at a moment of their choosing, in seconds.</summary>
@@ -111,6 +116,16 @@ public sealed class LoadingTrain : Control
 
     /// <summary>Whether it is asking for frames.</summary>
     internal bool Animating => ticker.IsEnabled;
+
+    /// <summary>Whether it is waiting for motion to be turned back on.</summary>
+    internal bool Watching => watcher.IsEnabled;
+
+    /// <summary>The watcher's look: once motion is back on, the train moves again.</summary>
+    internal void WatchMotion()
+    {
+        if (!Motion.Reduced)
+            Restart();
+    }
 
     /// <summary>The moment it draws: the clock while it moves, else a still moment with smoke in the air.</summary>
     private double Time => TimeOverride ?? (ticker.IsEnabled ? clock.Elapsed.TotalSeconds : StillMoment);
@@ -132,11 +147,13 @@ public sealed class LoadingTrain : Control
     {
         base.OnDetachedFromVisualTree(e);
         ticker.Stop();
+        watcher.Stop();
     }
 
     private void Restart()
     {
-        bool moving = IsRunning && !Motion.Reduced && VisualRoot is not null;
+        bool shown = IsRunning && VisualRoot is not null;
+        bool moving = shown && !Motion.Reduced;
         if (moving && !ticker.IsEnabled)
         {
             clock.Restart();
@@ -146,14 +163,18 @@ public sealed class LoadingTrain : Control
         {
             ticker.Stop();
         }
+        watcher.IsEnabled = shown && !moving;
         InvalidateVisual();
     }
 
     public override void Render(DrawingContext context)
     {
-        // Motion turned off in Windows mid-load stills the train at once.
+        // Motion turned off in Windows mid-load stills the train at once, and the watcher waits for it to come back.
         if (ticker.IsEnabled && Motion.Reduced)
+        {
             ticker.Stop();
+            watcher.Start();
+        }
         double t = Time;
         DrawTrack(context, t);
         using (context.PushTransform(Matrix.CreateTranslation(TenderX, TrainY)))
