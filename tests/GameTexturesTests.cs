@@ -1,5 +1,6 @@
 using CommonFury.Hashing;
 using FiveFury;
+using FiveFury.Rpf;
 using HikariHopper.Core;
 
 namespace HikariHopper.Tests;
@@ -211,5 +212,77 @@ public sealed class GameTexturesTests : IDisposable
         new GameTextures(game, GameTarget.Legacy, Build).Restamp(x64a);
         await Loaded();
         Assert.Equal(4, builds);
+    }
+
+    private int builds;
+
+    private GameTextures.Tables Counted()
+    {
+        Interlocked.Increment(ref builds);
+        return new GameTextures.Tables();
+    }
+
+    /// <summary>A game with one RPF (a texture dictionary and a meta in it), shared as the app's saves find it, its tables made.</summary>
+    private async Task<string> SharedGame()
+    {
+        string game = Directory.CreateDirectory(Path.Combine(scratch, "game")).FullName;
+        var archive = new RpfArchive("x64a.rpf");
+        archive.AddBinary("textures.ytd", [1]);
+        archive.AddBinary("data/carvariations.meta", "<Item />"u8.ToArray());
+        string rpf = Path.Combine(game, "x64a.rpf");
+        archive.Save(rpf);
+        await GameTextures.Share(game, Counted).Load();
+        Assert.Equal(1, builds);
+        return rpf;
+    }
+
+    /// <summary>How many times the tables were made, once the game loads afresh, as on the next run.</summary>
+    private async Task<int> BuildsOnTheNextRun(string rpf)
+    {
+        await new GameTextures(Path.GetDirectoryName(rpf)!, GameTarget.Legacy, Counted).Load();
+        return builds;
+    }
+
+    [Fact]
+    public async Task An_explorer_change_to_an_rpf_isnt_kept_in_the_cache_by_a_texture_save_after_it()
+    {
+        try
+        {
+            string rpf = await SharedGame();
+            // An entry added to the RPF, then a texture dictionary saved into it: the tables in memory are as before
+            // the entry was added, so they're made again.
+            EntryOperations.CreateFolderAt(new EntryCreationTarget(ArchivePath: rpf), "added");
+            ArchiveWriter.ReplaceEntry(rpf, null, "textures.ytd", [2, 2]);
+            await GameTextures.Rewritten(rpf);
+            Assert.Equal(2, await BuildsOnTheNextRun(rpf));
+        }
+        finally
+        {
+            GameTextures.ForgetAll();
+        }
+    }
+
+    [Fact]
+    public async Task Only_a_texture_dictionary_or_a_model_saved_into_an_rpf_keeps_the_cache()
+    {
+        try
+        {
+            string rpf = await SharedGame();
+            ArchiveWriter.ReplaceEntry(rpf, null, "textures.ytd", [2, 2]);
+            await GameTextures.Rewritten(rpf);
+            Assert.Equal(1, await BuildsOnTheNextRun(rpf));
+
+            // A meta saved, which the tables may be made from: not kept, nor by a texture dictionary saved after it.
+            ArchiveWriter.ReplaceEntry(rpf, null, "data/carvariations.meta", "<Item edited=\"1\" />"u8.ToArray());
+            await GameTextures.Rewritten(rpf);
+            Assert.Equal(2, await BuildsOnTheNextRun(rpf));
+            ArchiveWriter.ReplaceEntry(rpf, null, "textures.ytd", [3, 3, 3]);
+            await GameTextures.Rewritten(rpf);
+            Assert.Equal(3, await BuildsOnTheNextRun(rpf));
+        }
+        finally
+        {
+            GameTextures.ForgetAll();
+        }
     }
 }

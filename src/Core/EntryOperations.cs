@@ -346,6 +346,8 @@ public static class EntryOperations
             }
             // Kept until the import is done, so an undone import can put the old file back.
             replaced.Add((destination, backup));
+            // A game's RPF replaced by another has the game's texture tables made again.
+            GameTextures.Changed(destination);
             try
             {
                 File.Move(staging, destination);

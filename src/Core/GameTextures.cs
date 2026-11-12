@@ -17,7 +17,8 @@ namespace HikariHopper.Core;
 /// fix/touhou.rpf, or OpenIV's mods folder) take part too, over the game's own files.
 /// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done while the game loads,
 /// and what it gives is kept as a few tables, cached on disk until the game's archives change. HikariHopper's own saves
-/// of a file's contents into an RPF keep the cache (<see cref="Rewritten"/>), as they change no table.
+/// of a texture dictionary or a model into an RPF keep the cache (<see cref="Rewritten"/>), as they change no table;
+/// anything else it changes in an RPF has the tables made again (<see cref="Changed"/>).
 /// FiveFury's own index of what each archive holds and declares is kept beside them, so making the tables again
 /// after an archive changes reads only that archive, not the whole game.
 /// </summary>
@@ -44,6 +45,9 @@ public sealed class GameTextures
     private Task<Tables>? loading;
     // The game's archives as they were when the tables in memory were read or made; null until then.
     private IReadOnlyList<ArchiveState>? madeFrom;
+    // Set once HikariHopper changes the game's archives in a way the tables may not hold (see Changed): the tables in
+    // memory are as they were before, so no later save keeps the cache with them.
+    private bool stale;
 
     /// <summary>Tables made by <paramref name="build"/> when the cache has none for the game as it is, not shared; for tests.</summary>
     internal GameTextures(string root, GameTarget target, Func<Tables> build) => (this.root, this.target, this.build) = (root, target, build);
@@ -79,23 +83,51 @@ public sealed class GameTextures
     /// </summary>
     public static void WaitForArchiveReaders(string path)
     {
-        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (!full.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) && !Directory.Exists(full))
-            return;
-        foreach (GameTextures textures in Shared.Values)
+        foreach (GameTextures textures in Holding(path))
         {
-            string root = Path.TrimEndingDirectorySeparator(textures.root);
-            bool inside = full.Equals(root, StringComparison.OrdinalIgnoreCase)
-                || full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                // A folder over the game's holds its archives too.
-                || root.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
             Task? running;
             lock (textures.gate)
                 running = textures.loading;
-            if (!inside || running is null)
+            if (running is null)
                 continue;
             // Whether the tables could be made doesn't matter here, only that nothing reads the archives any more.
             Task.WhenAny(running).Wait();
+        }
+    }
+
+    /// <summary>
+    /// HikariHopper changed <paramref name="path"/>, an RPF on disk (or a folder holding some), other than by saving new
+    /// contents over a texture dictionary or a model in it (<see cref="KeepsTables"/>): entries added, removed or
+    /// renamed, or another file saved, such as a meta or a ytyp the tables are made from. The tables may no longer hold,
+    /// so no later save keeps the cache of a game holding it (<see cref="Rewritten"/>), and they are made again the next
+    /// time the game loads.
+    /// </summary>
+    public static void Changed(string path)
+    {
+        foreach (GameTextures textures in Holding(path))
+            lock (textures.writing)
+                textures.stale = true;
+    }
+
+    /// <summary>Whether saving new contents over the file <paramref name="entryPath"/> in an RPF leaves the tables as
+    /// they are: a texture dictionary or a model, whose contents no table is made from.</summary>
+    public static bool KeepsTables(string entryPath) =>
+        Path.GetExtension(entryPath).ToLowerInvariant() is ".ytd" or ".ydr" or ".yft" or ".ydd";
+
+    /// <summary>The games whose folder holds <paramref name="path"/>, an RPF or a folder; none for anything else.</summary>
+    private static IEnumerable<GameTextures> Holding(string path)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (!full.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase) && !Directory.Exists(full))
+            yield break;
+        foreach (GameTextures textures in Shared.Values)
+        {
+            string root = Path.TrimEndingDirectorySeparator(textures.root);
+            if (full.Equals(root, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                // A folder over the game's holds its archives too.
+                || root.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                yield return textures;
         }
     }
 
@@ -196,7 +228,8 @@ public sealed class GameTextures
     /// HikariHopper wrote <paramref name="archivePath"/>, an RPF on disk, changing only the contents of files in it (a
     /// texture dictionary or a model saved): the tables still hold, so each game's cache that holds that RPF is kept for
     /// the game as it is now, rather than made again the next time the game loads. Not when anything else of the
-    /// game's archives changed since its tables were read: they're made again then.
+    /// game's archives changed since its tables were read, nor once HikariHopper changed them otherwise
+    /// (<see cref="Changed"/>): they're made again then.
     /// </summary>
     public static Task Rewritten(string archivePath)
     {
@@ -215,7 +248,7 @@ public sealed class GameTextures
     {
         lock (writing)
         {
-            if (madeFrom is not { } before || loading is not { IsCompletedSuccessfully: true } done)
+            if (stale || madeFrom is not { } before || loading is not { IsCompletedSuccessfully: true } done)
                 return;
             string written = Path.GetRelativePath(root, archivePath).ToUpperInvariant();
             IReadOnlyList<ArchiveState> now;
