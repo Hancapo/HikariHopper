@@ -17,8 +17,8 @@ namespace HikariHopper.Rendering;
 internal sealed record ShaderValue(string Name, string Label, string Group, int Components, int Order,
     (float Min, float Max)? Range = null, bool Colour = false, string Legacy = "");
 
-/// <summary>What a save wrote: the changed values as they were when it started, and how many geometries had entries of their own.</summary>
-internal sealed record ShaderSnapshot(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Values, int Splits);
+/// <summary>What a save wrote: the changed values as they were when it started, and the entries geometries had been given of their own.</summary>
+internal sealed record ShaderSnapshot(IReadOnlyDictionary<DrawableMaterial, Dictionary<string, float[]>> Values, IReadOnlyList<DrawableMaterial> Splits);
 
 /// <summary>
 /// The shader values edited in a 3D viewer: each change goes into the shader entries read (so the next save writes it)
@@ -45,8 +45,13 @@ internal sealed class ShaderEdits
     private bool open;
     // Whether the next change joins the last step: the first change after a geometry was given an entry of its own.
     private bool joinNext;
-    // Geometries given an entry of their own, now and as last saved: each adds an entry to the file.
-    private int splits, savedSplits;
+    // The entries geometries were given of their own, now and as last saved: each adds an entry to the file. Which ones,
+    // not how many: a split undone and another made is a change.
+    private readonly List<DrawableMaterial> splits = [];
+    private DrawableMaterial[] savedSplits = [];
+    // What the last save writes (its snapshot), until it is marked saved: entries read again meanwhile take its values.
+    private Dictionary<DrawableMaterial, Dictionary<string, float[]>>? writing;
+    private List<DrawableMaterial>? writingSplits;
 
     /// <summary>Raised after an entry's values changed, by an edit, a reset or an undo.</summary>
     public event Action<DrawableMaterial>? Changed;
@@ -55,7 +60,7 @@ internal sealed class ShaderEdits
     public event Action? StructureChanged;
 
     /// <summary>Whether any value differs from the file's, or a geometry was given an entry of its own since.</summary>
-    public bool Dirty => splits != savedSplits || originals.Any(entry =>
+    public bool Dirty => !SameSplits(splits, savedSplits) || originals.Any(entry =>
     {
         Dictionary<string, float[]> now = CurrentAll(entry.Key);
         return entry.Value.Any(value => !Same(value.Value, now.GetValueOrDefault(value.Key) ?? []));
@@ -163,7 +168,7 @@ internal sealed class ShaderEdits
         ushort before = geometry.MaterialIndex;
         list.Add(copy);
         geometry.MaterialIndex = (ushort)(list.Count - 1);
-        splits++;
+        splits.Add(copy);
         undone.Clear();
         steps.Add(new Step
         {
@@ -172,21 +177,27 @@ internal sealed class ShaderEdits
                 geometry.MaterialIndex = before;
                 list.Remove(copy);
                 originals.Remove(copy);
-                splits--;
+                splits.Remove(copy);
             },
             Redo = () =>
             {
                 list.Add(copy);
                 geometry.MaterialIndex = (ushort)(list.Count - 1);
-                splits++;
+                splits.Add(copy);
             },
         });
         joinNext = true;
         return copy;
     }
 
-    /// <summary>Whether a geometry was given an entry of its own that isn't saved yet.</summary>
-    public bool HasUnsavedSplits => splits != savedSplits;
+    /// <summary>
+    /// Whether a geometry was given an entry of its own, or moved back to the one it shared, since the file was read or
+    /// saved, or since the save under way began: the drawables read again from the file wouldn't have it.
+    /// </summary>
+    public bool HasUnsavedSplits => !SameSplits(splits, savedSplits) || writingSplits is { } written && !SameSplits(written, splits);
+
+    private static bool SameSplits(IReadOnlyCollection<DrawableMaterial> a, IReadOnlyCollection<DrawableMaterial> b) =>
+        a.Count == b.Count && a.All(copy => b.Contains(copy, ReferenceEqualityComparer.Instance));
 
     /// <summary>Puts a value back as the file has it, as a step of its own.</summary>
     public void Reset(DrawableMaterial material, string name)
@@ -292,16 +303,20 @@ internal sealed class ShaderEdits
         var now = new Dictionary<DrawableMaterial, Dictionary<string, float[]>>(ReferenceEqualityComparer.Instance);
         foreach ((DrawableMaterial material, Dictionary<string, float[]> own) in originals)
             now[material] = own.Keys.ToDictionary(name => name, name => Current(material, name), StringComparer.Ordinal);
-        return new ShaderSnapshot(now, splits);
+        writing = now;
+        writingSplits = [.. splits];
+        return new ShaderSnapshot(now, writingSplits);
     }
 
     /// <summary>
     /// The values a save wrote (<see cref="Snapshot"/>, taken when it started) become the file's: changes made while it
-    /// ran stay changed.
+    /// ran stay changed. Drawables read again while it ran have its values under their new entries.
     /// </summary>
     public void MarkSaved(ShaderSnapshot saved)
     {
-        savedSplits = saved.Splits;
+        savedSplits = [.. saved.Splits];
+        if (ReferenceEquals(saved.Values, writing))
+            (writing, writingSplits) = (null, null);
         foreach ((DrawableMaterial material, Dictionary<string, float[]> values) in saved.Values)
             if (originals.TryGetValue(material, out var own))
                 foreach ((string name, float[] value) in values)
@@ -336,9 +351,21 @@ internal sealed class ShaderEdits
                 if (after[i] == now)
                     carried.Add(i);
         }
+        // A save under way marks its values saved on the entries they now live in.
+        if (writing is not null)
+        {
+            var moved = writing.Where(entry => map.ContainsKey(entry.Key)).Select(entry => (Now: map[entry.Key], entry.Value)).ToList();
+            writing.Clear();
+            foreach ((DrawableMaterial now, Dictionary<string, float[]> values) in moved)
+                writing[now] = values;
+        }
+        // Read again only once the splits are saved, the drawables have the entries as their own: there are none to
+        // save, and a split's step can't be undone there.
+        splits.Clear();
+        savedSplits = [];
+        writingSplits?.Clear();
         // Undone steps are forgotten, as a change forgets them.
         undone.Clear();
-        // A geometry given an entry of its own isn't in what was read again, so its step can't be undone there.
         for (int s = steps.Count - 1; s >= 0; s--)
         {
             List<Change> step = [.. steps[s].Changes.Where(change => map.ContainsKey(change.Material)).Select(change => change with { Material = map[change.Material] })];
