@@ -1,0 +1,110 @@
+using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Threading;
+using HikariHopper.Views;
+using T = HikariHopper.Ui.Theme;
+
+namespace HikariHopper.Tests;
+
+public sealed class LoadingOverlayTests
+{
+    private static Window Show(Control content)
+    {
+        var window = new Window { Width = 640, Height = 360, Content = content, Background = T.AppBg };
+        window.Show();
+        Pump();
+        return window;
+    }
+
+    private static void Pump()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+
+    // The window's pixels, for telling one frame from another.
+    private static byte[] Pixels(Window window)
+    {
+        using WriteableBitmap frame = window.CaptureRenderedFrame()!;
+        using ILockedFramebuffer buffer = frame.Lock();
+        var bytes = new byte[buffer.RowBytes * buffer.Size.Height];
+        System.Runtime.InteropServices.Marshal.Copy(buffer.Address, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    [AvaloniaFact]
+    public void The_train_moves_only_while_the_overlay_runs_and_motion_is_on()
+    {
+        Ui.Motion.ReducedOverride = false;
+        try
+        {
+            var overlay = new LoadingOverlay { Title = "LOADING GAME", Detail = "Grand Theft Auto V" };
+            Window window = Show(overlay);
+            Assert.False(overlay.Train.Animating);
+            overlay.IsRunning = true;
+            Assert.True(overlay.Train.Animating);
+            overlay.IsRunning = false;
+            Assert.False(overlay.Train.Animating);
+            // With motion reduced it stands still, even while the overlay runs.
+            Ui.Motion.ReducedOverride = true;
+            overlay.IsRunning = true;
+            Assert.False(overlay.Train.Animating);
+            window.Close();
+            Assert.False(overlay.Train.Animating);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void The_train_is_drawn_differently_as_time_passes()
+    {
+        var overlay = new LoadingOverlay { Title = "LOADING GAME", Detail = "Grand Theft Auto V" };
+        Window window = Show(overlay);
+        overlay.Train.TimeOverride = .1;
+        overlay.Train.InvalidateVisual();
+        Pump();
+        byte[] early = Pixels(window);
+        overlay.Train.TimeOverride = .35;
+        overlay.Train.InvalidateVisual();
+        Pump();
+        Assert.NotEqual(early, Pixels(window));
+        // Standing still it shows one moment, smoke in the air: the same each time.
+        overlay.Train.TimeOverride = null;
+        overlay.Train.InvalidateVisual();
+        Pump();
+        byte[] still = Pixels(window);
+        overlay.Train.TimeOverride = 1.0;
+        overlay.Train.InvalidateVisual();
+        Pump();
+        Assert.Equal(still, Pixels(window));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_caption_shows_the_title_over_what_is_loading()
+    {
+        var overlay = new LoadingOverlay { Title = "LOADING GAME", Detail = "Grand Theft Auto V Enhanced" };
+        Window window = Show(overlay);
+        TextBlock[] texts = [.. overlay.GetLogicalDescendants().OfType<TextBlock>()];
+        Assert.Equal(["LOADING GAME", "Grand Theft Auto V Enhanced"], texts.Select(text => text.Text));
+        Assert.True(texts[0].Bounds.Bottom <= texts[1].Bounds.Top);
+        // The train stands over the caption, the whole centred across the window.
+        Rect train = overlay.Train.Bounds;
+        Assert.Equal(new Size(LoadingTrain.FrameWidth, LoadingTrain.FrameHeight), train.Size);
+        Assert.Equal(window.Width / 2, overlay.Train.TranslatePoint(new Point(train.Width / 2, 0), window)!.Value.X, 1);
+        Assert.Equal("LOADING GAME Grand Theft Auto V Enhanced", AutomationProperties.GetName(overlay));
+        window.Close();
+    }
+}

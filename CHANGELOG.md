@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- While a game loads, a steam train runs along a short track over the caption, its wheels and rods turning and its stack puffing smoke, in place of a sliding bar; it stands still when Windows turns animations off. ([#176](https://github.com/Hancapo/HikariHopper/pull/176))
+
 ### Fixed
 
 ### Removed
