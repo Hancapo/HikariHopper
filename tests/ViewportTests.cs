@@ -446,11 +446,11 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.ToggleLevels();
         Assert.False(viewer.LevelsOpen);
         Assert.Equal(0, opened);
-        // The game's afternoon to start with, in quarter hours, on the time button and in its dropdown.
+        // The game's afternoon to start with, on the time button, its small dial, and the dial in its dropdown.
         Assert.Equal("14:30", viewer.TimeButton.Text);
-        Assert.Equal("14:30", viewer.SunText.Text);
         Assert.False(viewer.TimeOpen);
-        Assert.Equal(58, viewer.SunSlider.Value);
+        Assert.Equal((14.5f, 14.5f), (viewer.Dial.Hours, viewer.TimeGlyph.Hours));
+        Assert.True(viewer.TimeGlyph.Compact);
         Assert.Equal(14.5f, viewer.Hours);
 
         // No toolbar: what is drawn over the model is a row over the view, as in Blender: its shadows, skeleton,
@@ -558,12 +558,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
 
         viewer.SetHours(18.25f);
         Assert.Equal(18.25f, viewer.Hours);
-        Assert.Equal("18:15", viewer.SunText.Text);
         Assert.Equal("18:15", viewer.TimeButton.Text);
-        Assert.Equal(73, viewer.SunSlider.Value);
-        // Midnight at either end.
+        Assert.Equal((18.25f, 18.25f), (viewer.Dial.Hours, viewer.TimeGlyph.Hours));
+        // The dial moved lights the model at its time.
+        viewer.Dial.Step(-1);
+        Assert.Equal(18f, viewer.Hours);
+        Assert.Equal("18:00", viewer.TimeButton.Text);
+        Assert.Equal(18f, viewer.TimeGlyph.Hours);
+        // Midnight is one place.
         viewer.SetHours(24);
-        Assert.Equal("00:00", viewer.SunText.Text);
+        Assert.Equal("00:00", viewer.TimeButton.Text);
     }
 
     [AvaloniaFact]
@@ -844,7 +848,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         viewer.ToggleTime();
         Assert.True(viewer.TimeOpen);
         Assert.True(viewer.TimeButton.Sunken);
-        Assert.Contains(viewer.SunSlider, Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.SunSlider).OfType<Avalonia.Controls.Window>()
+        Assert.Contains(viewer.Dial, Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.Dial).OfType<Avalonia.Controls.Window>()
             .SelectMany(owner => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(owner)));
         Assert.True(viewer.Viewport.IsVisible);
         viewer.ToggleTime();
@@ -857,7 +861,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         ExplorerStateRenders.Pump(450);
         viewer.ToggleTime();
         Assert.True(viewer.TimeOpen);
-        var dropdown = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.SunSlider).OfType<Avalonia.Controls.Window>().Single();
+        var dropdown = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.Dial).OfType<Avalonia.Controls.Window>().Single();
         // As the platform says it lost the keyboard (the headless one doesn't move it between windows itself).
         object platform = dropdown.PlatformImpl!;
         var deactivated = (Action?)platform.GetType().GetInterfaces().Append(platform.GetType())

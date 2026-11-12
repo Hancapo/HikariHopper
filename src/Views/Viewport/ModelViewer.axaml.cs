@@ -56,9 +56,8 @@ public partial class ModelViewer : UserControl, IModalContent
             StatusText.Foreground = Ui.Theme.Error;
         };
         Viewport.EscapePressed += Close;
-        SunSlider.Value = Math.Round(DayCycle.DefaultHours * 4);
-        SunText.Text = TimeButton.Text = Clock(DayCycle.DefaultHours);
-        SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
+        TimeButton.Text = TimeDial.Clock(DayCycle.DefaultHours);
+        Dial.Moved += SetHours;
         timeBody = TimeBody();
         TimeButton.Click += (_, _) => ToggleTime();
         ThemedToolTip.Set(TimeButton, "Time of day");
@@ -661,17 +660,8 @@ public partial class ModelViewer : UserControl, IModalContent
             e.Handled = true;
     }
 
-    /// <summary>The time of day in its dropdown: quarter hours, with marks every six hours.</summary>
-    internal TextureMipSlider SunSlider { get; } = new() { Maximum = 96, TickCount = 5, Width = 212 };
-
-    /// <summary>The time of day the slider is at, in the dropdown's corner.</summary>
-    internal TextBlock SunText { get; } = new()
-    {
-        FontFamily = Ui.Theme.MonoFont,
-        FontSize = Ui.Theme.SmallFontSize,
-        Foreground = Ui.Theme.Text,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-    };
+    /// <summary>The time of day in its dropdown: a dial of the day, the sun or moon on it, in quarter hours.</summary>
+    internal TimeDial Dial { get; } = new() { Width = 152, Height = 152 };
 
     private readonly Control timeBody;
     private DropdownWindow? timeDropdown;
@@ -682,37 +672,13 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private Control TimeBody()
     {
-        Avalonia.Automation.AutomationProperties.SetName(SunSlider, "Time of day");
-        DockPanel.SetDock(SunText, Dock.Right);
-        return new StackPanel
-        {
-            Margin = new Thickness(12, 10, 12, 12),
-            Spacing = 10,
-            Children =
-            {
-                new DockPanel
-                {
-                    Children =
-                    {
-                        SunText,
-                        new TextBlock
-                        {
-                            Text = "Time of day",
-                            FontFamily = Ui.Theme.UiFont,
-                            FontSize = Ui.Theme.SmallFontSize,
-                            Foreground = Ui.Theme.TextDim,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                        },
-                    },
-                },
-                SunSlider,
-            },
-        };
+        Avalonia.Automation.AutomationProperties.SetName(Dial, "Time of day");
+        return new Border { Padding = new Thickness(12, 10, 12, 12), Child = Dial };
     }
 
     /// <summary>
-    /// Opens the time of day's slider above its button, a window of its own so the viewport doesn't cover it, or closes
-    /// it; the button sits raised while it is open.
+    /// Opens the time of day's dial above its button, a window of its own so the viewport doesn't cover it, or closes
+    /// it; the button sits raised while it is open, and the dial takes the keyboard.
     /// </summary>
     internal void ToggleTime()
     {
@@ -728,6 +694,7 @@ public partial class ModelViewer : UserControl, IModalContent
         if (timeDropdown is null)
             return;
         TimeButton.Sunken = true;
+        Dial.Focus();
         timeDropdown.Closed += (_, _) =>
         {
             timeDropdown = null;
@@ -740,18 +707,12 @@ public partial class ModelViewer : UserControl, IModalContent
     internal void SetHours(float hours)
     {
         Viewport.SetTime(hours);
-        SunText.Text = TimeButton.Text = Clock(hours);
-        SunSlider.SyncValue((int)Math.Round(hours * 4));
+        TimeButton.Text = TimeDial.Clock(hours);
+        Dial.Hours = TimeGlyph.Hours = hours;
     }
 
     /// <summary>The time of day the model is lit at, in hours.</summary>
     internal float Hours => Viewport.Hours;
-
-    private static string Clock(float hours)
-    {
-        int minutes = (int)Math.Round(hours * 60) % (24 * 60);
-        return $"{minutes / 60:00}:{minutes % 60:00}";
-    }
 
     private bool started;
     // Whether something was read to show, which the keys act on.

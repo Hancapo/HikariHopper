@@ -90,14 +90,13 @@
                   <TextBlock Name="SpeedText" Classes="status" />
                 </StackPanel>
                 <c:SegmentedSwitch Name="CameraSwitch" Height="{x:Static ui:Theme.ModelFooterControlHeight}" VerticalAlignment="Center" />
-                <!-- The time of day the model is lit at, which opens its slider above it. -->
+                <!-- The time of day the model is lit at, on a small dial of the day, which opens the dial above it. -->
                 <Border Name="TimeWell" Classes="well" IsVisible="False">
                   <Panel>
                     <c:ChromeToolButton Name="TimeButton" Classes="tool" Width="80" Padding="14,0,10,0"
                                         AutomationProperties.Name="Time of day" />
-                    <c:LucideIcon IconName="clock" Width="13" Height="13" Margin="8,0,0,0" Weight="1.6"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                    <v:TimeDial Name="TimeGlyph" Compact="True" Width="13" Height="13" Margin="8,0,0,0" Focusable="False"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
                     <c:LucideIcon IconName="chevron-up" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
                                   HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
                                   Stroke="{x:Static ui:Theme.TextDim}" />
