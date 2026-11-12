@@ -179,6 +179,8 @@ internal sealed class PartsPanel : UserControl
         TexturesRow.IsVisible = false;
         DockPanel.SetDock(TexturesRow, Dock.Bottom);
 
+        // The rows move under what points at one of them (the shader card) as they scroll or are laid out again.
+        rows.LayoutUpdated += (_, _) => RowsMoved?.Invoke();
         rows.Margin = new Thickness(0, 4, 0, 4);
         rows.Background = Brushes.Transparent;
         rows.PointerMoved += (_, e) =>
@@ -359,6 +361,40 @@ internal sealed class PartsPanel : UserControl
             Refresh();
         }
     }
+
+    /// <summary>
+    /// The same parts read or built again (with more of their textures, or a geometry given a shader entry of its own):
+    /// the rows open and selected, and the keyboard's place, stay, by key.
+    /// </summary>
+    internal void Replace(IPartList value)
+    {
+        string[] open = [.. expanded], picked = [.. selected];
+        (string? at, string? from) = (cursor, anchor);
+        replacing = true;
+        try
+        {
+            Parts = value;
+        }
+        finally
+        {
+            replacing = false;
+        }
+        // As they were, closed rows too: not the ones a new list opens.
+        expanded.Clear();
+        expanded.UnionWith(open);
+        selected.UnionWith(picked);
+        (cursor, anchor) = (at, from);
+        Refresh();
+    }
+
+    private bool replacing;
+
+    /// <summary>The row selected, when one alone is and it's listed: what the shader card points at.</summary>
+    internal Control? SelectedRow => Selection is [var node]
+        ? rowControls.FirstOrDefault(row => row.Index < Rows.Count && Rows[row.Index].Node.Key == node.Key).Row : null;
+
+    /// <summary>The rows moved: scrolled, or laid out again.</summary>
+    public event Action? RowsMoved;
 
     private bool HasVariants => sections.Any(section => section.Kind == PartSectionKind.Variants);
 
@@ -697,7 +733,8 @@ internal sealed class PartsPanel : UserControl
         Rows = listed;
         selected.IntersectWith(listed.Select(row => row.Item1.Key));
         string[] now = [.. selected.Order(StringComparer.Ordinal)];
-        if (!now.SequenceEqual(toldSelection))
+        // Midway through a replace, the selection is put back before it's told.
+        if (!replacing && !now.SequenceEqual(toldSelection))
         {
             toldSelection = now;
             SelectionChanged?.Invoke();

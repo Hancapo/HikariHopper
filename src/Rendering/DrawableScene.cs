@@ -57,6 +57,37 @@ internal sealed class DrawableScene
 
     public required IReadOnlyList<SurfaceMaterial> Materials { get => materials; init => materials = [.. value]; }
 
+    /// <summary>The geometry each of <see cref="Parts"/> is drawn from: a geometry split by bone is several parts.</summary>
+    public IReadOnlyList<DrawableGeometry> Geometries { get; init; } = [];
+
+    /// <summary>The list of shader entries each of <see cref="Sources"/> is in: its drawable's, or its owner's.</summary>
+    public IReadOnlyList<List<DrawableMaterial>> SourceLists { get; init; } = [];
+
+    // Builds the scene again from the drawables as they are now, with the same textures.
+    private Func<DrawableScene>? rebuild;
+
+    /// <summary>
+    /// The scene built again from the drawables as they are now (a geometry moved to a shader entry of its own, say),
+    /// with the same textures and the same file to write; none when it wasn't built from drawables.
+    /// </summary>
+    public DrawableScene? Rebuild()
+    {
+        if (rebuild?.Invoke() is not { } again)
+            return null;
+        again.Writer = Writer;
+        return again;
+    }
+
+    /// <summary>How many geometries are drawn with a shader entry: what an edit of it changes.</summary>
+    public int GeometriesUsing(DrawableMaterial material)
+    {
+        var geometries = new HashSet<DrawableGeometry>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < Parts.Count && i < Geometries.Count; i++)
+            if (Parts[i].Material < Sources.Count && Sources[Parts[i].Material] == material)
+                geometries.Add(Geometries[i]);
+        return geometries.Count;
+    }
+
     /// <summary>The file the drawables were read from, written again as they are now: with their shader values as edited.</summary>
     public Func<byte[]>? Writer { get; set; }
 
@@ -130,6 +161,8 @@ internal sealed class DrawableScene
         var diagnostics = new List<string>();
         var materials = new List<SurfaceMaterial>();
         var sources = new List<DrawableMaterial>();
+        var sourceLists = new List<List<DrawableMaterial>>();
+        var geometries = new List<DrawableGeometry>();
         // By material list: a drawable placed more than once shares its materials, as do drawables using another's.
         var firstMaterial = new Dictionary<List<DrawableMaterial>, int>(ReferenceEqualityComparer.Instance);
         var placed = new List<(DrawableGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary,
@@ -147,6 +180,7 @@ internal sealed class DrawableScene
                 firstMaterial.Add(entries, first);
                 materials.AddRange(entries.Select(material => SurfaceMaterial.From(material, Resolve)));
                 sources.AddRange(entries);
+                sourceLists.AddRange(entries.Select(_ => entries));
             }
 
             int best = Enumerable.Range(0, 4).Where(lod => drawable.Lods[(DrawableLod)lod].Models.Count > 0).DefaultIfEmpty(-1).First();
@@ -224,6 +258,8 @@ internal sealed class DrawableScene
                 foreach (uint index in used)
                     sum += vertices[baseVertex + (int)index].Position;
                 if (triangles.Count > 0)
+                    geometries.Add(geometry);
+                if (triangles.Count > 0)
                     parts.Add(new SurfacePart(material, first, (uint)triangles.Count, baseVertex, used.Count > 0 ? sum / used.Count : Vector3.Zero,
                         model, lod, name, primary, used.Count, CountEdges(indices, (int)first, triangles.Count)));
             }
@@ -241,6 +277,9 @@ internal sealed class DrawableScene
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
             Materials = materials,
             Sources = sources,
+            SourceLists = sourceLists,
+            Geometries = geometries,
+            rebuild = () => Build(models, lookup, fragmentBound, fragmentLights),
             remake = material => SurfaceMaterial.From(material, Resolve),
             Diagnostics = diagnostics,
         };

@@ -27,7 +27,7 @@
         "specIntensityAdjust": "Intensity adjust",
         "specFalloffAdjust": "Falloff adjust",
         "diffuse2SpecMod": { "label": "Layer specular", "range": [0, 1] },
-        "specular2Color_DirLerp": { "label": "Second lobe", "colour": true },
+        "specular2Color_DirLerp": "Second lobe",
         "specular2Factor": { "label": "Second lobe falloff", "range": [0, 100] },
         "specular2ColorIntensity": { "label": "Second lobe intensity", "range": [0, 10] },
         "SpecDesaturateIntensity": "Desaturate intensity",

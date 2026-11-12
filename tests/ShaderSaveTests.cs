@@ -36,6 +36,7 @@ public sealed class ShaderSaveTests
         field.StartTyping();
         field.Editor!.Text = value;
         field.FinishTyping(keep: true);
+        viewer.FlushEdits();
     }
 
     private static float BumpinessOf(byte[] ydr) =>

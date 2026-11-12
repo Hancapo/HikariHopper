@@ -1,4 +1,5 @@
 using System.Numerics;
+using Avalonia;
 using Avalonia.Headless.XUnit;
 using FiveFury;
 using FiveFury.Drawables;
@@ -268,6 +269,7 @@ public sealed class ShaderValuesTests
         float after = intensity.Value;
         Assert.NotEqual(before, after);
         Assert.Equal(after, ShaderEdits.Current(viewer.Card.Material!, "specularIntensityMult")[0]);
+        viewer.FlushEdits();
         Assert.Equal(after, viewer.Surfaces.Materials[0].Uniforms[2]);
         Assert.True(viewer.Card.ResetShown("specularIntensityMult"));
         Assert.True(viewer.Card.ResetAllShown);
@@ -279,10 +281,47 @@ public sealed class ShaderValuesTests
         Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[2]);
         Assert.False(viewer.Card.ResetAllShown);
 
+        // Its close mark lets go of the pick: no row selected, no outline, no card.
+        viewer.Card.RequestClose();
+        Assert.Empty(viewer.Parts.Selection);
+        Assert.Empty(viewer.Viewport.Picked);
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.CardOverlay.IsWanted);
+
         // Off the model: no card.
         Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
         Assert.False(viewer.CardOverlay.IsWanted);
         viewer.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_card_comes_out_of_the_picked_row_and_goes_to_the_top_left_without_the_parts_panel()
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", Triangle()));
+        var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
+        window.Show();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        viewer.SetPartsShown(true);
+        ExplorerStateRenders.Pump(300);
+        viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        ExplorerStateRenders.Pump(100);
+
+        // Out of the panel's edge, its notch at the row's middle.
+        Avalonia.Controls.Control row = viewer.Parts.SelectedRow!;
+        double middle = row.TranslatePoint(new Avalonia.Point(0, row.Bounds.Height / 2), viewer.Viewport)!.Value.Y;
+        (double? left, double? top, double? notch) = viewer.CardPlace;
+        Assert.Equal(0, left);
+        Assert.NotNull(notch);
+        Assert.Equal(middle, top!.Value + notch!.Value, 0);
+
+        // With the panel closed there's no row to come from: the view's top left, no notch.
+        viewer.SetPartsShown(false);
+        ExplorerStateRenders.Pump(300);
+        Assert.Equal((Ui.Theme.ShaderCardLeft, Ui.Theme.ToolStripInset, (double?)null), viewer.CardPlace);
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -296,8 +335,10 @@ public sealed class ShaderValuesTests
         bump.Editor!.Text = "2.5";
         bump.FinishTyping(keep: true);
         Assert.Equal(2.5f, bump.Value);
+        viewer.FlushEdits();
         Assert.Equal(2.5f, viewer.Surfaces!.Materials[0].Uniforms[3]);
         viewer.Card.ResetValue("bumpiness");
+        viewer.FlushEdits();
         Assert.Equal(before, bump.Value);
         Assert.Equal(before, viewer.Surfaces.Materials[0].Uniforms[3]);
         Assert.False(viewer.ShaderEdits.Dirty);

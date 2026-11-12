@@ -69,6 +69,9 @@ internal sealed class ScrubField : Border
         get => value;
         set
         {
+            // Unchanged, it is left as it is: a drag refreshes every field at each step.
+            if (value == this.value && text.Text is not null)
+                return;
             this.value = value;
             text.Text = Segment ? Short(value) : Format(value);
             if (Segment)
@@ -83,7 +86,12 @@ internal sealed class ScrubField : Border
     /// <summary>Whether it differs from the file's: its number in full ink.</summary>
     public bool Changed
     {
-        set => text.Foreground = value ? Ui.Theme.Text : Ui.Theme.TextRow;
+        set
+        {
+            IBrush ink = value ? Ui.Theme.Text : Ui.Theme.TextRow;
+            if (text.Foreground != ink)
+                text.Foreground = ink;
+        }
     }
 
     /// <summary>The number changed, by a drag or by typing; <c>Continuing</c> while a drag goes on after its first step.</summary>
@@ -263,7 +271,13 @@ internal sealed class ScrubField : Border
 internal sealed class ShaderValuesCard : Border
 {
     // The card's width, the room a value's control has, and the room of a colour's numbers beside its swatch.
-    private const double CardWidth = 232, ControlWidth = 118, SwatchWidth = 30;
+    private const double CardWidth = 300, ControlWidth = 140, SwatchWidth = 30;
+
+    /// <summary>How far the notch that points at the picked row reaches out of the card's left edge.</summary>
+    public const double NotchWidth = 8;
+
+    // The notch, on the card's left edge, pointing at the row picked in the parts panel.
+    private readonly Avalonia.Controls.Shapes.Path notch;
 
     // The slots a vehicle paint's colour can be, (2, n, n), as SurfaceMaterial.PaintColour reads them.
     internal static readonly string[] PaintSlots = ["Primary", "Secondary", "Pearlescent", "Wheels", "Unpainted", "Interior", "Dashboard"];
@@ -272,36 +286,27 @@ internal sealed class ShaderValuesCard : Border
     private static readonly Dictionary<string, bool> Opened = new(StringComparer.Ordinal);
 
     private readonly ShaderEdits edits;
-    private readonly TextBlock title;
-    private readonly TextBlock shader;
+    // What the geometry belongs to: the card shows it as the row it points at, not as a title.
+    private string title = "";
     private readonly StackPanel groups;
     private readonly ScrollViewer scroller;
     private readonly ChromeToolButton resetAll;
     private readonly List<Row> rows = [];
     private readonly List<(string Name, Control Header, Control Body)> sections = [];
+    // On a shared entry: whether a change goes to every geometry drawn with it, or to the picked one alone.
+    private readonly SegmentedSwitch applyTo;
+    private readonly DockPanel applyRow;
+    private int shared = 1;
+    // What else the picked geometry is drawn on: a geometry split by bone is a part under each.
+    private readonly TextBlock alsoOn;
 
     // A value's row: its fields, one per number, its reset, and the swatch or paint slot it shows instead of numbers.
-    private sealed record Row(ShaderValue Value, ScrubField[] Fields, ChromeToolButton Reset, Border? Swatch, Control? Numbers, Border? Slot);
+    private sealed record Row(ShaderValue Value, ScrubField[] Fields, ChromeToolButton Reset, Border? Swatch, Control? Numbers, Border? Slot, TextBlock Label);
 
     public ShaderValuesCard(ShaderEdits edits)
     {
         this.edits = edits;
-        Width = CardWidth;
-        Background = Ui.Theme.ChromeBg;
-        BorderBrush = Ui.Theme.BorderHard;
-        BorderThickness = new Thickness(1);
-        CornerRadius = Ui.Theme.PanelCorner;
-        ClipToBounds = true;
-        title = new TextBlock { FontSize = Ui.Theme.FontSize, FontWeight = FontWeight.SemiBold, Foreground = Ui.Theme.Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        shader = new TextBlock
-        {
-            FontFamily = Ui.Theme.MonoFont,
-            FontSize = Ui.Theme.SmallFontSize,
-            Foreground = Ui.Theme.TextFaint,
-            Margin = new Thickness(6, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
+        Width = CardWidth + NotchWidth;
         groups = new StackPanel();
         scroller = new ScrollViewer
         {
@@ -309,35 +314,97 @@ internal sealed class ShaderValuesCard : Border
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         };
-        resetAll = new ChromeToolButton { Text = "Reset all", Height = 21, Width = 70, CornerRadius = Ui.Theme.InnerCorner };
+        resetAll = new ChromeToolButton
+        {
+            Width = 24,
+            Height = 22,
+            Bordered = false,
+            IconKind = "reset",
+            IconSize = 13,
+            IconThickness = 1.6,
+            CornerRadius = Ui.Theme.InnerCorner,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        resetAll.SetValue(ToolTip.ShowOnDisabledProperty, true);
         resetAll.Click += (_, _) =>
         {
             if (Material is { } material)
                 edits.ResetAll(material);
         };
         Avalonia.Automation.AutomationProperties.SetName(resetAll, "Reset all the values");
-        ThemedToolTip.Set(resetAll, "Put every value back as the file has it");
-        var keys = new TextBlock { Text = "Ctrl+Z · Ctrl+S", FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
+        ThemedToolTip.Set(resetAll, "Reset all: put every value back as the file has it");
         DockPanel.SetDock(resetAll, Dock.Right);
+        alsoOn = new TextBlock
+        {
+            FontSize = Ui.Theme.SmallFontSize,
+            Foreground = Ui.Theme.TextFaint,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 5),
+            IsVisible = false,
+        };
+        applyTo = new SegmentedSwitch { Height = 22, VerticalAlignment = VerticalAlignment.Center };
+        applyTo.Sides.Add(new SwitchSide { Text = "Shared", Width = 78, Label = "Every geometry sharing this shader entry" });
+        applyTo.Sides.Add(new SwitchSide
+        {
+            Text = "Selected",
+            Width = 66,
+            Label = "The selected geometry alone",
+            ToolTip = "The selected geometry alone: it gets a copy of the shader entry at its first change",
+        });
+        applyTo.RefreshSides();
+        applyTo.SideRequested += (_, side) => applyTo.SelectedIndex = side;
+        Avalonia.Automation.AutomationProperties.SetName(applyTo, "Apply to");
+        var applyLabel = new TextBlock { Text = "Apply to", FontSize = Ui.Theme.FontSize, Foreground = Ui.Theme.TextDim, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(applyTo, Dock.Right);
+        applyRow = new DockPanel { Margin = new Thickness(0, 0, 10, 0), IsVisible = false, Children = { applyTo, applyLabel } };
+        // The foot: on a shared entry, what else the geometry is drawn on, and Apply to beside Reset all.
         var foot = new Border
         {
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, 1, 0, 0),
-            Padding = new Thickness(10, 5, 10, 6),
-            Child = new DockPanel { Children = { resetAll, keys } },
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = new StackPanel { Children = { alsoOn, new DockPanel { Children = { resetAll, applyRow } } } },
         };
-        Header = new StackPanel { Children = { new DockPanel { Children = { title, shader } } } };
-        DockPanel.SetDock(title, Dock.Left);
-        var head = new Border
-        {
-            BorderBrush = Ui.Theme.BorderHard,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(10, 8, 10, 7),
-            Child = Header,
-        };
-        DockPanel.SetDock(head, Dock.Top);
         DockPanel.SetDock(foot, Dock.Bottom);
-        Child = new DockPanel { Children = { head, foot, scroller } };
+        // Its close mark, at its top right, on the first group's heading: a click lets go of the pick.
+        var close = new ChromeToolButton
+        {
+            Width = 20,
+            Height = 20,
+            Margin = new Thickness(0, 2, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Bordered = false,
+            IconKind = "close",
+            IconSize = 10,
+            IconThickness = 1.4,
+            CornerRadius = Ui.Theme.InnerCorner,
+        };
+        close.Click += (_, _) => RequestClose();
+        ThemedToolTip.Set(close, "Close");
+        Avalonia.Automation.AutomationProperties.SetName(close, "Close the shader values");
+        var face = new Border
+        {
+            Background = Ui.Theme.ChromeBg,
+            BorderBrush = Ui.Theme.Border,
+            BorderThickness = new Thickness(1),
+            CornerRadius = Ui.Theme.PanelCorner,
+            ClipToBounds = true,
+            Margin = new Thickness(NotchWidth, 0, 0, 0),
+            Child = new Panel { Children = { new DockPanel { Children = { foot, scroller } }, close } },
+        };
+        // Its fill covers the card's edge where it meets it; its outline is the card's.
+        notch = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse($"M {NotchWidth + 1},0 L 1,7 L {NotchWidth + 1},14"),
+            Fill = Ui.Theme.ChromeBg,
+            Stroke = Ui.Theme.Border,
+            StrokeThickness = 1,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            IsVisible = false,
+        };
+        Child = new Panel { Children = { face, notch } };
         Avalonia.Automation.AutomationProperties.SetName(this, "Shader values");
         edits.Changed += material =>
         {
@@ -348,8 +415,25 @@ internal sealed class ShaderValuesCard : Border
         edits.Saved += Refresh;
     }
 
-    /// <summary>The card's header, under the title: where what applies to the whole entry goes.</summary>
-    private StackPanel Header { get; }
+    /// <summary>
+    /// Points the notch at <paramref name="y"/>, down from the card's top (the middle of the row picked), kept clear of
+    /// its corners; none hides it.
+    /// </summary>
+    public void PointAt(double? y)
+    {
+        notch.IsVisible = y is not null;
+        if (y is { } at)
+            notch.Margin = new Thickness(0, Math.Clamp(at - 7, 8, Math.Max(8, Bounds.Height - 22)), 0, 0);
+    }
+
+    /// <summary>Where the notch points, down from the card's top; none while it's hidden.</summary>
+    internal double? PointedAt => notch.IsVisible ? notch.Margin.Top + 7 : null;
+
+    /// <summary>Its close mark was clicked: the viewer lets go of the pick, and the card goes with it.</summary>
+    public event Action? CloseRequested;
+
+    /// <summary>Closes the card, as its close mark does.</summary>
+    internal void RequestClose() => CloseRequested?.Invoke();
 
     /// <summary>The shader entry shown; none while nothing is picked.</summary>
     public DrawableMaterial? Material { get; private set; }
@@ -380,7 +464,7 @@ internal sealed class ShaderValuesCard : Border
     internal bool ResetAllShown => resetAll.IsEnabled;
 
     /// <summary>The title shown: what the geometry belongs to.</summary>
-    internal string Title => title.Text ?? "";
+    internal string Title => title;
 
     /// <summary>The field of one number of a value; none when it isn't listed.</summary>
     internal ScrubField? Field(string name, int component = 0) =>
@@ -400,6 +484,64 @@ internal sealed class ShaderValuesCard : Border
             edits.Reset(material, name);
     }
 
+    /// <summary>
+    /// Asked, at the first change in This one, to give the picked geometry an entry of its own: the viewer copies the
+    /// entry, hands it over with <see cref="Adopt"/> and returns it, and the change goes to the copy; none when it
+    /// can't, and then the change isn't made.
+    /// </summary>
+    public Func<DrawableMaterial?>? SplitRequested { get; set; }
+
+    /// <summary>How many geometries are drawn with the entry shown: Apply to is offered when more than one.</summary>
+    internal int Shared => shared;
+
+    /// <summary>Whether Apply to is offered, the entry being shared.</summary>
+    internal bool ApplyToShown => applyRow.IsVisible;
+
+    /// <summary>Whether changes go to the picked geometry alone (This one), on a shared entry.</summary>
+    internal bool ApplyToOne
+    {
+        get => shared > 1 && applyTo.SelectedIndex == 1;
+        set => applyTo.SelectedIndex = value ? 1 : 0;
+    }
+
+    /// <summary>How many geometries are drawn with the entry shown, as the scene now counts them.</summary>
+    public void SetShared(int count)
+    {
+        shared = Math.Max(1, count);
+        applyTo.Sides[0].Text = $"Shared ({shared})";
+        applyTo.Sides[0].Label = $"All {shared} geometries sharing this shader entry";
+        applyTo.Sides[0].ToolTip = $"All {shared} geometries sharing this shader entry";
+        applyTo.RefreshSides();
+        applyRow.IsVisible = shared > 1;
+    }
+
+    /// <summary>Takes the picked geometry's own copy of the entry shown, which its changes go to from now on.</summary>
+    public void Adopt(DrawableMaterial copy)
+    {
+        Material = copy;
+        SetShared(1);
+    }
+
+    /// <summary>What the card says the geometry is also drawn on; empty when only on the part picked.</summary>
+    internal string AlsoOn => alsoOn.IsVisible ? alsoOn.Text ?? "" : "";
+
+    /// <summary>
+    /// Says what else the picked geometry is drawn on, the parts its bones split it into or the other places its
+    /// drawable is put: a change to it, This one included, shows on them too.
+    /// </summary>
+    public void SetAlsoOn(IReadOnlyList<string> parts)
+    {
+        alsoOn.IsVisible = parts.Count > 0;
+        alsoOn.Text = parts.Count switch
+        {
+            0 => "",
+            1 => $"Also drawn on {parts[0]}",
+            2 => $"Also drawn on {parts[0]} and {parts[1]}",
+            3 => $"Also drawn on {parts[0]}, {parts[1]} and {parts[2]}",
+            _ => $"Also drawn on {parts[0]}, {parts[1]} and {parts.Count - 2} more",
+        };
+    }
+
     /// <summary>A field opened for typing, and needs the keyboard in the card's window.</summary>
     public event Action? TypingStarted;
 
@@ -409,31 +551,32 @@ internal sealed class ShaderValuesCard : Border
     /// <summary>The tallest the card grows; its values scroll past that.</summary>
     public double Room
     {
-        set => scroller.MaxHeight = Math.Max(80, value - 110);
+        set => scroller.MaxHeight = Math.Max(80, value - 70);
     }
 
-    /// <summary>Shows a shader entry's values, under <paramref name="name"/> (what the geometry belongs to), or nothing.</summary>
-    public void Show(string name, DrawableMaterial? material)
+    /// <summary>
+    /// Shows a shader entry's values, under <paramref name="name"/> (what the geometry belongs to), or nothing; drawn
+    /// with it are <paramref name="geometries"/> geometries, and a change goes to all of them until This one is picked.
+    /// </summary>
+    public void Show(string name, DrawableMaterial? material, int geometries = 1)
     {
-        // A field being typed in keeps what was typed, for the entry it was.
-        foreach (Row row in rows)
-            foreach (ScrubField field in row.Fields)
-                field.FinishTyping(true);
+        // A field being typed in keeps what was typed, for the entry it was and as Apply to was then.
+        FinishTyping();
+        applyTo.SelectedIndex = 0;
+        SetShared(geometries);
         Material = material;
         rows.Clear();
         sections.Clear();
         groups.Children.Clear();
         if (material is null)
             return;
-        title.Text = name;
-        ShaderDefinition? definition = (material.Gen9Parameters is not null ? ShaderCatalog.Enhanced : ShaderCatalog.Legacy).Find(material.ShaderHash);
-        shader.Text = definition?.Name ?? $"0x{material.ShaderHash.Value:X8}";
+        title = name;
         foreach (IGrouping<string, ShaderValue> group in ShaderEdits.ValuesOf(material).GroupBy(value => value.Group))
         {
             var body = new StackPanel { Margin = new Thickness(10, 0, 10, 5) };
             foreach (ShaderValue value in group)
                 body.Children.Add(Build(material, value));
-            Control header = Heading(group.Key, group.Count(), sections.Count > 0);
+            Control header = Heading(group.Key, sections.Count > 0);
             sections.Add((group.Key, header, body));
             groups.Children.Add(header);
             groups.Children.Add(body);
@@ -451,14 +594,20 @@ internal sealed class ShaderValuesCard : Border
         Refresh();
     }
 
-    // A group's heading: a chevron, its name and how many values it holds; a click opens or folds it.
-    private Control Heading(string group, int count, bool rule)
+    /// <summary>Closes a field being typed in, keeping what was typed.</summary>
+    public void FinishTyping()
+    {
+        foreach (Row row in rows.ToArray())
+            foreach (ScrubField field in row.Fields)
+                field.FinishTyping(true);
+    }
+
+    // A group's heading: a chevron and its name; a click opens or folds it.
+    private Control Heading(string group, bool rule)
     {
         var chevron = new LucideIcon { IconName = "chevron-down", Width = 9, Height = 9, Weight = 1.8, Stroke = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
-        var number = new TextBlock { Text = count.ToString(CultureInfo.InvariantCulture), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = VerticalAlignment.Center };
         var name = new TextBlock { Text = group, FontSize = Ui.Theme.SmallFontSize, FontWeight = FontWeight.Medium, Foreground = Ui.Theme.TextFaint, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(chevron, Dock.Left);
-        DockPanel.SetDock(number, Dock.Right);
         var heading = new Border
         {
             Height = 24,
@@ -467,10 +616,10 @@ internal sealed class ShaderValuesCard : Border
             BorderBrush = Ui.Theme.BorderHard,
             BorderThickness = new Thickness(0, rule ? 1 : 0, 0, 0),
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = new DockPanel { Children = { chevron, number, name } },
+            Child = new DockPanel { Children = { chevron, name } },
         };
-        heading.PointerEntered += (_, _) => name.Foreground = Ui.Theme.TextRow;
-        heading.PointerExited += (_, _) => name.Foreground = Ui.Theme.TextFaint;
+        heading.PointerEntered += (_, _) => (name.Foreground, chevron.Stroke) = (Ui.Theme.TextRow, Ui.Theme.TextRow);
+        heading.PointerExited += (_, _) => (name.Foreground, chevron.Stroke) = (Ui.Theme.TextFaint, Ui.Theme.TextFaint);
         heading.PointerReleased += (_, e) =>
         {
             if (e.InitialPressMouseButton == MouseButton.Left)
@@ -520,7 +669,14 @@ internal sealed class ShaderValuesCard : Border
             Avalonia.Automation.AutomationProperties.SetName(field, fields.Length == 1 ? value.Label : $"{value.Label} {component + 1}");
             field.Edited += (number, continuing) =>
             {
+                // In This one, the first change gives the geometry its own copy of the entry, which it then goes to.
                 DrawableMaterial target = Material ?? material;
+                if (!continuing && ApplyToOne)
+                {
+                    if (SplitRequested?.Invoke() is not { } copy)
+                        return;
+                    target = copy;
+                }
                 float[] values = ShaderEdits.Current(target, value.Name);
                 if (component < values.Length)
                 {
@@ -557,7 +713,7 @@ internal sealed class ShaderValuesCard : Border
         var control = new Panel { Width = ControlWidth, VerticalAlignment = VerticalAlignment.Center, Children = { numbers } };
         if (slot is not null)
             control.Children.Add(slot);
-        rows.Add(new Row(value, fields, reset, swatch, numbers, slot));
+        rows.Add(new Row(value, fields, reset, swatch, numbers, slot, label));
 
         var line = new DockPanel { MinHeight = 24, Margin = new Thickness(0, vector && fields.Length > 4 ? 2 : 0, 0, vector && fields.Length > 4 ? 2 : 0) };
         DockPanel.SetDock(control, Dock.Right);
@@ -693,7 +849,18 @@ internal sealed class ShaderValuesCard : Border
         float[] values = ShaderEdits.Current(material, value.Name);
         if (values.Length < 3)
             return;
-        (values[0], values[1], values[2]) = slot is int at ? (2f, at, at) : (1f, 1f, 1f);
+        (float, float, float) picked = slot is int at ? (2f, at, at) : (1f, 1f, 1f);
+        // The slot it has already: no change, and no entry of its own.
+        if ((values[0], values[1], values[2]) == picked)
+            return;
+        if (ApplyToOne)
+        {
+            if (SplitRequested?.Invoke() is not { } copy)
+                return;
+            material = copy;
+            values = ShaderEdits.Current(material, value.Name);
+        }
+        (values[0], values[1], values[2]) = picked;
         edits.Set(material, value.Name, values);
         edits.Close();
     }
@@ -703,10 +870,12 @@ internal sealed class ShaderValuesCard : Border
     {
         if (Material is not { } material)
             return;
+        // Read once for every row: a drag refreshes the card at each step.
+        Dictionary<string, float[]> now = ShaderEdits.CurrentAll(material);
         foreach (Row row in rows)
         {
-            float[] values = ShaderEdits.Current(material, row.Value.Name);
-            bool changed = edits.IsChanged(material, row.Value.Name);
+            float[] values = now.GetValueOrDefault(row.Value.Name) ?? [];
+            bool changed = edits.IsChanged(material, row.Value.Name, values);
             for (int i = 0; i < row.Fields.Length; i++)
             {
                 if (!row.Fields[i].Typing && i < values.Length)
@@ -724,6 +893,9 @@ internal sealed class ShaderValuesCard : Border
                     numbers.IsVisible = at is null;
             }
             row.Reset.IsVisible = changed;
+            IBrush ink = changed ? Ui.Theme.Text : Ui.Theme.TextRow;
+            if (row.Label.Foreground != ink)
+                row.Label.Foreground = ink;
         }
         resetAll.IsEnabled = rows.Any(row => row.Reset.IsVisible);
 
