@@ -20,9 +20,18 @@ internal sealed class PaintPanel : Border
     private const int TileColumns = 8;
     private const double TileSize = 38;
     private const int SwatchColumns = 12;
-    private const double SwatchCell = 26;
+    // Twelve cells fill the well across the panel; each chip leaves room in its cell for a ring around it.
+    private const double SwatchCell = 25.5;
+    private const double ChipSize = 21;
 
     private static readonly IImmutableSolidColorBrush Edge = new ImmutableSolidColorBrush(Color.FromArgb(46, 255, 255, 255));
+    // A chip's edge, and a faint light along its top, so the darkest colours stand off the well.
+    private static readonly IImmutableSolidColorBrush ChipEdge = new ImmutableSolidColorBrush(Color.FromArgb(33, 255, 255, 255));
+    private static readonly Avalonia.Media.BoxShadow ChipBevel = Avalonia.Media.BoxShadow.Parse("inset 0 1 0 0 #29FFFFFF");
+    // The picked colour's ring, and the one under the pointer: hugging the chip, its corners following the chip's.
+    private static readonly BoxShadows PickedRing = new(new Avalonia.Media.BoxShadow { Spread = 3, Color = Ui.Theme.Accent.Color }, [ChipBevel]);
+    private static readonly BoxShadows HoverRing = new(new Avalonia.Media.BoxShadow { Spread = 3, Color = Ui.Theme.Border.Color }, [ChipBevel]);
+    private static readonly BoxShadows NoRing = new(ChipBevel);
     private static readonly IImmutableSolidColorBrush Grey = new ImmutableSolidColorBrush(Color.FromRgb(150, 150, 150));
 
     private readonly CarPaints paints;
@@ -41,6 +50,33 @@ internal sealed class PaintPanel : Border
 
     /// <summary>A combination or a colour was picked: the six slots' colour numbers now.</summary>
     public event Action<IReadOnlyList<int?>>? Changed;
+
+    /// <summary>
+    /// A colour is under the pointer: the six slots' colour numbers with it in the slot being picked, to show the
+    /// vehicle in until the pointer leaves the colours; none once it has, to show it as picked again.
+    /// </summary>
+    public event Action<IReadOnlyList<int?>?>? Previewing;
+
+    /// <summary>The colour shown on the vehicle while the pointer is over it; none when the vehicle shows its own.</summary>
+    public int? PreviewColour { get; private set; }
+
+    /// <summary>Shows the vehicle with <paramref name="colour"/> in the slot being picked, or as picked with none.</summary>
+    public void Preview(int? colour)
+    {
+        if (PickingSlot is null)
+            colour = null;
+        if (colour == PreviewColour)
+            return;
+        PreviewColour = colour;
+        if (colour is null)
+        {
+            Previewing?.Invoke(null);
+            return;
+        }
+        int?[] shown = [.. indices];
+        shown[PickingSlot!.Value] = colour;
+        Previewing?.Invoke(shown);
+    }
 
     /// <summary>The six slots' colour numbers.</summary>
     public IReadOnlyList<int?> Indices => indices;
@@ -77,6 +113,7 @@ internal sealed class PaintPanel : Border
     public void PickColour(int slot, int colour)
     {
         indices[slot] = colour;
+        PreviewColour = null;
         Changed?.Invoke(indices);
         if (PickingSlot == slot)
             Child = Picker(slot, paints.Colour(colour), paints.Finishes);
@@ -107,6 +144,7 @@ internal sealed class PaintPanel : Border
     /// <summary>Shows the combinations and the slots.</summary>
     public void ShowSlots()
     {
+        Preview(null);
         PickingSlot = null;
         var body = new StackPanel { Margin = new Thickness(12, 10, 12, 8), Spacing = 8 };
         if (paints.Combinations.Count > 0)
@@ -264,24 +302,26 @@ internal sealed class PaintPanel : Border
             foreach (CarColour colour in paints.Colours.Where(colour => colour.Finish == finish))
             {
                 bool on = colour.Index == current?.Index;
-                var cell = new Border
+                var chip = new Border
                 {
-                    Width = 24, Height = 24, Padding = new Thickness(2), CornerRadius = Ui.Theme.ItemCorner, Cursor = new Cursor(StandardCursorType.Hand),
-                    BorderBrush = on ? Ui.Theme.Accent : Brushes.Transparent, BorderThickness = new Thickness(on ? 2 : 1),
-                    Child = new Border { CornerRadius = Ui.Theme.InnerCorner, Background = Brush(colour), BorderBrush = Edge, BorderThickness = new Thickness(1) },
+                    Width = ChipSize, Height = ChipSize, CornerRadius = Ui.Theme.ItemCorner, Background = Brush(colour),
+                    BorderBrush = ChipEdge, BorderThickness = new Thickness(1), BoxShadow = on ? PickedRing : NoRing,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 };
+                // The whole cell takes the pointer, so moving from one colour to the next never crosses a gap.
+                var cell = new Border { Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand), Child = chip };
                 Avalonia.Automation.AutomationProperties.SetName(cell, colour.Name);
                 cell.PointerEntered += (_, _) =>
                 {
                     if (!on)
-                        cell.BorderBrush = Ui.Theme.Border;
+                        chip.BoxShadow = HoverRing;
                     Name(colour);
+                    Preview(colour.Index);
                 };
                 cell.PointerExited += (_, _) =>
                 {
                     if (!on)
-                        cell.BorderBrush = Brushes.Transparent;
-                    Name(current);
+                        chip.BoxShadow = NoRing;
                 };
                 cell.PointerPressed += (_, e) =>
                 {
@@ -310,7 +350,14 @@ internal sealed class PaintPanel : Border
             body.Children.Add(switcher);
         }
         Fill();
-        body.Children.Add(new Border { Background = Ui.Theme.InsetBg, CornerRadius = Ui.Theme.ControlCorner, Padding = new Thickness(5), HorizontalAlignment = HorizontalAlignment.Left, Child = swatches });
+        var well = new Border { Background = Ui.Theme.InsetBg, CornerRadius = Ui.Theme.ControlCorner, Padding = new Thickness(5), HorizontalAlignment = HorizontalAlignment.Left, Child = swatches };
+        // Off the colours, the vehicle and the name line show the slot's own colour again.
+        well.PointerExited += (_, _) =>
+        {
+            Name(current);
+            Preview(null);
+        };
+        body.Children.Add(well);
         Name(current);
         body.Children.Add(hovered);
         return body;

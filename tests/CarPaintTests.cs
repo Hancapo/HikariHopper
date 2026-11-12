@@ -287,6 +287,47 @@ public sealed class CarPaintTests
     }
 
     [AvaloniaFact]
+    public void A_colour_under_the_pointer_is_shown_on_the_vehicle_until_the_pointer_leaves_the_colours()
+    {
+        Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
+        var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
+        window.Show();
+        ExplorerStateRenders.Pump(50);
+        float[] Drawn() => viewer.Surfaces!.Materials[0].Uniforms[16..19];
+        Vector3 silver = Srgb(0xFF5A5E66), red = Srgb(0xFFC00E1A);
+        viewer.TogglePaint();
+        Views.PaintPanel panel = viewer.PaintPanel!;
+        panel.ShowPicker(0);
+        ExplorerStateRenders.Pump(50);
+
+        // The pointer over Metallic Red: the vehicle shows it, and its paint is still the silver it had.
+        var top = (Avalonia.Controls.TopLevel)Avalonia.Controls.TopLevel.GetTopLevel(panel)!;
+        Avalonia.Controls.Control Cell(string name) => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel)
+            .OfType<Avalonia.Controls.Control>().First(control => Avalonia.Automation.AutomationProperties.GetName(control) == name);
+        Avalonia.Controls.Control cell = Cell(Paints.Colour(27)!.Name);
+        Avalonia.Point centre = Avalonia.VisualExtensions.TranslatePoint(cell, new Avalonia.Point(cell.Bounds.Width / 2, cell.Bounds.Height / 2), top)!.Value;
+        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, centre);
+        ExplorerStateRenders.Pump(20);
+        Assert.Equal(27, panel.PreviewColour);
+        Assert.Equal([red.X, red.Y, red.Z], Drawn());
+        Assert.Equal(4, viewer.PaintIndices[0]);
+
+        // Off the colours, back to the silver; and a preview the dropdown closes on goes with it.
+        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, new Avalonia.Point(2, 2));
+        ExplorerStateRenders.Pump(20);
+        Assert.Null(panel.PreviewColour);
+        Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
+        panel.Preview(27);
+        Assert.Equal([red.X, red.Y, red.Z], Drawn());
+        viewer.TogglePaint();
+        ExplorerStateRenders.Pump(50);
+        Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
+        Assert.Equal(4, viewer.PaintIndices[0]);
+        viewer.Close();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void The_colour_picker_keeps_its_size_from_one_finish_to_another()
     {
         // Thirty metallics, three rows of them, and one matte.
