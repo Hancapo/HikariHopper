@@ -1113,6 +1113,23 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastTextureIsTransformedStillChangesNothing()
+    {
+        TextureWindowHarness harness = Opened();
+        Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+        harness.ViewModel.SelectAllTextures();
+        Assert.True(harness.ViewModel.StartTransform("Resizing", texture => TextureTestKit.Red(texture.Name)));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+        Assert.False(harness.ViewModel.Modified);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
     public void AnExtractStopsWritingWhenTheDocumentCloses()
     {
         using var folder = new TempFolder();
