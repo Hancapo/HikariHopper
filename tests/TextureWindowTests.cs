@@ -516,14 +516,72 @@ public sealed class TextureWindowTests
         Assert.True(dialog.NameField.IsFocused);
         Assert.Equal(name, dialog.NameField.Text);
         Assert.Equal(name.Length, dialog.NameField.SelectionEnd - dialog.NameField.SelectionStart);
+        // No header: the field holds the name. As it opens there is nothing wrong to say.
+        Assert.Empty(dialog.GetVisualDescendants().OfType<TextureDialogSummary>());
+        Assert.Equal("", dialog.ErrorShown);
+        Assert.True(dialog.ApplyEnabled);
+        double plain = dialog.BodyHeight;
+        // An empty name waits without a complaint.
         dialog.NameField.Text = "   ";
         Assert.False(dialog.ApplyEnabled);
+        Assert.Equal("", dialog.ErrorShown);
+        Assert.False(dialog.NameField.Invalid);
+        // Another texture's name is said so under the field as it is typed, whatever its case; the dialog grows by the line.
+        string other = harness.ViewModel.TexturesModel.First(item => item.Name != name).Name;
+        dialog.NameField.Text = other.ToUpperInvariant();
+        Assert.False(dialog.ApplyEnabled);
+        Assert.Equal($"This dictionary already has a {other}.", dialog.ErrorShown);
+        Assert.True(dialog.NameField.Invalid);
+        Assert.True(dialog.BodyHeight > plain);
+        // Its own name in another case is fine.
+        dialog.NameField.Text = name.ToUpperInvariant();
+        Assert.True(dialog.ApplyEnabled);
+        Assert.Equal(plain, dialog.BodyHeight);
         dialog.NameField.Text = "fresh";
         Assert.True(dialog.ApplyEnabled);
+        Assert.Equal("", dialog.ErrorShown);
         dialog.Apply();
         harness.Settle();
         Assert.False(dialog.IsOpen);
         Assert.Equal("fresh", harness.ViewModel.SelectedName);
+    }
+
+    [AvaloniaFact]
+    public void RemoveDialogNamesWhatGoesAndWhatIsLeft()
+    {
+        TextureWindowHarness harness = Opened(Solid("one", 64, 64), Solid("two", 32, 32), Solid("three", 16, 16));
+        long all = harness.ViewModel.DictionaryDataSize;
+        Assert.Equal((64 * 64 + 32 * 32 + 16 * 16) * 4, all);
+        harness.ViewModel.SelectTexture(harness.ViewModel.TexturesModel.ToList().FindIndex(item => item.Name == "one"));
+        harness.Settle();
+        var dialog = (TextureRemoveDialog)harness.Window.OpenToolDialog(TextureTool.Remove);
+        harness.Settle();
+        // One texture: the heading asks, its name says which, and the dictionary is counted before and after.
+        Assert.Equal("REMOVE TEXTURE", dialog.Heading);
+        Assert.Equal("one", dialog.NamesText.Text);
+        Assert.Empty(dialog.GetVisualDescendants().OfType<TextureDialogSummary>());
+        Assert.Equal(("3 textures", "2 textures"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal((Core.Formatting.FormatSize(all), Core.Formatting.FormatSize(all - 64 * 64 * 4)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.True(dialog.Outcome.Saves);
+        Assert.True(dialog.ApplyButton!.Destructive);
+        dialog.Close();
+        harness.Settle();
+
+        // All of them: named, and nothing left.
+        harness.ViewModel.SelectAllTextures();
+        harness.Settle();
+        dialog = (TextureRemoveDialog)harness.Window.OpenToolDialog(TextureTool.Remove);
+        harness.Settle();
+        Assert.Equal("REMOVE 3 TEXTURES", dialog.Heading);
+        Assert.Equal(["one", "three", "two"], dialog.NamesText.Text!.Split(" · ").Order());
+        Assert.Equal(("3 textures", "0 textures"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal("0 B", dialog.Outcome.AfterMemory);
+        Assert.Equal("1 texture", TextureRemoveDialog.Textures(1));
+        // Many names are the first few and a count of the rest.
+        Assert.Equal("a · b · c · +2 more", TextureOutcome.Names(["a", "b", "c", "d", "e"]));
+        dialog.Apply();
+        harness.Settle();
+        Assert.Equal(0, harness.ViewModel.TextureCount);
     }
 
     [AvaloniaFact]
@@ -997,12 +1055,21 @@ public sealed class TextureWindowTests
         harness.Settle();
         TexturePasteDialog dialog = Assert.IsType<TexturePasteDialog>(harness.Window.PasteDialog);
         Assert.False(dialog.ReplaceMode);
+        Assert.Equal("PASTE IMAGE", dialog.Heading);
+        // The header says what is on the clipboard. With nothing to replace there is no choice to show: a name, focused.
+        Assert.Equal("8 × 4", dialog.SizeText.Text);
+        Assert.False(dialog.ModeSwitch.IsVisible);
+        Assert.True(dialog.NameField.IsFocused);
+        Assert.Equal("Name", dialog.NameLabel.Text);
         Assert.Equal("pasted_texture", dialog.NameField.Text);
         Assert.True(dialog.ApplyEnabled);
+        double plain = dialog.BodyHeight;
         dialog.NameField.Text = "TWO";
         Assert.False(dialog.ApplyEnabled);
-        Assert.True(dialog.ErrorText.IsVisible);
+        Assert.Equal("A texture with this name already exists", dialog.ErrorShown);
+        Assert.True(dialog.ErrorHost.IsVisible);
         Assert.True(dialog.NameField.Invalid);
+        Assert.True(dialog.BodyHeight > plain);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(dialog.IsOpen);
@@ -1017,12 +1084,34 @@ public sealed class TextureWindowTests
         harness.ViewModel.RequestPasteImage().Wait();
         harness.Settle();
         TexturePasteDialog dialog = harness.Window.PasteDialog!;
+        // Over one texture, replacing it is the choice the switch opens on: it names the texture, with no field.
         Assert.True(dialog.ReplaceMode);
-        Assert.Equal(harness.ViewModel.SelectedName, dialog.NameField.Text);
-        Assert.False(dialog.NameField.IsEnabled);
-        Assert.True(dialog.ModeCombo.IsFocused);
-        dialog.ModeCombo.SelectedIndex = 1;
+        Assert.True(dialog.ModeSwitch.IsVisible);
+        Assert.Equal(0, dialog.ModeSwitch.SelectedIndex);
+        Assert.True(dialog.ModeSwitch.IsFocused);
+        Assert.Equal("Replaces", dialog.NameLabel.Text);
+        Assert.True(dialog.TargetText.IsVisible);
+        Assert.Equal(harness.ViewModel.SelectedName, dialog.TargetText.Text);
+        Assert.False(dialog.NameField.IsVisible);
+        Assert.True(dialog.ApplyEnabled);
+        // As a new texture, it asks for a name, starting from the usual one.
+        dialog.ModeSwitch.Pick(1);
+        Assert.False(dialog.ReplaceMode);
+        Assert.Equal("Name", dialog.NameLabel.Text);
+        Assert.True(dialog.NameField.IsVisible);
+        Assert.False(dialog.TargetText.IsVisible);
         Assert.Equal("pasted_texture", dialog.NameField.Text);
+        // And back, applied: the texture keeps its name and takes the image.
+        string name = harness.ViewModel.SelectedName;
+        dialog.ModeSwitch.Pick(0);
+        Assert.True(dialog.ReplaceMode);
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal(name, harness.ViewModel.SelectedName);
+        Assert.Equal((8, 4), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
     }
 
     [AvaloniaFact]
@@ -1038,10 +1127,36 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.False(harness.Window.DropArea.OverlayVisible);
         TextureImportDialog dialog = Assert.IsType<TextureImportDialog>(harness.Window.ImportDialog);
-        Assert.Contains("Import 1 files? 1 matching names", dialog.MessageText.Text);
+        // One image, which replaces the texture of its name.
+        Assert.Equal("IMPORT 1 IMAGE", dialog.Heading);
+        Assert.Empty(dialog.NewNames);
+        Assert.Equal(["two"], dialog.ReplacedNames);
+        Assert.Empty(dialog.NotesShown);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(harness.ViewModel.ImportConfirmationPending);
+        Assert.Null(harness.Window.ImportDialog);
+
+        // Several: the new ones and the ones that replace a texture, by name, and a line for files that share a name.
+        using var second = new TempFolder();
+        string[] files =
+        [
+            TextureTestKit.ImageFile(folder.File("one.png")),
+            TextureTestKit.ImageFile(second.File("ONE.png")),
+            TextureTestKit.ImageFile(folder.File("decal.png")),
+            TextureTestKit.ImageFile(folder.File("trim.png")),
+            clash,
+        ];
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        dialog = Assert.IsType<TextureImportDialog>(harness.Window.ImportDialog);
+        Assert.Equal("IMPORT 5 IMAGES", dialog.Heading);
+        Assert.Equal(["decal", "trim"], dialog.NewNames);
+        Assert.Equal(["one", "two"], dialog.ReplacedNames);
+        Assert.Equal(["More than one file is named one: the last one wins."], dialog.NotesShown);
+        Assert.True(dialog.ApplyEnabled);
+        harness.Key(Key.Escape);
+        harness.Settle();
         Assert.Null(harness.Window.ImportDialog);
     }
 

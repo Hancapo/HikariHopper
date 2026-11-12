@@ -1,8 +1,13 @@
 <v:TextureToolDialog xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:v="using:HikariHopper.Views"
+                     xmlns:c="using:HikariHopper.Views.Controls"
                      x:Class="HikariHopper.Views.TextureImportDialog"
-                     Heading="IMPORT TEXTURES" BodyHeight="110" ApplyLabel="Import">
-  <!-- Port of TextureImportDialog.qml (objectName textureImportConfirmation). -->
-  <TextBlock Name="MessageText" Classes="body" Margin="16" />
+                     Heading="IMPORT IMAGES" ApplyLabel="Import">
+  <!-- Confirms an import whose images' names clash with textures: which are new and which replace one, side by side
+       by name, and a line when files share a name. -->
+  <c:QtColumnLayout Margin="12,12,12,13" Spacing="9">
+    <Grid Name="Cells" ColumnDefinitions="*,8,*" />
+    <StackPanel Name="Notes" Spacing="5" IsVisible="False" />
+  </c:QtColumnLayout>
 </v:TextureToolDialog>

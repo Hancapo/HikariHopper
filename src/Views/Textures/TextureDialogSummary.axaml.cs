@@ -8,16 +8,14 @@ namespace HikariHopper.Views;
 /// <summary>The one thing about a selection that a tool dialog's header says, beside its name: what the tool changes.</summary>
 public enum TextureFact
 {
-    /// <summary>The name over its dimensions, format and mip count, as before a dialog picks one.</summary>
-    None,
     Size,
     Format,
     Mips,
 }
 
 /// <summary>
-/// The selection summary at the top of the tool dialogs (port of <c>TextureDialogSummary.qml</c>):
-/// the texture name, or the count of a multi-selection, and with a <see cref="Fact"/> the one thing the tool changes.
+/// The header of a tool dialog that changes something measurable: the texture's name, or the count of a
+/// multi-selection, and the <see cref="Fact"/> the tool changes, as it is now.
 /// </summary>
 public partial class TextureDialogSummary : UserControl
 {
@@ -37,8 +35,8 @@ public partial class TextureDialogSummary : UserControl
         set => SetValue(FactProperty, value);
     }
 
-    /// <summary>The fact shown at the right; empty without one.</summary>
-    internal string FactShown => FactText.IsVisible ? FactText.Text ?? "" : "";
+    /// <summary>The fact shown at the right.</summary>
+    internal string FactShown => FactText.Text ?? "";
 
     /// <summary>The name shown.</summary>
     internal string NameShown => NameText.Text ?? "";
@@ -85,33 +83,19 @@ public partial class TextureDialogSummary : UserControl
     {
         if (viewModel is null)
         {
-            NameText.Text = DetailText.Text = FactText.Text = "";
+            NameText.Text = FactText.Text = "";
             return;
         }
         bool multiple = viewModel.SelectedCount > 1;
-        bool fact = Fact != TextureFact.None;
-        FactText.IsVisible = fact;
-        DetailText.IsVisible = !fact;
-        Glyph.Width = Glyph.Height = fact ? 16 : 20;
-        if (fact)
+        IReadOnlyList<TextureFacts> facts = viewModel.SelectionFacts;
+        NameText.Text = multiple ? $"{viewModel.SelectedCount} textures" : viewModel.SelectedName;
+        FactText.Text = Fact switch
         {
-            IReadOnlyList<TextureFacts> facts = viewModel.SelectionFacts;
-            NameText.Text = multiple ? $"{viewModel.SelectedCount} textures" : viewModel.SelectedName;
-            FactText.Text = Fact switch
-            {
-                TextureFact.Size => Sizes(facts.Select(each => (each.Width, each.Height))),
-                TextureFact.Format when multiple && facts.Select(each => each.Format).Distinct().Count() > 1
-                    => $"{facts.Select(each => each.Format).Distinct().Count()} formats",
-                TextureFact.Format => viewModel.SelectedFormat,
-                _ when multiple && facts.Select(each => each.MipCount).Distinct().Count() > 1
-                    => $"{facts.Min(each => each.MipCount)} to {TextureItem.Mips(facts.Max(each => each.MipCount))}",
-                _ => TextureItem.Mips(viewModel.MipCount),
-            };
-            return;
-        }
-        NameText.Text = multiple ? $"{viewModel.SelectedCount} textures selected" : viewModel.SelectedName;
-        DetailText.Text = multiple
-            ? "Applies to all selected textures."
-            : $"Original  {viewModel.SelectedDimensions}  ·  {viewModel.SelectedFormat}  ·  {TextureItem.Mips(viewModel.MipCount)}";
+            TextureFact.Size => Sizes(facts.Select(each => (each.Width, each.Height))),
+            TextureFact.Format when multiple && facts.Select(each => each.Format).Distinct().Count() > 1
+                => $"{facts.Select(each => each.Format).Distinct().Count()} formats",
+            TextureFact.Format => viewModel.SelectedFormat,
+            _ => TextureMipmapsDialog.Chains(facts.Select(each => each.MipCount)),
+        };
     }
 }

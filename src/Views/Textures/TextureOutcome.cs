@@ -76,29 +76,70 @@ public sealed class TextureOutcome : StackPanel
             + string.Concat((notes ?? []).Select(note => " " + note)));
     }
 
-    private static Grid Warning(string text)
+    /// <summary>A line worth a second look, as the outcome draws its own: a small mark and the text, in the warning colour or another.</summary>
+    internal static Grid Warning(string text, IImmutableSolidColorBrush? ink = null)
     {
+        ink ??= T.Warning;
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("13,7,*") };
         row.Children.Add(new Border
         {
             Width = 13, Height = 13, CornerRadius = new CornerRadius(3), VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 1, 0, 0),
-            Background = new ImmutableSolidColorBrush(T.WithAlpha(T.Warning.Color, .18)),
+            Background = new ImmutableSolidColorBrush(T.WithAlpha(ink.Color, .18)),
             Child = new TextBlock
             {
-                Text = "!", Foreground = T.Warning, FontFamily = T.MonoFont, FontSize = 9, FontWeight = FontWeight.Bold,
+                Text = "!", Foreground = ink, FontFamily = T.MonoFont, FontSize = 9, FontWeight = FontWeight.Bold,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             },
         });
         var line = new TextBlock
         {
-            Text = text, Foreground = T.Warning, FontFamily = T.UiFont, FontSize = T.FontSize,
+            Text = text, Foreground = ink, FontFamily = T.UiFont, FontSize = T.FontSize,
             TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(line, 2);
         row.Children.Add(line);
         return row;
     }
+
+    /// <summary>
+    /// A cell in the outcome's look that counts something and names it: how many images an import adds, and which.
+    /// </summary>
+    internal static Border Count(string caption, int count, IReadOnlyList<string> names, bool outlined) => new()
+    {
+        Background = T.InsetBg,
+        CornerRadius = T.ControlCorner,
+        BorderBrush = outlined ? T.Border : Brushes.Transparent,
+        BorderThickness = new Thickness(1),
+        Padding = new Thickness(9, 7, 9, 8),
+        Child = new StackPanel
+        {
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = caption, Foreground = T.TextFaint, FontFamily = T.MonoFont, FontSize = T.CapsFontSize,
+                    FontWeight = FontWeight.Bold, LetterSpacing = 1.3, Margin = new Thickness(0, 0, 0, 6),
+                },
+                new TextBlock
+                {
+                    Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    FontFamily = T.MonoFont, FontSize = 13, Foreground = count > 0 ? T.Text : T.TextFaint,
+                },
+                new TextBlock
+                {
+                    Text = Names(names), Margin = new Thickness(0, 6, 0, 0), IsVisible = names.Count > 0,
+                    FontFamily = T.MonoFont, FontSize = T.SmallFontSize, Foreground = T.TextFaint,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                },
+            },
+        },
+    };
+
+    /// <summary>Names on a line: the first few, then how many more.</summary>
+    internal static string Names(IReadOnlyList<string> names, int most = 3) => names.Count <= most
+        ? string.Join(" · ", names)
+        : string.Join(" · ", names.Take(most)) + $" · +{names.Count - most} more";
 
     /// <summary>One side: its caption, its value, and the memory with its bar.</summary>
     private sealed class Cell
