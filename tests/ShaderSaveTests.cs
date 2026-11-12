@@ -112,6 +112,59 @@ public sealed class ShaderSaveTests
     }
 
     [AvaloniaFact]
+    public void Closing_while_a_save_is_written_waits_for_it()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        Assert.True(viewer.Save());
+        viewer.Close();
+        Assert.Null(viewer.UnsavedDialog);
+        Assert.False(viewer.Closing);
+        // Once written there is nothing left to save: it closes without asking.
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.Null(viewer.UnsavedDialog);
+        Assert.True(viewer.Closing);
+    }
+
+    [AvaloniaFact]
+    public void A_change_undone_while_a_save_is_written_is_asked_about_once_it_is()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        Assert.True(viewer.Save());
+        // The file gets 2 and the viewer is back at 1, which only the finished save makes a change.
+        Assert.True(viewer.ShaderEdits.Undo());
+        viewer.Close();
+        Assert.Null(viewer.UnsavedDialog);
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.NotNull(viewer.UnsavedDialog);
+        Assert.False(viewer.Closing);
+    }
+
+    [AvaloniaFact]
+    public void Save_and_close_asks_again_for_a_change_made_while_it_was_written()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        viewer.Close();
+        viewer.UnsavedDialog!.SaveButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Bump(viewer, "3");
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.False(viewer.Closing);
+        Assert.NotNull(viewer.UnsavedDialog);
+        Assert.True(viewer.ShaderEdits.Dirty);
+    }
+
+    [AvaloniaFact]
     public void Dont_save_closes_without_writing()
     {
         bool written = false;
@@ -155,6 +208,37 @@ public sealed class ShaderSaveTests
         {
             Assert.Equal("untouched"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("keep.txt")!).ReadStandalone());
             Assert.Equal(1.75f, BumpinessOf(((RpfResourceFileEntry)saved.Archive.Find("tri.ydr")!).ReadStandalone()));
+        }
+        finally
+        {
+            saved.Close();
+        }
+    }
+
+    [Fact]
+    public void Edits_to_one_rpf_wait_for_each_other()
+    {
+        using var folder = new TempFolder();
+        string archivePath = folder.File("props.rpf");
+        var archive = new RpfArchive("props.rpf");
+        ArchiveWriter.AddStandalone(archive, "tri.ydr", ShaderValuesTests.Triangle());
+        archive.Save(archivePath);
+        byte[] model = ShaderValuesTests.Triangle("default");
+        Task? save = null;
+        // A model save asked for while an explorer change is being made waits for it, and keeps it.
+        ArchiveWriter.Mutate(archivePath, null, "", edited =>
+        {
+            save = Task.Run(() => ArchiveWriter.ReplaceEntry(archivePath, null, "tri.ydr", model));
+            Assert.False(save.Wait(300));
+            ArchiveWriter.AddStandalone(edited, "added.txt", "added"u8.ToArray());
+        });
+        Assert.True(save!.Wait(10_000));
+        ArchiveNode saved = ArchiveNode.OpenRoot(archivePath, null);
+        try
+        {
+            Assert.Equal("added"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("added.txt")!).ReadStandalone());
+            byte[] written = ((RpfResourceFileEntry)saved.Archive.Find("tri.ydr")!).ReadStandalone();
+            Assert.Equal(FiveFury.Ydr.Ydr.Read(model).Drawable.Materials[0].ShaderHash, FiveFury.Ydr.Ydr.Read(written).Drawable.Materials[0].ShaderHash);
         }
         finally
         {

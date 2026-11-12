@@ -31,9 +31,27 @@ public sealed class AxesGizmoTests
         camera.LookFrom(-Vector3.UnitZ);
         Assert.Equal(-OrbitCamera.MaxPitch, camera.Pitch);
         Assert.True(camera.Forward.Z > .9999f);
+        Assert.True(camera.Up.Y > .9999f);
         // A drag from there tilts no further than the view does.
         camera.Orbit(0, -500);
         Assert.Equal(-OrbitCamera.MaxPitch, camera.Pitch);
+    }
+
+    [Fact]
+    public void The_camera_keeps_a_right_and_an_up_far_from_the_origin()
+    {
+        // Far out and as close as it zooms, the eye rounds onto the centre's column near the poles; the view must not.
+        var camera = new OrbitCamera();
+        camera.Frame(new Vector3(70000, -70000, 300), 1);
+        camera.Zoom(1000);
+        camera.LookFrom(Vector3.UnitZ);
+        Assert.True(float.IsFinite(camera.Right.X) && float.IsFinite(camera.Up.Y));
+        Assert.True(camera.Up.Y > .9999f);
+        Matrix4x4 view = camera.ViewProjection(1.5f, camera.Center);
+        Assert.True(float.IsFinite(view.M11) && float.IsFinite(view.M22));
+        Vector3 center = camera.Center;
+        camera.Fly(0, 0, 0, 1);
+        Assert.Equal(center, camera.Center);
     }
 
     [AvaloniaFact]

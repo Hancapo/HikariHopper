@@ -24,9 +24,36 @@ public sealed class ShaderApplyToTests
         return new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
     }
 
-    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target = null)
+    // The pair with a texture of its own, as many pixels across as asked.
+    private static byte[] TexturedPair(int size)
     {
-        var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { SaveTarget = target });
+        var builder = new DrawableBuilder { Name = "pair" };
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "normal_spec" };
+        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
+            new FiveFury.Textures.Texture("pair_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+        builder.Materials.Add(material);
+        foreach (float x in new[] { 0f, 2f })
+        {
+            var mesh = new DrawableMeshInput([new(x, 0, 0), new(x + 1, 0, 0), new(x, 1, 0)], [0, 1, 2], "surface");
+            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+            var model = new DrawableModelInput();
+            model.Meshes.Add(mesh);
+            builder.Models.Add(model);
+        }
+        return new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
+    }
+
+    private static void Wait(Task task)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Assert.True(task.IsCompletedSuccessfully);
+    }
+
+    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target = null, Action<Action<SavedDocument>>? textures = null)
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { SaveTarget = target, OpenTextures = textures });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
             ExplorerStateRenders.Pump(10);
@@ -131,6 +158,71 @@ public sealed class ShaderApplyToTests
     }
 
     [AvaloniaFact]
+    public void A_number_typed_in_this_one_goes_to_its_geometry_when_another_is_picked()
+    {
+        Views.ModelViewer viewer = Open(Pair());
+        PickLeft(viewer);
+        viewer.Card.ApplyToOne = true;
+        Views.ScrubField field = viewer.Card.Field("bumpiness")!;
+        field.StartTyping();
+        field.Editor!.Text = "3";
+        // Picking the right ends the typing: the left gets an entry of its own with it, the right keeps the shared one.
+        PickRight(viewer);
+        Assert.Null(field.Editor);
+        Assert.Equal((3f, 1f), Drawn(viewer));
+        Assert.Equal(2, viewer.Surfaces!.Sources.Count);
+        Assert.Equal(1f, viewer.Card.Field("bumpiness")!.Value);
+    }
+
+    [AvaloniaFact]
+    public void Picking_the_paint_slot_shown_in_this_one_changes_nothing()
+    {
+        DrawableMaterial paint = new DrawableMaterialInput { Name = "surface", Shader = "vehicle_paint3" }.Build(GameTarget.Legacy);
+        var edits = new ShaderEdits();
+        var card = new Views.ShaderValuesCard(edits);
+        int asked = 0;
+        card.SplitRequested = () =>
+        {
+            asked++;
+            return null;
+        };
+        card.Show("door", paint, geometries: 2);
+        card.ApplyToOne = true;
+        ShaderValue colour = card.Values.Single(value => value.Name == "matDiffuseColor");
+        float[] now = ShaderEdits.Current(paint, "matDiffuseColor");
+        card.PickSlot(colour, now[0] == 2 ? (int)now[1] : null);
+        Assert.Equal(0, asked);
+        Assert.False(edits.Dirty);
+        // Another slot asks for the entry of its own, and with none given, nothing is changed.
+        card.PickSlot(colour, now[0] == 2 && now[1] == 3 ? 4 : 3);
+        Assert.Equal(1, asked);
+        Assert.Equal(now, ShaderEdits.Current(paint, "matDiffuseColor"));
+        Assert.False(edits.Dirty);
+    }
+
+    [AvaloniaFact]
+    public void Textures_saved_while_a_split_is_unsaved_stop_a_save_over_them()
+    {
+        Action<SavedDocument>? tell = null;
+        bool written = false;
+        Views.ModelViewer viewer = Open(TexturedPair(4), new SaveTarget(_ => written = true), saved => tell = saved);
+        PickLeft(viewer);
+        Assert.True(viewer.OpenTextures());
+        // Saved in the texture editor, and a split made while the drawable is read again with them.
+        byte[] saved = TexturedPair(8);
+        tell!(new SavedDocument([.. ModelContent.EmbeddedTextures("pair.ydr", saved).Textures], saved));
+        viewer.Card.ApplyToOne = true;
+        Type(viewer.Card.Field("bumpiness")!, "3");
+        Wait(viewer.TexturesSaved);
+        // The split stays, drawn as it was; written, it would put the 4-pixel texture back, so it isn't.
+        Assert.Equal(2, viewer.Surfaces!.Sources.Count);
+        Assert.Equal((3f, 1f), Drawn(viewer));
+        Assert.False(viewer.Save());
+        Assert.False(written);
+        Assert.Contains("textures were saved since it was read", viewer.StatusText.Text);
+    }
+
+    [AvaloniaFact]
     public void A_geometry_split_by_bone_says_what_else_it_is_drawn_on()
     {
         // A fragment's skinned body: one geometry, drawn as the chassis, the door and the extra.
@@ -166,5 +258,26 @@ public sealed class ShaderApplyToTests
         Assert.Equal(1, rebuilt);
         Assert.False(edits.Dirty);
         Assert.False(edits.Undo());
+    }
+
+    [Fact]
+    public void Another_geometry_split_in_place_of_a_saved_one_is_a_change()
+    {
+        Drawable drawable = FiveFury.Ydr.Ydr.Read(Pair()).Drawable;
+        List<DrawableMaterial> list = drawable.Materials;
+        DrawableMaterial material = list[0];
+        DrawableGeometry left = drawable.Lods[DrawableLod.High].Models[0].Geometries[0];
+        DrawableGeometry right = drawable.Lods[DrawableLod.High].Models[1].Geometries[0];
+        var edits = new ShaderEdits();
+        edits.Set(edits.Split(left, list, material), "bumpiness", [4, 0, 0, 0]);
+        edits.MarkSaved();
+        Assert.False(edits.Dirty);
+        // The left's split undone and the right's made, its value put back: as many splits, but not the file's.
+        Assert.True(edits.Undo());
+        DrawableMaterial copy = edits.Split(right, list, material);
+        edits.Set(copy, "bumpiness", [4, 0, 0, 0]);
+        edits.Reset(copy, "bumpiness");
+        Assert.True(edits.HasUnsavedSplits);
+        Assert.True(edits.Dirty);
     }
 }

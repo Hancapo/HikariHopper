@@ -72,7 +72,17 @@ public static class ArchiveWriter
         return current;
     }
 
+    // Each edit reads the root RPF afresh and replaces it whole, so two at once would lose the first one's change: an
+    // explorer change, a texture save and a model save each wait for the one before to be written.
+    private static readonly Lock EditGate = new();
+
     private static void Edit(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
+    {
+        lock (EditGate)
+            EditAlone(rootPath, crypto, edit);
+    }
+
+    private static void EditAlone(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
     {
         string path = Path.GetFullPath(rootPath);
         string staging = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
