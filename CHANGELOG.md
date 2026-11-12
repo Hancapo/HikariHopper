@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Resizing textures, recalculating their mipmaps, changing their format or compression, extracting several to DDS files and saving the dictionary show the loading train over the texture editor once they take a moment, with a bar counting the textures and Cancel where it can stop: a cancelled change keeps nothing, a cancelled extract keeps the files it wrote. Extracting no longer freezes the window. ([#178](https://github.com/Hancapo/HikariHopper/pull/178))
 - Importing images into a texture dictionary shows the loading train over the editor once it takes a moment, with the file being read, a progress bar counting the files, and Cancel, which stops the import without adding anything. ([#177](https://github.com/Hancapo/HikariHopper/pull/177))
 
 ### Changed

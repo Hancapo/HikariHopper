@@ -25,7 +25,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         nameof(CanImportImages), nameof(CanPasteImage), nameof(PastePending), nameof(PasteCanReplace), nameof(PasteTargetName),
         nameof(ImportConfirmationPending), nameof(ImportConflictCount), nameof(ImportFileCount), nameof(Loading),
         nameof(PreviewLoading), nameof(OperationBusy), nameof(Saving), nameof(Modified), nameof(CanUndo), nameof(UndoLabel),
-        nameof(CanSaveSource), nameof(MaximumDimension), nameof(Error), nameof(DuplicateTextureCount), nameof(ImageImport),
+        nameof(CanSaveSource), nameof(MaximumDimension), nameof(Error), nameof(DuplicateTextureCount), nameof(Work),
     ];
     private static readonly string[] SelectionProperties =
     [
@@ -449,7 +449,8 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
             told(saved);
         pendingImageImport = null;
         pendingPaste = null;
-        imageImport = null;
+        work = null;
+        workCancel = null;
         generation++;
         pool.Clear();
         session = Guid.NewGuid().ToString("N");

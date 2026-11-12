@@ -541,40 +541,12 @@ public sealed partial class TextureViewerViewModel
         SetStatus($"Pasted {texture.Name}");
     }
 
-    /// <summary>The image import running now: how many files it has read, of how many, and the one it is on; none when
-    /// no import runs.</summary>
-    public ImageImportProgress? ImageImport => imageImport;
-
-    /// <summary>
-    /// Stops the running image import once the file in hand is read. Nothing it read is added: the dictionary stays as
-    /// it was. False when no import runs.
-    /// </summary>
-    public bool CancelImageImport()
-    {
-        if (imageImport is null || importCancel is null || importCancel.IsCancellationRequested)
-            return false;
-        importCancel.Cancel();
-        SetStatus("Cancelling the import…");
-        return true;
-    }
-
-    private ImageImportProgress? imageImport;
-    private CancellationTokenSource? importCancel;
-
-    private void ImageImportReached(int token, ImageImportProgress progress)
-    {
-        if (token != generation || imageImport is null)
-            return;
-        imageImport = progress;
-        OnPropertyChanged(nameof(ImageImport));
-    }
-
     private void ImageImportCancelled(int token)
     {
         if (token != generation)
             return;
         operationBusy = false;
-        imageImport = null;
+        EndWork();
         SetStatus("Import cancelled: no textures were added");
         EmitStateChanged();
     }
@@ -582,8 +554,7 @@ public sealed partial class TextureViewerViewModel
     private bool StartImageImport(IReadOnlyList<string> paths)
     {
         operationBusy = true;
-        imageImport = new ImageImportProgress(0, paths.Count, Path.GetFileName(paths[0]));
-        CancellationTokenSource cancel = importCancel = new CancellationTokenSource();
+        CancellationToken cancel = BeginWork("IMPORTING TEXTURES", paths.Count, Path.GetFileName(paths[0]), cancellable: true);
         SetStatus($"Importing {paths.Count} images…");
         EmitStateChanged();
         int token = generation;
@@ -604,8 +575,8 @@ public sealed partial class TextureViewerViewModel
                     Post(() => ImageImportCancelled(token));
                     return;
                 }
-                var reached = new ImageImportProgress(index, paths.Count, Path.GetFileName(path));
-                Post(() => ImageImportReached(token, reached));
+                (int done, string name) = (index, Path.GetFileName(path));
+                Post(() => WorkReached(token, done, name));
                 try
                 {
                     Texture decoded = ReadImportImage(path);
@@ -638,8 +609,7 @@ public sealed partial class TextureViewerViewModel
         if (token != generation)
             return;
         operationBusy = false;
-        imageImport = null;
-        OnPropertyChanged(nameof(ImageImport));
+        EndWork();
         TextureSet original = dictionary!;
         var textures = new List<Texture>();
         var selected = new SortedSet<int>();
@@ -684,14 +654,23 @@ public sealed partial class TextureViewerViewModel
             return false;
         operationBusy = true;
         string label = SelectedCount == 1 ? record.Name : $"{SelectedCount} textures";
+        CancellationToken cancel = BeginWork(WorkTitle(operation), sources.Count, sources[0].Texture.Name ?? "", cancellable: true);
         SetStatus($"{operation} {label}…");
         EmitStateChanged();
         int token = generation;
         pool.Start(() =>
         {
             var results = new List<(int Row, Texture Texture)>();
-            foreach ((int row, Texture source) in sources)
+            for (int index = 0; index < sources.Count; index++)
             {
+                (int row, Texture source) = sources[index];
+                if (cancel.IsCancellationRequested)
+                {
+                    Post(() => TransformCancelled(token, operation));
+                    return;
+                }
+                (int done, string name) = (index, source.Name ?? "");
+                Post(() => WorkReached(token, done, name));
                 try
                 {
                     Texture transformed = transform(source);
@@ -705,9 +684,28 @@ public sealed partial class TextureViewerViewModel
                     return;
                 }
             }
+            if (cancel.IsCancellationRequested)
+            {
+                Post(() => TransformCancelled(token, operation));
+                return;
+            }
             Post(() => TransformCompleted(token, operation, results));
         }, PriorityTransform);
         return true;
+    }
+
+    /// <summary>A transform's title on the overlay: "Optimizing compression for" as "OPTIMIZING COMPRESSION".</summary>
+    private static string WorkTitle(string operation) =>
+        (operation.EndsWith(" for", StringComparison.Ordinal) ? operation[..^4] : operation).ToUpperInvariant();
+
+    private void TransformCancelled(int token, string operation)
+    {
+        if (token != generation)
+            return;
+        operationBusy = false;
+        EndWork();
+        SetStatus($"{operation} cancelled: nothing was changed".Replace(" for cancelled", " cancelled"));
+        EmitStateChanged();
     }
 
     private void TransformCompleted(int token, string operation, IReadOnlyList<(int Row, Texture Texture)> results)
@@ -715,6 +713,7 @@ public sealed partial class TextureViewerViewModel
         if (token != generation)
             return;
         operationBusy = false;
+        EndWork();
         if (results.Count == 0)
         {
             SetStatus("No changes were needed");
@@ -740,7 +739,7 @@ public sealed partial class TextureViewerViewModel
         if (token != generation)
             return;
         operationBusy = false;
-        imageImport = null;
+        EndWork();
         SetStatus($"{operation} failed: {message}");
         EmitStateChanged();
     }
@@ -840,12 +839,4 @@ public sealed partial class TextureViewerViewModel
             throw new FileNotFoundException($"No such file or directory: '{full}'");
         return full;
     }
-}
-
-/// <summary>How far an image import has got: <paramref name="Done"/> files read of <paramref name="Total"/>, reading
-/// <paramref name="Current"/> now.</summary>
-public sealed record ImageImportProgress(int Done, int Total, string Current)
-{
-    /// <summary>The share done, 0 to 1.</summary>
-    public double Fraction => Total == 0 ? 0 : (double)Done / Total;
 }

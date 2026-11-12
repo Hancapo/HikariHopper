@@ -10,7 +10,7 @@ using T = HikariHopper.Ui.Theme;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// The common loading overlay: a dim over what is behind, and in the middle the steam train (<see cref="LoadingTrain"/>)
+/// The common loading overlay: a dim over what is behind, and across its middle a band holding the steam train (<see cref="LoadingTrain"/>)
 /// over a caption, a small capitalised <see cref="Title"/> and what is loading as <see cref="Detail"/>. The moving train
 /// is the busy sign; there is no spinner. A long task with a known length also shows <see cref="Progress"/> as a bar
 /// with <see cref="ProgressText"/> in it, and one that can stop offers Cancel (<see cref="CanCancel"/>,
@@ -39,6 +39,9 @@ public sealed class LoadingOverlay : UserControl
 
     /// <summary>The progress bar's size.</summary>
     internal const double BarWidth = 260, BarHeight = 16;
+
+    /// <summary>The band's room above and below what it holds.</summary>
+    internal const double BandPadding = 26;
 
     private readonly TextBlock title = new()
     {
@@ -112,20 +115,38 @@ public sealed class LoadingOverlay : UserControl
         };
         cancel.Click += OnCancel;
         AutomationProperties.SetName(cancel, "Cancel");
-        // The train over the caption and, for a long task, its bar and Cancel; the whole a little above the middle.
-        Content = new StackPanel
+        // The train over the caption and, for a long task, its bar and Cancel, on a band of the canvas across the whole
+        // overlay with hard seams top and bottom, so they sit on something rather than float over what is dimmed; the
+        // whole a little above the middle.
+        Band = new Border
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 28),
-            Children =
+            Background = T.AppBg,
+            BorderBrush = T.BorderHard,
+            BorderThickness = new Thickness(0, 1),
+            Child = new Panel
             {
-                Train,
-                new StackPanel { Spacing = 2, Margin = new Thickness(0, 12, 0, 0), Children = { title, detail } },
-                bar,
-                cancel,
+                Children =
+                {
+                    new Border { Height = 1, VerticalAlignment = VerticalAlignment.Top, Background = T.Bevel },
+                    new StackPanel
+                    {
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Margin = new Thickness(0, BandPadding),
+                        Children =
+                        {
+                            Train,
+                            new StackPanel { Spacing = 2, Margin = new Thickness(0, 12, 0, 0), Children = { title, detail } },
+                            bar,
+                            cancel,
+                        },
+                    },
+                },
             },
         };
+        Content = Band;
     }
 
     /// <summary>What kind of work it is, as the caption's small capitals show it: "LOADING GAME".</summary>
@@ -175,6 +196,9 @@ public sealed class LoadingOverlay : UserControl
 
     /// <summary>The train.</summary>
     internal LoadingTrain Train { get; }
+
+    /// <summary>The band across the overlay that holds it all.</summary>
+    internal Border Band { get; }
 
     /// <summary>The bar, its fill and Cancel, for tests.</summary>
     internal Border Bar => bar;

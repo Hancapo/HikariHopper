@@ -139,4 +139,21 @@ public sealed class LoadingOverlayTests
         Assert.Equal(0, overlay.Fill.Width);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Everything_sits_on_a_band_across_the_whole_overlay()
+    {
+        var overlay = new LoadingOverlay { Title = "IMPORTING TEXTURES", Detail = "adder_paint_d.png", Progress = .25, ProgressText = "4/12", CanCancel = true };
+        Window window = Show(overlay);
+        Rect band = overlay.Band.Bounds;
+        Assert.Equal(window.Width, band.Width);
+        Assert.Equal(T.AppBg, overlay.Band.Background);
+        Assert.Equal(new Thickness(0, 1), overlay.Band.BorderThickness);
+        // The train and the Cancel button inside it, with its room above and below.
+        double top = overlay.Train.TranslatePoint(default, overlay.Band)!.Value.Y;
+        double bottom = overlay.CancelButton.TranslatePoint(new Point(0, overlay.CancelButton.Bounds.Height), overlay.Band)!.Value.Y;
+        Assert.Equal(LoadingOverlay.BandPadding + 1, top, 1);
+        Assert.Equal(band.Height - LoadingOverlay.BandPadding - 1, bottom, 1);
+        window.Close();
+    }
 }
