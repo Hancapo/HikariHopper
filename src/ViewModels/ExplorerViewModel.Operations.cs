@@ -11,12 +11,14 @@ public sealed partial class ExplorerViewModel
     private bool entryOperationBusy;
     private bool peerEntryOperationBusy;
     private bool textureSaving;
+    // Saves by the text viewer or the 3D viewer into an RPF of this tab's, under way.
+    private int viewerSaves;
 
-    /// <summary>True while this tab, a peer tab, a game load or a texture save is writing.</summary>
-    public bool EntryOperationBusy => entryOperationBusy || peerEntryOperationBusy || gameLoading || TextureViewer.Saving;
+    /// <summary>True while this tab, a peer tab, a game load, a texture save or a viewer's save into an RPF is writing.</summary>
+    public bool EntryOperationBusy => entryOperationBusy || peerEntryOperationBusy || gameLoading || TextureViewer.Saving || viewerSaves > 0;
 
     /// <summary>Busy because of this tab's own write (not a peer's).</summary>
-    internal bool LocalEntryOperationBusy => entryOperationBusy || TextureViewer.Saving;
+    internal bool LocalEntryOperationBusy => entryOperationBusy || TextureViewer.Saving || viewerSaves > 0;
 
     /// <summary>The tail of the operation queue, completed once queued work has run (tests wait on it).</summary>
     internal Task OperationQueue => operationQueue;
@@ -467,12 +469,12 @@ public sealed partial class ExplorerViewModel
         ArchiveWriteRequested?.Invoke(this, rootPath);
     }
 
-    /// <summary>Where the 3D viewer saves an entry it changed: into its RPF, or over the loose file; none when neither can be had.</summary>
-    private ModelSaveTarget? ModelSaveTargetOf(EntryRecord entry)
+    /// <summary>Where a viewer saves an entry it changed: into its RPF, or over the loose file; none when neither can be had.</summary>
+    private SaveTarget? SaveTargetOf(EntryRecord entry)
     {
         try
         {
-            return ModelSaveTargetOf(Provider.EntrySourcePath(entry), Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null, entry.Name);
+            return SaveTargetOf(Provider.EntrySourcePath(entry), Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null, entry.Name);
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
@@ -481,19 +483,36 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>
-    /// Where the 3D viewer saves a file: into its root RPF through <paramref name="target"/>, as the texture editor does,
+    /// Where a viewer (the 3D viewer, the text viewer) saves a file: into its root RPF through <paramref name="target"/>, as the texture editor does,
     /// or over the loose file at <paramref name="source"/>; then what lists it is read again.
     /// </summary>
-    private ModelSaveTarget ModelSaveTargetOf(string source, ArchiveEntryTarget? target, string name)
+    private SaveTarget SaveTargetOf(string source, ArchiveEntryTarget? target, string name)
     {
         if (target is not null)
-            return new ModelSaveTarget(target.Save, () => PrepareTextureWrite(target), success => ModelSaved(new EntryCreationTarget(ArchivePath: target.RootPath), success, name));
-        return new ModelSaveTarget(bytes => CommonFury.IO.AtomicFile.Write(source, bytes),
-            Finished: success => ModelSaved(new EntryCreationTarget(Directory: Path.GetDirectoryName(source)), success, name));
+            return new SaveTarget(target.Save, () =>
+            {
+                PrepareTextureWrite(target);
+                ViewerSaving(true);
+            }, success =>
+            {
+                ViewerSaving(false);
+                FileSaved(new EntryCreationTarget(ArchivePath: target.RootPath), success, name);
+            });
+        return new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(source, bytes),
+            Finished: success => FileSaved(new EntryCreationTarget(Directory: Path.GetDirectoryName(source)), success, name));
     }
 
-    // A file the 3D viewer saved: what lists it, here and in the other tabs, is read again.
-    private void ModelSaved(EntryCreationTarget target, bool success, string name)
+    // A viewer's save into an RPF counts as this tab writing, as a texture save does: nothing else here or in the other
+    // tabs writes the RPF meanwhile.
+    private void ViewerSaving(bool started)
+    {
+        viewerSaves += started ? 1 : -1;
+        if (viewerSaves == (started ? 1 : 0))
+            RaiseEntryOperationStateChanged();
+    }
+
+    // A file a viewer saved: what lists it, here and in the other tabs, is read again.
+    private void FileSaved(EntryCreationTarget target, bool success, string name)
     {
         RefreshExternalContent(target);
         ContentChanged?.Invoke(this, target);

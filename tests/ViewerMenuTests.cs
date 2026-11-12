@@ -23,7 +23,7 @@ public sealed class ViewerMenuTests
         return new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
     }
 
-    private static Views.ModelViewer Open(byte[] ydr, ModelSaveTarget? target = null)
+    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target = null)
     {
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { SaveTarget = target });
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -57,7 +57,7 @@ public sealed class ViewerMenuTests
     [AvaloniaFact]
     public void The_3d_viewer_has_file_and_edit_menus_whose_items_say_when_they_can_be_used()
     {
-        Views.ModelViewer viewer = Open(Textured(), new ModelSaveTarget(_ => { }));
+        Views.ModelViewer viewer = Open(Textured(), new SaveTarget(_ => { }));
         Views.Controls.ViewerMenuRow menus = viewer.Menus;
         Assert.Equal(["File", "Edit"], menus.Titles);
         Assert.Equal(["Save", "Save as…", "-", "Embedded textures…", "Extract embedded textures…", "-", "Close"],
@@ -178,8 +178,9 @@ public sealed class ViewerMenuTests
     {
         var viewer = new Views.TextViewer(HikariHopper.Core.TextDocument.Load("notes.txt", "one\ntwo\n"u8.ToArray()));
         Assert.Equal(["File", "Edit"], viewer.Menus.Titles);
-        Assert.Equal(["Close"], viewer.Menus.ItemsOf("File").Select(item => item.Text));
-        Assert.Equal(["Copy", "-", "Find…", "Find next", "Find previous"], viewer.Menus.ItemsOf("Edit").Select(item => item.Text));
+        Assert.Equal(["Save", "Save as…", "-", "Close"], viewer.Menus.ItemsOf("File").Select(item => item.Text));
+        Assert.Equal(["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select all", "-", "Find…", "Find next", "Find previous"],
+            viewer.Menus.ItemsOf("Edit").Select(item => item.Text));
         // Find next needs something to find.
         Assert.False(Enabled(viewer.Menus, "Edit", "Find next"));
         viewer.FindField.Text = "two";

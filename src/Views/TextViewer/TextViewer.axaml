@@ -9,7 +9,7 @@
              FontFamily="{x:Static ui:Theme.UiFont}"
              FontSize="{x:Static ui:Theme.FontSize}"
              Foreground="{x:Static ui:Theme.Text}">
-  <!-- A text file, read only, as a modal that fills the main window over its blurred explorer, in the
+  <!-- A text file, edited as typed, as a modal that fills the main window over its blurred explorer, in the
        texture editor's frame: a header naming the file with a close mark, a toolbar in the texture
        toolbar's wells (find on the left; the table / text switch, wrapping, zoom and copy on the
        right), the text or the table, and the status bar. -->
@@ -138,6 +138,9 @@
             </ScrollViewer>
           </Panel>
         </DockPanel>
+
+        <!-- Where the viewer asks whether to save its changes before it closes. -->
+        <v:TextureDialogLayer Name="DialogLayer" />
 
         <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
         <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"

@@ -51,7 +51,7 @@ public sealed class ShaderApplyToTests
         Assert.True(task.IsCompletedSuccessfully);
     }
 
-    private static Views.ModelViewer Open(byte[] ydr, ModelSaveTarget? target = null, Action<Action<SavedDocument>>? textures = null)
+    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target = null, Action<Action<SavedDocument>>? textures = null)
     {
         var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { SaveTarget = target, OpenTextures = textures });
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -143,7 +143,7 @@ public sealed class ShaderApplyToTests
     public void A_geometry_given_an_entry_of_its_own_is_saved_with_it()
     {
         byte[]? written = null;
-        Views.ModelViewer viewer = Open(Pair(), new ModelSaveTarget(bytes => written = bytes));
+        Views.ModelViewer viewer = Open(Pair(), new SaveTarget(bytes => written = bytes));
         PickRight(viewer);
         viewer.Card.ApplyToOne = true;
         Type(viewer.Card.Field("bumpiness")!, "3");
@@ -214,7 +214,7 @@ public sealed class ShaderApplyToTests
     {
         Action<SavedDocument>? tell = null;
         bool written = false;
-        Views.ModelViewer viewer = Open(TexturedPair(4), new ModelSaveTarget(_ => written = true), saved => tell = saved);
+        Views.ModelViewer viewer = Open(TexturedPair(4), new SaveTarget(_ => written = true), saved => tell = saved);
         PickLeft(viewer);
         Assert.True(viewer.OpenTextures());
         // Saved in the texture editor, and a split made while the drawable is read again with them.

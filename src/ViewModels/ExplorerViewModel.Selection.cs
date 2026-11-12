@@ -357,7 +357,7 @@ public sealed partial class ExplorerViewModel
             SetStatus($"{entry.Name} isn't a text file");
             return;
         }
-        TextFileOpened?.Invoke(this, TextDocument.Load(entry.Name, data));
+        TextFileOpened?.Invoke(this, new TextFile(TextDocument.Load(entry.Name, data)) { SaveTarget = SaveTargetOf(entry) });
         SetStatus($"Opened {entry.Name}");
     }
 
@@ -409,7 +409,7 @@ public sealed partial class ExplorerViewModel
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
             Nearby = NearbyDictionaries(entry),
-            SaveTarget = ModelSaveTargetOf(entry),
+            SaveTarget = SaveTargetOf(entry),
         });
         SetStatus($"Opened {entry.Name}");
     }

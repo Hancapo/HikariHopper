@@ -135,10 +135,18 @@ public sealed class ExplorerSession : IStartupSession
         viewer.Present();
     }
 
-    private void OnTextFileOpened(object? sender, Core.TextDocument document)
+    private void OnTextFileOpened(object? sender, TextFile file)
     {
-        TextViewer?.Close();
-        var viewer = new TextViewer(document) { Anchor = window?.ExplorerScreenHost };
+        // The one open goes first; with changes unsaved it asks, and if that is cancelled it stays and this one doesn't open.
+        if (TextViewer is { } open)
+            open.CloseThen(() => ShowTextViewer(file));
+        else
+            ShowTextViewer(file);
+    }
+
+    private void ShowTextViewer(TextFile file)
+    {
+        var viewer = new TextViewer(file) { Anchor = window?.ExplorerScreenHost };
         TextViewer = viewer;
         // Let go of it once closed: it holds the whole file.
         viewer.Closed += (_, _) =>

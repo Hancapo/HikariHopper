@@ -72,8 +72,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>A game was opened; the argument is its root folder.</summary>
     public event EventHandler<string>? GameOpened;
 
-    /// <summary>A text file was opened from the list, for the text viewer to show.</summary>
-    public event EventHandler<TextDocument>? TextFileOpened;
+    /// <summary>A text file was opened from the list, for the text viewer to show and edit.</summary>
+    public event EventHandler<TextFile>? TextFileOpened;
 
     /// <summary>An image file was opened for viewing; the image viewer shows it.</summary>
     public event EventHandler<ImageViewerViewModel>? ImageFileOpened;
