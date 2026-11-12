@@ -162,6 +162,58 @@ internal sealed class PartVisibility : IPartList
         return (shown.Sum(part => part.TriangleCount), shown.Sum(part => part.VertexCount), shown.Sum(part => part.EdgeCount));
     }
 
+    /// <summary>
+    /// The drawn part a ray from the world first meets, for picking with the pointer; none when it meets nothing drawn.
+    /// Both sides of a triangle count, as a cut-out leaf is seen from both.
+    /// </summary>
+    public int? PartAt(Vector3 origin, Vector3 direction)
+    {
+        bool[] mask = Mask();
+        Vector3 from = origin - scene.Origin;
+        float nearest = float.PositiveInfinity;
+        int? found = null;
+        for (int i = 0; i < mask.Length; i++)
+        {
+            if (!mask[i])
+                continue;
+            SurfacePart part = scene.Parts[i];
+            for (uint at = part.FirstIndex; at + 2 < part.FirstIndex + part.IndexCount && at + 2 < scene.Indices.Length; at += 3)
+            {
+                long a = part.BaseVertex + scene.Indices[at], b = part.BaseVertex + scene.Indices[at + 1], c = part.BaseVertex + scene.Indices[at + 2];
+                if (a < 0 || b < 0 || c < 0 || a >= scene.Vertices.Length || b >= scene.Vertices.Length || c >= scene.Vertices.Length)
+                    continue;
+                if (Hit(from, direction, scene.Vertices[a].Position, scene.Vertices[b].Position, scene.Vertices[c].Position) is { } distance
+                    && distance < nearest)
+                {
+                    nearest = distance;
+                    found = i;
+                }
+            }
+        }
+        return found;
+    }
+
+    // How far along a ray it meets a triangle (Moller and Trumbore's test), either side; none when it misses.
+    private static float? Hit(Vector3 origin, Vector3 direction, Vector3 a, Vector3 b, Vector3 c)
+    {
+        Vector3 ab = b - a, ac = c - a;
+        Vector3 p = Vector3.Cross(direction, ac);
+        float determinant = Vector3.Dot(ab, p);
+        if (MathF.Abs(determinant) < 1e-12f)
+            return null;
+        float inverse = 1 / determinant;
+        Vector3 t = origin - a;
+        float u = Vector3.Dot(t, p) * inverse;
+        if (u < 0 || u > 1)
+            return null;
+        Vector3 q = Vector3.Cross(t, ab);
+        float v = Vector3.Dot(direction, q) * inverse;
+        if (v < 0 || u + v > 1)
+            return null;
+        float distance = Vector3.Dot(ac, q) * inverse;
+        return distance > 0 ? distance : null;
+    }
+
     /// <summary>The triangles that would be drawn at a level of detail, with the parts hidden as they are.</summary>
     public int TrianglesAt(int lod)
     {

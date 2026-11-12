@@ -113,6 +113,18 @@ internal sealed class OrbitCamera
         }
     }
 
+    /// <summary>
+    /// The ray from the eye through a pixel of a view <paramref name="width"/> by <paramref name="height"/> pixels, in
+    /// the world, for picking what is under the pointer.
+    /// </summary>
+    public (Vector3 Origin, Vector3 Direction) Ray(float x, float y, float width, float height)
+    {
+        float aspect = width / Math.Max(height, 1);
+        float across = (2 * (x + .5f) / Math.Max(width, 1) - 1) * TanHalf * aspect;
+        float up = (1 - 2 * (y + .5f) / Math.Max(height, 1)) * TanHalf;
+        return (Eye, Vector3.Normalize(Forward + Right * across + Up * up));
+    }
+
     /// <summary>Moves closer for positive wheel steps, further for negative.</summary>
     public void Zoom(float steps) => Distance = Math.Clamp(Distance * MathF.Exp(-steps * .12f), Radius * .02f, Radius * 200);
 

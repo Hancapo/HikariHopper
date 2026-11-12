@@ -110,6 +110,8 @@ public partial class ModelViewer : UserControl, IModalContent
         Avalonia.Automation.AutomationProperties.SetName(CameraSwitch, "Camera");
         this.file = file;
         Parts.Changed += ShowParts;
+        Parts.SelectionChanged += ShowPicked;
+        Viewport.Clicked += (from, direction) => PickAt(from, direction);
         Parts.FrameRequested += FrameParts;
         Parts.TexturesRequested += () => OpenTextures();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
@@ -411,6 +413,28 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsSide.Transitions = PartsSlide;
     }
 
+    /// <summary>
+    /// Picks the geometry a ray from the world meets first, as a click on the model does: its row is selected in the parts
+    /// panel, opened to it, and it is outlined; a click on nothing picks nothing.
+    /// </summary>
+    internal bool PickAt(System.Numerics.Vector3 from, System.Numerics.Vector3 direction)
+    {
+        if (visibility is null)
+            return false;
+        if (visibility.PartAt(from, direction) is int part
+            && Parts.Reveal(node => node.Kind == PartKind.Geometry && node.Parts.Count == 1 && node.Parts[0] == part))
+            return true;
+        Parts.ClearSelection();
+        return false;
+    }
+
+    // What is selected in the parts panel is outlined on the model: a drawable's geometries under the rows.
+    private void ShowPicked()
+    {
+        if (visibility is not null)
+            Viewport.Pick(Parts.Selection.SelectMany(node => node.Parts).Distinct());
+    }
+
     /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
     internal void FrameParts(IReadOnlyList<PartNode> nodes)
     {
@@ -604,6 +628,8 @@ public partial class ModelViewer : UserControl, IModalContent
         if (visibility is null)
             return;
         Viewport.ShowParts(visibility.Mask());
+        // What is picked, again: another level's rows keep their keys but not their parts.
+        ShowPicked();
         (int triangles, int vertices, int edges) = visibility.Stats();
         static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         TrianglesText.Text = Count(triangles);

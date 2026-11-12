@@ -294,6 +294,7 @@ internal sealed unsafe partial class ViewportRenderer
         shadowRadius = 0;
         surfaceParts = [];
         partsShown = [];
+        partsPicked = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
         uploaded.Clear();
