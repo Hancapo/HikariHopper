@@ -435,10 +435,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
         Settle(viewer);
-        // No embedded textures: the button (an icon, no count) is off, and T does nothing.
-        Assert.False(viewer.TexturesButton.IsEnabled);
-        Assert.True(string.IsNullOrEmpty(viewer.TexturesButton.Text));
+        // No embedded textures: the parts panel has no row for them, and T does nothing.
+        Assert.False(viewer.Parts.TexturesRow.IsVisible);
         Assert.False(viewer.Shortcut('T'));
+        // Of the model, the toolbar has its shadows, and its levels of detail when it has more than one: its state
+        // and textures are in the parts panel.
+        Assert.Equal([viewer.ShadowsButton], viewer.ModelTools.GetLogicalDescendants().OfType<Views.Controls.ChromeToolButton>());
+        Assert.False(viewer.LodSwitch.IsVisible);
         Assert.Equal(0, opened);
         // The game's afternoon to start with, in quarter hours, on the time button and in its dropdown.
         Assert.Equal("14:30", viewer.TimeButton.Text);
@@ -478,11 +481,10 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.False(viewer.Shortcut('L'));
         Assert.False(viewer.SolidButton.IsEnabled);
         Assert.False(viewer.Shortcut('K'));
-        // Not a fragment with a damaged state: its button is off, and X does nothing.
-        Assert.False(viewer.DamagedButton.IsEnabled);
+        // Not a fragment with a damaged state: the parts panel has no State section, and X does nothing.
+        Assert.DoesNotContain(viewer.Parts.Rows, row => row.Node.Kind == PartKind.State);
         Assert.False(viewer.Shortcut('X'));
         // Off, the toggles keep the button's own faint ink.
-        Assert.False(viewer.DamagedButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
         Assert.False(viewer.SkeletonButton.IsSet(Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty));
         // The camera orbits to start with; V flies it, with its speed in the status bar, and F frames the model and
         // orbits again.
@@ -562,15 +564,21 @@ public sealed class ModelViewerTests : ExplorerTestBase
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
         Settle(viewer);
-        Assert.True(viewer.TexturesButton.IsEnabled);
+        // The parts panel's foot has their row, with how many; T, or a press on it, opens them.
+        Assert.True(viewer.Parts.TexturesRow.IsVisible);
+        Assert.Equal("1", viewer.Parts.TexturesCountText);
+        Assert.Contains(viewer.Parts.TexturesRow.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>(), text => text.Text == "Embedded textures");
         Assert.True(viewer.Shortcut('T'));
         Assert.True(viewer.OpenTextures());
-        Assert.Equal(2, opened);
+        viewer.Parts.RequestTextures();
+        Assert.Equal(3, opened);
 
-        // A file that can't open its textures has the button off.
+        // A file that can't open its textures has no row.
         var lone = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(lone);
-        Assert.False(lone.TexturesButton.IsEnabled);
+        Assert.False(lone.Parts.TexturesRow.IsVisible);
+        lone.Parts.RequestTextures();
+        Assert.False(lone.OpenTextures());
     }
 
     [AvaloniaFact]
@@ -842,16 +850,16 @@ public sealed class ModelViewerTests : ExplorerTestBase
         ExplorerStateRenders.Pump(300);
 
         // In the viewer: drawn in a window of its own, in place of the in-window tooltip the viewport would cover.
-        Avalonia.Controls.ToolTip.SetIsOpen(viewer.ShadowsButton, true);
-        Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.ShadowsButton));
-        Assert.Equal("Shadows  (H)", Views.Controls.WindowToolTip.ShownText);
+        Avalonia.Controls.ToolTip.SetIsOpen(viewer.FrameButton, true);
+        Assert.False(Avalonia.Controls.ToolTip.GetIsOpen(viewer.FrameButton));
+        Assert.Equal("Frame the model, orbiting it  (F)", Views.Controls.WindowToolTip.ShownText);
         Assert.Contains(window.OwnedWindows, owned => owned.Content is Avalonia.Controls.Border);
         // Held at its own size in the window's corner: Windows keeps such a window at least 39 pixels high, which
         // stretched a one-line tooltip.
         var body = (Avalonia.Controls.Border)window.OwnedWindows.Single(owned => owned.Content is Avalonia.Controls.Border).Content!;
         Assert.Equal((Avalonia.Layout.HorizontalAlignment.Left, Avalonia.Layout.VerticalAlignment.Top), (body.HorizontalAlignment, body.VerticalAlignment));
         // A tooltip that changes, as the parts arrow's does when it's pressed, closes it.
-        Avalonia.Controls.ToolTip.SetTip(viewer.ShadowsButton, "Changed");
+        Avalonia.Controls.ToolTip.SetTip(viewer.FrameButton, "Changed");
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
         // So does the viewer closing.
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.TimeButton, true);

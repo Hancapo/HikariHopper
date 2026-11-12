@@ -275,6 +275,55 @@ public sealed class PartsPanelVariantTests
     }
 
     [AvaloniaFact]
+    public void A_fragments_states_are_picked_as_a_peds_variants_are()
+    {
+        var visibility = new PartVisibility(FragmentViewerTests.DamagedScene());
+        var panel = new Views.PartsPanel { Parts = visibility };
+        int changed = 0;
+        panel.Changed += () => changed++;
+        // A State section first, intact open with its parts, damaged closed; then the extras. No One | All switch.
+        Assert.False(panel.ModeRow.IsVisible);
+        Assert.Equal([("Intact", true), ("chassis", false), ("door_dside_f", false), ("Damaged", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+
+        // A click on the damaged row shows it in place of the intact one, open, the intact one closed.
+        panel.Select(panel.Rows[3].Node);
+        Assert.True(visibility.Damaged);
+        Assert.Equal(1, changed);
+        Assert.Equal([("Intact", false), ("Damaged", true), ("chassis", false), ("door_dside_f", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+        Assert.Equal((false, true), (visibility.State(panel.Rows[0].Node), visibility.State(panel.Rows[1].Node)));
+        // X does the same through the panel.
+        panel.PickState(false);
+        Assert.False(visibility.Damaged);
+        Assert.Equal(2, changed);
+        Assert.Equal("Intact", panel.Rows[0].Node.Name);
+        Assert.True(panel.Rows[0].Open);
+    }
+
+    [AvaloniaFact]
+    public void A_drawables_embedded_textures_are_a_row_at_the_panels_foot()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
+        // None until the model has them.
+        Assert.False(panel.TexturesRow.IsVisible);
+
+        // Embedded textures are a row at the foot, with how many, which asks for them when pressed.
+        int opened = 0;
+        panel.TexturesRequested += () => opened++;
+        panel.RequestTextures();
+        Assert.Equal(0, opened);
+        panel.ShowTextures(12);
+        Assert.True(panel.TexturesRow.IsVisible);
+        Assert.Equal("12", panel.TexturesCountText);
+        Assert.Contains(panel.TexturesRow.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == "Embedded textures");
+        panel.RequestTextures();
+        Assert.Equal(1, opened);
+        panel.ShowTextures(0);
+        Assert.False(panel.TexturesRow.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void A_collisions_materials_are_rows_with_their_colour_to_show_hide_and_find()
     {
         // Two boxes of tarmac and one of another material, apart from each other.

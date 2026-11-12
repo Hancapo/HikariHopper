@@ -73,11 +73,10 @@ public partial class ModelViewer : UserControl, IModalContent
             if (visibility is { } shown && index >= 0 && index < shown.Levels.Count)
                 SetLevel(shown.Levels[index]);
         };
-        TexturesButton.Click += (_, _) => OpenTextures();
-        DamagedButton.Click += (_, _) => SetDamaged(visibility?.Damaged != true);
         this.file = file;
         Parts.Changed += ShowParts;
         Parts.FrameRequested += FrameParts;
+        Parts.TexturesRequested += () => OpenTextures();
         FrameButton.Click += (_, _) => Reframe();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
@@ -135,7 +134,6 @@ public partial class ModelViewer : UserControl, IModalContent
                 button.ClearValue(ForegroundProperty);
         }
         Set(ShadowsButton, Viewport.Shadows);
-        Set(DamagedButton, visibility?.Damaged == true);
         Set(SkeletonButton, skeletonShown);
         Set(SolidButton, solidShown);
         Set(LightsButton, lightsShown);
@@ -245,7 +243,7 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal bool OpenTextures()
     {
-        if (!TexturesButton.IsEnabled || file.OpenTextures is not { } open)
+        if (!texturesAvailable || file.OpenTextures is not { } open)
             return false;
         open(saved => TexturesSaved = ShowSaved(saved));
         return true;
@@ -284,10 +282,8 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (visibility is null || surfaces is not { HasDamaged: true })
             return false;
-        visibility.Damaged = damaged;
-        Parts.Refresh();
-        ShowParts();
-        RefreshToggles();
+        // Through the panel, which opens the state's row and asks for the parts to be drawn again.
+        Parts.PickState(damaged);
         return true;
     }
 
@@ -296,17 +292,15 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The drawable shown, once read.</summary>
     internal DrawableScene? Surfaces => surfaces;
 
-    /// <summary>The textures button, off when there are none or they can't be opened; its tooltip says how many.</summary>
+    // Whether the drawable has embedded textures that can be opened.
+    private bool texturesAvailable;
+
+    /// <summary>The embedded textures' row at the foot of the parts panel, with how many; none when there are none or they can't be opened.</summary>
     private void ShowTextures(DrawableScene scene)
     {
         int count = scene.EmbeddedTextureCount;
-        TexturesButton.IsEnabled = count > 0 && file.OpenTextures is not null;
-        ThemedToolTip.Set(TexturesButton, count switch
-        {
-            0 => "No embedded textures",
-            1 => "1 embedded texture  (T)",
-            _ => $"{count} embedded textures  (T)",
-        });
+        texturesAvailable = count > 0 && file.OpenTextures is not null;
+        Parts.ShowTextures(texturesAvailable ? count : 0);
     }
 
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
@@ -707,8 +701,6 @@ public partial class ModelViewer : UserControl, IModalContent
             ShowTextures(surfaces);
             ShowOverlayButtons(surfaces);
             this.surfaces = surfaces;
-            DamagedButton.IsEnabled = surfaces.HasDamaged;
-            ThemedToolTip.Set(DamagedButton, surfaces.HasDamaged ? "Damaged  (X)" : "No damaged state");
             RefreshToggles();
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
@@ -723,6 +715,7 @@ public partial class ModelViewer : UserControl, IModalContent
         var listed = new MeshParts(content.Mesh);
         marks = listed.Any ? listed : null;
         Parts.Parts = marks;
+        Parts.ShowTextures(0);
         partsTab.IsWanted = marks is not null;
         SetPartsShown(marks is not null);
         RefreshToggles();

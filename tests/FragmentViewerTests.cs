@@ -138,16 +138,24 @@ public sealed class FragmentViewerTests
         Assert.False(scene.HasDamaged);
     }
 
-    [Fact]
-    public void A_fragments_damaged_drawable_is_drawn_in_place_of_its_intact_one_while_damaged()
+    // A fragment of four triangles (a chassis, a door with its handle, an extra) whose damaged drawable has two.
+    private static Yft Damageable()
     {
         var (skeleton, physics) = Rig();
         var fragment = new Yft { MainDrawable = new FragmentDrawable(Skinned(skeleton)) };
         fragment.Drawables.Add(new FragmentDrawableEntry("damaged", new FragmentDrawable(Skinned(skeleton, 2))));
         fragment.DamagedDrawableIndex = 0;
         fragment.PhysicsLods[0] = physics;
+        return fragment;
+    }
 
-        IReadOnlyList<SceneModel> models = FragmentModels.Of(fragment, "sign");
+    /// <summary>The scene of <see cref="Damageable"/>, named sign.</summary>
+    internal static DrawableScene DamagedScene() => DrawableScene.Build(FragmentModels.Of(Damageable(), "sign"), TextureLookup.None);
+
+    [Fact]
+    public void A_fragments_damaged_drawable_is_drawn_in_place_of_its_intact_one_while_damaged()
+    {
+        IReadOnlyList<SceneModel> models = FragmentModels.Of(Damageable(), "sign");
         Assert.Equal([ModelVariant.Intact, ModelVariant.Damaged], models.Select(model => model.Variant));
         DrawableScene scene = DrawableScene.Build(models, TextureLookup.None);
         Assert.True(scene.HasDamaged);
@@ -158,8 +166,46 @@ public sealed class FragmentViewerTests
         Assert.Equal((4, 12, 12), visibility.Stats());
         visibility.Damaged = true;
         Assert.Equal((2, 6, 6), visibility.Stats());
-        // One row for the sign either way, named for it.
-        Assert.Equal("sign", Assert.Single(visibility.Tree()).Name);
+    }
+
+    [Fact]
+    public void A_fragments_states_are_rows_with_their_parts_one_of_which_shows()
+    {
+        var visibility = new PartVisibility(DamagedScene());
+        // Intact, then damaged, each with what its drawable is made of; the extra is the intact drawable's, listed with
+        // the extras while the fragment is intact.
+        IReadOnlyList<PartSection> sections = visibility.Sections();
+        Assert.Equal([("State", PartSectionKind.States), ("Extras", PartSectionKind.Extras)], sections.Select(section => (section.Title, section.Kind)));
+        Assert.Equal([PartVisibility.IntactKey, PartVisibility.DamagedKey], sections[0].Nodes.Select(node => node.Key));
+        Assert.Equal(["Intact", "Damaged"], sections[0].Nodes.Select(node => node.Name));
+        Assert.All(sections[0].Nodes, node => Assert.Equal(PartKind.State, node.Kind));
+        Assert.Equal(["chassis", "door_dside_f"], sections[0].Nodes[0].Children.Select(child => child.Name));
+        Assert.Equal([1, 1], sections[0].Nodes[0].Children.Select(child => child.Depth));
+        Assert.Equal((3, 2), (sections[0].Nodes[0].Triangles, sections[0].Nodes[1].Triangles));
+        Assert.Equal("extra_1", Assert.Single(sections[1].Nodes).Name);
+        Assert.Equal((true, false), (visibility.State(sections[0].Nodes[0]), visibility.State(sections[0].Nodes[1])));
+        Assert.Equal((3, 3), visibility.Counts());
+
+        // Showing the damaged row is showing the fragment damaged: the intact row reads hidden, and its extra goes.
+        visibility.Show(sections[0].Nodes[1], true);
+        Assert.True(visibility.Damaged);
+        sections = visibility.Sections();
+        Assert.Equal(["State"], sections.Select(section => section.Title));
+        Assert.Equal((false, true), (visibility.State(sections[0].Nodes[0]), visibility.State(sections[0].Nodes[1])));
+        Assert.Equal((2, 2), visibility.Counts());
+        // Hiding it is showing the other.
+        visibility.Show(sections[0].Nodes[1], false);
+        Assert.False(visibility.Damaged);
+        // Only a part of the damaged state: damaged, with that part alone; only the damaged state, all of it.
+        sections = visibility.Sections();
+        visibility.ShowOnly([sections[0].Nodes[1].Children[0]]);
+        Assert.True(visibility.Damaged);
+        Assert.Equal((1, 2), visibility.Counts());
+        visibility.ShowOnly([sections[0].Nodes[0]]);
+        Assert.False(visibility.Damaged);
+        visibility.ShowOnly([sections[0].Nodes[1]]);
+        Assert.True(visibility.Damaged);
+        Assert.Equal((2, 2), visibility.Counts());
     }
 
     [Fact]

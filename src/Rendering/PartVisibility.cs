@@ -46,6 +46,8 @@ internal enum PartSectionKind
     Extras,
     /// <summary>A drawable dictionary's drawables of one kind (a ped's heads, say): variants of each other.</summary>
     Variants,
+    /// <summary>A fragment's intact and damaged states, each with its parts: one of them shows.</summary>
+    States,
 }
 
 /// <summary>A section of the parts panel.</summary>
@@ -66,6 +68,8 @@ internal enum PartKind
     Geometry,
     /// <summary>What a flat mesh's triangles are marked as, by colour: a collision's material, a navmesh's kind of ground.</summary>
     Mark,
+    /// <summary>A fragment intact or damaged, with the parts drawn only in that state.</summary>
+    State,
 }
 
 /// <summary>
@@ -165,13 +169,21 @@ internal sealed class PartVisibility : IPartList
         return (at.Count(i => !hidden.Contains(keys[i])), at.Length);
     }
 
+    /// <summary>The intact state's row of a fragment that has a damaged one.</summary>
+    public const string IntactKey = "state/intact";
+
+    /// <summary>The damaged state's row.</summary>
+    public const string DamagedKey = "state/damaged";
+
     /// <summary>
     /// The parts panel's rows at the level picked: each drawable, or its group (a vehicle's wheels), then its models
-    /// when it has more than one, then their geometries by shader.
+    /// when it has more than one, then their geometries by shader. A fragment with a damaged state has a row for each
+    /// state first, Intact and Damaged, with what is drawn only in it under it: its main drawable's parts, and the
+    /// children that break.
     /// </summary>
     public IReadOnlyList<PartNode> Tree()
     {
-        int[] at = [.. AtLevel()];
+        int[] at = [.. AtLevel(everyState: true)];
         PartNode Geometry(int part, int depth) =>
             new(keys[part], scene.Materials[scene.Parts[part].Material].Shader, depth, scene.Parts[part].TriangleCount, [part], [], PartKind.Geometry);
         PartNode Drawable(int model, int depth)
@@ -191,8 +203,50 @@ internal sealed class PartVisibility : IPartList
             else
                 rows.Add(Node($"group/{group.Key}", group.Key, 0, [.. group.Select(m => Drawable(m, 1))], PartKind.Group));
         }
-        return rows;
+        return scene.HasDamaged ? WithStates(rows) : rows;
     }
+
+    // The rows with what is drawn only intact or only damaged taken out, into a row for each state.
+    private IReadOnlyList<PartNode> WithStates(List<PartNode> rows)
+    {
+        ModelVariant VariantOf(PartNode node) =>
+            node.Kind == PartKind.Drawable && int.TryParse(node.Key, out int model) && model < scene.Variants.Count ? scene.Variants[model] : ModelVariant.Always;
+        var intact = new List<PartNode>();
+        var damaged = new List<PartNode>();
+        var kept = new List<PartNode>();
+        foreach (PartNode row in rows)
+        {
+            if (row.Kind == PartKind.Group)
+            {
+                var stays = new List<PartNode>();
+                foreach (PartNode child in row.Children)
+                    (VariantOf(child) switch { ModelVariant.Intact => intact, ModelVariant.Damaged => damaged, _ => stays }).Add(child);
+                if (stays.Count > 0)
+                    kept.Add(stays.Count == row.Children.Count ? row : Node(row.Key, row.Name, row.Depth, stays, PartKind.Group));
+                continue;
+            }
+            switch (VariantOf(row))
+            {
+                case ModelVariant.Intact:
+                    intact.Add(Shifted(row, 1));
+                    break;
+                case ModelVariant.Damaged:
+                    damaged.Add(Shifted(row, 1));
+                    break;
+                default:
+                    kept.Add(row);
+                    break;
+            }
+        }
+        // A state that is one drawable lists its parts under it, without a row for the drawable.
+        PartNode State(string key, string name, List<PartNode> nodes) => Node(key, name, 0,
+            nodes is [{ Kind: PartKind.Drawable, Children.Count: > 0 } only] ? [.. only.Children.Select(child => Shifted(child, -1))] : nodes, PartKind.State);
+        return [State(IntactKey, "Intact", intact), State(DamagedKey, "Damaged", damaged), .. kept];
+    }
+
+    // A row and everything under it moved down (or up) the tree.
+    private static PartNode Shifted(PartNode node, int by) =>
+        node with { Depth = Math.Max(0, node.Depth + by), Children = [.. node.Children.Select(child => Shifted(child, by))] };
 
     /// <summary>
     /// The parts panel's sections at the level picked. A drawable dictionary's drawables go by what their names say they
@@ -200,11 +254,40 @@ internal sealed class PartVisibility : IPartList
     /// each group of drawables (its wheels, its children), then its extras, taken out of where they're bound; a single
     /// drawable is one section, untitled.
     /// </summary>
-    public IReadOnlyList<PartSection> Sections() => SectionsOf(Tree());
+    public IReadOnlyList<PartSection> Sections() => SectionsOf(Tree(), node => node.Key != (Damaged ? IntactKey : DamagedKey));
 
-    /// <summary>The sections of these rows, as <see cref="Sections"/> makes them.</summary>
-    internal static IReadOnlyList<PartSection> SectionsOf(IReadOnlyList<PartNode> tree)
+    /// <summary>
+    /// The sections of these rows, as <see cref="Sections"/> makes them. A fragment's states come first, as a section of
+    /// their own; the extras listed are those of the state <paramref name="shown"/> says is drawn, so each is there once.
+    /// </summary>
+    internal static IReadOnlyList<PartSection> SectionsOf(IReadOnlyList<PartNode> tree, Func<PartNode, bool>? shown = null)
     {
+        PartNode[] states = [.. tree.Where(node => node.Kind == PartKind.State)];
+        if (states.Length > 0)
+        {
+            var extrasOf = new List<PartNode>();
+            var listed = new List<PartNode>();
+            foreach (PartNode state in states)
+            {
+                // A state is taken as one drawable, its extras out of it.
+                IReadOnlyList<PartSection> own = SectionsOf([state with { Kind = PartKind.Drawable }]);
+                listed.Add(own.First(section => section.Kind == PartSectionKind.Tree).Nodes.Single() with { Kind = PartKind.State });
+                if (shown?.Invoke(state) != false)
+                    extrasOf.AddRange(own.Where(section => section.Kind == PartSectionKind.Extras).SelectMany(section => section.Nodes));
+            }
+            IReadOnlyList<PartSection> rest = SectionsOf([.. tree.Where(node => node.Kind != PartKind.State)]);
+            var all = new List<PartSection> { new("State", PartSectionKind.States, listed) };
+            foreach (PartSection section in rest)
+                all.Add(section.Kind == PartSectionKind.Tree && section.Title == "" ? section with { Title = "Body" } : section);
+            if (extrasOf.Count > 0)
+            {
+                PartNode[] merged = [.. (all.FirstOrDefault(section => section.Kind == PartSectionKind.Extras)?.Nodes ?? []).Concat(extrasOf)
+                    .OrderBy(extra => ExtraNumber(extra.Name)).ThenBy(extra => extra.Name, StringComparer.Ordinal)];
+                all.RemoveAll(section => section.Kind == PartSectionKind.Extras);
+                all.Add(new PartSection("Extras", PartSectionKind.Extras, merged));
+            }
+            return all;
+        }
         if (tree.Count > 1 && tree.All(node => node.Kind == PartKind.Drawable))
             // Drawables whose names don't say what they are aren't variants of each other: all of them show.
             // A ped's are in the order of its body, head first, then its props, each kind's variants by their number;
@@ -336,7 +419,8 @@ internal sealed class PartVisibility : IPartList
     /// <summary>Whether a row's parts are drawn: all of them, none, or some (null).</summary>
     public bool? State(PartNode node)
     {
-        int shown = node.Parts.Count(i => !hidden.Contains(keys[i]));
+        // What the other state draws isn't drawn, whatever the panel hides.
+        int shown = node.Parts.Count(i => Active(scene.Parts[i].Model) && !hidden.Contains(keys[i]));
         return shown == node.Parts.Count ? true : shown == 0 ? false : null;
     }
 
@@ -346,6 +430,14 @@ internal sealed class PartVisibility : IPartList
     /// <summary>Shows the parts under these rows and hides the rest at the level shown.</summary>
     public void ShowOnly(IEnumerable<PartNode> nodes)
     {
+        nodes = [.. nodes];
+        // Only a state's parts, or parts of it: that state, and nothing else of it.
+        ModelVariant[] states = [.. nodes.SelectMany(node => node.Parts).Select(part => scene.Parts[part].Model)
+            .Select(model => model < scene.Variants.Count ? scene.Variants[model] : ModelVariant.Always).Where(variant => variant != ModelVariant.Always).Distinct()];
+        if (nodes.FirstOrDefault(node => node.Kind == PartKind.State) is { } state)
+            Damaged = state.Key == DamagedKey;
+        else if (states is [var only])
+            Damaged = only == ModelVariant.Damaged;
         var keep = new HashSet<int>(nodes.SelectMany(node => node.Parts));
         foreach (int part in AtLevel())
             if (keep.Contains(part))
@@ -377,9 +469,14 @@ internal sealed class PartVisibility : IPartList
         return any ? new Aabb3(min + scene.Origin, max + scene.Origin) : null;
     }
 
-    /// <summary>Shows or hides every part under a row.</summary>
+    /// <summary>Shows or hides every part under a row. A state's row shows that state, or the other one.</summary>
     public void Show(PartNode node, bool shown)
     {
+        if (node.Kind == PartKind.State)
+        {
+            Damaged = (node.Key == DamagedKey) == shown;
+            return;
+        }
         foreach (int part in node.Parts)
             if (shown)
                 hidden.Remove(keys[part]);
@@ -387,11 +484,12 @@ internal sealed class PartVisibility : IPartList
                 hidden.Add(keys[part]);
     }
 
-    private IEnumerable<int> AtLevel()
+    // The parts at the level shown, of the state shown or of both.
+    private IEnumerable<int> AtLevel(bool everyState = false)
     {
         int[] levels = [.. Enumerable.Range(0, scene.Models.Count).Select(LevelOf)];
         return Enumerable.Range(0, scene.Parts.Count).Where(i => scene.Parts[i].Model < levels.Length && scene.Parts[i].Lod == levels[scene.Parts[i].Model]
-            && Active(scene.Parts[i].Model));
+            && (everyState || Active(scene.Parts[i].Model)));
     }
 
     private static PartNode Node(string key, string name, int depth, IReadOnlyList<PartNode> children, PartKind kind) =>

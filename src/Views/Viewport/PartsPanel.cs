@@ -18,7 +18,8 @@ namespace HikariHopper.Views;
 /// keyboard moves through them and shows, hides and frames what is selected; a right click offers the same. A filter
 /// over the rows narrows them by name. Rows come in sections: a fragment's body, its groups of drawables and its extras
 /// (toggles numbered as the game numbers them); a drawable dictionary's drawables by what they are, which can show one
-/// of each at a time. A collision or a navmesh lists what its colours mean instead: its materials, or its kinds of
+/// of each at a time. A fragment with a damaged state has a switch between it intact and damaged, and a drawable with
+/// embedded textures a row at the panel's foot that opens them. A collision or a navmesh lists what its colours mean instead: its materials, or its kinds of
 /// ground, edges, links and cover points, each row with its colour in place of the badge and how many wear it.
 /// </summary>
 internal sealed class PartsPanel : UserControl
@@ -119,6 +120,65 @@ internal sealed class PartsPanel : UserControl
         };
         DockPanel.SetDock(tools, Dock.Top);
 
+        // The drawable's embedded textures, at the panel's foot: how many, and a press opens them.
+        var texturesIcon = new LucideIcon
+        {
+            IconName = "image", Width = 14, Height = 14, Weight = 1.6, Stroke = Ui.Theme.InkAsset,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0),
+        };
+        var texturesGo = new LucideIcon
+        {
+            IconName = "chevron-right", Width = 11, Height = 11, Weight = 1.8, Stroke = Ui.Theme.TextDim,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        texturesCount.FontFamily = Ui.Theme.MonoFont;
+        texturesCount.FontSize = Ui.Theme.SmallFontSize;
+        texturesCount.Foreground = Ui.Theme.TextFaint;
+        texturesCount.VerticalAlignment = VerticalAlignment.Center;
+        texturesCount.Margin = new Thickness(8, 0, 0, 0);
+        DockPanel.SetDock(texturesIcon, Dock.Left);
+        DockPanel.SetDock(texturesGo, Dock.Right);
+        var texturesHit = new Border
+        {
+            Background = Brushes.Transparent,
+            CornerRadius = Ui.Theme.ItemCorner,
+            Padding = new Thickness(8, 0, 6, 0),
+            Height = 26,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = new DockPanel
+            {
+                Children =
+                {
+                    texturesIcon,
+                    texturesGo,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = "Embedded textures", FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize,
+                                Foreground = Ui.Theme.TextRow, VerticalAlignment = VerticalAlignment.Center,
+                            },
+                            texturesCount,
+                        },
+                    },
+                },
+            },
+        };
+        texturesHit.PointerEntered += (_, _) => texturesHit.Background = Ui.Theme.HoverBg;
+        texturesHit.PointerExited += (_, _) => texturesHit.Background = Brushes.Transparent;
+        PointerClick.Attach(texturesHit, _ => TexturesRequested?.Invoke());
+        ThemedToolTip.Set(texturesHit, "Open the embedded textures  (T)");
+        AutomationProperties.SetName(texturesHit, "Embedded textures");
+        TexturesRow.Child = texturesHit;
+        TexturesRow.Padding = new Thickness(4, 3, 4, 3);
+        TexturesRow.BorderBrush = Ui.Theme.BorderHard;
+        TexturesRow.BorderThickness = new Thickness(0, 1, 0, 0);
+        TexturesRow.IsVisible = false;
+        DockPanel.SetDock(TexturesRow, Dock.Bottom);
+
         rows.Margin = new Thickness(0, 4, 0, 4);
         rows.Background = Brushes.Transparent;
         rows.PointerMoved += (_, e) =>
@@ -141,7 +201,7 @@ internal sealed class PartsPanel : UserControl
         rows.PointerCaptureLost += (_, _) => EndSweep();
         Content = new DockPanel
         {
-            Children = { header, tools, Scroller(rows) },
+            Children = { header, tools, TexturesRow, Scroller(rows) },
         };
         GotFocus += (_, _) => Refresh();
         LostFocus += (_, _) => Refresh();
@@ -167,6 +227,31 @@ internal sealed class PartsPanel : UserControl
         if (Application.Current?.TryFindResource("QuietOverlayScrollViewer", out object? theme) == true && theme is Avalonia.Styling.ControlTheme quiet)
             scroller.Theme = quiet;
         return scroller;
+    }
+
+    private readonly TextBlock texturesCount = new();
+
+    /// <summary>The embedded textures' row at the panel's foot: there for a drawable that has some that can be opened.</summary>
+    internal Border TexturesRow { get; } = new();
+
+    /// <summary>How many embedded textures the row says there are, as shown.</summary>
+    internal string TexturesCountText => texturesCount.Text ?? "";
+
+    /// <summary>Raised when the embedded textures' row is pressed.</summary>
+    public event Action? TexturesRequested;
+
+    /// <summary>Asks for the embedded textures, as a press on their row does.</summary>
+    internal void RequestTextures()
+    {
+        if (TexturesRow.IsVisible)
+            TexturesRequested?.Invoke();
+    }
+
+    /// <summary>Shows the embedded textures' row with how many there are; none hides it.</summary>
+    public void ShowTextures(int count)
+    {
+        TexturesRow.IsVisible = count > 0;
+        texturesCount.Text = count.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>Raised when the user shows or hides parts.</summary>
@@ -214,6 +299,10 @@ internal sealed class PartsPanel : UserControl
                 if (section.Kind == PartSectionKind.Tree && section.Title is "" or "Body")
                     foreach (PartNode node in section.Nodes)
                         expanded.Add(node.Key);
+                // A fragment's state shown is open, the other closed.
+                else if (section.Kind == PartSectionKind.States)
+                    foreach (PartNode node in section.Nodes.Where(node => value!.State(node) != false))
+                        expanded.Add(node.Key);
             ModeRow.IsVisible = HasVariants;
             if (HasVariants && oneAtATime)
                 ApplyOneAtATime();
@@ -259,10 +348,12 @@ internal sealed class PartsPanel : UserControl
         Changed?.Invoke();
     }
 
-    /// <summary>The variant section a row is in, while one of each shows at a time; none otherwise.</summary>
-    private PartSection? RadioSection(PartNode node) => oneAtATime
-        ? sections.FirstOrDefault(section => section.Kind == PartSectionKind.Variants && section.Nodes.Any(each => each.Key == node.Key))
-        : null;
+    /// <summary>
+    /// The section a row picks one of: a fragment's states, always, or a variant section while one of each shows at a
+    /// time; none otherwise.
+    /// </summary>
+    private PartSection? RadioSection(PartNode node) => sections.FirstOrDefault(section =>
+        (section.Kind == PartSectionKind.States || (oneAtATime && section.Kind == PartSectionKind.Variants)) && section.Nodes.Any(each => each.Key == node.Key));
 
     /// <summary>Shows a drawable of a variant section in place of the one shown.</summary>
     internal void Pick(PartNode node)
@@ -270,9 +361,25 @@ internal sealed class PartsPanel : UserControl
         if (parts is null || RadioSection(node) is not { } section)
             return;
         foreach (PartNode each in section.Nodes)
+        {
             parts.Show(each, each.Key == node.Key);
+            // A fragment's state picked opens, and the other closes.
+            if (section.Kind == PartSectionKind.States && each.Children.Count > 0)
+                if (each.Key == node.Key)
+                    expanded.Add(each.Key);
+                else
+                    expanded.Remove(each.Key);
+        }
         Changed?.Invoke();
         Refresh();
+    }
+
+    /// <summary>Shows a fragment intact or damaged, as picking its state's row does.</summary>
+    internal void PickState(bool damaged)
+    {
+        string key = damaged ? PartVisibility.DamagedKey : PartVisibility.IntactKey;
+        if (sections.Where(section => section.Kind == PartSectionKind.States).SelectMany(section => section.Nodes).FirstOrDefault(node => node.Key == key) is { } state)
+            Pick(state);
     }
 
     /// <summary>The rows shown, in order, for tests: each a node and whether it is open.</summary>
@@ -474,6 +581,8 @@ internal sealed class PartsPanel : UserControl
     /// <summary>Lists the rows again, after the level, the filter or what is shown or selected changed.</summary>
     public void Refresh()
     {
+        // The rows of the level and the state shown.
+        sections = parts?.Sections() ?? [];
         rows.Children.Clear();
         rowControls.Clear();
         var listed = new List<(PartNode, bool)>();
@@ -625,6 +734,7 @@ internal sealed class PartsPanel : UserControl
         PartKind.Group => ("S", Ui.Theme.InkAsset, "Set of drawables"),
         PartKind.Child => ("C", Ui.Theme.Brass, "Child model, bound to a bone"),
         PartKind.Geometry => ("G", Ui.Theme.InkData, "Geometry, named by its shader"),
+        PartKind.State => ("F", Ui.Theme.Brass, "Fragment state, with what is drawn only in it"),
         _ => ("D", Ui.Theme.Accent, "Drawable"),
     };
 
