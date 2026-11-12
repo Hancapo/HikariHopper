@@ -11,7 +11,7 @@ namespace HikariHopper.Tests;
 
 public sealed class ShaderSaveTests
 {
-    private static Views.ModelViewer Open(byte[] ydr, ModelSaveTarget? target)
+    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target)
     {
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { SaveTarget = target });
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -49,7 +49,7 @@ public sealed class ShaderSaveTests
         var finished = new List<bool>();
         bool prepared = false;
         Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(),
-            new ModelSaveTarget(bytes => written = bytes, () => prepared = true, finished.Add));
+            new SaveTarget(bytes => written = bytes, () => prepared = true, finished.Add));
         // Nothing changed, nothing to save.
         Assert.False(viewer.Command('S'));
         Assert.Equal("tri.ydr", viewer.TitleText.Text);
@@ -75,7 +75,7 @@ public sealed class ShaderSaveTests
     {
         var finished = new List<bool>();
         Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(),
-            new ModelSaveTarget(_ => throw new IOException("The file is in use."), Finished: finished.Add));
+            new SaveTarget(_ => throw new IOException("The file is in use."), Finished: finished.Add));
         Bump(viewer, "3");
         Assert.True(viewer.Save());
         Wait(viewer.Saving);
@@ -90,7 +90,7 @@ public sealed class ShaderSaveTests
     public void Closing_with_unsaved_values_asks_first()
     {
         byte[]? written = null;
-        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new ModelSaveTarget(bytes => written = bytes));
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(bytes => written = bytes));
         Bump(viewer, "2");
 
         // Asked: Cancel stays open, with the change.
@@ -115,7 +115,7 @@ public sealed class ShaderSaveTests
     public void Dont_save_closes_without_writing()
     {
         bool written = false;
-        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new ModelSaveTarget(_ => written = true));
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(_ => written = true));
         Bump(viewer, "2");
         viewer.Close();
         viewer.UnsavedDialog!.DiscardButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
@@ -145,7 +145,7 @@ public sealed class ShaderSaveTests
         ArchiveNode source = ArchiveNode.OpenRoot(archivePath, null);
         var target = new ArchiveEntryTarget(archivePath, "tri.ydr", null, source);
         byte[] data = ((RpfResourceFileEntry)source.Archive.Find("tri.ydr")!).ReadStandalone();
-        Views.ModelViewer viewer = Open(data, new ModelSaveTarget(target.Save, target.Prepare));
+        Views.ModelViewer viewer = Open(data, new SaveTarget(target.Save, target.Prepare));
         Bump(viewer, "1.75");
         Assert.True(viewer.Save());
         Wait(viewer.Saving);
@@ -164,7 +164,7 @@ public sealed class ShaderSaveTests
 }
 
 [Collection(ExplorerCollection.Name)]
-public sealed class ModelSaveTargetTests : ExplorerTestBase
+public sealed class SaveTargetTests : ExplorerTestBase
 {
     [AvaloniaFact]
     public void A_loose_drawable_opened_from_the_explorer_is_saved_over_its_file()
@@ -179,7 +179,7 @@ public sealed class ModelSaveTargetTests : ExplorerTestBase
         bridge.ModelFileOpened += (_, file) => opened = file;
         bridge.ActivateEntry(Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == "tri.ydr"));
 
-        ModelSaveTarget target = opened!.SaveTarget!;
+        SaveTarget target = opened!.SaveTarget!;
         target.Prepare?.Invoke();
         target.Write([1, 2, 3, 4]);
         target.Finished?.Invoke(true);

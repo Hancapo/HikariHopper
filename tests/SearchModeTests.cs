@@ -170,8 +170,8 @@ public sealed class SearchModeTests : ExplorerTestBase
         var ytd = new RpfArchive("textures.rpf");
         ytd.AddResource("vehicles/adder.ytd", Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("adder_body")));
         ytd.Save(Path.Combine(Work, "textures.rpf"));
-        TextDocument? opened = null;
-        bridge.TextFileOpened += (_, document) => opened = document;
+        TextFile? opened = null;
+        bridge.TextFileOpened += (_, file) => opened = file;
         bridge.BeginSearch();
         bridge.SetSearchText("readme");
         await Searched(bridge);
@@ -179,7 +179,9 @@ public sealed class SearchModeTests : ExplorerTestBase
         // A text file in a nested RPF: in the viewer, and the results stay.
         bridge.ActivateEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"));
         Assert.True(bridge.IsSearching);
-        Assert.Equal("readme.txt", opened?.Name);
+        Assert.Equal("readme.txt", opened?.Document.Name);
+        // Saved back where it was found, into its RPF, as from its folder.
+        Assert.NotNull(opened?.SaveTarget);
         Assert.Equal(3, bridge.SearchHitCount);
 
         // A texture dictionary in an RPF: in the texture editor, its saves going back to that RPF.

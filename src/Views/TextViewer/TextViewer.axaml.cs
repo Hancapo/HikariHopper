@@ -5,39 +5,54 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using HikariHopper.Core;
 using HikariHopper.Infrastructure;
+using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
 
 namespace HikariHopper.Views;
 
 /// <summary>
-/// A text file, read only, shown over the main window like the texture editor: TXT, XML and META, JSON,
+/// A text file, shown over the main window like the texture editor and edited as typed: TXT, XML and META, JSON,
 /// CSV, INI and the rest <see cref="TextDocument"/> knows. The text is coloured, selectable and searchable;
-/// long lines can wrap, the type can be zoomed, and a CSV file reads as a table (or as text). Escape
-/// clears the find first, then closes.
+/// long lines can wrap, the type can be zoomed, and a CSV file reads as a table (or as text, which is where it is
+/// edited). Save puts it back where it was read from, in its own encoding and line endings; closing with changes
+/// unsaved asks first. Escape clears the find first, then closes.
 /// </summary>
 public partial class TextViewer : UserControl, IModalContent
 {
     /// <summary>Matches found past this many are not marked; the count says so.</summary>
     public const int MaxMatches = 10000;
 
+    /// <summary>How long typing pauses before the find looks again, so a big file isn't searched on every key.</summary>
+    internal static TimeSpan FindAgainDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
     private readonly TextDocument document;
-    private readonly CsvTable? table;
+    private readonly bool isCsv;
+    private CsvTable? table;
+    // The table was read from the text before its last edit, and is read again when it next shows.
+    private bool tableStale;
     private ModalOverlay? overlay;
     private List<TextMatch> textMatches = [];
     private List<(int Row, int Column)> cellMatches = [];
     private int currentMatch = -1;
     private int zoomStep = TextViewerInk.Zooms.ToList().IndexOf(1);
+    private readonly DispatcherTimer findAgain;
 
     /// <summary>An empty viewer, for the XAML loader and previews.</summary>
     public TextViewer() : this(TextDocument.Load("", []))
     {
     }
 
-    public TextViewer(TextDocument document)
+    /// <summary>A text with nowhere to save it but a file picked for it (Save as).</summary>
+    public TextViewer(TextDocument document) : this(new TextFile(document))
     {
-        this.document = document;
+    }
+
+    public TextViewer(TextFile file)
+    {
+        document = file.Document;
+        saveTarget = file.SaveTarget;
+        documentName = document.Name;
         InitializeComponent();
-        TitleText.Text = document.Name;
         TitleGlyph.FileKind = RpfProvider.FileKind(document.Name);
         Lines.Scroller = TextScroller;
         Lines.Document = document;
@@ -46,7 +61,10 @@ public partial class TextViewer : UserControl, IModalContent
         SmoothScrolling.Attach(TableScroller);
         Lines.ContextMenu = BuildMenu();
         Lines.CaretMoved += (_, _) => RefreshCaret();
-        if (document.Format == TextFormat.Csv)
+        Lines.TextChanged += (_, _) => OnTextChanged();
+        findAgain = new DispatcherTimer(FindAgainDelay, DispatcherPriority.Background, (_, _) => FindAgain());
+        isCsv = document.Format == TextFormat.Csv;
+        if (isCsv)
         {
             table = CsvTable.Parse(document.Text);
             Table.Scroller = TableScroller;
@@ -57,16 +75,7 @@ public partial class TextViewer : UserControl, IModalContent
         }
 
         CloseMark.Click += (_, _) => Close();
-        Menus = new ViewerMenuRow(
-            ("File", [new("Close", "Ctrl+W", Close)]),
-            ("Edit",
-            [
-                new("Copy", "Ctrl+C", () => Copy()),
-                null,
-                new("Find…", "Ctrl+F", FocusFind),
-                new("Find next", "F3", () => StepMatch(1), () => (FindField.Text ?? "").Length > 0),
-                new("Find previous", "Shift+F3", () => StepMatch(-1), () => (FindField.Text ?? "").Length > 0),
-            ]));
+        Menus = BuildMenus();
         MenuHolder.Children.Add(Menus);
         WrapButton.Click += (_, _) => SetWrap(!Lines.Wrap);
         ZoomOutButton.Click += (_, _) => SetZoom(zoomStep - 1);
@@ -94,11 +103,10 @@ public partial class TextViewer : UserControl, IModalContent
         ThemedToolTip.Set(PreviousButton, "Previous match  (Shift+F3)");
         ThemedToolTip.Set(NextButton, "Next match  (F3)");
 
-        SizeText.Text = Formatting.FormatSize(document.Size);
         EncodingText.Text = document.Encoding;
-        EndingText.Text = document.LineEnding;
-        EndingText.IsVisible = document.LineEnding.Length > 0;
         FormatText.Text = document.FormatName;
+        RefreshTitle();
+        RefreshFacts();
         ShowTable(table is not null);
         SetWrap(false);
         SetZoom(zoomStep);
@@ -124,6 +132,9 @@ public partial class TextViewer : UserControl, IModalContent
 
     public int CurrentMatch => currentMatch;
 
+    /// <summary>Whether the text has changes not yet saved.</summary>
+    public bool IsModified => Lines.IsModified;
+
     public void Present()
     {
         if (IsOpen)
@@ -142,11 +153,52 @@ public partial class TextViewer : UserControl, IModalContent
         Dispatcher.UIThread.Post(FocusBody, DispatcherPriority.Loaded);
     }
 
-    public void Close() => overlay?.Close();
+    // Whether the viewer has closed, or may close with its changes unsaved (they were saved, or the dialog was told not to).
+    private bool closed;
+    private bool closeApproved;
+    // What to do once the viewer has closed (open another file in it), unless the closing is cancelled.
+    private Action? afterClose;
+    private TextureUnsavedChangesDialog? unsavedDialog;
+
+    /// <summary>The dialog asking whether to save before the viewer closes, while it is open.</summary>
+    internal TextureUnsavedChangesDialog? UnsavedDialog => unsavedDialog is { IsOpen: true } ? unsavedDialog : null;
+
+    /// <summary>Closes the viewer; with changes unsaved it asks first, and may stay.</summary>
+    public void Close()
+    {
+        if (!closed && !closeApproved && Lines.IsModified)
+        {
+            AskToSave();
+            return;
+        }
+        if (!closed)
+        {
+            closed = true;
+            findAgain.Stop();
+            overlay?.Close();
+        }
+        Action? next = afterClose;
+        afterClose = null;
+        next?.Invoke();
+    }
+
+    /// <summary>
+    /// Closes the viewer as <see cref="Close"/> does, then runs <paramref name="next"/>: at once, or once the changes are
+    /// saved or let go. Cancelled, the viewer stays and <paramref name="next"/> never runs.
+    /// </summary>
+    public void CloseThen(Action next)
+    {
+        if (UnsavedDialog is not null)
+            return;
+        afterClose = next;
+        Close();
+    }
 
     /// <summary>Escape: clears the find (and goes back to the text) first, then closes.</summary>
     void IModalContent.RequestClose()
     {
+        if (UnsavedDialog is not null)
+            return;
         if (!string.IsNullOrEmpty(FindField.Text) || FindField.IsKeyboardFocusWithin)
         {
             FindField.Text = "";
@@ -156,16 +208,60 @@ public partial class TextViewer : UserControl, IModalContent
         Close();
     }
 
+    /// <summary>
+    /// Asks whether to save the changes before the viewer closes: Save closes it once they are saved (into a file picked
+    /// for them, for a text with nowhere of its own), Don't save closes it, Cancel stays.
+    /// </summary>
+    private void AskToSave()
+    {
+        if (UnsavedDialog is not null)
+            return;
+        var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
+        dialog.SaveRequested += async (_, _) =>
+        {
+            bool saved = saveTarget is not null ? Save() && await Saving : await SaveAs();
+            if (saved)
+            {
+                closeApproved = true;
+                Close();
+            }
+            else
+                StayOpen();
+        };
+        dialog.DiscardRequested += (_, _) =>
+        {
+            closeApproved = true;
+            Close();
+        };
+        dialog.Rejected += (_, _) => StayOpen();
+        unsavedDialog = dialog;
+        dialog.Open(DialogLayer);
+    }
+
+    // The closing was called off: nothing waits on it, and the text has the keyboard again.
+    private void StayOpen()
+    {
+        afterClose = null;
+        FocusBody();
+    }
+
     /// <summary>Shows the CSV as a table, or as text.</summary>
     public void ShowTable(bool showTable)
     {
         bool tableShown = showTable && table is not null;
+        if (tableShown && tableStale)
+        {
+            // The table shows the text as it is now; it is only read, never edited.
+            table = CsvTable.Parse(document.Text);
+            Table.Table = table;
+            tableStale = false;
+        }
         TableScroller.IsVisible = tableShown;
         TextScroller.IsVisible = !tableShown;
         ViewSwitch.SelectedIndex = tableShown ? 1 : 0;
         // Wrapping is for text; a table's cells are cut to their columns instead.
         WrapWell.IsEnabled = !tableShown;
-        LinesText.Text = tableShown ? $"{Table.RecordCount:N0} rows" : $"{document.Lines.Count:N0} lines";
+        RefreshFacts();
         Find(FindField.Text ?? "");
         RefreshCaret();
     }
@@ -205,16 +301,47 @@ public partial class TextViewer : UserControl, IModalContent
         else
         {
             text = document.Text;
-            said = $"Copied {document.Name}";
+            said = $"Copied {documentName}";
         }
         _ = AppServices.Clipboard.SetTextAsync(text);
-        StatusText.Text = said;
+        ShowStatus(said);
         return text;
     }
 
-    /// <summary>Looks for <paramref name="query"/> (case aside) in what is showing.</summary>
-    public void Find(string query)
+    /// <summary>Takes the selection out of the text onto the clipboard; "" with nothing selected.</summary>
+    public string Cut()
     {
+        if (ShowingTable || !Lines.HasSelection)
+            return "";
+        int lines = Lines.Selection.End.Line - Lines.Selection.Start.Line + 1;
+        string text = Lines.Cut();
+        _ = AppServices.Clipboard.SetTextAsync(text);
+        ShowStatus(lines == 1 ? $"Cut {text.Length:N0} characters" : $"Cut {lines:N0} lines");
+        return text;
+    }
+
+    /// <summary>Puts the clipboard's text in place of the selection; false when it holds none.</summary>
+    public async Task<bool> Paste()
+    {
+        if (ShowingTable)
+            return false;
+        string? text = await AppServices.Clipboard.GetTextAsync();
+        if (string.IsNullOrEmpty(text) || closed || ShowingTable)
+            return false;
+        Lines.Paste(text);
+        return true;
+    }
+
+    /// <summary>Looks for <paramref name="query"/> (case aside) in what is showing.</summary>
+    public void Find(string query) => Find(query, select: true);
+
+    /// <summary>
+    /// Looks for <paramref name="query"/> in what is showing; the current match is selected only when
+    /// <paramref name="select"/>, so a find run again after an edit leaves the caret where the typing is.
+    /// </summary>
+    private void Find(string query, bool select)
+    {
+        findAgain.Stop();
         textMatches = [];
         cellMatches = [];
         currentMatch = -1;
@@ -241,25 +368,35 @@ public partial class TextViewer : UserControl, IModalContent
             int index = textMatches.FindIndex(match => new TextPosition(match.Line, match.Column) >= from);
             currentMatch = textMatches.Count == 0 ? -1 : index < 0 ? 0 : index;
         }
-        ApplyMatches(query);
+        ApplyMatches(query, select);
+    }
+
+    // The text changed under the find: it looks again, without moving the caret.
+    private void FindAgain()
+    {
+        findAgain.Stop();
+        if (!closed && !ShowingTable && (FindField.Text ?? "").Length > 0)
+            Find(FindField.Text ?? "", select: false);
     }
 
     /// <summary>Moves to the next (or, with -1, the previous) match, wrapping round.</summary>
     public void StepMatch(int direction)
     {
+        if (findAgain.IsEnabled)
+            FindAgain();
         int count = MatchCount;
         if (count == 0)
             return;
         currentMatch = ((currentMatch < 0 ? 0 : currentMatch + direction) % count + count) % count;
-        ApplyMatches(FindField.Text ?? "");
+        ApplyMatches(FindField.Text ?? "", select: true);
     }
 
-    private void ApplyMatches(string query)
+    private void ApplyMatches(string query, bool select)
     {
         if (ShowingTable)
             Table.SetMatches(query, cellMatches, currentMatch);
         else
-            Lines.SetMatches(textMatches, currentMatch);
+            Lines.SetMatches(textMatches, currentMatch, select);
         int count = MatchCount;
         bool any = query.Length > 0;
         FindWell.IsVisible = any;
@@ -267,8 +404,19 @@ public partial class TextViewer : UserControl, IModalContent
         MatchText.Text = count == 0 ? "No matches" : $"{currentMatch + 1:N0} of {count:N0}{(count >= MaxMatches ? "+" : "")}";
         MatchText.Foreground = count == 0 ? Ui.Theme.Warning : Ui.Theme.TextDim;
         PreviousButton.IsEnabled = NextButton.IsEnabled = count > 0;
-        StatusText.Text = !any ? "Read only" : count == 0 ? $"No matches for \"{query}\"" : $"{count:N0}{(count >= MaxMatches ? "+" : "")} matches for \"{query}\"";
+        // Looking again after an edit leaves what the status says (a save, say) alone.
+        if (select || any)
+            ShowStatus(!any ? IdleStatus : count == 0 ? $"No matches for \"{query}\"" : $"{count:N0}{(count >= MaxMatches ? "+" : "")} matches for \"{query}\"");
         RefreshFindField();
+    }
+
+    /// <summary>What the status says with nothing else to say: for a text with nowhere of its own, how to keep it.</summary>
+    private string IdleStatus => saveTarget is null ? "Save as… to keep changes" : "";
+
+    private void ShowStatus(string text)
+    {
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = text;
     }
 
     private void RefreshFindField()
@@ -290,22 +438,195 @@ public partial class TextViewer : UserControl, IModalContent
         CaretText.Text = $"Ln {caret.Line + 1:N0}, Col {caret.Column + 1:N0}{selection}";
     }
 
-    /// <summary>Right-click: copy what is selected (or the whole file), or select everything.</summary>
+    /// <summary>The status bar's facts that change with the text: lines (or rows), size and line endings.</summary>
+    private void RefreshFacts()
+    {
+        LinesText.Text = ShowingTable ? $"{Table.RecordCount:N0} rows" : $"{document.Lines.Count:N0} lines";
+        SizeText.Text = Formatting.FormatSize(document.Size);
+        EndingText.Text = document.LineEnding;
+        EndingText.IsVisible = document.LineEnding.Length > 0;
+    }
+
+    /// <summary>The file's name in the title, marked with an asterisk while it has unsaved changes.</summary>
+    private void RefreshTitle() => TitleText.Text = Lines.IsModified ? $"{documentName} *" : documentName;
+
+    // An edit, an undo or a redo: the title, the facts and the caret catch up; the table and the find follow later.
+    private void OnTextChanged()
+    {
+        RefreshTitle();
+        RefreshFacts();
+        RefreshCaret();
+        tableStale = isCsv;
+        if ((FindField.Text ?? "").Length > 0)
+        {
+            findAgain.Stop();
+            findAgain.Interval = FindAgainDelay;
+            findAgain.Start();
+        }
+    }
+
+    // ---------------- Saving ----------------
+
+    // The file's name as shown, and where Save puts it: as opened, until it is saved as another file.
+    private string documentName;
+    private SaveTarget? saveTarget;
+    private bool saving;
+
+    /// <summary>The last save, done once it is written (true) or failed (false).</summary>
+    internal Task<bool> Saving { get; private set; } = Task.FromResult(false);
+
+    /// <summary>Whether the text can be saved where it lives: it was opened from there, or saved as a file since.</summary>
+    internal bool CanSave => saveTarget is not null;
+
+    /// <summary>The file pickers Save as asks; the app's, unless a test gives its own.</summary>
+    internal IFileDialogs Dialogs { get; set; } = AppServices.Dialogs;
+
+    /// <summary>
+    /// Saves the text (Ctrl+S) where it lives, into its RPF or over the loose file, off the UI thread, in the encoding
+    /// and line endings it was read in. False when nothing is changed, a save is under way, it has nowhere to go, or it
+    /// can't be written in its encoding.
+    /// </summary>
+    internal bool Save()
+    {
+        if (saving || !Lines.IsModified || saveTarget is not { } target)
+            return false;
+        return SaveTo(target, documentName, null);
+    }
+
+    /// <summary>
+    /// Saves the text as a loose file picked for it (Ctrl+Shift+S), changed or not; from then on it is that file, which
+    /// Save saves to. False when nothing was picked or it couldn't be written.
+    /// </summary>
+    internal async Task<bool> SaveAs()
+    {
+        if (saving)
+            return false;
+        string extension = Path.GetExtension(documentName);
+        IReadOnlyList<FileFilter> filters = extension.Length > 0
+            ? [new FileFilter($"{extension.TrimStart('.').ToUpperInvariant()} file", [$"*{extension}"]), new FileFilter("All files", ["*.*"])]
+            : [new FileFilter("All files", ["*.*"])];
+        string? path = await Dialogs.PickSaveFileAsync($"Save {documentName} as", documentName, filters);
+        if (string.IsNullOrEmpty(path) || closed)
+            return false;
+        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(path, bytes));
+        string name = Path.GetFileName(path);
+        if (!SaveTo(target, name, () =>
+            {
+                saveTarget = target;
+                documentName = name;
+                TitleGlyph.FileKind = RpfProvider.FileKind(name);
+            }))
+            return false;
+        return await Saving;
+    }
+
+    // Writes the text as it is now through a target, off the UI thread; once it is written, runs afterwards.
+    private bool SaveTo(SaveTarget target, string name, Action? afterwards)
+    {
+        // What is written is the text as it is now; what is typed while it is put in place stays a change.
+        int state = Lines.EditState;
+        byte[] bytes;
+        try
+        {
+            bytes = document.Encode();
+            target.Prepare?.Invoke();
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            ShowSaveFailure(name, error.Message);
+            return false;
+        }
+        Lines.SealEdits();
+        saving = true;
+        ShowStatus($"Saving {name}…");
+        Saving = Finish();
+        return true;
+
+        async Task<bool> Finish()
+        {
+            string? failure = null;
+            try
+            {
+                await Task.Run(() => target.Write(bytes));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                failure = error.Message;
+            }
+            saving = false;
+            if (failure is null)
+            {
+                afterwards?.Invoke();
+                Lines.MarkSaved(state);
+                document.MarkSaved(bytes.LongLength);
+                RefreshTitle();
+                RefreshFacts();
+            }
+            target.Finished?.Invoke(failure is null);
+            if (failure is not null)
+                ShowSaveFailure(name, failure);
+            else if (!closed)
+                ShowStatus($"Saved {name}");
+            return failure is null;
+        }
+    }
+
+    private void ShowSaveFailure(string name, string message)
+    {
+        StatusText.Text = $"Couldn't save {name}: {message}";
+        StatusText.Foreground = Ui.Theme.Error;
+    }
+
+    /// <summary>Right-click: cut, copy (what is selected, or the whole file) and paste, or select everything.</summary>
     private RetroMenu BuildMenu()
     {
         var menu = new RetroMenu { Width = 200 + 2 * Ui.Theme.MenuPadding };
+        var cut = new RetroMenuItem { Text = "Cut", ShortcutText = "Ctrl+X", MinWidth = 0 };
+        cut.Triggered += (_, _) => Cut();
         var copy = new RetroMenuItem { Text = "Copy", ShortcutText = "Ctrl+C", MinWidth = 0 };
         copy.Triggered += (_, _) => Copy();
+        var paste = new RetroMenuItem { Text = "Paste", ShortcutText = "Ctrl+V", MinWidth = 0 };
+        paste.Triggered += (_, _) => _ = Paste();
         var selectAll = new RetroMenuItem { Text = "Select all", ShortcutText = "Ctrl+A", MinWidth = 0 };
         selectAll.Triggered += (_, _) => Lines.SelectAll();
+        menu.Items.Add(cut);
         menu.Items.Add(copy);
+        menu.Items.Add(paste);
+        menu.Items.Add(new RetroMenuSeparator());
         menu.Items.Add(selectAll);
-        menu.Opening += (_, _) => copy.Text = Lines.HasSelection ? "Copy" : "Copy the whole file";
+        menu.Opening += (_, _) =>
+        {
+            copy.Text = Lines.HasSelection ? "Copy" : "Copy the whole file";
+            cut.IsEnabled = Lines.HasSelection;
+        };
         return menu;
     }
 
     /// <summary>The menu bar under the title: File and Edit.</summary>
     internal ViewerMenuRow Menus { get; }
+
+    private ViewerMenuRow BuildMenus() => new(
+        ("File",
+        [
+            new("Save", "Ctrl+S", () => Save(), () => CanSave && Lines.IsModified && !saving),
+            new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => !saving),
+            null,
+            new("Close", "Ctrl+W", Close),
+        ]),
+        ("Edit",
+        [
+            new("Undo", "Ctrl+Z", () => Lines.Undo(), () => !ShowingTable && Lines.CanUndo),
+            new("Redo", "Ctrl+Y", () => Lines.Redo(), () => !ShowingTable && Lines.CanRedo),
+            null,
+            new("Cut", "Ctrl+X", () => Cut(), () => !ShowingTable && Lines.HasSelection),
+            new("Copy", "Ctrl+C", () => Copy()),
+            new("Paste", "Ctrl+V", () => _ = Paste(), () => !ShowingTable),
+            new("Select all", "Ctrl+A", Lines.SelectAll, () => !ShowingTable),
+            null,
+            new("Find…", "Ctrl+F", FocusFind),
+            new("Find next", "F3", () => StepMatch(1), () => (FindField.Text ?? "").Length > 0),
+            new("Find previous", "Shift+F3", () => StepMatch(-1), () => (FindField.Text ?? "").Length > 0),
+        ]));
 
     // Find: the field takes the keyboard, what it holds selected.
     private void FocusFind()
@@ -333,10 +654,22 @@ public partial class TextViewer : UserControl, IModalContent
 
     private void OnShortcut(object? sender, KeyEventArgs e)
     {
+        // The dialog asking whether to save has the keyboard while it is open.
+        if (UnsavedDialog is not null)
+            return;
         KeyModifiers modifiers = e.KeyModifiers;
         bool ctrl = modifiers == KeyModifiers.Control;
+        bool ctrlShift = modifiers == (KeyModifiers.Control | KeyModifiers.Shift);
+        // The text's own keys; in the find field, its own undo, cut and paste instead.
+        bool inText = !ShowingTable && !FindField.IsKeyboardFocusWithin;
         switch (e.Key)
         {
+            case Key.S when ctrl:
+                Save();
+                break;
+            case Key.S when ctrlShift:
+                _ = SaveAs();
+                break;
             case Key.F when ctrl:
                 FocusFind();
                 break;
@@ -348,6 +681,19 @@ public partial class TextViewer : UserControl, IModalContent
                 break;
             case Key.C when ctrl && !FindField.IsKeyboardFocusWithin:
                 Copy();
+                break;
+            case Key.X when ctrl && inText:
+                Cut();
+                break;
+            case Key.V when ctrl && inText:
+                _ = Paste();
+                break;
+            case Key.Z when ctrl && inText:
+                Lines.Undo();
+                break;
+            case Key.Y when ctrl && inText:
+            case Key.Z when ctrlShift && inText:
+                Lines.Redo();
                 break;
             case Key.OemPlus or Key.Add when ctrl:
                 SetZoom(zoomStep + 1);

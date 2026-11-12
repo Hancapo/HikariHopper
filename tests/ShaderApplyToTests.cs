@@ -24,7 +24,7 @@ public sealed class ShaderApplyToTests
         return new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
     }
 
-    private static Views.ModelViewer Open(byte[] ydr, ModelSaveTarget? target = null)
+    private static Views.ModelViewer Open(byte[] ydr, SaveTarget? target = null)
     {
         var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { SaveTarget = target });
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -107,7 +107,7 @@ public sealed class ShaderApplyToTests
     public void A_geometry_given_an_entry_of_its_own_is_saved_with_it()
     {
         byte[]? written = null;
-        Views.ModelViewer viewer = Open(Pair(), new ModelSaveTarget(bytes => written = bytes));
+        Views.ModelViewer viewer = Open(Pair(), new SaveTarget(bytes => written = bytes));
         PickRight(viewer);
         viewer.Card.ApplyToOne = true;
         Type(viewer.Card.Field("bumpiness")!, "3");

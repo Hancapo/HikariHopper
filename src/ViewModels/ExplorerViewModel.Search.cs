@@ -546,7 +546,7 @@ public sealed partial class ExplorerViewModel
                 SetStatus($"{name} isn't a text file");
                 return;
             }
-            TextFileOpened?.Invoke(this, TextDocument.Load(name, file.Data));
+            TextFileOpened?.Invoke(this, new TextFile(TextDocument.Load(name, file.Data)) { SaveTarget = SaveTargetOf(file.Source, file.Target, name) });
             SetStatus($"Opened {name}");
         }
         else if (model)
@@ -624,7 +624,7 @@ public sealed partial class ExplorerViewModel
                     () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0]);
             })],
             OpenTextures = saved => OpenHitTextures(hit, saved),
-            SaveTarget = ModelSaveTargetOf(file.Source, file.Target, name),
+            SaveTarget = SaveTargetOf(file.Source, file.Target, name),
         };
     }
 

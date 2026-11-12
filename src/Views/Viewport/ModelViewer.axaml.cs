@@ -670,7 +670,7 @@ public partial class ModelViewer : UserControl, IModalContent
 
     // The file's name as shown, and where Save puts it: as opened, until it is saved as another file.
     private string documentName;
-    private ModelSaveTarget? saveTarget;
+    private SaveTarget? saveTarget;
     private bool savedElsewhere;
 
     /// <summary>The file's name in the title, marked with an asterisk while it has unsaved changes.</summary>
@@ -712,7 +712,7 @@ public partial class ModelViewer : UserControl, IModalContent
         if (string.IsNullOrEmpty(path) || closed)
             return false;
         string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : Path.ChangeExtension(path, extension);
-        var target = new ModelSaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
+        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
         string name = Path.GetFileName(destination);
         if (!SaveTo(target, name, () =>
             {
@@ -727,7 +727,7 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     // Writes the file as it is now through a target, off the UI thread; then, once it is written, runs afterwards.
-    private bool SaveTo(ModelSaveTarget target, string name, Action? afterwards)
+    private bool SaveTo(SaveTarget target, string name, Action? afterwards)
     {
         if (surfaces?.Writer is not { } write)
             return false;
