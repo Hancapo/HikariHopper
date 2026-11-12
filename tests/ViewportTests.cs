@@ -656,7 +656,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(Avalonia.Controls.ToolTip.GetShowOnDisabled(viewer.LightsButton));
         double Glyph(Views.Controls.ChromeToolButton button) => button.GetVisualDescendants().OfType<Views.Controls.ChromeIcon>().Single().Opacity;
         Assert.Equal(1, Glyph(viewer.SolidButton));
-        Assert.Equal(Views.Controls.ChromeToolButton.DisabledSegmentOpacity, Glyph(viewer.LightsButton));
+        Assert.Equal(Views.Controls.ChromeToolButton.DisabledOpacity, Glyph(viewer.LightsButton));
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.LightsButton, true);
         Assert.Equal("No lights", Views.Controls.WindowToolTip.ShownText);
         // A disabled tool gets no pointer events of its own, so the strip's window tells when the pointer leaves it.
@@ -967,12 +967,30 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void A_collision_has_no_time_of_day()
+    public void A_collision_has_the_cameras_buttons_and_no_time_of_day()
     {
         var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
         var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write()));
         Settle(viewer);
-        Assert.False(viewer.Toolbar.IsVisible);
+        // Of the toolbar, a collision or a navmesh has the camera: orbit or fly, and frame. Nothing of a drawable's.
+        Assert.True(viewer.Toolbar.IsVisible);
+        Assert.False(viewer.ModelTools.IsVisible);
+        Assert.False(viewer.TimeWell.IsVisible);
+        Assert.True(viewer.OrbitButton.Sunken);
+        Assert.False(viewer.StatsPanel.IsVisible);
+        Assert.True(viewer.Shortcut('V'));
+        Assert.True(viewer.Viewport.FreeCamera);
+        Assert.True(viewer.FreeButton.Sunken);
+        // Flying, the status bar says how fast, without a drawable's counts.
+        Assert.True(viewer.StatsPanel.IsVisible);
+        Assert.True(viewer.SpeedStat.IsVisible);
+        Assert.False(viewer.TrianglesStat.IsVisible);
+        Assert.False(viewer.VerticesStat.IsVisible);
+        Assert.False(viewer.EdgesStat.IsVisible);
+        Assert.True(viewer.Shortcut('f'));
+        Assert.False(viewer.Viewport.FreeCamera);
+        Assert.False(viewer.Shortcut('T'));
+        Assert.False(viewer.Shortcut('P'));
         Assert.False(viewer.ToolStripOverlay.IsWanted);
         Assert.False(viewer.PartsTabOverlay.IsWanted);
         Assert.False(viewer.StatsPanel.IsVisible);
