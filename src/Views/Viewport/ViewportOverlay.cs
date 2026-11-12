@@ -119,6 +119,19 @@ internal sealed class ViewportOverlay
         window = null;
     }
 
+    /// <summary>
+    /// Takes the keyboard into its window, for a field in it opened for typing: it isn't activated by a click, so it is
+    /// asked to be.
+    /// </summary>
+    public void TakeKeyboard() => window?.Activate();
+
+    /// <summary>Gives the keyboard back to the main window, once typing in it ends.</summary>
+    public void ReturnKeyboard()
+    {
+        if (window?.IsActive == true)
+            owner?.Activate();
+    }
+
     private void OwnerMoved(object? sender, PixelPointEventArgs e) => Place();
 
     private Window Create()

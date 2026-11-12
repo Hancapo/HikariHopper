@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "about": "How the 3D viewer's shader values card names a shader entry's numeric values and groups them, by the values' Legacy names (Enhanced ones reach them through FiveFury's catalogue). Groups are shown in the order listed, folded to start with when marked so, and values in each group in the order listed. A value is its label, or an object with its label, the range its slider's fill spans (when it isn't 0 to 1, or to twice the file's value past that), and whether its first three numbers are a colour. A value not listed keeps its own name, split into words, under Other, which starts folded; hidden values aren't listed at all.",
+  "hidden": ["bDebugDisplayDamageMap", "bDebugDisplayDamageScale"],
+  "groups": [
+    {
+      "name": "Paint",
+      "values": {
+        "matDiffuseColor": { "label": "Colour", "colour": true },
+        "matDiffuseColor2": { "label": "Layer", "colour": true },
+        "matDiffuseSpecularRampEnabled": "Ramp",
+        "matMaterialColorScale": "Colour scale",
+        "tintPaletteSelector": "Tint"
+      }
+    },
+    {
+      "name": "Specular",
+      "values": {
+        "specularIntensityMult": { "label": "Intensity", "range": [0, 1] },
+        "specularFalloffMult": { "label": "Falloff", "range": [0, 500] },
+        "specularFresnel": { "label": "Fresnel", "range": [0, 1] },
+        "reflectivePower": { "label": "Reflection", "range": [0, 1] },
+        "specMapIntMask": "Map mask",
+        "specTexTileUV": "Map tiling",
+        "specularIntensityMultSpecMap": { "label": "Map intensity", "range": [0, 1] },
+        "specularFalloffMultSpecMap": { "label": "Map falloff", "range": [0, 500] },
+        "specIntensityAdjust": "Intensity adjust",
+        "specFalloffAdjust": "Falloff adjust",
+        "diffuse2SpecMod": { "label": "Layer specular", "range": [0, 1] },
+        "specular2Color_DirLerp": { "label": "Second lobe", "colour": true },
+        "specular2Factor": { "label": "Second lobe falloff", "range": [0, 100] },
+        "specular2ColorIntensity": { "label": "Second lobe intensity", "range": [0, 10] },
+        "SpecDesaturateIntensity": "Desaturate intensity",
+        "SpecDesaturateExponent": "Desaturate exponent"
+      }
+    },
+    {
+      "name": "Surface",
+      "values": {
+        "bumpiness": { "label": "Bumpiness", "range": [0, 2] },
+        "bumpSelfShadowAmount": { "label": "Bump self-shadow", "range": [0, 1] },
+        "emissiveMultiplier": { "label": "Emissive", "range": [0, 10] },
+        "DiffuseTexTileUV": "Diffuse tiling",
+        "HardAlphaBlend": { "label": "Hard alpha blend", "range": [0, 1] },
+        "AlphaScale": { "label": "Alpha scale", "range": [0, 1] },
+        "AlphaTest": { "label": "Alpha cutoff", "range": [0, 1] },
+        "globalAnimUV0": "UV animation, row 1",
+        "globalAnimUV1": "UV animation, row 2",
+        "useTessellation": { "label": "Tessellation", "range": [0, 1] },
+        "tessellationMultiplier": "Tessellation amount"
+      }
+    },
+    {
+      "name": "Detail",
+      "values": {
+        "detailSettings": "Settings"
+      }
+    },
+    {
+      "name": "Parallax",
+      "values": {
+        "heightScale": { "label": "Height scale", "range": [0, 0.1] },
+        "heightBias": { "label": "Height bias", "range": [0, 0.05] },
+        "parallaxScaleBias": { "label": "Scale and bias", "range": [0, 0.1] },
+        "parallaxSelfShadowAmount": { "label": "Self-shadow", "range": [0, 1] },
+        "heightScale0": { "label": "Layer 1 height scale", "range": [0, 0.1] },
+        "heightBias0": { "label": "Layer 1 height bias", "range": [0, 0.05] },
+        "heightScale1": { "label": "Layer 2 height scale", "range": [0, 0.1] },
+        "heightBias1": { "label": "Layer 2 height bias", "range": [0, 0.05] },
+        "heightScale2": { "label": "Layer 3 height scale", "range": [0, 0.1] },
+        "heightBias2": { "label": "Layer 3 height bias", "range": [0, 0.05] },
+        "heightScale3": { "label": "Layer 4 height scale", "range": [0, 0.1] },
+        "heightBias3": { "label": "Layer 4 height bias", "range": [0, 0.05] }
+      }
+    },
+    {
+      "name": "Hair",
+      "values": {
+        "anisotropicSpecularIntensity": "Highlight intensity",
+        "anisotropicSpecularExponent": "Highlight sharpness",
+        "anisotropicSpecularColour": { "label": "Highlight colour", "colour": true },
+        "AnisotropicAlphaBias": { "label": "Alpha bias", "range": [0, 1] },
+        "specularNoiseMapUVScaleFactor": "Noise tiling"
+      }
+    },
+    {
+      "name": "Dirt",
+      "folded": true,
+      "values": {
+        "dirtLevelMod": "Level",
+        "dirtColor": { "label": "Colour", "colour": true }
+      }
+    },
+    {
+      "name": "Weather",
+      "folded": true,
+      "values": {
+        "wetnessMultiplier": { "label": "Wetness", "range": [0, 1] },
+        "materialWetnessMultiplier": "Wetness by material",
+        "envEffThickness": { "label": "Snow thickness", "range": [0, 50] },
+        "envEffFatThickness": "Snow thickness, fat",
+        "envEffScale": "Snow scale",
+        "envEffTexTileUV": { "label": "Snow tiling", "range": [0, 16] }
+      }
+    },
+    {
+      "name": "Vegetation",
+      "folded": true,
+      "values": {
+        "umGlobalParams": "Micro-movement",
+        "WindGlobalParams": "Wind",
+        "UseTreeNormals": { "label": "Tree normals", "range": [0, 1] },
+        "SelfShadowing": { "label": "Self-shadowing", "range": [0, 1] },
+        "ShadowFalloff": { "label": "Shadow falloff", "range": [0, 2] }
+      }
+    },
+    {
+      "name": "Damage",
+      "folded": true,
+      "values": {
+        "DamageMultiplier": { "label": "Amount", "range": [0, 1] },
+        "DamageTextureOffset": "Texture offset",
+        "BoundRadius": "Bound radius",
+        "DamagedWheelOffsets": "Wheel offsets"
+      }
+    }
+  ]
+}

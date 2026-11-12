@@ -52,7 +52,28 @@ internal sealed class DrawableScene
     public required SurfaceVertex[] Vertices { get; init; }
     public required uint[] Indices { get; init; }
     public required IReadOnlyList<SurfacePart> Parts { get; init; }
-    public required IReadOnlyList<SurfaceMaterial> Materials { get; init; }
+
+    private readonly SurfaceMaterial[] materials = [];
+
+    public required IReadOnlyList<SurfaceMaterial> Materials { get => materials; init => materials = [.. value]; }
+
+    /// <summary>The shader entry each of <see cref="Materials"/> is made from, in the drawables read: what its values edit.</summary>
+    public IReadOnlyList<DrawableMaterial> Sources { get; init; } = [];
+
+    // Makes a shader entry ready to draw, with the textures the scene found for it.
+    private Func<DrawableMaterial, SurfaceMaterial>? remake;
+
+    /// <summary>
+    /// Makes <see cref="Materials"/>[<paramref name="index"/>] again from its shader entry, after its values changed,
+    /// with the same textures; false when the scene doesn't know its entry.
+    /// </summary>
+    public bool Remake(int index)
+    {
+        if (remake is null || index < 0 || index >= materials.Length || index >= Sources.Count)
+            return false;
+        materials[index] = remake(Sources[index]);
+        return true;
+    }
 
     /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
     public int EmbeddedTextureCount { get; init; }
@@ -105,6 +126,7 @@ internal sealed class DrawableScene
 
         var diagnostics = new List<string>();
         var materials = new List<SurfaceMaterial>();
+        var sources = new List<DrawableMaterial>();
         // By material list: a drawable placed more than once shares its materials, as do drawables using another's.
         var firstMaterial = new Dictionary<List<DrawableMaterial>, int>(ReferenceEqualityComparer.Instance);
         var placed = new List<(DrawableGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary,
@@ -115,12 +137,13 @@ internal sealed class DrawableScene
             SceneModel scene = models[index];
             Drawable drawable = scene.Drawable;
             // A drawable can use the shaders of another, its owner (as a fragment's pieces do).
-            List<DrawableMaterial> sources = drawable.Materials.Count > 0 ? drawable.Materials : drawable.ShaderOwner?.Materials ?? [];
-            if (!firstMaterial.TryGetValue(sources, out int first))
+            List<DrawableMaterial> entries = drawable.Materials.Count > 0 ? drawable.Materials : drawable.ShaderOwner?.Materials ?? [];
+            if (!firstMaterial.TryGetValue(entries, out int first))
             {
                 first = materials.Count;
-                firstMaterial.Add(sources, first);
-                materials.AddRange(sources.Select(material => SurfaceMaterial.From(material, Resolve)));
+                firstMaterial.Add(entries, first);
+                materials.AddRange(entries.Select(material => SurfaceMaterial.From(material, Resolve)));
+                sources.AddRange(entries);
             }
 
             int best = Enumerable.Range(0, 4).Where(lod => drawable.Lods[(DrawableLod)lod].Models.Count > 0).DefaultIfEmpty(-1).First();
@@ -140,7 +163,7 @@ internal sealed class DrawableScene
                     // A fragment's skinned drawable is split by the part each triangle's bone belongs to.
                     IReadOnlyDictionary<int, string>? boneParts = model.SkeletonBinding.HasSkin != 0 ? scene.BoneGroups : null;
                     foreach (DrawableGeometry geometry in model.Geometries)
-                        if (geometry.MaterialIndex < sources.Count)
+                        if (geometry.MaterialIndex < entries.Count)
                             placed.Add((geometry, transform, first + geometry.MaterialIndex, index, lod, group,
                                 lod == best && scene.Variant != ModelVariant.Damaged, boneParts));
                 }
@@ -213,7 +236,9 @@ internal sealed class DrawableScene
             Variants = [.. models.Select(m => m.Variant)],
             EmbeddedTextureCount = own.Count,
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
-            Materials = [.. materials],
+            Materials = materials,
+            Sources = sources,
+            remake = material => SurfaceMaterial.From(material, Resolve),
             Diagnostics = diagnostics,
         };
     }
