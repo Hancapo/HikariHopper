@@ -132,6 +132,34 @@ public sealed class ExplorerWorkTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ACancelledMoveToTheRecycleBinCountsOnlyWhatItMoved()
+    {
+        ExplorerViewModel bridge = OpenBareGame();
+        string[] files = [.. new[] { "alpha.txt", "beta.txt", "gamma.txt" }.Select(name => Write(Path.Combine(Work, "junk", name), name))];
+        bridge.Refresh();
+        bridge.Navigate("junk");
+        bridge.SelectAllEntries();
+        // The first is gone before its turn, so it is passed by.
+        File.Delete(files[0]);
+        int started = 0;
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ =>
+        {
+            Interlocked.Increment(ref started);
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        };
+        Assert.True(bridge.DeleteSelectedFiles());
+        gate.Release();
+        Until(() => Volatile.Read(ref started) == 2, "the second item");
+        Assert.True(bridge.CancelWork());
+        gate.Release(5);
+        Settle(bridge);
+        Assert.False(File.Exists(files[1]));
+        Assert.True(File.Exists(files[2]));
+        Assert.Equal("Cancelled moving 3 items to the Recycle Bin: 1 of 3 items were moved to the Recycle Bin", bridge.Status);
+    }
+
+    [AvaloniaFact]
     public async Task AnExtractShowsItsFilesAndCancelKeepsWhatItWrote()
     {
         MakeGame();

@@ -36,6 +36,10 @@ public sealed class OperationProgress
 
     public int Total { get; private set; }
 
+    /// <summary>How many items came out as meant, for an operation that may pass some by (a file already gone, one the
+    /// Recycle Bin refused): counted by <see cref="Succeed"/>.</summary>
+    public int Succeeded { get; private set; }
+
     /// <summary>Makes this the operation of the calling thread until disposed.</summary>
     public IDisposable Use()
     {
@@ -53,6 +57,9 @@ public sealed class OperationProgress
         Total = Math.Max(0, items);
         Done = 0;
     }
+
+    /// <summary>Counts the item in hand as having come out as meant.</summary>
+    public void Succeed() => Succeeded++;
 
     /// <summary>
     /// Starts on the next item, named <paramref name="name"/>: stops first if asked to, then reports it. Every report

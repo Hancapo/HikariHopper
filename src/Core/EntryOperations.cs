@@ -457,6 +457,7 @@ public static class EntryOperations
                 continue;
             }
             moved++;
+            OperationProgress.Current.Succeed();
         }
         if (failed.Count > 0)
             throw new IOException($"Could not move to the Recycle Bin: {string.Join(", ", failed)}");

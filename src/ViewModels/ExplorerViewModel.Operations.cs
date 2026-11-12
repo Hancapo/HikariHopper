@@ -372,7 +372,7 @@ public sealed partial class ExplorerViewModel
             : $"Moving {count} {noun} to the Recycle Bin…";
         // Moved to the Recycle Bin one at a time, what was moved stays there; an RPF stops before it is swapped.
         Func<OperationProgress, string>? cancelled = target.InArchive ? null
-            : stopped => CancelledStatus(progress, $"{stopped.Done} of {stopped.Total} {noun} were moved to the Recycle Bin");
+            : stopped => CancelledStatus(progress, $"{stopped.Succeeded} of {stopped.Total} {noun} were moved to the Recycle Bin");
         return StartEntryOperation(target, "delete selected items", progress, operation, EntryDeletionCompleted, cancelled);
     }
 
