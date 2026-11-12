@@ -310,6 +310,71 @@ public sealed class ShaderApplyToTests
     }
 
     [AvaloniaFact]
+    public void Textures_saved_before_the_games_come_are_shown_with_the_games_too()
+    {
+        // The pair has a texture of its own and one only in the game's dictionaries, whose tables come after it is shown.
+        static byte[] Mixed(int size)
+        {
+            var builder = new DrawableBuilder { Name = "pair" };
+            var material = new DrawableMaterialInput { Name = "surface", Shader = "normal_spec" };
+            material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
+                new FiveFury.Textures.Texture("pair_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+            material.Textures["BumpSampler"] = new FiveFury.Textures.TextureReference("pair_n");
+            builder.Materials.Add(material);
+            var mesh = new DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+            var model = new DrawableModelInput();
+            model.Meshes.Add(mesh);
+            builder.Models.Add(model);
+            return new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
+        }
+        var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
+        // The folder's other dictionary is looked in while a texture is missing: the read after the texture save is
+        // held there until the game's textures are shown.
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        bool hold = false;
+        byte[] other = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("other_d"));
+        Action<SavedDocument>? tell = null;
+        var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", Mixed(4))
+        {
+            GameDictionaries = tables.Task,
+            OpenTextures = saved => tell = saved,
+            Nearby = [new NearbyDictionary("other.ytd", other.Length, () =>
+            {
+                if (Volatile.Read(ref hold))
+                {
+                    entered.Set();
+                    release.Wait(10_000);
+                }
+                return other;
+            })],
+        });
+        Wait(viewer.Reading);
+        Assert.Equal("1 texture not found", viewer.Location);
+
+        Volatile.Write(ref hold, true);
+        Assert.True(viewer.OpenTextures());
+        byte[] saved = Mixed(8);
+        tell!(new SavedDocument([.. ModelContent.EmbeddedTextures("pair.ydr", saved).Textures], saved));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!entered.IsSet && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        Assert.True(entered.IsSet);
+        Volatile.Write(ref hold, false);
+
+        // The game's come and are shown; then the read begun before them finishes, without them.
+        byte[] game = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("pair_n"));
+        tables.SetResult([new NearbyDictionary("pair_txd.ytd", game.Length, () => game)]);
+        Wait(viewer.GameTexturesAdded);
+        Assert.Equal("", viewer.Location);
+        release.Set();
+        Wait(viewer.TexturesSaved);
+        Assert.Equal("", viewer.Location);
+        Assert.Equal(8, viewer.Surfaces!.Materials.Single().Diffuse!.Width);
+    }
+
+    [AvaloniaFact]
     public void Once_saved_as_another_file_its_embedded_textures_cant_be_opened()
     {
         using var folder = new Textures.TempFolder();
