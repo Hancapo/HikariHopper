@@ -281,7 +281,7 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public Task AYdrWithNoEmbeddedTexturesIsNotOpened() => Headless.Run(() =>
+    public void AYdrWithNoEmbeddedTexturesIsNotOpened()
     {
         byte[] withTextures = Asset(BreadRack);
         byte[] without = Document(withTextures).Serialize(Legacy([]), NoRenames);
@@ -304,7 +304,7 @@ public sealed class YdrTextureTests
         Assert.Equal(1, opened);
         Assert.True(viewer.HasDocument);
         Assert.Single(declined);
-    });
+    }
 
     [AvaloniaFact]
     public void ZeroCountEmbeddedDictionaryIsNotRejected()
@@ -485,7 +485,7 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public Task ViewerYdrRenameUndoAndSave() => Headless.Run(() =>
+    public void ViewerYdrRenameUndoAndSave()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
@@ -504,10 +504,10 @@ public sealed class YdrTextureTests
         Assert.True(viewer.SaveYtd());
         Settle(viewer);
         Assert.Equal(raw, File.ReadAllBytes(destination));
-    });
+    }
 
     [AvaloniaFact]
-    public Task ViewerYdrSaveAsRetainsContainer() => Headless.Run(async () =>
+    public async Task ViewerYdrSaveAsRetainsContainer()
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { SaveFile = folder.File("output") };
@@ -522,10 +522,10 @@ public sealed class YdrTextureTests
         Assert.True(File.Exists(folder.File("output.ydr")));
         Assert.False(File.Exists(folder.File("output.ytd")));
         AssertPreserved(Asset(BreadRack), File.ReadAllBytes(folder.File("output.ydr")));
-    });
+    }
 
     [AvaloniaFact]
-    public Task InvalidRenamePreservesDestinationAndModifiedState() => Headless.Run(() =>
+    public void InvalidRenamePreservesDestinationAndModifiedState()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
@@ -533,10 +533,10 @@ public sealed class YdrTextureTests
         Assert.False(viewer.RenameSelected("broken\0name"));
         Assert.False(viewer.Modified);
         Assert.Equal(Asset(BreadRack), File.ReadAllBytes(destination));
-    });
+    }
 
     [AvaloniaFact]
-    public Task DeletedNameReuseDoesNotRebindRemovedTexture() => Headless.Run(() =>
+    public void DeletedNameReuseDoesNotRebindRemovedTexture()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
@@ -548,10 +548,10 @@ public sealed class YdrTextureTests
         Settle(viewer);
         Assert.Equal(MaterialNames(Asset(BreadRack)).Select(name => name == remaining ? "last_name" : name),
             MaterialNames(File.ReadAllBytes(destination)));
-    });
+    }
 
     [AvaloniaFact]
-    public Task SingleRemoveKeepsCompactUndoHistory() => Headless.Run(() =>
+    public void SingleRemoveKeepsCompactUndoHistory()
     {
         TextureSet dictionary = Document(Asset(BreadRack)).Dictionary;
         TextureViewerViewModel viewer = Loaded(dictionary);
@@ -561,13 +561,13 @@ public sealed class YdrTextureTests
         Assert.True(viewer.Undo());
         Assert.True(viewer.Undo(), "Removal retained unchanged texture data and exhausted the undo budget");
         Assert.Equal(dictionary.Textures, viewer.Dictionary!.Textures);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public Task RemoveDeletesTheSelectionAndUndoRestoresIt(bool allSelected, bool duplicateNeighbor) => Headless.Run(() =>
+    public void RemoveDeletesTheSelectionAndUndoRestoresIt(bool allSelected, bool duplicateNeighbor)
     {
         TextureSet dictionary = Document(Asset(BreadRack)).Dictionary;
         if (duplicateNeighbor)
@@ -583,5 +583,5 @@ public sealed class YdrTextureTests
         Assert.True(viewer.Undo());
         Assert.Equal(dictionary.Textures, viewer.Dictionary!.Textures);
         Assert.False(viewer.Modified);
-    });
+    }
 }

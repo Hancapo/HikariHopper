@@ -31,7 +31,7 @@ public sealed class RenderScenarios
         if (string.IsNullOrEmpty(scenarios) || string.IsNullOrEmpty(output))
             Assert.Skip("Set HH_SCENARIOS and HH_RENDER_OUT to render the comparison scenarios.");
         string[]? only = Environment.GetEnvironmentVariable("HH_ONLY")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        UiThread.Run(() => RenderAllOnUiThread(scenarios, output, only));
+        RenderAllOnUiThread(scenarios, output, only);
     }
 
     private static void RenderAllOnUiThread(string scenarios, string output, string[]? only)

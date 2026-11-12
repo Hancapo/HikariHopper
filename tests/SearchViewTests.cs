@@ -15,18 +15,6 @@ public sealed class SearchViewTests : ExplorerTestBase
 {
     public SearchViewTests() => ExplorerViewModel.SearchDelay = 0;
 
-    private static async Task Searched(ExplorerViewModel bridge)
-    {
-        for (int round = 0; round < 4; round++)
-        {
-            await bridge.SearchIndexSettled;
-            Dispatcher.UIThread.RunJobs();
-            await bridge.SearchSettled;
-            Dispatcher.UIThread.RunJobs();
-        }
-        TestWait.Settle();
-    }
-
     private static void Key(MainWindow window, Key key, RawInputModifiers modifiers, PhysicalKey physical)
     {
         window.KeyPress(key, modifiers, physical, null);

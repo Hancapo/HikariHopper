@@ -101,7 +101,7 @@ public sealed class YtdSavingTests
     // Each edition's empty dictionary, saved as a loose file and inside an RPF.
     [InlineData(GameTarget.Legacy, 1, false)]
     [InlineData(GameTarget.Enhanced, 3, true)]
-    public Task RemoveEveryTextureSaveReopenAndUndo(GameTarget target, int count, bool inArchive) => Headless.Run(() =>
+    public void RemoveEveryTextureSaveReopenAndUndo(GameTarget target, int count, bool inArchive)
     {
         using var folder = new TempFolder();
         TextureSet original = Dictionary(target, [.. Enumerable.Range(0, count).Select(index => $"tex_{index}")]);
@@ -168,7 +168,7 @@ public sealed class YtdSavingTests
         Settle(viewer);
         Assert.False(viewer.Saving);
         Assert.False(viewer.OperationBusy);
-    });
+    }
 
     private static byte[] ReadArchived(string archivePath, string name)
     {
@@ -182,7 +182,7 @@ public sealed class YtdSavingTests
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task SaveEmptyYtdAsPreservesTarget(GameTarget target) => Headless.Run(async () =>
+    public async Task SaveEmptyYtdAsPreservesTarget(GameTarget target)
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { SaveFile = folder.File("exported") };
@@ -200,12 +200,12 @@ public sealed class YtdSavingTests
         TextureSet saved = YtdSaving.Read(File.ReadAllBytes(destination));
         Assert.Equal(target, saved.Target);
         Assert.Empty(saved.Textures);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task UndoLastRemovalPreservesAnImportedUnnamedTexture(GameTarget target) => Headless.Run(() =>
+    public void UndoLastRemovalPreservesAnImportedUnnamedTexture(GameTarget target)
     {
         ResourceFile resource = ResourceFile.Read(YtdSaving.Serialize(Dictionary(target, "named")));
         byte[] system = resource.SystemData.ToArray();
@@ -227,10 +227,10 @@ public sealed class YtdSavingTests
         Assert.Equal([original], viewer.Dictionary!.Textures);
         Assert.False(viewer.Modified);
         Assert.ThrowsAny<Exception>(() => YtdSaving.Serialize(viewer.Dictionary)); // Undo is not an export-validation bypass.
-    });
+    }
 
     [AvaloniaFact]
-    public Task InvalidSaveNeverTouchesTheDestinationOrTheSaver() => Headless.Run(() =>
+    public void InvalidSaveNeverTouchesTheDestinationOrTheSaver()
     {
         using var folder = new TempFolder();
         string path = folder.File("existing.ytd");
@@ -259,5 +259,5 @@ public sealed class YtdSavingTests
         Assert.Empty(calls);
         Assert.Equal([false], saveResults);
         Assert.Equal([new SourceWriteResult("root.rpf", false)], writes);
-    });
+    }
 }

@@ -41,7 +41,7 @@ public sealed class CompressionTests
     // Each format, and each edition once: the optimizer works the same in both.
     [InlineData(GameTarget.Legacy, TextureFormat.BC2Unorm)]
     [InlineData(GameTarget.Enhanced, TextureFormat.BC3Unorm)]
-    public Task OptimizationPreservesAuthoredMipsAndUndo(GameTarget target, TextureFormat format) => Headless.Run(() =>
+    public void OptimizationPreservesAuthoredMipsAndUndo(GameTarget target, TextureFormat format)
     {
         Texture source = MakeTexture(format);
         source.Usage = TextureUsage.Diffuse;
@@ -67,14 +67,14 @@ public sealed class CompressionTests
         Settle(viewer);
         Assert.Same(source, viewer.Dictionary.Textures[0]);
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(TextureFormat.BC1Unorm, 255, null, TextureFormat.BC1Unorm)]
     [InlineData(TextureFormat.BC3Unorm, 100, null, TextureFormat.BC3Unorm)]
     [InlineData(TextureFormat.BC3Unorm, 255, 100, TextureFormat.BC3Unorm)]
     [InlineData(TextureFormat.BC2Unorm, 255, 100, TextureFormat.BC3Unorm)]
-    public Task ChecksAlphaInAllMipsAndLeavesCorrectFormatsUntouched(TextureFormat format, int alpha, int? lastAlpha, TextureFormat expected) => Headless.Run(() =>
+    public void ChecksAlphaInAllMipsAndLeavesCorrectFormatsUntouched(TextureFormat format, int alpha, int? lastAlpha, TextureFormat expected)
     {
         Texture source = MakeTexture(format, alpha: (byte)alpha, lastAlpha: (byte?)lastAlpha);
         TextureViewerViewModel viewer = Loaded(new TextureSet([source], GameTarget.Legacy));
@@ -91,10 +91,10 @@ public sealed class CompressionTests
         }
         if (lastAlpha is not null)
             Assert.True(TextureProcessing.Decode(result, 2).Pixels[3] < 255);
-    });
+    }
 
     [AvaloniaFact]
-    public Task BatchSkipsNonconventionalFormatsAndPreservesSelection() => Headless.Run(() =>
+    public void BatchSkipsNonconventionalFormatsAndPreservesSelection()
     {
         TextureFormat[] formats = [TextureFormat.BC3Unorm, TextureFormat.B8G8R8A8Unorm, TextureFormat.BC5Unorm,
             TextureFormat.BC4Unorm, TextureFormat.BC7Unorm];
@@ -117,10 +117,10 @@ public sealed class CompressionTests
         Assert.False(viewer.OptimizeSelectedCompression());
         Assert.False(viewer.Modified);
         Assert.False(viewer.CanUndo);
-    });
+    }
 
     [AvaloniaFact]
-    public Task OptimizationErrorKeepsEntireBatchUnchanged() => Headless.Run(() =>
+    public void OptimizationErrorKeepsEntireBatchUnchanged()
     {
         Texture[] sources = [MakeTexture(TextureFormat.BC3Unorm, "good"), MakeTexture(TextureFormat.BC3Unorm, "bad")];
         TextureViewerViewModel viewer = Loaded(new TextureSet(sources, GameTarget.Legacy));
@@ -137,5 +137,5 @@ public sealed class CompressionTests
         Assert.False(viewer.OperationBusy);
         Assert.Contains("simulated optimization failure", viewer.Status);
         Assert.StartsWith("Optimizing compression for failed: bad: ", viewer.Status);
-    });
+    }
 }

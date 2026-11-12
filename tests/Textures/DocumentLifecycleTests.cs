@@ -24,7 +24,7 @@ public sealed class DocumentLifecycleTests
     [InlineData("cancel")]
     [InlineData("discard")]
     [InlineData("save")]
-    public Task OpeningAnotherYtdRequiresADecision(string decision) => Headless.Run(async () =>
+    public async Task OpeningAnotherYtdRequiresADecision(string decision)
     {
         using var folder = new TempFolder();
         var (viewer, path) = EditedDocument(folder);
@@ -46,10 +46,10 @@ public sealed class DocumentLifecycleTests
             Assert.True(viewer.CanUndo);
         }
         Assert.Null(viewer.PendingChange);
-    });
+    }
 
     [AvaloniaFact]
-    public Task ClosingADocumentThatWasSavedTellsWhoOpenedItWhatItSaved() => Headless.Run(() =>
+    public void ClosingADocumentThatWasSavedTellsWhoOpenedItWhatItSaved()
     {
         using var folder = new TempFolder();
         string path = folder.File("first.ytd");
@@ -90,10 +90,10 @@ public sealed class DocumentLifecycleTests
         Assert.Equal(["third"], told[1].Textures.Select(texture => texture.Name));
         viewer.CloseDocument();
         Assert.Equal(2, told.Count);
-    });
+    }
 
     [AvaloniaFact]
-    public Task RequestCloseClearsTheDocumentAfterDiscard() => Headless.Run(async () =>
+    public async Task RequestCloseClearsTheDocumentAfterDiscard()
     {
         using var folder = new TempFolder();
         var (viewer, _) = EditedDocument(folder);
@@ -108,10 +108,10 @@ public sealed class DocumentLifecycleTests
         Assert.False(viewer.Modified);
         Assert.False(viewer.HasDocument);
         Assert.Equal("No texture dictionary loaded", viewer.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public Task FailedSaveCancelsDocumentSwitch() => Headless.Run(async () =>
+    public async Task FailedSaveCancelsDocumentSwitch()
     {
         using var folder = new TempFolder();
         var (viewer, _) = EditedDocument(folder);
@@ -126,10 +126,10 @@ public sealed class DocumentLifecycleTests
         Assert.Equal("Could not save first.ytd: simulated write failure", viewer.Status);
         Assert.Null(viewer.PendingChange);
         Assert.Equal([false], results);
-    });
+    }
 
     [AvaloniaFact]
-    public Task CancelledSaveAsPreservesDocument() => Headless.Run(async () =>
+    public async Task CancelledSaveAsPreservesDocument()
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { SaveFile = null };
@@ -141,10 +141,10 @@ public sealed class DocumentLifecycleTests
         Assert.Equal("first.ytd", viewer.SourceName);
         Assert.True(viewer.Modified);
         Assert.Null(viewer.PendingChange);
-    });
+    }
 
     [AvaloniaFact]
-    public Task DocumentChangeWaitsForAnInFlightSave() => Headless.Run(() =>
+    public void DocumentChangeWaitsForAnInFlightSave()
     {
         using var folder = new TempFolder();
         var (viewer, _) = EditedDocument(folder);
@@ -164,10 +164,10 @@ public sealed class DocumentLifecycleTests
         Settle(viewer);
         Assert.Equal(1, ran);
         Assert.False(viewer.Saving);
-    });
+    }
 
     [AvaloniaFact]
-    public Task BusyOperationsBlockDocumentChanges() => Headless.Run(() =>
+    public void BusyOperationsBlockDocumentChanges()
     {
         TextureViewerViewModel viewer = Loaded(Dictionary("paint"));
         using var release = new ManualResetEventSlim();
@@ -180,10 +180,10 @@ public sealed class DocumentLifecycleTests
         Assert.Equal(0, ran);
         viewer.RequestDocumentChange(() => ran++);
         Assert.Equal(1, ran);
-    });
+    }
 
     [AvaloniaFact]
-    public Task ReadFailureReportsTheError() => Headless.Run(() =>
+    public void ReadFailureReportsTheError()
     {
         TextureViewerViewModel viewer = Viewer();
         int opens = 0;
@@ -197,5 +197,5 @@ public sealed class DocumentLifecycleTests
         Assert.False(viewer.HasDocument);
         Assert.NotEqual("", viewer.Error);
         Assert.Equal($"Could not read texture dictionary: {viewer.Error}", viewer.Status);
-    });
+    }
 }

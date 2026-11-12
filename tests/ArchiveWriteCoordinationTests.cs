@@ -19,7 +19,7 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void DeletingNestedRpfReturnsPeerToRoot() => OnUiThread(() =>
+    public void DeletingNestedRpfReturnsPeerToRoot()
     {
         string path = SaveArchive(Path.Combine(Work, "outer.rpf"), ("inner.rpf", Archive("inner.rpf", ("payload.txt", "example"))));
         var tabs = new ExplorerTabsViewModel();
@@ -43,10 +43,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.True(peer.CreateEmptyRpf("replacement"));
         Settle(tabs);
         Assert.Equal(["replacement.rpf"], ListedNames(first));
-    });
+    }
 
     [AvaloniaFact]
-    public void SharedArchiveCreationImportAndDeletion() => OnUiThread(() =>
+    public void SharedArchiveCreationImportAndDeletion()
     {
         var (tabs, first, peer, path) = SharedArchive();
         var contentChanges = new List<object>();
@@ -68,10 +68,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.DoesNotContain("new.rpf", ListedNames(peer));
         Assert.Equal(Bytes("untouched"), ReadSavedEntry(path, "sibling.txt"));
         Assert.Equal(Bytes("imported"), ReadSavedEntry(path, "import.txt"));
-    });
+    }
 
     [AvaloniaFact]
-    public void FailedEntryWriteRestoresPeers() => OnUiThread(() =>
+    public void FailedEntryWriteRestoresPeers()
     {
         var (tabs, first, peer, path) = SharedArchive();
         File.SetAttributes(path, FileAttributes.ReadOnly);
@@ -93,10 +93,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.True(first.CreateEmptyRpf("retry"));
         Settle(tabs);
         Assert.Contains("retry.rpf", ListedNames(peer));
-    });
+    }
 
     [AvaloniaFact]
-    public void InFlightWriteBlocksCompetingWritesAndReopening() => OnUiThread(() =>
+    public void InFlightWriteBlocksCompetingWritesAndReopening()
     {
         MakeGame(executable: "GTA5_Enhanced.exe");
         string archive = SaveArchive(Path.Combine(Work, "shared.rpf"), ("file.txt", "x"));
@@ -142,6 +142,6 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.False(peer.EntryOperationBusy);
         Assert.DoesNotContain("delete.txt", ListedNames(peer));
         Assert.False(File.Exists(Path.Combine(Work, "blocked.rpf")));
-    });
+    }
 
 }

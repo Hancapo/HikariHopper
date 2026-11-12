@@ -112,7 +112,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void RejectsDuplicateRpfBeforeStartingWorker() => OnUiThread(() =>
+    public void RejectsDuplicateRpfBeforeStartingWorker()
     {
         ExplorerViewModel bridge = OpenBareGame();
         File.WriteAllText(Path.Combine(Work, "existing.rpf"), "existing");
@@ -124,10 +124,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.False(bridge.CreateEmptyRpf("EXISTING"));
         Assert.False(bridge.EntryOperationBusy);
         Assert.Equal("An entry with this name already exists", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void CreatesEntriesWithoutBlockingTheUiThread() => OnUiThread(() =>
+    public void CreatesEntriesWithoutBlockingTheUiThread()
     {
         ExplorerViewModel bridge = OpenBareGame();
         var busyChanges = new List<bool>();
@@ -150,10 +150,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.True(bridge.EntriesModel[0].Selected);
         Assert.Equal("background.rpf", bridge.SelectedName);
         Assert.Equal("Created background.rpf", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void CreatesFoldersAndPackedRpfsFromTheExplorer() => OnUiThread(() =>
+    public void CreatesFoldersAndPackedRpfsFromTheExplorer()
     {
         string source = Directory.CreateDirectory(Path.Combine(Work, "..", "pack")).FullName;
         Write(Path.Combine(source, "inside.txt"), "inside");
@@ -172,10 +172,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.Equal(["stream", "packed.rpf", "zipped.rpf"], ListedNames(bridge));
         Assert.NotNull(ReadArchive(Path.Combine(Work, "packed.rpf")).Find("inside.txt"));
         Assert.NotNull(ReadArchive(Path.Combine(Work, "zipped.rpf")).Find("zipped.txt"));
-    });
+    }
 
     [AvaloniaFact]
-    public void CreatesInsideTheOpenArchiveAndReloadsIt() => OnUiThread(() =>
+    public void CreatesInsideTheOpenArchiveAndReloadsIt()
     {
         string archive = SaveArchive(Path.Combine(Work, "outer.rpf"), ("mods/keep.txt", "keep"));
         var bridge = new ExplorerViewModel();
@@ -191,10 +191,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.Equal(["stream", "keep.txt"], ListedNames(bridge));
         Assert.Equal("stream", bridge.SelectedName);
         Assert.NotNull(ReadArchive(archive).Find("mods/stream"));
-    });
+    }
 
     [AvaloniaFact]
-    public void FailedWriteReportsTheErrorAndEndsTheOperation() => OnUiThread(() =>
+    public void FailedWriteReportsTheErrorAndEndsTheOperation()
     {
         ExplorerViewModel bridge = OpenBareGame();
         string source = Path.Combine(Work, "..", "missing-folder");
@@ -202,7 +202,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Settle(bridge);
         Assert.StartsWith("Could not create packed.rpf: RPF source folder does not exist:", bridge.Status);
         Assert.False(bridge.EntryOperationBusy);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
@@ -217,7 +217,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void CreatesYtdInsideAnRpfWithTheActiveGameTarget() => OnUiThread(() =>
+    public void CreatesYtdInsideAnRpfWithTheActiveGameTarget()
     {
         MakeGame(executable: "GTA5_Enhanced.exe");
         string archive = SaveArchive(Path.Combine(Work, "assets.rpf"), ("textures", null!));
@@ -233,10 +233,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Ytd created = Ytd.Read(ReadSavedEntry(archive, "textures/created.ytd")!);
         Assert.Empty(created.Textures);
         Assert.Equal(GameTarget.Enhanced, created.Target);
-    });
+    }
 
     [AvaloniaFact]
-    public void YtdCreationUsesNameValidationAndRunsInBackground() => OnUiThread(() =>
+    public void YtdCreationUsesNameValidationAndRunsInBackground()
     {
         ExplorerViewModel bridge = OpenBareGame("GTA5.exe");
 
@@ -249,10 +249,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.Equal("textures.ytd", entry.Name);
         Assert.Equal("Texture Dictionary", entry.Kind);
         Assert.Equal("An entry with this name already exists", bridge.CreationNameError("textures", "ytd"));
-    });
+    }
 
     [AvaloniaFact]
-    public void StandaloneRpfWithoutGameContextDoesNotGuessYtdEdition() => OnUiThread(() =>
+    public void StandaloneRpfWithoutGameContextDoesNotGuessYtdEdition()
     {
         string archive = SaveArchive(Path.Combine(Work, "standalone.rpf"));
         byte[] original = File.ReadAllBytes(archive);
@@ -265,7 +265,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.Contains("configured game", bridge.Status);
         Assert.StartsWith("Could not create unknown.ytd: ", bridge.Status);
         Assert.Equal(original, File.ReadAllBytes(archive));
-    });
+    }
 
     [AvaloniaFact]
     public void ImportsFilesIntoALooseDirectoryWithoutOverwriting()
@@ -334,7 +334,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void A_drop_with_names_already_there_asks_before_importing_anything() => OnUiThread(() =>
+    public void A_drop_with_names_already_there_asks_before_importing_anything()
     {
         Write(Path.Combine(Work, "first.txt"), "old");
         ExplorerViewModel bridge = OpenBareGame();
@@ -364,7 +364,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.True(bridge.ResolveImport(asked!, ImportConflict.Skip));
         Settle(bridge);
         Assert.Equal("Nothing imported: every file was already here", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
     public void ImportsFilesAndNestedRpfsIntoAnRpfFolder()
@@ -399,7 +399,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ImportsDroppedFilesInBackground() => OnUiThread(() =>
+    public void ImportsDroppedFilesInBackground()
     {
         string first = Write(Path.Combine(Work, "..", "drops", "first.txt"), "first");
         string second = new Uri(Write(Path.Combine(Work, "..", "drops", "second.txt"), "second")).AbsoluteUri;
@@ -415,10 +415,10 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.Equal("second", File.ReadAllText(Path.Combine(Work, "second.txt")));
         Assert.Equal(2, bridge.SelectionCount);
         Assert.Equal("Imported 2 files", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void RejectsNonLocalDrops() => OnUiThread(() =>
+    public void RejectsNonLocalDrops()
     {
         // A dropped folder is imported now (CopyPasteTests); what isn't a local file or folder still isn't.
         ExplorerViewModel bridge = OpenBareGame();
@@ -430,7 +430,7 @@ public sealed class EntryCreationTests : ExplorerTestBase
         Assert.False(bridge.ImportDroppedFiles([]));
         Assert.Equal("Could not import files: Drop one or more files to import", bridge.Status);
         Assert.False(bridge.EntryOperationBusy);
-    });
+    }
 
     [AvaloniaFact]
     public void LocalDropPathsResolvePathsAndFileUris()

@@ -14,7 +14,7 @@ namespace HikariHopper.Tests.Textures;
 public sealed class ImageImportTests
 {
     [AvaloniaFact]
-    public Task ImportImagesAsksForFilesAndImportsThemAsOneBatch() => Headless.Run(async () =>
+    public async Task ImportImagesAsksForFilesAndImportsThemAsOneBatch()
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs();
@@ -31,10 +31,10 @@ public sealed class ImageImportTests
         dialogs.OpenFiles.Clear();
         Assert.False(await viewer.ImportImagesFromFiles());
         Assert.Equal(3, viewer.TextureCount);
-    });
+    }
 
     [AvaloniaFact]
-    public Task CopyingDroppedImagesHoldsTheDocumentUntilTheImport() => Headless.Run(() =>
+    public void CopyingDroppedImagesHoldsTheDocumentUntilTheImport()
     {
         using var folder = new TempFolder();
         string source = ImageFile(folder.File("source.png"));
@@ -62,10 +62,10 @@ public sealed class ImageImportTests
         Settle(viewer);
         Assert.Equal(["existing", "from_browser"], Names(viewer).Order());
         Assert.Empty(dialogs.Titles);
-    });
+    }
 
     [AvaloniaFact]
-    public Task AFailedCopyImportsNothingAndSaysWhy() => Headless.Run(() =>
+    public void AFailedCopyImportsNothingAndSaysWhy()
     {
         TextureViewerViewModel viewer = Loaded(Dictionary("existing"));
         Assert.True(viewer.ImportDroppedImagesAfterCopy([Path.Combine(Path.GetTempPath(), "gone.png")],
@@ -74,12 +74,12 @@ public sealed class ImageImportTests
         Assert.False(viewer.OperationBusy);
         Assert.Equal(["existing"], Names(viewer));
         Assert.Equal("Could not import images: The source went away", viewer.Status);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task DropIntoEmptyYtdImportsSavesAndUndoesOneBatch(GameTarget target) => Headless.Run(() =>
+    public void DropIntoEmptyYtdImportsSavesAndUndoesOneBatch(GameTarget target)
     {
         using var folder = new TempFolder();
         string path = folder.File("test.ytd");
@@ -111,12 +111,12 @@ public sealed class ImageImportTests
         Assert.Equal(0, viewer.SelectedCount);
         Assert.Equal(-1, viewer.SelectedIndex);
         Assert.False(viewer.PreviewLoading);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public Task NameCollisionsRequireOneGlobalConfirmation(bool accept) => Headless.Run(() =>
+    public void NameCollisionsRequireOneGlobalConfirmation(bool accept)
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = Opened("test.ytd", Bytes(Dictionary("paint", "detail", "keep")));
@@ -152,10 +152,10 @@ public sealed class ImageImportTests
         Settle(viewer);
         Assert.Equal(before, viewer.Dictionary!.Textures);
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task BadImageRollsBackWholeImport() => Headless.Run(() =>
+    public void BadImageRollsBackWholeImport()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = Opened("test.ytd", Bytes(Dictionary("keep")));
@@ -169,10 +169,10 @@ public sealed class ImageImportTests
         Assert.False(viewer.CanUndo);
         Assert.False(viewer.OperationBusy);
         Assert.StartsWith("Import failed: bad.png: ", viewer.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public Task IncomingDuplicatesUseOneConfirmationAndLastFile() => Headless.Run(() =>
+    public void IncomingDuplicatesUseOneConfirmationAndLastFile()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = Opened("test.ytd", EmptyYtd(GameTarget.Legacy));
@@ -185,10 +185,10 @@ public sealed class ImageImportTests
         Settle(viewer);
         Assert.Equal(["same"], Names(viewer));
         Assert.Equal(16, viewer.Dictionary!.Textures[0].Width);
-    });
+    }
 
     [AvaloniaFact]
-    public Task StaleConfirmationCannotModifyAnotherDocument() => Headless.Run(() =>
+    public void StaleConfirmationCannotModifyAnotherDocument()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = Opened("first.ytd", Bytes(Dictionary("paint")));
@@ -198,10 +198,10 @@ public sealed class ImageImportTests
         Assert.False(viewer.ConfirmImageImport(true));
         Assert.Equal(0, viewer.TextureCount);
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task DropRejectsUnloadedBusyRemoteFolderAndUnsupported() => Headless.Run(() =>
+    public void DropRejectsUnloadedBusyRemoteFolderAndUnsupported()
     {
         using var folder = new TempFolder();
         string image = ImageFile(folder.File("test.png"));
@@ -223,7 +223,7 @@ public sealed class ImageImportTests
         Assert.True(viewer.CanAcceptImageDrop([image]));
         Assert.False(viewer.Modified);
         Assert.Equal(0, viewer.TextureCount);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData("png")]
@@ -233,7 +233,7 @@ public sealed class ImageImportTests
     [InlineData("tga")]
     [InlineData("webp")]
     [InlineData("dds")]
-    public Task SupportedFormatsImportRealEncodedFiles(string extension) => Headless.Run(() =>
+    public void SupportedFormatsImportRealEncodedFiles(string extension)
     {
         using var folder = new TempFolder();
         string path = folder.File($"input.{extension}");
@@ -262,10 +262,10 @@ public sealed class ImageImportTests
             Assert.Equal(255, alpha);
         else
             Assert.InRange(alpha, 80, 120);
-    });
+    }
 
     [AvaloniaFact]
-    public Task DroppedImagesSaveInsideRpf() => Headless.Run(() =>
+    public void DroppedImagesSaveInsideRpf()
     {
         using var folder = new TempFolder();
         string archivePath = folder.File("textures.rpf");
@@ -303,5 +303,5 @@ public sealed class ImageImportTests
         {
             saved.Close();
         }
-    });
+    }
 }

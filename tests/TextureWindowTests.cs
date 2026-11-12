@@ -625,10 +625,7 @@ public sealed class TextureWindowTests
         harness.Backdrop.Children.Remove(gone);
         dialog.WidthField.Text = "128";
         dialog.Apply();
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
-            harness.Settle();
-        harness.Settle();
+        harness.WaitIdle();
         Assert.Equal(128, harness.ViewModel.SelectedWidth);
 
         // The keyboard is back in the editor, so Ctrl+Z undoes the resize without a click first.
@@ -663,10 +660,7 @@ public sealed class TextureWindowTests
         var dialog = Assert.IsType<TextureResizeDialog>(harness.Window.ToolDialog);
         dialog.WidthField.Text = "128";
         ClickOn(dialog.ApplyButton!);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
-            harness.Settle();
-        harness.Settle();
+        harness.WaitIdle();
         Assert.Equal(128, harness.ViewModel.SelectedWidth);
 
         // Nothing else touched: Ctrl+Z undoes it.

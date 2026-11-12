@@ -62,6 +62,18 @@ internal sealed class TextureWindowHarness
         return this;
     }
 
+    /// <summary>Waits for the operation running in the background (a resize, a format change) to finish and show.</summary>
+    public void WaitIdle()
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (ViewModel.OperationBusy)
+        {
+            Assert.True(clock.ElapsedMilliseconds < 10_000, "Waited 10 s for the editor's operation to finish");
+            Settle();
+        }
+        Settle();
+    }
+
     public void Settle()
     {
         TextureTestKit.Settle(ViewModel);
