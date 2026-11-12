@@ -407,7 +407,7 @@ public sealed partial class ExplorerViewModel
             GameDictionaries = GameDictionaries(entry.Name),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
-            OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
+            OpenTextures = OpensTexturesOf(entry, data),
             Nearby = NearbyDictionaries(entry),
             SaveTarget = SaveTargetOf(entry),
         });
@@ -489,6 +489,58 @@ public sealed partial class ExplorerViewModel
             return;
         }
         OpenEmbeddedDictionary(entry.Name, data, closedAfterSave);
+    }
+
+    /// <summary>
+    /// What opens a drawable's embedded textures from the 3D viewer. A .ydr in an RPF is read again where it lives each
+    /// time, with a reader of its own, as a search result is: a save into the RPF, from the texture editor or the
+    /// viewer, closes the archive the explorer read it from.
+    /// </summary>
+    private Action<Action<SavedDocument>> OpensTexturesOf(EntryRecord entry, byte[] data)
+    {
+        ArchiveEntryTarget? where = null;
+        string source = "";
+        if (Provider.InArchive && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                where = Provider.GetArchiveEntryTarget(entry);
+                source = Provider.EntrySourcePath(entry);
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                where = null;
+            }
+        }
+        if (where is null)
+            return saved => OpenEmbeddedTextures(entry, data, saved);
+        return saved =>
+        {
+            try
+            {
+                OpenHitDictionary(entry.Name, ReadArchived(where, source), saved);
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                SetStatus($"Could not open texture dictionary: {error.Message}");
+            }
+        };
+    }
+
+    /// <summary>An archived file read where it lives, with an archive of its own that is closed after, and its save target.</summary>
+    private static (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadArchived(ArchiveEntryTarget where, string source)
+    {
+        ArchiveNode root = ArchiveNode.OpenRoot(where.RootPath, where.Crypto);
+        try
+        {
+            if (root.FindEntry(where.EntryPath) is not { Entry: FiveFury.Rpf.RpfFileEntry file })
+                throw new FileNotFoundException($"{Path.GetFileName(where.EntryPath)} is no longer in {Path.GetFileName(where.RootPath)}");
+            return (file.ReadStandalone(), source, where);
+        }
+        finally
+        {
+            root.Close();
+        }
     }
 
     /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>
