@@ -379,6 +379,8 @@ internal sealed class PartsPanel : UserControl
         {
             replacing = false;
         }
+        // As they were, closed rows too: not the ones a new list opens.
+        expanded.Clear();
         expanded.UnionWith(open);
         selected.UnionWith(picked);
         (cursor, anchor) = (at, from);
