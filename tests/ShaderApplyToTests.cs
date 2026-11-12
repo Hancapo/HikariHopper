@@ -232,6 +232,116 @@ public sealed class ShaderApplyToTests
     }
 
     [AvaloniaFact]
+    public void A_save_while_the_drawable_is_read_again_with_saved_textures_is_refused_until_they_show()
+    {
+        Action<SavedDocument>? tell = null;
+        byte[]? written = null;
+        Views.ModelViewer viewer = Open(TexturedPair(4), new SaveTarget(bytes => written = bytes), saved => tell = saved);
+        PickLeft(viewer);
+        Type(viewer.Card.Field("bumpiness")!, "2");
+        Assert.True(viewer.OpenTextures());
+        byte[] saved = TexturedPair(8);
+        tell!(new SavedDocument([.. ModelContent.EmbeddedTextures("pair.ydr", saved).Textures], saved));
+
+        // Ctrl+S before the drawable is read again with them: written now, it would put the 4-pixel texture back.
+        Assert.False(viewer.Command('S'));
+        Assert.Null(written);
+        Assert.Contains("still being read again", viewer.StatusText.Text);
+
+        // Once they show, it saves them with the shader values.
+        Wait(viewer.TexturesSaved);
+        Assert.True(viewer.Command('S'));
+        Wait(viewer.Saving);
+        Assert.True(viewer.Saving.Result, viewer.StatusText.Text);
+        Assert.Equal(8, ModelContent.EmbeddedTextures("pair.ydr", written!).Textures.Single().Width);
+        Assert.Equal(2f, ShaderEdits.Current(FiveFury.Ydr.Ydr.Read(written!).Drawable.Materials[0], "bumpiness")[0]);
+    }
+
+    [AvaloniaFact]
+    public void The_games_textures_read_before_a_save_dont_bring_back_the_drawable_from_before_it()
+    {
+        // The pair's texture is only in the game's dictionaries, whose tables come after it is shown; the read with
+        // them is held while a geometry is given an entry of its own and saved.
+        var builder = new DrawableBuilder { Name = "pair" };
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "normal_spec" };
+        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference("pair_d");
+        builder.Materials.Add(material);
+        foreach (float x in new[] { 0f, 2f })
+        {
+            var mesh = new DrawableMeshInput([new(x, 0, 0), new(x + 1, 0, 0), new(x, 1, 0)], [0, 1, 2], "surface");
+            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+            var model = new DrawableModelInput();
+            model.Meshes.Add(mesh);
+            builder.Models.Add(model);
+        }
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
+        var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
+        var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { GameDictionaries = tables.Task, SaveTarget = new SaveTarget(_ => { }) });
+        Wait(viewer.Reading);
+        Assert.Equal("1 texture not found", viewer.Location);
+
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        byte[] dictionary = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("pair_d"));
+        tables.SetResult([new NearbyDictionary("pair_txd.ytd", dictionary.Length, () =>
+        {
+            entered.Set();
+            release.Wait(10_000);
+            return dictionary;
+        })]);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!entered.IsSet && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        Assert.True(entered.IsSet);
+
+        PickLeft(viewer);
+        viewer.Card.ApplyToOne = true;
+        Type(viewer.Card.Field("bumpiness")!, "3");
+        Assert.True(viewer.Save());
+        Wait(viewer.Saving);
+        Assert.True(viewer.Saving.Result, viewer.StatusText.Text);
+
+        // The read from before the save finishes: it is read again from what was saved, the split kept.
+        release.Set();
+        Wait(viewer.GameTexturesAdded);
+        Assert.Equal(2, viewer.Surfaces!.Sources.Count);
+        Assert.Equal((3f, 1f), Drawn(viewer));
+        Assert.Equal("", viewer.Location);
+    }
+
+    [AvaloniaFact]
+    public void Once_saved_as_another_file_its_embedded_textures_cant_be_opened()
+    {
+        using var folder = new Textures.TempFolder();
+        int opened = 0;
+        Views.ModelViewer viewer = Open(TexturedPair(4), textures: _ => opened++);
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
+        TestWait.Pump(50);
+        void PressT()
+        {
+            viewer.Focus();
+            Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Avalonia.Input.Key.T, Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PhysicalKey.T, "t");
+        }
+        Assert.True(viewer.Parts.TexturesRow.IsVisible);
+        PressT();
+        Assert.Equal(1, opened);
+        viewer.Dialogs = new Textures.FakeDialogs { SaveFile = folder.File("copy.ydr") };
+        Task<bool> saving = viewer.SaveAs();
+        Wait(saving);
+        Assert.True(saving.Result, viewer.StatusText.Text);
+
+        // The texture editor would open the original's: T and the parts panel's row don't, and the row is gone.
+        PressT();
+        Assert.False(viewer.OpenTextures());
+        Assert.False(viewer.Parts.TexturesRow.IsVisible);
+        viewer.Parts.RequestTextures();
+        Assert.Equal(1, opened);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_geometry_split_by_bone_says_what_else_it_is_drawn_on()
     {
         // A fragment's skinned body: one geometry, drawn as the chassis, the door and the extra.
