@@ -67,6 +67,7 @@ public partial class ShortcutsDialog : ModalSheet
             new("1 – 4", "Level of detail"),
             new("H", "Shadows"),
             new("T", "Embedded textures"),
+            new("M", "Shader values"),
             new("X", "Damaged"),
             new("B", "Skeleton"),
             new("K", "Collision"),

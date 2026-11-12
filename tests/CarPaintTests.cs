@@ -182,7 +182,7 @@ public sealed class CarPaintTests
         var viewer = new Views.ModelViewer(file);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         return viewer;
     }
 
@@ -205,15 +205,15 @@ public sealed class CarPaintTests
         var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
         var paints = new TaskCompletionSource<CarPaints?>();
         var viewer = new Views.ModelViewer(new ModelFile("car.ydr", car) { GameDictionaries = tables.Task, GamePaints = paints.Task });
-        ExplorerStateRenders.Pump(300);
+        TestWait.Pump(300);
         byte[] dictionary = Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("car_d"));
         tables.SetResult([new NearbyDictionary("car_txd.ytd", dictionary.Length, () => dictionary)]);
         paints.SetResult(Paints);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         while (!viewer.GameTexturesAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.GameTexturesAdded.IsCompletedSuccessfully);
         Assert.Equal("", viewer.Location);
     }
@@ -233,7 +233,7 @@ public sealed class CarPaintTests
         paints.SetResult(Paints);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.PaintsAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Vector3 silver = Srgb(0xFF5A5E66);
         Assert.Equal([silver.X, silver.Y, silver.Z], viewer.Surfaces!.Materials[0].Uniforms[16..19]);
         Assert.Equal([4, 12, 111, 156, 0, 0], viewer.PaintIndices);
@@ -246,7 +246,7 @@ public sealed class CarPaintTests
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
         var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
         window.Show();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         float[] Drawn() => viewer.Surfaces!.Materials[0].Uniforms[16..19];
         Vector3 silver = Srgb(0xFF5A5E66), red = Srgb(0xFFC00E1A), black = Srgb(0xFF080808);
 
@@ -280,7 +280,7 @@ public sealed class CarPaintTests
         Assert.Null(panel.PickingSlot);
 
         viewer.TogglePaint();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Null(viewer.PaintPanel);
         viewer.Close();
         window.Close();
@@ -292,19 +292,19 @@ public sealed class CarPaintTests
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
         var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
         window.Show();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         float[] Drawn() => viewer.Surfaces!.Materials[0].Uniforms[16..19];
         Vector3 silver = Srgb(0xFF5A5E66), red = Srgb(0xFFC00E1A);
         viewer.TogglePaint();
         Views.PaintPanel panel = viewer.PaintPanel!;
         var top = (Avalonia.Controls.TopLevel)Avalonia.Controls.TopLevel.GetTopLevel(panel)!;
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Avalonia.Controls.Control Named(Func<string, bool> name) => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel)
             .OfType<Avalonia.Controls.Control>().First(control => Avalonia.Automation.AutomationProperties.GetName(control) is { } named && name(named));
         void Over(Avalonia.Controls.Control control, Avalonia.Point at)
         {
             Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, Avalonia.VisualExtensions.TranslatePoint(control, at, top)!.Value);
-            ExplorerStateRenders.Pump(20);
+            TestWait.Pump(20);
         }
         Avalonia.Point Middle(Avalonia.Controls.Control control) => new(control.Bounds.Width / 2, control.Bounds.Height / 2);
 
@@ -320,7 +320,7 @@ public sealed class CarPaintTests
 
         // The pointer over Metallic Red in the primary's colours: the vehicle shows it, its paint still silver.
         panel.ShowPicker(0);
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Avalonia.Controls.Control cell = Named(name => name == Paints.Colour(27)!.Name);
         Over(cell, Middle(cell));
         Assert.Equal(27, panel.PreviewColour);
@@ -335,7 +335,7 @@ public sealed class CarPaintTests
         panel.Preview(27);
         Assert.Equal([red.X, red.Y, red.Z], Drawn());
         viewer.TogglePaint();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
         Assert.Equal(4, viewer.PaintIndices[0]);
         viewer.Close();
@@ -354,10 +354,10 @@ public sealed class CarPaintTests
         var window = new Avalonia.Controls.Window { Width = 600, Height = 600, Content = panel };
         window.Show();
         panel.ShowPicker(0);
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         double metallic = panel.DesiredSize.Height;
         panel.ShowFinish("Matte");
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         Assert.Equal("Matte", panel.Finish);
         Assert.Equal(metallic, panel.DesiredSize.Height);
         window.Close();

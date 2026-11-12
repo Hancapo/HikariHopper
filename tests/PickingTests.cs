@@ -62,7 +62,7 @@ public sealed class PickingTests
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         // The triangle is where the file puts it, in the world.
         Vector3 origin = Vector3.Zero;
         int told = 0;

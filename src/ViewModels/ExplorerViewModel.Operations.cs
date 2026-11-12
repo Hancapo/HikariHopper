@@ -560,7 +560,12 @@ public sealed partial class ExplorerViewModel
         if (SearchShowsLocation && searchIndex is not null)
             searchIndexTask = searchIndex.Refresh();
         if (success)
+        {
+            // Only a file's contents changed: the game's texture tables still hold, and are kept for next time.
+            if (target.ArchivePath is { } archive)
+                _ = GameTextures.Rewritten(archive);
             SetStatus($"Saved {name}");
+        }
     }
 
     private void PrepareTextureWrite(ArchiveEntryTarget target)

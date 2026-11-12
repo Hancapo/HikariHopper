@@ -40,7 +40,8 @@ public partial class GameLoadingView : UserControl
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(ExplorerViewModel.GameLoading) or nameof(ExplorerViewModel.GameLoadingName)))
+        if (e.PropertyName is not (nameof(ExplorerViewModel.GameLoading) or nameof(ExplorerViewModel.GameLoadingName)
+            or nameof(ExplorerViewModel.GameLoadingStage)))
             return;
         // onGameLoadingChanged: a finished load hides the view until the next one has run 200ms.
         if (Bridge?.GameLoading != true)

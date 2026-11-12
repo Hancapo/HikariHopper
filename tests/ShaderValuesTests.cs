@@ -241,7 +241,7 @@ public sealed class ShaderValuesTests
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         return viewer;
     }
 
@@ -313,12 +313,12 @@ public sealed class ShaderValuesTests
         window.Show();
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         viewer.SetPartsShown(true);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Pump(300);
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
         Assert.True(viewer.OpenShaderValues());
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
 
         // Out of the panel's edge, its notch at the row's middle.
         Avalonia.Controls.Control row = viewer.Parts.SelectedRow!;
@@ -330,7 +330,7 @@ public sealed class ShaderValuesTests
 
         // With the panel closed there's no row to come from: the view's top left, no notch.
         viewer.SetPartsShown(false);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Pump(300);
         Assert.Equal((Ui.Theme.ShaderCardLeft, Ui.Theme.ToolStripInset, (double?)null), viewer.CardPlace);
         window.Close();
     }
@@ -343,7 +343,7 @@ public sealed class ShaderValuesTests
         window.Show();
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Views.PartsPanel.MenuRowItem[] Items()
         {
             viewer.Parts.OpenMenu(viewer.Parts, new Point(20, 40));

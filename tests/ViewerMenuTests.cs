@@ -28,7 +28,7 @@ public sealed class ViewerMenuTests
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { SaveTarget = target });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
         Assert.True(viewer.OpenShaderValues());
         return viewer;
@@ -38,7 +38,7 @@ public sealed class ViewerMenuTests
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(task.IsCompleted);
     }
 

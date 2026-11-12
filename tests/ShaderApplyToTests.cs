@@ -47,7 +47,7 @@ public sealed class ShaderApplyToTests
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(task.IsCompletedSuccessfully);
     }
 
@@ -56,7 +56,7 @@ public sealed class ShaderApplyToTests
         var viewer = new Views.ModelViewer(new ModelFile("pair.ydr", ydr) { SaveTarget = target, OpenTextures = textures });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         return viewer;
     }
 
@@ -150,7 +150,7 @@ public sealed class ShaderApplyToTests
         Assert.True(viewer.Save());
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Saving.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.Saving.Result, viewer.StatusText.Text);
         Assert.False(viewer.ShaderEdits.Dirty);
 

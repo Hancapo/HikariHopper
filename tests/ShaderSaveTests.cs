@@ -16,7 +16,7 @@ public sealed class ShaderSaveTests
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { SaveTarget = target });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
         Assert.True(viewer.OpenShaderValues());
         return viewer;
@@ -26,7 +26,7 @@ public sealed class ShaderSaveTests
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(task.IsCompleted);
     }
 
@@ -107,7 +107,7 @@ public sealed class ShaderSaveTests
         viewer.Close();
         viewer.UnsavedDialog!.SaveButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         Wait(viewer.Saving);
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         Assert.Equal(2, BumpinessOf(written!));
         Assert.Null(viewer.UnsavedDialog);
     }
@@ -125,7 +125,7 @@ public sealed class ShaderSaveTests
         // Once written there is nothing left to save: it closes without asking.
         written.Set();
         Wait(viewer.Saving);
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         Assert.Null(viewer.UnsavedDialog);
         Assert.True(viewer.Closing);
     }
@@ -143,7 +143,7 @@ public sealed class ShaderSaveTests
         Assert.Null(viewer.UnsavedDialog);
         written.Set();
         Wait(viewer.Saving);
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         Assert.NotNull(viewer.UnsavedDialog);
         Assert.False(viewer.Closing);
     }
@@ -159,7 +159,7 @@ public sealed class ShaderSaveTests
         Bump(viewer, "3");
         written.Set();
         Wait(viewer.Saving);
-        ExplorerStateRenders.Pump(20);
+        TestWait.Pump(20);
         Assert.False(viewer.Closing);
         Assert.NotNull(viewer.UnsavedDialog);
         Assert.True(viewer.ShaderEdits.Dirty);

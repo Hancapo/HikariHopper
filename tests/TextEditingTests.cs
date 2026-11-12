@@ -14,7 +14,7 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class TextEditingTests : ExplorerTestBase
 {
-    private static void Pump(int milliseconds = 20) => ExplorerStateRenders.Pump(milliseconds);
+    private static void Pump(int milliseconds = 20) => TestWait.Pump(milliseconds);
 
     private static (MainWindow Window, TextViewer Viewer) Open(string name, string text, SaveTarget? target = null) =>
         Open(name, Encoding.UTF8.GetBytes(text), target);
