@@ -1061,9 +1061,29 @@ public partial class ModelViewer : UserControl, IModalContent
         if (carPaints is null || surfaces is not { } scene)
             return;
         paintIndices = Slots(indices);
-        foreach (int index in scene.Repaint(VehiclePaint.Of(carPaints, paintIndices)))
-            Viewport.UpdateMaterial(index);
+        previewing = false;
+        Repaint(scene, paintIndices);
         ShowPaint();
+    }
+
+    private bool previewing;
+
+    /// <summary>
+    /// Shows the vehicle in <paramref name="indices"/> while a colour is under the pointer in the paint's dropdown,
+    /// without taking them as its paint; with none, as its paint again.
+    /// </summary>
+    internal void PreviewPaint(IReadOnlyList<int?>? indices)
+    {
+        if (carPaints is null || surfaces is not { } scene || indices is null && !previewing)
+            return;
+        previewing = indices is not null;
+        Repaint(scene, indices is null ? paintIndices : Slots(indices));
+    }
+
+    private void Repaint(DrawableScene scene, int?[] indices)
+    {
+        foreach (int index in scene.Repaint(VehiclePaint.Of(carPaints!, indices)))
+            Viewport.UpdateMaterial(index);
     }
 
     /// <summary>Opens the paint above its well, or closes it.</summary>
@@ -1079,6 +1099,7 @@ public partial class ModelViewer : UserControl, IModalContent
             return;
         var panel = new PaintPanel(carPaints, paintIndices);
         panel.Changed += SetPaint;
+        panel.Previewing += PreviewPaint;
         paintDropdown = DropdownWindow.OpenAbove(PaintWell, panel, 4);
         if (paintDropdown is null)
             return;
@@ -1089,6 +1110,7 @@ public partial class ModelViewer : UserControl, IModalContent
         {
             paintDropdown = null;
             PaintPanel = null;
+            PreviewPaint(null);
             paintClosedAt = Environment.TickCount64;
             PaintPaintWell();
         };
