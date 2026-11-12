@@ -599,15 +599,22 @@ public sealed partial class TextureViewerViewModel
                 return;
             }
             var result = order.Select(key => KeyValuePair.Create(key, imported[key])).ToArray();
-            Post(() => ImageImportCompleted(token, result));
+            Post(() => ImageImportCompleted(token, cancel, result));
         }, PriorityTransform);
         return true;
     }
 
-    private void ImageImportCompleted(int token, IReadOnlyList<KeyValuePair<string, Texture>> imported)
+    private void ImageImportCompleted(int token, CancellationToken cancel,
+        IReadOnlyList<KeyValuePair<string, Texture>> imported)
     {
         if (token != generation)
             return;
+        // A Cancel accepted after the worker's last look still wins: nothing is added.
+        if (cancel.IsCancellationRequested)
+        {
+            ImageImportCancelled(token);
+            return;
+        }
         operationBusy = false;
         EndWork();
         TextureSet original = dictionary!;
@@ -689,7 +696,7 @@ public sealed partial class TextureViewerViewModel
                 Post(() => TransformCancelled(token, operation));
                 return;
             }
-            Post(() => TransformCompleted(token, operation, results));
+            Post(() => TransformCompleted(token, cancel, operation, results));
         }, PriorityTransform);
         return true;
     }
@@ -708,10 +715,17 @@ public sealed partial class TextureViewerViewModel
         EmitStateChanged();
     }
 
-    private void TransformCompleted(int token, string operation, IReadOnlyList<(int Row, Texture Texture)> results)
+    private void TransformCompleted(int token, CancellationToken cancel, string operation,
+        IReadOnlyList<(int Row, Texture Texture)> results)
     {
         if (token != generation)
             return;
+        // A Cancel accepted after the worker's last look still wins: nothing is changed.
+        if (cancel.IsCancellationRequested)
+        {
+            TransformCancelled(token, operation);
+            return;
+        }
         operationBusy = false;
         EndWork();
         if (results.Count == 0)

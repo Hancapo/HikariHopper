@@ -999,6 +999,23 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastFileIsReadStillAddsNothing()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("late.png"))]));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.False(harness.ViewModel.CanUndo);
+    }
+
+    [AvaloniaFact]
     public void AQuickImportNeverShowsTheOverlay()
     {
         using var folder = new TempFolder();
@@ -1093,6 +1110,61 @@ public sealed class TextureWindowTests
         {
             TextureEditor.WorkOverlayDelay = delay;
         }
+    }
+
+    [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastTextureIsTransformedStillChangesNothing()
+    {
+        TextureWindowHarness harness = Opened();
+        Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+        harness.ViewModel.SelectAllTextures();
+        Assert.True(harness.ViewModel.StartTransform("Resizing", texture => TextureTestKit.Red(texture.Name)));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+        Assert.False(harness.ViewModel.Modified);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractStopsWritingWhenTheDocumentCloses()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        using var started = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
+        int written = 0;
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            started.Release();
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            Interlocked.Increment(ref written);
+        };
+        _ = harness.ViewModel.ExtractAll();
+        Until(() => started.CurrentCount > 0, "the first texture");
+        harness.ViewModel.CloseDocument();
+        gate.Release(3);
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        // The texture in hand finishes; none after it is written.
+        Assert.Equal(1, written);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractThatFailsOddlyStillEndsAndSaysWhy()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) => throw new OverflowException("too big");
+        _ = harness.ViewModel.ExtractAll();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Could not extract textures: too big", harness.ViewModel.Status);
     }
 
     [AvaloniaFact]

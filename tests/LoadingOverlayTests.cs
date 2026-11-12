@@ -58,8 +58,49 @@ public sealed class LoadingOverlayTests
             Ui.Motion.ReducedOverride = true;
             overlay.IsRunning = true;
             Assert.False(overlay.Train.Animating);
+            Assert.True(overlay.Train.Watching);
             window.Close();
             Assert.False(overlay.Train.Animating);
+            Assert.False(overlay.Train.Watching);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void The_train_moves_again_when_motion_comes_back_mid_load()
+    {
+        Ui.Motion.ReducedOverride = false;
+        try
+        {
+            var overlay = new LoadingOverlay { Title = "LOADING GAME", Detail = "Grand Theft Auto V" };
+            Window window = Show(overlay);
+            overlay.IsRunning = true;
+            Assert.True(overlay.Train.Animating);
+            Assert.False(overlay.Train.Watching);
+            // Animations turned off mid-load: the next frame stills it, and it waits for them to come back.
+            Ui.Motion.ReducedOverride = true;
+            overlay.Train.InvalidateVisual();
+            Pump();
+            Assert.False(overlay.Train.Animating);
+            Assert.True(overlay.Train.Watching);
+            overlay.Train.WatchMotion();
+            Assert.False(overlay.Train.Animating);
+            // Turned back on: the watcher's next look sets it going and stops looking.
+            Ui.Motion.ReducedOverride = false;
+            overlay.Train.WatchMotion();
+            Assert.True(overlay.Train.Animating);
+            Assert.False(overlay.Train.Watching);
+            // Once the load ends nothing is left ticking.
+            Ui.Motion.ReducedOverride = true;
+            overlay.Train.InvalidateVisual();
+            Pump();
+            overlay.IsRunning = false;
+            Assert.False(overlay.Train.Animating);
+            Assert.False(overlay.Train.Watching);
+            window.Close();
         }
         finally
         {
