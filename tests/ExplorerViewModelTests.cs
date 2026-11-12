@@ -310,7 +310,8 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         // A compressed file shows the bytes it takes in the archive; its whole size is kept for reading it.
         EntryItem deflated = Row("deflated.txt");
-        Assert.Equal("Text Document (Compressed)", deflated.TypeText);
+        // Its type is just what it is, compressed or not.
+        Assert.Equal("Text Document", deflated.TypeText);
         Assert.Equal(text.Length, deflated.Size);
         Assert.True(deflated.Record.StoredSize < text.Length / 10);
         Assert.Equal(Formatting.FormatSize(deflated.Record.StoredSize), deflated.SizeText);
@@ -321,7 +322,7 @@ public sealed class ExplorerViewModelTests : ExplorerTestBase
 
         // A resource is always kept deflated; its padded in-memory size isn't what's shown.
         EntryItem ytd = Row("textures.ytd");
-        Assert.Equal("Texture Dictionary (Compressed)", ytd.TypeText);
+        Assert.Equal("Texture Dictionary", ytd.TypeText);
         Assert.True(ytd.Record.StoredSize < ytd.Size);
         Assert.Equal(Formatting.FormatSize(ytd.Record.StoredSize), ytd.SizeText);
         Assert.Equal("Texture Dictionary", ytd.Kind);

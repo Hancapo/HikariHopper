@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The Type column shows only what a file is, without "(Compressed)" after the files an RPF keeps compressed. ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
 ### Fixed
 
 ### Removed
