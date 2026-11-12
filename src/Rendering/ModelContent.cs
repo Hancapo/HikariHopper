@@ -1,5 +1,6 @@
 using System.Numerics;
 using CommonFury.Numerics;
+using CommonFury.Textures;
 using FiveFury;
 using FiveFury.Textures;
 using FiveFury.Drawables;

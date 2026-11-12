@@ -267,9 +267,9 @@ public abstract class ExplorerTestBase : IDisposable
 
         public event EventHandler? Changed { add { } remove { } }
 
-        public Task<FiveFury.Textures.RgbaImage?> GetImageAsync() => Task.FromResult<FiveFury.Textures.RgbaImage?>(null);
+        public Task<CommonFury.Textures.RgbaImage?> GetImageAsync() => Task.FromResult<CommonFury.Textures.RgbaImage?>(null);
 
-        public Task<bool> SetImageAsync(FiveFury.Textures.RgbaImage image) => Task.FromResult(false);
+        public Task<bool> SetImageAsync(CommonFury.Textures.RgbaImage image) => Task.FromResult(false);
 
         /// <summary>The files on the clipboard, as a copy here or in Windows Explorer leaves them.</summary>
         public List<string> Files { get; } = [];

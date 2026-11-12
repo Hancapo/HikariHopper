@@ -1,5 +1,6 @@
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommonFury.Textures;
 using FiveFury.Textures;
 using HikariHopper.Core;
 using HikariHopper.Textures;

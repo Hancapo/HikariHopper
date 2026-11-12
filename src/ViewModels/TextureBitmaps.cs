@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using CommonFury.Textures;
 using FiveFury.Textures;
 
 namespace HikariHopper.ViewModels;

@@ -1,4 +1,5 @@
 using System.Numerics;
+using CommonFury.Textures;
 using CommonFury.Vertices;
 using FiveFury;
 using FiveFury.Drawables;
