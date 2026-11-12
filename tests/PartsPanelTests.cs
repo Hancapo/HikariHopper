@@ -182,6 +182,19 @@ public sealed class PartsPanelTests
     }
 
     [AvaloniaFact]
+    public void Parts_read_again_keep_their_rows_closed_as_left()
+    {
+        // The drawable's row, open at first, closed: read again, it stays closed.
+        Views.PartsPanel panel = Panel();
+        panel.HandleKey(Key.Down, KeyModifiers.None);
+        panel.HandleKey(Key.Left, KeyModifiers.None);
+        Assert.Equal(["sign"], Names(panel));
+        panel.Replace(new PartVisibility(PartVisibilityTests.Scene()));
+        Assert.Equal(["sign"], Names(panel));
+        Assert.Equal(["sign"], panel.Selection.Select(node => node.Name));
+    }
+
+    [AvaloniaFact]
     public void A_right_click_menu_acts_on_the_selection_and_copies_its_names()
     {
         var clipboard = new FakeClipboard();
