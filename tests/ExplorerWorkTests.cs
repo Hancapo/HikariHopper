@@ -82,6 +82,56 @@ public sealed class ExplorerWorkTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ACancelDuringTheLastFileOfAnImportStillUndoesIt()
+    {
+        ExplorerViewModel bridge = OpenBareGame();
+        string[] drops = [.. new[] { "alpha.txt", "beta.txt" }.Select(name => Write(Path.Combine(Work, "..", "drops", name), name))];
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ => Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(bridge.ImportDroppedFiles(drops));
+        gate.Release();
+        Until(() => bridge.Work?.Count == "2/2", "the last file");
+        // Cancelled while the last file is in hand: it is copied, then everything is taken back out.
+        Assert.True(bridge.CancelWork());
+        gate.Release(5);
+        Settle(bridge);
+        Assert.All(new[] { "alpha.txt", "beta.txt" }, name => Assert.False(File.Exists(Path.Combine(Work, name))));
+        Assert.Equal("Cancelled importing 2 files: nothing was changed", bridge.Status);
+    }
+
+    [AvaloniaFact]
+    public void ACancelledImportThatReplacesFilesPutsTheOldOnesBack()
+    {
+        ExplorerViewModel bridge = OpenBareGame();
+        Write(Path.Combine(Work, "alpha.txt"), "old alpha");
+        Write(Path.Combine(Work, "beta.txt"), "old beta");
+        bridge.Refresh();
+        string[] drops = [.. new[] { "alpha.txt", "beta.txt", "gamma.txt" }.Select(name => Write(Path.Combine(Work, "..", "drops", name), "new " + name))];
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ => Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(bridge.ImportDroppedFiles(drops, ImportConflict.Replace));
+        gate.Release();
+        Until(() => bridge.Work?.Count == "2/3", "the second file");
+        // Cancelled once alpha.txt and beta.txt are replaced: both are as they were, and nothing else is left.
+        Assert.True(bridge.CancelWork());
+        gate.Release(5);
+        Settle(bridge);
+        Assert.Equal("old alpha", File.ReadAllText(Path.Combine(Work, "alpha.txt")));
+        Assert.Equal("old beta", File.ReadAllText(Path.Combine(Work, "beta.txt")));
+        Assert.False(File.Exists(Path.Combine(Work, "gamma.txt")));
+        Assert.Empty(Directory.GetFiles(Work, "*.hikari-*"));
+        Assert.Equal("Cancelled importing 3 files: nothing was changed", bridge.Status);
+
+        // Not cancelled, the new ones stay and the old ones' backups go.
+        bridge.WorkStarting = null;
+        Assert.True(bridge.ImportDroppedFiles(drops, ImportConflict.Replace));
+        Settle(bridge);
+        Assert.Equal("new alpha.txt", File.ReadAllText(Path.Combine(Work, "alpha.txt")));
+        Assert.Equal("new gamma.txt", File.ReadAllText(Path.Combine(Work, "gamma.txt")));
+        Assert.Empty(Directory.GetFiles(Work, "*.hikari-*"));
+    }
+
+    [AvaloniaFact]
     public async Task AnExtractShowsItsFilesAndCancelKeepsWhatItWrote()
     {
         MakeGame();
