@@ -111,6 +111,59 @@ public sealed class ShaderSaveTests
     }
 
     [AvaloniaFact]
+    public void Closing_while_a_save_is_written_waits_for_it()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new ModelSaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        Assert.True(viewer.Save());
+        viewer.Close();
+        Assert.Null(viewer.UnsavedDialog);
+        Assert.False(viewer.Closing);
+        // Once written there is nothing left to save: it closes without asking.
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.Null(viewer.UnsavedDialog);
+        Assert.True(viewer.Closing);
+    }
+
+    [AvaloniaFact]
+    public void A_change_undone_while_a_save_is_written_is_asked_about_once_it_is()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new ModelSaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        Assert.True(viewer.Save());
+        // The file gets 2 and the viewer is back at 1, which only the finished save makes a change.
+        Assert.True(viewer.ShaderEdits.Undo());
+        viewer.Close();
+        Assert.Null(viewer.UnsavedDialog);
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.NotNull(viewer.UnsavedDialog);
+        Assert.False(viewer.Closing);
+    }
+
+    [AvaloniaFact]
+    public void Save_and_close_asks_again_for_a_change_made_while_it_was_written()
+    {
+        using var written = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new ModelSaveTarget(_ => written.Wait()));
+        Bump(viewer, "2");
+        viewer.Close();
+        viewer.UnsavedDialog!.SaveButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Bump(viewer, "3");
+        written.Set();
+        Wait(viewer.Saving);
+        ExplorerStateRenders.Pump(20);
+        Assert.False(viewer.Closing);
+        Assert.NotNull(viewer.UnsavedDialog);
+        Assert.True(viewer.ShaderEdits.Dirty);
+    }
+
+    [AvaloniaFact]
     public void Dont_save_closes_without_writing()
     {
         bool written = false;

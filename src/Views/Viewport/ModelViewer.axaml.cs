@@ -598,8 +598,11 @@ public partial class ModelViewer : UserControl, IModalContent
         StatusText.Foreground = Ui.Theme.Error;
     }
 
-    // Whether the viewer may close with its changes unsaved: they were saved, or the dialog was told not to.
+    // Whether the viewer may close with its changes unsaved: the dialog was told not to save them.
     private bool closeApproved;
+    // Counts the closes asked for and the dialogs cancelled: a save from the dialog closes the viewer only while its
+    // close is still the last one asked for.
+    private int closeRequest;
     private TextureUnsavedChangesDialog? unsavedDialog;
 
     /// <summary>The dialog asking whether to save before the viewer closes, while it is open.</summary>
@@ -614,14 +617,17 @@ public partial class ModelViewer : UserControl, IModalContent
         if (UnsavedDialog is not null)
             return;
         Viewport.IsVisible = false;
+        int request = closeRequest;
         var dialog = new TextureUnsavedChangesDialog { DocumentName = file.Name };
         dialog.SaveRequested += async (_, _) =>
         {
-            if (Save() && await Saving)
-            {
-                closeApproved = true;
+            bool saved = Save() && await Saving;
+            // Closes as asked, unless a later close or cancel came meanwhile: asking again if a change made while it
+            // was written is unsaved.
+            if (request != closeRequest)
+                return;
+            if (saved)
                 Close();
-            }
             else
                 ShowViewportAgain();
         };
@@ -630,7 +636,11 @@ public partial class ModelViewer : UserControl, IModalContent
             closeApproved = true;
             Close();
         };
-        dialog.Rejected += (_, _) => ShowViewportAgain();
+        dialog.Rejected += (_, _) =>
+        {
+            closeRequest++;
+            ShowViewportAgain();
+        };
         unsavedDialog = dialog;
         dialog.Open(DialogLayer);
     }
@@ -994,6 +1004,9 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private bool closed;
 
+    /// <summary>Whether it has closed, or begun to.</summary>
+    internal bool Closing => closed;
+
     /// <summary>
     /// Waits for the game's dictionaries for the drawable shown, then reads it again with them and shows that in its
     /// place, as it was: the camera, the level, the damaged state, the parts hidden and the overlays stay.
@@ -1208,10 +1221,23 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
-        if (!closeApproved && !closed && shaderEdits.Dirty && CanSave)
+        if (!closeApproved && !closed)
         {
-            AskToSave();
-            return;
+            // Already asked: the dialog answers.
+            if (UnsavedDialog is not null)
+                return;
+            int request = ++closeRequest;
+            // What is unsaved is known once a save under way is written: it waits for that first.
+            if (saving)
+            {
+                _ = CloseOnceSaved(request);
+                return;
+            }
+            if (shaderEdits.Dirty && CanSave)
+            {
+                AskToSave();
+                return;
+            }
         }
         closed = true;
         timeDropdown?.Close();
@@ -1219,6 +1245,13 @@ public partial class ModelViewer : UserControl, IModalContent
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();
+    }
+
+    private async Task CloseOnceSaved(int request)
+    {
+        await Saving;
+        if (request == closeRequest)
+            Close();
     }
 
     void IModalContent.RequestClose() => Close();
