@@ -23,7 +23,7 @@ public sealed class SwitchTests
         };
         var window = new Window { Width = 400, Height = 120, Content = choice };
         window.Show();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         var asked = new List<int>();
         choice.SideRequested += (_, side) =>
         {
@@ -35,7 +35,7 @@ public sealed class SwitchTests
             Point point = choice.TranslatePoint(new Point(choice.SideStart(side) + 6, choice.Bounds.Height / 2), window)!.Value;
             window.MouseDown(point, MouseButton.Left);
             window.MouseUp(point, MouseButton.Left);
-            ExplorerStateRenders.Pump(300);
+            TestWait.Settle();
         }
         double r = Ui.Theme.InnerRadius;
 

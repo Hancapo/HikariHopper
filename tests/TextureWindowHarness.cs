@@ -57,8 +57,8 @@ internal sealed class TextureWindowHarness
     {
         ViewModel.OpenDictionary(name, path, data);
         Settle();
-        // The card rises into place; let it finish so points land where the tests expect.
-        ExplorerStateRenders.Pump(260);
+        // The card rises into place (at once in tests); let it, so points land where the tests expect.
+        TestWait.Settle();
         return this;
     }
 

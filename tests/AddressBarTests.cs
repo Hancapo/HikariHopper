@@ -140,7 +140,7 @@ public sealed class AddressBarTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         return (window, window.GetVisualDescendants().OfType<NavigationBar>().Single(), bridge);
     }
 
@@ -148,7 +148,7 @@ public sealed class AddressBarTests : ExplorerTestBase
     {
         window.KeyPress(key, modifiers, physical, null);
         window.KeyRelease(key, modifiers, physical, null);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
     }
 
     [AvaloniaFact]
@@ -156,7 +156,7 @@ public sealed class AddressBarTests : ExplorerTestBase
     {
         var (window, navigation, bridge) = Open();
         bridge.Navigate("x64");
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Key(window, Avalonia.Input.Key.L, RawInputModifiers.Control, PhysicalKey.L);
         Assert.True(navigation.EditingAddress);
         Assert.Equal("x64", navigation.AddressField.Text);
@@ -188,13 +188,13 @@ public sealed class AddressBarTests : ExplorerTestBase
     {
         var (window, navigation, bridge) = Open();
         bridge.Navigate("x64");
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Border bar = navigation.AddressBar;
         Point empty = bar.TranslatePoint(new Point(bar.Bounds.Width - 60, bar.Bounds.Height / 2), window)!.Value;
 
         window.MouseDown(empty, MouseButton.Right, RawInputModifiers.None);
         window.MouseUp(empty, MouseButton.Right, RawInputModifiers.None);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         RetroMenu menu = Assert.IsType<RetroMenu>(navigation.AddressMenu);
         RetroMenuItem[] items = [.. menu.Items.OfType<RetroMenuItem>()];
         Assert.Equal(["Copy address", "Edit address", "Paste and go"], items.Select(item => item.Text));
@@ -206,18 +206,18 @@ public sealed class AddressBarTests : ExplorerTestBase
         Clipboard.SetTextAsync(Path.Combine(Work, "x64", "levels"));
         window.MouseDown(empty, MouseButton.Right, RawInputModifiers.None);
         window.MouseUp(empty, MouseButton.Right, RawInputModifiers.None);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         navigation.AddressMenu!.Items.OfType<RetroMenuItem>().Last()
             .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         Assert.Equal("x64/levels", bridge.CurrentPath);
         navigation.AddressMenu?.Close();
 
         // A click on the empty part edits.
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         window.MouseDown(empty, MouseButton.Left, RawInputModifiers.None);
         window.MouseUp(empty, MouseButton.Left, RawInputModifiers.None);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         Assert.True(navigation.EditingAddress);
         Assert.Equal(@"x64\levels", navigation.AddressField.Text);
         window.Close();

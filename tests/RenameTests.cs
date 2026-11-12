@@ -98,11 +98,11 @@ public sealed class RenameTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         bridge.SelectEntry(Row(bridge, "notes.txt"));
         window.KeyPress(Key.F2, RawInputModifiers.None, PhysicalKey.F2, null);
         window.KeyRelease(Key.F2, RawInputModifiers.None, PhysicalKey.F2, null);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         WorkspaceView workspace = window.GetVisualDescendantsOf<WorkspaceView>();
         ExplorerCreateDialog dialog = Assert.IsType<ExplorerCreateDialog>(workspace.CreateDialog);
@@ -114,7 +114,7 @@ public sealed class RenameTests : ExplorerTestBase
         dialog.Field.Text = "todo.txt";
         dialog.Submit();
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.True(File.Exists(Path.Combine(Work, "todo.txt")));
         window.Close();
     }

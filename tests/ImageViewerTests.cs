@@ -125,12 +125,12 @@ public sealed class ImageViewerTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         int row = Enumerable.Range(0, bridge.EntriesModel.Count).Single(index => bridge.EntriesModel[index].Name == "photo.png");
         bridge.ActivateEntry(row);
         ImageViewer viewer = Assert.IsType<ImageViewer>(session.ImageViewer);
         Settle(viewer.Image);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.True(viewer.IsOpen);
         Assert.Equal("Opened photo.png", bridge.Status);
         Assert.Equal((40, 20), (viewer.Image.Width, viewer.Image.Height));
@@ -148,7 +148,7 @@ public sealed class ImageViewerTests : ExplorerTestBase
         // Escape closes it and the session lets it go.
         window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         window.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.False(viewer.IsOpen);
         Assert.Null(session.ImageViewer);
         window.Close();

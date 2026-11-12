@@ -50,7 +50,8 @@ public sealed class ModalOverlay : Panel
     /// <summary>How soft the content behind a modal gets.</summary>
     public const double BlurRadius = 14;
 
-    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(180);
+    /// <summary>How long an opening dialog takes to rise into place, and the content behind it to blur.</summary>
+    internal static TimeSpan OpenDuration { get; set; } = TimeSpan.FromMilliseconds(180);
 
     /// <summary>How long a closing dialog takes to shrink away, as a macOS window or sheet does.</summary>
     internal static TimeSpan CloseDuration { get; set; } = TimeSpan.FromMilliseconds(220);
@@ -87,7 +88,7 @@ public sealed class ModalOverlay : Panel
         dialog.Transitions =
         [
             Fade(OpacityProperty),
-            new TransformOperationsTransition { Property = RenderTransformProperty, Duration = FadeDuration, Easing = new CubicEaseOut() },
+            new TransformOperationsTransition { Property = RenderTransformProperty, Duration = OpenDuration, Easing = new CubicEaseOut() },
         ];
     }
 
@@ -292,7 +293,7 @@ public sealed class ModalOverlay : Panel
     }
 
     private static DoubleTransition Fade(AvaloniaProperty property) =>
-        new() { Property = property, Duration = FadeDuration, Easing = new CubicEaseOut() };
+        new() { Property = property, Duration = OpenDuration, Easing = new CubicEaseOut() };
 
     private static ITransform Lift(double y, double scale)
     {
@@ -309,7 +310,7 @@ public sealed class ModalOverlay : Panel
             return;
         backdrop.Transitions ??= [];
         if (!backdrop.Transitions.OfType<EffectTransition>().Any())
-            backdrop.Transitions.Add(new EffectTransition { Property = EffectProperty, Duration = FadeDuration, Easing = new CubicEaseOut() });
+            backdrop.Transitions.Add(new EffectTransition { Property = EffectProperty, Duration = OpenDuration, Easing = new CubicEaseOut() });
         backdrop.Effect = new BlurEffect { Radius = on ? BlurRadius : 0 };
     }
 

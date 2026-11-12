@@ -387,12 +387,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(200);
+        TestWait.Settle();
         int row = Enumerable.Range(0, bridge.EntriesModel.Count).Single(index => bridge.EntriesModel[index].Name == "ch2_04_15.ybn");
         bridge.ActivateEntry(row);
 
         Views.ModelViewer viewer = Assert.IsType<Views.ModelViewer>(session.ModelViewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Settle(viewer);
         Assert.True(viewer.IsOpen);
         Assert.Equal("Opened ch2_04_15.ybn", bridge.Status);
@@ -404,7 +404,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Escape closes it, the viewport first, and the session lets it go.
         window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
         window.KeyRelease(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.False(viewer.IsOpen);
         Assert.False(viewer.Viewport.IsVisible);
         Assert.Null(session.ModelViewer);
@@ -424,13 +424,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void A_drawable_is_lit_at_the_time_of_day_its_slider_sets()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
 
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
@@ -573,18 +567,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void The_textures_button_opens_a_drawables_embedded_textures()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        // A textured material needs a UV set.
-        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
-            new FiveFury.Textures.Texture("tri_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]));
-        builder.Materials.Add(material);
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]));
 
         int opened = 0;
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { OpenTextures = _ => opened++ });
@@ -611,23 +594,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
     {
         byte[] Triangle(int size)
         {
-            var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-            mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-            var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-            var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-            material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference(
-                new FiveFury.Textures.Texture("tri_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
-            builder.Materials.Add(material);
-            var model = new FiveFury.Drawables.DrawableModelInput();
-            model.Meshes.Add(mesh);
-            builder.Models.Add(model);
-            return new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+            return TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", size, size, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
         }
         void Wait(Task task)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (!task.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-                ExplorerStateRenders.Pump(10);
+                TestWait.Pump(10);
             Assert.True(task.IsCompletedSuccessfully);
         }
 
@@ -660,21 +633,50 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_parts_arrow_and_the_overlay_row_are_drawn_over_the_viewport()
+    public void The_parts_panels_header_runs_across_its_edge()
     {
         var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
+        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
         builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
         var model = new FiveFury.Drawables.DrawableModelInput();
         model.Meshes.Add(mesh);
         builder.Models.Add(model);
         byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
+        Settle(viewer);
+        viewer.SetPartsShown(true);
+        TestWait.Pump(400);
+        Assert.True(viewer.PartsHandle.IsVisible);
+
+        Avalonia.Media.Color At(double x, double y)
+        {
+            Avalonia.Point point = Avalonia.VisualExtensions.TranslatePoint(viewer.PartsHandle, new Avalonia.Point(x, y), window)!.Value;
+            using var frame = window.CaptureRenderedFrame()!;
+            using var buffer = frame.Lock();
+            var bytes = new byte[4];
+            System.Runtime.InteropServices.Marshal.Copy(buffer.Address + (int)point.Y * buffer.RowBytes + (int)point.X * 4, bytes, 0, 4);
+            return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
+                ? Avalonia.Media.Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
+                : Avalonia.Media.Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
+        }
+        // The panel's header goes on across its edge, up to the edge's line; below it, the edge is the body's colour.
+        Assert.Equal(Ui.Theme.ListHeaderBg.Color, At(1, Ui.Theme.ListHeaderHeight / 2));
+        Assert.Equal(Ui.Theme.AppBg.Color, At(1, Ui.Theme.ListHeaderHeight + 20));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_parts_arrow_and_the_overlay_row_are_drawn_over_the_viewport()
+    {
+        byte[] ydr = TestDrawables.Triangle(bound: true);
         var window = new Views.MainWindow { Width = 1360, Height = 840 };
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
         Settle(viewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
 
         // Each in a window of its own, over the main one: the viewport is a native window, which covers what's drawn in it.
         Assert.True(viewer.ToolStripOverlay.IsShown);
@@ -697,13 +699,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
         double natural = viewer.ToolStrip.Bounds.Height;
         tools.SizeToContent = Avalonia.Controls.SizeToContent.Manual;
         tools.Height = 39;
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Equal(39, tools.ClientSize.Height);
         Assert.Equal(natural, viewer.ToolStrip.Bounds.Height);
         Assert.Equal(26, viewer.ToolStrip.Bounds.Height);
         Assert.Equal(0, viewer.ToolStrip.Bounds.Top);
         tools.SizeToContent = Avalonia.Controls.SizeToContent.WidthAndHeight;
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         // Side by side, joined by a one-pixel seam.
         for (int i = 1; i < strip.Length; i++)
             Assert.Equal(new Avalonia.Point(31, 0), Avalonia.VisualExtensions.TranslatePoint(strip[i], default, strip[i - 1]));
@@ -750,12 +752,12 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Centred();
         // It follows the viewport: opening the parts panel moves the viewport's edge, and the tools with it.
         viewer.SetPartsShown(true);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         Assert.True(viewer.PartsHandle.IsVisible);
         Centred();
         // So does the main window, moved.
         window.Position = new Avalonia.PixelPoint(window.Position.X + 40, window.Position.Y + 30);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Centred();
 
         // The pointer doesn't go through the tab or the strip to the viewport.
@@ -764,20 +766,23 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.True(viewer.PartsTabOverlay.Covers(Middle(viewer.PartsArrow, tab)));
         Assert.True(viewer.ToolStripOverlay.Covers(Middle(viewer.SolidButton, tools)));
 
-        // It hides while the viewport does, under another overlay, and shows again after.
+        // It hides while the viewport does, under another overlay, and shows again after. The viewport is a native
+        // window, which would cover anything above it.
         Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
+        Assert.False(viewer.Viewport.IsVisible);
         Assert.False(viewer.ToolStripOverlay.IsShown);
         Assert.False(viewer.PartsTabOverlay.IsShown);
         above.Close();
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
+        Assert.True(viewer.Viewport.IsVisible);
         Assert.True(viewer.ToolStripOverlay.IsShown);
         Assert.True(viewer.PartsTabOverlay.IsShown);
         Centred();
 
         // And goes with the viewer.
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.False(viewer.ToolStripOverlay.IsShown);
         Assert.False(viewer.GizmoOverlay.IsShown);
         Assert.False(tools.IsVisible);
@@ -788,13 +793,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void A_drawables_collision_is_drawn_over_it_with_K()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri", Bound = new BoundBox(new Aabb3(new Vector3(0), new Vector3(1))) };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle(bound: true);
 
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         Settle(viewer);
@@ -811,45 +810,15 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_viewport_hides_while_another_overlay_is_over_the_viewer()
-    {
-        var window = new Views.MainWindow { Width = 1360, Height = 840 };
-        window.Show();
-        var box = new Aabb3(new Vector3(0, 0, 0), new Vector3(1, 1, 1));
-        var viewer = new Views.ModelViewer(new ModelFile("box.ybn", new Ybn(new BoundBox(box)).Write())) { Anchor = window.ExplorerScreenHost };
-        viewer.Present();
-        ExplorerStateRenders.Pump(400);
-        Assert.True(viewer.Viewport.IsVisible);
-
-        // The viewport is a native window, which would cover anything above it: it hides while something is.
-        Views.ModalOverlay above = Assert.IsType<Views.ModalOverlay>(Views.ModalOverlay.Show(window.ExplorerScreenHost, new Avalonia.Controls.Border { Width = 200, Height = 100 }));
-        ExplorerStateRenders.Pump(50);
-        Assert.False(viewer.Viewport.IsVisible);
-        above.Close();
-        ExplorerStateRenders.Pump(400);
-        Assert.True(viewer.Viewport.IsVisible);
-
-        viewer.Close();
-        ExplorerStateRenders.Pump(300);
-        window.Close();
-    }
-
-    [AvaloniaFact]
     public void The_time_of_day_opens_in_a_dropdown_window_over_the_viewport()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
         var window = new Views.MainWindow { Width = 1360, Height = 840 };
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr)) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
         Settle(viewer);
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
 
         // A window of its own (the viewport would cover a popup drawn in the main one), and the viewport stays.
         viewer.ToggleTime();
@@ -865,7 +834,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         // Another window taking the keyboard closes it, once the change of window is over, not in the middle of it
         // (Windows then gave the keyboard to another app, and the main window went behind it). Past the moment in which a
         // press that closed it doesn't open it again.
-        ExplorerStateRenders.Pump(450);
+        TestWait.Pump(450);
         viewer.ToggleTime();
         Assert.True(viewer.TimeOpen);
         var dropdown = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(viewer.Dial).OfType<Avalonia.Controls.Window>().Single();
@@ -876,11 +845,11 @@ public sealed class ModelViewerTests : ExplorerTestBase
             .First(property => property is not null)!.GetValue(platform);
         deactivated!();
         Assert.True(viewer.TimeOpen);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         Assert.False(viewer.TimeOpen);
 
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         window.Close();
     }
 
@@ -891,7 +860,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         window.Show();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", [])) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         // In the viewer: drawn in a window of its own, in place of the in-window tooltip the viewport would cover.
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.StatsButton, true);
@@ -909,14 +878,14 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Avalonia.Controls.ToolTip.SetIsOpen(viewer.TimeButton, true);
         Assert.Equal("Time of day", Views.Controls.WindowToolTip.ShownText);
         viewer.Close();
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
 
         // Outside it, tooltips are drawn in the window as before.
         var outside = new Avalonia.Controls.Button();
         Views.Controls.ThemedToolTip.Set(outside, "Elsewhere");
         window.ExplorerScreenHost.Content = outside;
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Avalonia.Controls.ToolTip.SetIsOpen(outside, true);
         Assert.True(Avalonia.Controls.ToolTip.GetIsOpen(outside));
         Assert.Null(Views.Controls.WindowToolTip.ShownText);
@@ -939,16 +908,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     public void A_drawable_shows_at_once_and_gets_the_games_textures_when_they_come()
     {
         // A triangle whose texture is only in the game's dictionaries, whose tables are still being worked out.
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        mesh.SetChannel(CommonFury.Vertices.VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "sign" };
-        var material = new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" };
-        material.Textures["DiffuseSampler"] = new FiveFury.Textures.TextureReference("sign_d");
-        builder.Materials.Add(material);
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle("sign", diffuseName: "sign_d");
         var tables = new TaskCompletionSource<IReadOnlyList<NearbyDictionary>>();
 
         var viewer = new Views.ModelViewer(new ModelFile("sign.ydr", ydr) { GameDictionaries = tables.Task });
@@ -964,7 +924,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         tables.SetResult([new NearbyDictionary("sign_txd.ytd", dictionary.Length, () => dictionary)]);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.GameTexturesAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.GameTexturesAdded.IsCompletedSuccessfully);
         Assert.Equal("", viewer.Location);
         Assert.Equal([false], viewer.Visibility!.Mask());
@@ -988,7 +948,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
         var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
         window.Show();
         Settle(viewer);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         // The level shown, with its triangles, and an arrow: there is a choice.
         Assert.Equal(("High", "1"), (viewer.LodText.Text, viewer.LodCount.Text));
         Assert.True(viewer.LodCaret.IsVisible);
@@ -1017,15 +977,15 @@ public sealed class ModelViewerTests : ExplorerTestBase
         Assert.Equal([true, false, false, false], viewer.LevelRows.Select(row => row.Highlighted));
         Assert.False(viewer.LevelsKey(Avalonia.Input.Key.A));
         Assert.True(viewer.LevelsKey(Avalonia.Input.Key.Enter));
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Equal(0, viewer.Visibility!.Lod);
         Assert.False(viewer.LevelsOpen);
         viewer.Shortcut('2');
-        ExplorerStateRenders.Pump(450);
+        TestWait.Pump(450);
         viewer.ToggleLevels();
         Assert.True(viewer.LevelsOpen);
         viewer.LevelRows[0].Trigger();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Equal(0, viewer.Visibility!.Lod);
         Assert.Equal("High", viewer.LodText.Text);
         Assert.False(viewer.LevelsOpen);
@@ -1035,19 +995,13 @@ public sealed class ModelViewerTests : ExplorerTestBase
     [AvaloniaFact]
     public void Typing_in_the_parts_filter_is_not_a_shortcut_and_a_framed_part_turns_the_camera()
     {
-        var mesh = new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
-        var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
-        var model = new FiveFury.Drawables.DrawableModelInput();
-        model.Meshes.Add(mesh);
-        builder.Models.Add(model);
-        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write();
+        byte[] ydr = TestDrawables.Triangle();
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
         // In a window, so a key bubbles from the panel up through the viewer.
         var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
         window.Show();
         Settle(viewer);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Settle();
         Assert.True(viewer.Viewport.Shadows);
         Avalonia.Input.KeyEventArgs Press(Avalonia.Interactivity.Interactive source) => new()
         {
@@ -1121,7 +1075,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         Assert.True(viewer.Reading.IsCompletedSuccessfully);
     }
 }

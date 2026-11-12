@@ -166,7 +166,7 @@ public sealed class GameSkyTests : ExplorerTestBase
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (!done() && clock.ElapsedMilliseconds < 5000)
-            ExplorerStateRenders.Pump(10);
+            TestWait.Pump(10);
         return done();
     }
 }
