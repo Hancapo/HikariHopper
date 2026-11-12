@@ -140,17 +140,17 @@ public sealed class PartsPanelTests
         Views.PartsPanel panel = Panel();
         window.Content = panel;
         window.Show();
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         // Where the second row's name is, with another row picked.
         TextBlock name = panel.GetVisualDescendants().OfType<TextBlock>().First(text => text.Text == panel.Rows[1].Node.Name);
         Point at = name.TranslatePoint(new Point(4, name.Bounds.Height / 2), window)!.Value;
         panel.Select(panel.Rows[2].Node);
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
 
         // One right press: the row is picked and its menu opens, once what the pick sets off has run. (The release lands
         // on the menu, which opens under the pointer; here it would go to the window, which takes the keyboard back.)
         window.MouseDown(at, MouseButton.Right);
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Assert.Equal([panel.Rows[1].Node], panel.Selection);
         Assert.NotNull(panel.Menu);
         // Its groups are parted as the app's other menus are.
