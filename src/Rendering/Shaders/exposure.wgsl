@@ -1,7 +1,11 @@
-// What GTA V's exposure is measured on (postfx PS_Lum*): the mean luminance (0.2125, 0.7154, 0.0721) of the whole
-// HDR frame, before any exposure, with NaNs and infinities left out. The game's frame is its world and sky; the
-// viewer's is the drawable over GTA's sky (sky_system.wgsl) and, below the horizon, the stand-in ground the
-// reflections show. tonemap.wgsl turns the mean into the exposure with the game's curve.
+// What the viewer's exposure is measured on. GTA V measures the mean luminance (0.2125, 0.7154, 0.0721) of its whole
+// HDR frame (postfx PS_Lum*), which in the game is always its world and sky. In a viewer the frame is mostly one model,
+// more or less of it as the camera comes and goes, so measured that way the exposure would follow the framing, not the
+// light. So the mean is of a fixed view of the world at that hour instead: all round the horizon, at the elevations a
+// level camera sees, GTA's sky (sky_system.wgsl) above and the stand-in ground the reflections show below, without the
+// model. Wherever the camera is, the exposure is the same; only the time of day moves it. The work is laid out over
+// the frame's size, each of its pixels one direction of that view. tonemap.wgsl turns the mean into the exposure with
+// the game's curve. NaNs and infinities are left out, as the game's conversion pass has it.
 // Put after scene.wgsl and sky_system.wgsl.
 
 @group(1) @binding(0) var hdr_frame: texture_2d<f32>;
@@ -18,15 +22,19 @@ fn frame_luminance(colour: vec3f) -> f32 {
     return select(0.0, l, l == l && abs(l) < 3.0e38);
 }
 
-// What a pixel of the frame holds: the drawable, premultiplied over the sky or ground behind it.
-fn frame_pixel(pixel: vec2u, size: vec2u) -> f32 {
-    let stored = textureLoad(hdr_frame, vec2i(pixel), 0);
-    let ndc = vec2f((f32(pixel.x) + 0.5) / f32(size.x) * 2.0 - 1.0, 1.0 - (f32(pixel.y) + 0.5) / f32(size.y) * 2.0);
-    let aspect = scene.projection.x;
+// The direction a pixel of the work stands for: across, all round the horizon; down, from the top to the bottom of
+// a level camera's view.
+fn reference_ray(pixel: vec2u, size: vec2u) -> vec3f {
+    let around = (f32(pixel.x) + 0.5) / f32(size.x) * 6.2831853;
     let tan_half = scene.projection.y;
-    let ray = normalize(scene.forward.xyz + scene.right.xyz * ndc.x * aspect * tan_half + scene.up.xyz * ndc.y * tan_half);
-    let behind = mix(sky_system(frame_sky, ray), frame_sky.ground.rgb, smoothstep(0.0, -0.04, ray.z));
-    return frame_luminance(stored.rgb + (1.0 - stored.a) * behind);
+    let rise = (1.0 - (f32(pixel.y) + 0.5) / f32(size.y) * 2.0) * tan_half;
+    return normalize(vec3f(cos(around), sin(around), rise));
+}
+
+// What the world shows in that direction at this hour: the sky, or the ground below the horizon.
+fn frame_pixel(pixel: vec2u, size: vec2u) -> f32 {
+    let ray = reference_ray(pixel, size);
+    return frame_luminance(mix(sky_system(frame_sky, ray), frame_sky.ground.rgb, smoothstep(0.0, -0.04, ray.z)));
 }
 
 @compute @workgroup_size(16, 16)

@@ -39,11 +39,8 @@ public sealed class EntryItem : ObservableObject
 
     public bool IsDirectory => Record.IsDirectory;
 
-    /// <summary>
-    /// The TYPE column: a folder is recognisable by its glyph, so it shows no type. A file an archive keeps
-    /// compressed says so, since its size is then what it takes there; anything else is as it is.
-    /// </summary>
-    public string TypeText => IsDirectory ? "" : Record.Storage == EntryStorage.Compressed ? $"{Kind} (Compressed)" : Kind;
+    /// <summary>The TYPE column: what the file is; a folder is recognisable by its glyph, so it shows no type.</summary>
+    public string TypeText => IsDirectory ? "" : Kind;
 
     /// <summary>The SIZE column: a file's size, or how many items a folder holds ("Empty" for none).</summary>
     public string SizeText => !IsDirectory ? SizeLabel

@@ -1,4 +1,5 @@
 using CommonFury;
+using CommonFury.Textures;
 using FiveFury.Textures;
 using HikariHopper.Infrastructure;
 using HikariHopper.Textures;
@@ -22,6 +23,19 @@ public sealed partial class TextureViewerViewModel
     /// <summary>Clipboard image conversion (Python <c>texture_from_clipboard_image</c>); replaceable by tests.</summary>
     internal Func<RgbaImage, string, Texture> TextureFromClipboardImage { get; set; } = TextureImport.TextureFromClipboardImage;
 
+    /// <summary>
+    /// How many images an import reads at a time: half the processors, at most eight, as a big image holds tens of
+    /// megabytes while it is compressed.
+    /// </summary>
+    internal static int DefaultImportWorkers { get; } = Math.Clamp(Environment.ProcessorCount / 2, 1, 8);
+
+    /// <summary>How many images an import reads at a time; none for <see cref="DefaultImportWorkers"/>. Tests set one to
+    /// see an import step by step.</summary>
+    internal int ImportWorkers { get; set; }
+
+    /// <summary>Reads one image an import adds; tests hold it to see an import part way.</summary>
+    internal Func<string, Texture> ReadImportImage { get; set; } = TextureImport.ReadTextureImage;
+
     /// <summary>Resizes every selected texture; <paramref name="filterName"/> is a mip filter such as <c>mitchell</c>.</summary>
     public bool ResizeSelected(int width, int height, string filterName, int minMipSize, bool generateMipmaps)
     {
@@ -30,6 +44,29 @@ public sealed partial class TextureViewerViewModel
         ImageFilter filter = TextureOperations.MipFilter(filterName);
         int stop = TextureDimensions.MipStopSize(width, height, minMipSize);
         return StartTransform("Resizing", texture => TextureOperations.Resize(texture, width, height, filter, stop, generateMipmaps));
+    }
+
+    /// <summary>
+    /// Resizes every selected texture as <paramref name="plan"/> says: to one size in pixels, or each by a percentage
+    /// of its own, rounded to powers of two if the plan asks. A texture the plan leaves at its size is left alone.
+    /// </summary>
+    public bool ResizeSelection(ResizePlan plan, string filterName, int minMipSize, bool generateMipmaps)
+    {
+        foreach ((_, TextureItem item) in SelectionRecords())
+        {
+            (int width, int height) = plan.Target(item.Texture.Width, item.Texture.Height);
+            if (!ValidDimensions(width, height))
+                return false;
+        }
+        ImageFilter filter = TextureOperations.MipFilter(filterName);
+        return StartTransform("Resizing", texture =>
+        {
+            if (plan.Keeps(texture.Width, texture.Height))
+                return texture;
+            (int width, int height) = plan.Target(texture.Width, texture.Height);
+            return TextureOperations.Resize(texture, width, height, filter,
+                TextureDimensions.MipStopSize(width, height, minMipSize), generateMipmaps);
+        });
     }
 
     /// <summary>Rounds every selected texture to powers of two (<c>nearest</c>, <c>down</c> or <c>up</c>).</summary>
@@ -45,12 +82,32 @@ public sealed partial class TextureViewerViewModel
             TextureOperations.ResizeToPowerOfTwo(texture, mode, filter, minMipSize, generateMipmaps));
     }
 
-    public bool RecalculateSelectedMipmaps(string filterName, int minMipSize)
+    /// <summary>Makes each selected texture's chain again, down to <paramref name="minMipSize"/>; or, not generating, leaves its full-size level alone.</summary>
+    public bool RecalculateSelectedMipmaps(string filterName, int minMipSize, bool generate = true)
     {
         if (SelectedRecord() is null)
             return false;
         ImageFilter filter = TextureOperations.MipFilter(filterName);
-        return StartTransform("Recalculating mipmaps for", texture => TextureOperations.RecalculateMipmaps(texture, filter, minMipSize));
+        return StartTransform("Recalculating mipmaps for", texture => generate
+            ? TextureOperations.RecalculateMipmaps(texture, filter, minMipSize)
+            : TextureOperations.DropMipmaps(texture, filter));
+    }
+
+    /// <summary>Whether any selected texture has pixels less than opaque; a texture that can't be decoded counts as none.</summary>
+    public bool SelectionUsesAlpha()
+    {
+        foreach ((_, TextureItem item) in SelectionRecords())
+        {
+            try
+            {
+                if (TextureOperations.UsesAlpha(item.Texture))
+                    return true;
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error) || error is NotSupportedException or ArgumentException)
+            {
+            }
+        }
+        return false;
     }
 
     /// <summary>Re-encodes DXT1/3/5 textures of the selection as DXT1 or DXT5, whichever their alpha needs.</summary>
@@ -63,7 +120,7 @@ public sealed partial class TextureViewerViewModel
     }
 
     /// <summary>Converts the selection to one of <see cref="FormatOptions"/> (<c>BC1</c>…<c>A8R8G8B8</c>).</summary>
-    public bool ChangeSelectedFormat(string formatName, double quality, string filterName, int minMipSize)
+    public bool ChangeSelectedFormat(string formatName, double quality, string filterName, int minMipSize, bool generateMipmaps = true)
     {
         string normalized = formatName.ToUpperInvariant();
         if (!TextureFormatNames.Editable.Contains(normalized))
@@ -76,7 +133,7 @@ public sealed partial class TextureViewerViewModel
         ImageFilter filter = TextureOperations.MipFilter(filterName);
         float clamped = (float)Math.Max(0.0, Math.Min(1.0, quality));
         return StartTransform("Changing format for", texture => TextureOperations.ChangeFormat(texture,
-            TextureFormatNames.FromEditable(normalized, texture.Format), clamped, filter, minMipSize));
+            TextureFormatNames.FromEditable(normalized, texture.Format), clamped, filter, minMipSize, generateMipmaps));
     }
 
     /// <summary>Asks for an image and replaces the single selected texture with it, keeping its size, format and mips.</summary>
@@ -208,6 +265,23 @@ public sealed partial class TextureViewerViewModel
             return false;
         }
         return StartImageImport(pending.Paths);
+    }
+
+    /// <summary>
+    /// What is wrong with a new name for the single selected texture, or empty when it can take it: its own name in
+    /// another case is fine, another texture's is not.
+    /// </summary>
+    public string RenameError(string name)
+    {
+        string normalized = name.Trim();
+        if (normalized.Length == 0)
+            return "Enter a texture name";
+        if (normalized.Length > 255 || normalized.Any(character => character < 32 || character == 127))
+            return "Use up to 255 characters without control characters";
+        return TexturesModel.Where((_, row) => row != selectedIndex)
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, normalized, StringComparison.OrdinalIgnoreCase)) is { } taken
+            ? $"This dictionary already has a {taken.Name}."
+            : "";
     }
 
     /// <summary>Renames the single selected texture; names are unique ignoring case.</summary>
@@ -538,49 +612,107 @@ public sealed partial class TextureViewerViewModel
         SetStatus($"Pasted {texture.Name}");
     }
 
+    private void ImageImportCancelled(int token)
+    {
+        if (token != generation)
+            return;
+        operationBusy = false;
+        EndWork();
+        SetStatus("Import cancelled: no textures were added");
+        EmitStateChanged();
+    }
+
     private bool StartImageImport(IReadOnlyList<string> paths)
     {
         operationBusy = true;
+        CancellationToken cancel = BeginWork("IMPORTING TEXTURES", paths.Count, Path.GetFileName(paths[0]), cancellable: true);
         SetStatus($"Importing {paths.Count} images…");
         EmitStateChanged();
         int token = generation;
         Texture[] original = [.. dictionary!.Textures];
+        int workers = ImportWorkers > 0 ? ImportWorkers : DefaultImportWorkers;
         pool.Start(() =>
         {
             var sources = new Dictionary<string, Texture>(StringComparer.Ordinal);
             foreach (Texture texture in original)
                 sources.TryAdd(TextureSet.Lower(texture.Name), texture);
+            // Read several at a time: each file's decode and compression is its own, and they take nearly all of an
+            // import's time. A Cancel stops new files from starting; a failure stops the rest, and the first in the
+            // files' order is the one reported.
+            var read = new Texture[paths.Count];
+            int finished = 0, failedAt = int.MaxValue;
+            string? failure = null;
+            var failing = new Lock();
+            try
+            {
+                Parallel.For(0, paths.Count, new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = cancel }, (index, loop) =>
+                {
+                    if (Volatile.Read(ref failedAt) != int.MaxValue)
+                    {
+                        loop.Stop();
+                        return;
+                    }
+                    (int done, string name) = (Volatile.Read(ref finished), Path.GetFileName(paths[index]));
+                    Post(() => WorkReached(token, done, name));
+                    try
+                    {
+                        read[index] = ReadImportImage(paths[index]);
+                        Interlocked.Increment(ref finished);
+                    }
+                    catch (Exception exception)
+                    {
+                        lock (failing)
+                            if (index < failedAt)
+                                (failedAt, failure) = (index, $"{name}: {exception.Message}");
+                        loop.Stop();
+                    }
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                Post(() => ImageImportCancelled(token));
+                return;
+            }
+            if (failure is { } message)
+            {
+                Post(() => TransformFailed(token, "Import", message));
+                return;
+            }
             // Ordered by first occurrence; a later file with the same name replaces the earlier texture in place.
             var order = new List<string>();
             var imported = new Dictionary<string, Texture>(StringComparer.Ordinal);
-            foreach (string path in paths)
+            for (int index = 0; index < paths.Count; index++)
             {
-                try
-                {
-                    Texture decoded = TextureImport.ReadTextureImage(path);
-                    string key = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
-                    if (!imported.ContainsKey(key))
-                        order.Add(key);
-                    imported[key] = TextureOperations.Adopt(decoded, sources.GetValueOrDefault(key));
-                }
-                catch (Exception exception)
-                {
-                    string message = $"{Path.GetFileName(path)}: {exception.Message}";
-                    Post(() => TransformFailed(token, "Import", message));
-                    return;
-                }
+                string key = Path.GetFileNameWithoutExtension(paths[index]).ToLowerInvariant();
+                if (!imported.ContainsKey(key))
+                    order.Add(key);
+                imported[key] = TextureOperations.Adopt(read[index], sources.GetValueOrDefault(key));
+            }
+            // Cancelled while the last file was read: nothing is added, as for any other.
+            if (cancel.IsCancellationRequested)
+            {
+                Post(() => ImageImportCancelled(token));
+                return;
             }
             var result = order.Select(key => KeyValuePair.Create(key, imported[key])).ToArray();
-            Post(() => ImageImportCompleted(token, result));
+            Post(() => ImageImportCompleted(token, cancel, result));
         }, PriorityTransform);
         return true;
     }
 
-    private void ImageImportCompleted(int token, IReadOnlyList<KeyValuePair<string, Texture>> imported)
+    private void ImageImportCompleted(int token, CancellationToken cancel,
+        IReadOnlyList<KeyValuePair<string, Texture>> imported)
     {
         if (token != generation)
             return;
+        // A Cancel accepted after the worker's last look still wins: nothing is added.
+        if (cancel.IsCancellationRequested)
+        {
+            ImageImportCancelled(token);
+            return;
+        }
         operationBusy = false;
+        EndWork();
         TextureSet original = dictionary!;
         var textures = new List<Texture>();
         var selected = new SortedSet<int>();
@@ -625,14 +757,23 @@ public sealed partial class TextureViewerViewModel
             return false;
         operationBusy = true;
         string label = SelectedCount == 1 ? record.Name : $"{SelectedCount} textures";
+        CancellationToken cancel = BeginWork(WorkTitle(operation), sources.Count, sources[0].Texture.Name ?? "", cancellable: true);
         SetStatus($"{operation} {label}…");
         EmitStateChanged();
         int token = generation;
         pool.Start(() =>
         {
             var results = new List<(int Row, Texture Texture)>();
-            foreach ((int row, Texture source) in sources)
+            for (int index = 0; index < sources.Count; index++)
             {
+                (int row, Texture source) = sources[index];
+                if (cancel.IsCancellationRequested)
+                {
+                    Post(() => TransformCancelled(token, operation));
+                    return;
+                }
+                (int done, string name) = (index, source.Name ?? "");
+                Post(() => WorkReached(token, done, name));
                 try
                 {
                     Texture transformed = transform(source);
@@ -646,16 +787,43 @@ public sealed partial class TextureViewerViewModel
                     return;
                 }
             }
-            Post(() => TransformCompleted(token, operation, results));
+            if (cancel.IsCancellationRequested)
+            {
+                Post(() => TransformCancelled(token, operation));
+                return;
+            }
+            Post(() => TransformCompleted(token, cancel, operation, results));
         }, PriorityTransform);
         return true;
     }
 
-    private void TransformCompleted(int token, string operation, IReadOnlyList<(int Row, Texture Texture)> results)
+    /// <summary>A transform's title on the overlay: "Optimizing compression for" as "OPTIMIZING COMPRESSION".</summary>
+    private static string WorkTitle(string operation) =>
+        (operation.EndsWith(" for", StringComparison.Ordinal) ? operation[..^4] : operation).ToUpperInvariant();
+
+    private void TransformCancelled(int token, string operation)
     {
         if (token != generation)
             return;
         operationBusy = false;
+        EndWork();
+        SetStatus($"{operation} cancelled: nothing was changed".Replace(" for cancelled", " cancelled"));
+        EmitStateChanged();
+    }
+
+    private void TransformCompleted(int token, CancellationToken cancel, string operation,
+        IReadOnlyList<(int Row, Texture Texture)> results)
+    {
+        if (token != generation)
+            return;
+        // A Cancel accepted after the worker's last look still wins: nothing is changed.
+        if (cancel.IsCancellationRequested)
+        {
+            TransformCancelled(token, operation);
+            return;
+        }
+        operationBusy = false;
+        EndWork();
         if (results.Count == 0)
         {
             SetStatus("No changes were needed");
@@ -681,6 +849,7 @@ public sealed partial class TextureViewerViewModel
         if (token != generation)
             return;
         operationBusy = false;
+        EndWork();
         SetStatus($"{operation} failed: {message}");
         EmitStateChanged();
     }

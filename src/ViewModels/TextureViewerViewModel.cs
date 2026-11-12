@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommonFury.Textures;
 using FiveFury;
 using FiveFury.Textures;
 using HikariHopper.Core;
@@ -25,7 +26,7 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
         nameof(CanImportImages), nameof(CanPasteImage), nameof(PastePending), nameof(PasteCanReplace), nameof(PasteTargetName),
         nameof(ImportConfirmationPending), nameof(ImportConflictCount), nameof(ImportFileCount), nameof(Loading),
         nameof(PreviewLoading), nameof(OperationBusy), nameof(Saving), nameof(Modified), nameof(CanUndo), nameof(UndoLabel),
-        nameof(CanSaveSource), nameof(MaximumDimension), nameof(Error), nameof(DuplicateTextureCount),
+        nameof(CanSaveSource), nameof(MaximumDimension), nameof(Error), nameof(DuplicateTextureCount), nameof(Work),
     ];
     private static readonly string[] SelectionProperties =
     [
@@ -163,6 +164,32 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
 
     public int ImportFileCount => pendingImageImport?.Paths.Count ?? 0;
 
+    /// <summary>The names an import waiting to be confirmed would add, in the order given: those no texture has yet.</summary>
+    public IReadOnlyList<string> ImportNewNames => ImportNames(existing: false);
+
+    /// <summary>The names of the textures an import waiting to be confirmed would replace.</summary>
+    public IReadOnlyList<string> ImportReplacedNames => ImportNames(existing: true);
+
+    /// <summary>The names more than one of the import's files has: the last file of each wins.</summary>
+    public IReadOnlyList<string> ImportSharedNames => pendingImageImport is null ? []
+        : [.. pendingImageImport.Paths.Select(path => Path.GetFileNameWithoutExtension(path))
+            .GroupBy(name => name, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key)];
+
+    private IReadOnlyList<string> ImportNames(bool existing)
+    {
+        if (pendingImageImport is null || dictionary is null)
+            return [];
+        var present = new HashSet<string>(dictionary.Textures.Select(texture => TextureSet.Lower(texture.Name)), StringComparer.Ordinal);
+        return [.. pendingImageImport.Paths.Select(path => Path.GetFileNameWithoutExtension(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Where(name => present.Contains(name.ToLowerInvariant()) == existing)];
+    }
+
+    /// <summary>The size of the image a paste waiting to be confirmed holds; none without one.</summary>
+    public TextureSize? PasteImageSize => pendingPaste is { } paste ? new TextureSize(paste.Image.Width, paste.Image.Height) : null;
+
+    /// <summary>The bytes every texture of the dictionary takes together.</summary>
+    public long DictionaryDataSize => TexturesModel.Sum(texture => texture.DataSize);
+
     public bool Loading => loading;
 
     public bool PreviewLoading => previewLoading;
@@ -206,6 +233,11 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
     public int SelectedWidth => SelectedRecord()?.Texture.Width ?? 0;
 
     public int SelectedHeight => SelectedRecord()?.Texture.Height ?? 0;
+
+    /// <summary>The selected textures as the tool dialogs read them: what each is now.</summary>
+    public IReadOnlyList<TextureFacts> SelectionFacts => [.. SelectionRecords().Select(record => new TextureFacts(
+        record.Item.Name, record.Item.Texture.Width, record.Item.Texture.Height, record.Item.Texture.Format,
+        record.Item.MipCount, record.Item.DataSize))];
 
     public bool SelectedNeedsPowerOfTwo => SelectionRecords()
         .Any(record => !TextureDimensions.IsPowerOfTwo(record.Item.Texture.Width, record.Item.Texture.Height));
@@ -449,6 +481,10 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
             told(saved);
         pendingImageImport = null;
         pendingPaste = null;
+        // A task still running stops at its next look, so an extract writes nothing more once the document is gone.
+        work = null;
+        workCancel?.Cancel();
+        workCancel = null;
         generation++;
         pool.Clear();
         session = Guid.NewGuid().ToString("N");

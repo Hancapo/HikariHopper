@@ -36,6 +36,7 @@ public class ChromeIcon : Control
         ["image"] = "image",
         ["home"] = "house",
         ["refresh"] = "rotate-cw",
+        ["reset"] = "rotate-ccw",
         ["list"] = "list",
         ["grid"] = "layout-grid",
         ["checkerboard"] = "grid-3x3",
@@ -54,15 +55,18 @@ public class ChromeIcon : Control
         ["sun"] = "sun",
         ["parts"] = "panel-left",
         ["frame"] = "focus",
-        ["orbit"] = "orbit",
+        ["orbit"] = "hh-orbit",
+        ["fly"] = "hh-fly",
+        ["shadows"] = "hh-shadows",
+        ["stats"] = "hh-stats",
         ["damaged"] = "hammer",
         ["skeleton"] = "bone",
         ["collision"] = "brick-wall",
         ["lights"] = "lightbulb",
-        ["free"] = "move-3d",
         ["expand-all"] = "chevrons-up-down",
         ["collapse-all"] = "chevrons-down-up",
         ["show-all"] = "eye",
+        ["link"] = "link",
     };
 
     static ChromeIcon()

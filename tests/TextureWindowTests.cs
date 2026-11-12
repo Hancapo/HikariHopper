@@ -128,7 +128,19 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.Null(harness.Window.ToolDialog);
         harness.Key(Key.Delete);
-        Assert.IsType<TextureRemoveDialog>(harness.Window.ToolDialog);
+        var remove = Assert.IsType<TextureRemoveDialog>(harness.Window.ToolDialog);
+        harness.Settle();
+        // Removing wears the error colour, as the explorer's Delete does; the other tools' apply is the green one.
+        Assert.True(remove.ApplyButton!.Destructive);
+        Assert.False(remove.ApplyButton.Primary);
+        harness.Key(Key.Escape);
+        harness.Settle();
+        var rename = (TextureRenameDialog)harness.Window.OpenToolDialog(TextureTool.Rename);
+        harness.Settle();
+        Assert.True(rename.ApplyButton!.Primary);
+        Assert.False(rename.ApplyButton.Destructive);
+        // Its field is as tall as the dropdowns of the other tools.
+        Assert.Equal(28, rename.NameField.Bounds.Height);
     }
 
     [AvaloniaFact]
@@ -147,18 +159,6 @@ public sealed class TextureWindowTests
         Assert.True(harness.Window.RunShortcut(Key.F, KeyModifiers.None));
         Assert.True(harness.Window.RunShortcut(Key.D1, KeyModifiers.None));
         Assert.False(harness.Viewport.FitMode);
-    }
-
-    [AvaloniaFact]
-    public void UndoShortcutRevertsARename()
-    {
-        TextureWindowHarness harness = Opened();
-        string name = harness.ViewModel.SelectedName;
-        Assert.True(harness.ViewModel.RenameSelected("renamed"));
-        harness.Settle();
-        harness.Key(Key.Z, RawInputModifiers.Control);
-        harness.Settle();
-        Assert.Equal(name, harness.ViewModel.SelectedName);
     }
 
     [AvaloniaFact]
@@ -260,7 +260,7 @@ public sealed class TextureWindowTests
             Assert.Equal(frame, harness.Viewport.ImageFrame.Frame);
             Assert.False(harness.Viewport.MessageText.IsVisible);
             // A decode that takes longer shows the message.
-            ExplorerStateRenders.Pump(350);
+            TestWait.Pump(350);
             Assert.True(harness.Viewport.MessageText.IsVisible);
             Assert.Equal("Decoding texture…", harness.Viewport.MessageText.Text);
             Assert.Null(harness.Viewport.ImageFrame.Source);
@@ -303,18 +303,6 @@ public sealed class TextureWindowTests
         harness.Window.Rail.SelectionList.Focus();
         harness.Key(Key.F10, RawInputModifiers.Shift);
         Assert.True(harness.Window.Rail.ContextMenuPopup.IsOpen);
-    }
-
-    [AvaloniaFact]
-    public void RailRowsHaveTheQmlMetrics()
-    {
-        TextureWindowHarness harness = Opened(Solid("a", 4, 4), Solid("b", 4, 4));
-        Control row = harness.Window.Rail.SelectionList.ContainerFromIndex(0)!;
-        Assert.Equal(RowHeight, row.Bounds.Height);
-        Assert.Equal(340, row.Bounds.Width);
-        Border thumbnail = row.GetVisualDescendants().OfType<Border>().First(border => border.Classes.Contains("thumbnail"));
-        Assert.Equal(new Rect(7, 6, 50, 50), thumbnail.Bounds);
-        Assert.False(harness.Window.Rail.Scrollable);
     }
 
     [AvaloniaFact]
@@ -421,6 +409,19 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ATextureWithOneMipSaysSoWithoutASlider()
+    {
+        TextureWindowHarness harness = Opened();
+        Assert.Equal(1, harness.ViewModel.MipCount);
+        Assert.Equal("1 MIP", harness.Window.Preview.MipBar.MipText.Text);
+        Assert.False(harness.Window.Preview.MipBar.Slider.IsVisible);
+        // In the list and in the dialogs' summary too: one mip, not "1 mips".
+        Assert.Equal("1 MIP", harness.ViewModel.TexturesModel[0].MipLabel);
+        Assert.Equal("1 mip", ViewModels.TextureItem.Mips(1));
+        Assert.Equal("7 mips", ViewModels.TextureItem.Mips(7));
+    }
+
+    [AvaloniaFact]
     public void MipSliderJumpsToAPressOffTheHandle()
     {
         Texture mipped = new("mips", 64, 64, TextureFormat.B8G8R8A8Unorm, 3,
@@ -467,10 +468,12 @@ public sealed class TextureWindowTests
         TextureWindowHarness harness = Opened();
         TextureToolDialog dialog = harness.Window.OpenToolDialog(TextureTool.Format);
         harness.Settle();
-        Assert.Equal(new Size(520, Ui.Theme.SheetHeaderHeight + 292 + Ui.Theme.DialogFooterHeight), dialog.Bounds.Size);
+        // As tall as what is in it: the header and footer around a body fitted to its content.
+        Assert.InRange(dialog.BodyHeight, 150, 292);
+        Assert.Equal(new Size(520, Ui.Theme.SheetHeaderHeight + dialog.BodyHeight + Ui.Theme.DialogFooterHeight), dialog.Bounds.Size);
         Assert.Equal(Math.Floor((1250 - 520) / 2.0 + 0.5), dialog.Bounds.X);
         Assert.Equal(Math.Floor((738 - dialog.Bounds.Height) / 2 + 0.5), dialog.Bounds.Y);
-        Assert.Equal("CHANGE TEXTURE FORMAT", dialog.Heading);
+        Assert.Equal("CHANGE FORMAT", dialog.Heading);
         // Its header's close mark cancels it, as the sheets' does.
         ChromeToolButton close = Assert.IsType<ChromeToolButton>(dialog.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_CloseMark"));
         Assert.False(close.IsTabStop);
@@ -489,14 +492,72 @@ public sealed class TextureWindowTests
         Assert.True(dialog.NameField.IsFocused);
         Assert.Equal(name, dialog.NameField.Text);
         Assert.Equal(name.Length, dialog.NameField.SelectionEnd - dialog.NameField.SelectionStart);
+        // No header: the field holds the name. As it opens there is nothing wrong to say.
+        Assert.Empty(dialog.GetVisualDescendants().OfType<TextureDialogSummary>());
+        Assert.Equal("", dialog.ErrorShown);
+        Assert.True(dialog.ApplyEnabled);
+        double plain = dialog.BodyHeight;
+        // An empty name waits without a complaint.
         dialog.NameField.Text = "   ";
         Assert.False(dialog.ApplyEnabled);
+        Assert.Equal("", dialog.ErrorShown);
+        Assert.False(dialog.NameField.Invalid);
+        // Another texture's name is said so under the field as it is typed, whatever its case; the dialog grows by the line.
+        string other = harness.ViewModel.TexturesModel.First(item => item.Name != name).Name;
+        dialog.NameField.Text = other.ToUpperInvariant();
+        Assert.False(dialog.ApplyEnabled);
+        Assert.Equal($"This dictionary already has a {other}.", dialog.ErrorShown);
+        Assert.True(dialog.NameField.Invalid);
+        Assert.True(dialog.BodyHeight > plain);
+        // Its own name in another case is fine.
+        dialog.NameField.Text = name.ToUpperInvariant();
+        Assert.True(dialog.ApplyEnabled);
+        Assert.Equal(plain, dialog.BodyHeight);
         dialog.NameField.Text = "fresh";
         Assert.True(dialog.ApplyEnabled);
+        Assert.Equal("", dialog.ErrorShown);
         dialog.Apply();
         harness.Settle();
         Assert.False(dialog.IsOpen);
         Assert.Equal("fresh", harness.ViewModel.SelectedName);
+    }
+
+    [AvaloniaFact]
+    public void RemoveDialogNamesWhatGoesAndWhatIsLeft()
+    {
+        TextureWindowHarness harness = Opened(Solid("one", 64, 64), Solid("two", 32, 32), Solid("three", 16, 16));
+        long all = harness.ViewModel.DictionaryDataSize;
+        Assert.Equal((64 * 64 + 32 * 32 + 16 * 16) * 4, all);
+        harness.ViewModel.SelectTexture(harness.ViewModel.TexturesModel.ToList().FindIndex(item => item.Name == "one"));
+        harness.Settle();
+        var dialog = (TextureRemoveDialog)harness.Window.OpenToolDialog(TextureTool.Remove);
+        harness.Settle();
+        // One texture: the heading asks, its name says which, and the dictionary is counted before and after.
+        Assert.Equal("REMOVE TEXTURE", dialog.Heading);
+        Assert.Equal("one", dialog.NamesText.Text);
+        Assert.Empty(dialog.GetVisualDescendants().OfType<TextureDialogSummary>());
+        Assert.Equal(("3 textures", "2 textures"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal((Core.Formatting.FormatSize(all), Core.Formatting.FormatSize(all - 64 * 64 * 4)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.True(dialog.Outcome.Saves);
+        Assert.True(dialog.ApplyButton!.Destructive);
+        dialog.Close();
+        harness.Settle();
+
+        // All of them: named, and nothing left.
+        harness.ViewModel.SelectAllTextures();
+        harness.Settle();
+        dialog = (TextureRemoveDialog)harness.Window.OpenToolDialog(TextureTool.Remove);
+        harness.Settle();
+        Assert.Equal("REMOVE 3 TEXTURES", dialog.Heading);
+        Assert.Equal(["one", "three", "two"], dialog.NamesText.Text!.Split(" · ").Order());
+        Assert.Equal(("3 textures", "0 textures"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal("0 B", dialog.Outcome.AfterMemory);
+        Assert.Equal("1 texture", TextureRemoveDialog.Textures(1));
+        // Many names are the first few and a count of the rest.
+        Assert.Equal("a · b · c · +2 more", TextureOutcome.Names(["a", "b", "c", "d", "e"]));
+        dialog.Apply();
+        harness.Settle();
+        Assert.Equal(0, harness.ViewModel.TextureCount);
     }
 
     [AvaloniaFact]
@@ -515,9 +576,21 @@ public sealed class TextureWindowTests
         // A dialog that focuses nothing itself still holds the focus, so Esc closes it.
         dialog.Close();
         harness.Settle();
-        TextureToolDialog mipmaps = harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+        TextureToolDialog remove = harness.Window.OpenToolDialog(TextureTool.Remove);
         harness.Settle();
-        Assert.True(mipmaps.IsFocused);
+        Assert.True(remove.IsFocused);
+        harness.Key(Key.Tab);
+        Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
+        harness.Key(Key.Escape);
+        harness.Settle();
+        Assert.False(remove.IsOpen);
+
+        // One that starts on its first choice keeps the same round: the footer, then back to it.
+        var mipmaps = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+        harness.Settle();
+        Assert.True(mipmaps.MipCombo.IsFocused);
+        harness.Key(Key.Tab);
+        Assert.Same(mipmaps.FilterCombo, harness.Host.FocusManager!.GetFocusedElement());
         harness.Key(Key.Tab);
         Assert.Equal("PART_CancelButton", (harness.Host.FocusManager!.GetFocusedElement() as Control)?.Name);
         harness.Key(Key.Escape);
@@ -552,10 +625,7 @@ public sealed class TextureWindowTests
         harness.Backdrop.Children.Remove(gone);
         dialog.WidthField.Text = "128";
         dialog.Apply();
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
-            harness.Settle();
-        harness.Settle();
+        harness.WaitIdle();
         Assert.Equal(128, harness.ViewModel.SelectedWidth);
 
         // The keyboard is back in the editor, so Ctrl+Z undoes the resize without a click first.
@@ -590,10 +660,7 @@ public sealed class TextureWindowTests
         var dialog = Assert.IsType<TextureResizeDialog>(harness.Window.ToolDialog);
         dialog.WidthField.Text = "128";
         ClickOn(dialog.ApplyButton!);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
-            harness.Settle();
-        harness.Settle();
+        harness.WaitIdle();
         Assert.Equal(128, harness.ViewModel.SelectedWidth);
 
         // Nothing else touched: Ctrl+Z undoes it.
@@ -604,31 +671,120 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
-    public void ResizeDialogLocksTheAspectAndEstimatesTheResult()
+    public void ResizeDialogFollowsTheAspectAsYouTypeAndSaysWhatItWouldBe()
     {
         TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
         var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
         harness.Settle();
         Assert.Equal("RESIZE TEXTURE", dialog.Heading);
         Assert.True(dialog.WidthField.IsFocused);
-        dialog.WidthField.Text = "128";
-        harness.Key(Key.Enter);
-        Assert.Equal("32", dialog.HeightField.Text);
-        Assert.Equal($"256 × 64  →  128 × 32  ·  {harness.ViewModel.EstimatedMipCount(128, 32, 4)} mips  ·  last "
-            + harness.ViewModel.EstimatedSmallestMipDimensions(128, 32, 4), dialog.ResultText.Text);
-        Assert.True(dialog.ApplyEnabled);
-        // Typing a letter is refused, as the IntValidator refuses it.
-        dialog.WidthField.Text = "12x";
-        Assert.Equal("128", dialog.WidthField.Text);
-        dialog.WidthField.Text = "";
+        // The header has the name and the one thing this tool changes: the size now.
+        Assert.Equal(("wide", "256 × 64"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal((HikariHopper.Textures.ResizeUnit.Pixels, true, false), (dialog.Unit, dialog.Locked, dialog.Snap));
+        Assert.True(dialog.LockButton.Sunken);
+        // As it opens, it is what it is: nothing to apply.
+        Assert.Equal(("256", "64"), (dialog.WidthField.Text, dialog.HeightField.Text));
         Assert.False(dialog.ApplyEnabled);
-        Assert.Equal("256 × 64  →  — × 32  ·  1 mips  ·  last none", dialog.ResultText.Text);
-        dialog.MipCheck.IsChecked = false;
-        Assert.False(dialog.MipSizeCombo.IsVisible);
+        Assert.Equal(("256 × 64", "256 × 64"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+
+        // The height follows the width while it is typed: no Enter, no click away.
+        dialog.WidthField.Text = "128";
+        Assert.Equal("32", dialog.HeightField.Text);
+        Assert.True(dialog.ApplyEnabled);
+        Assert.Equal((128, 32), (dialog.TargetWidth, dialog.TargetHeight));
+        Assert.Equal(("256 × 64", "128 × 32"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        // Each side says the memory it takes, the larger filling its bar, and a saving is drawn as one.
+        long now = harness.ViewModel.SelectionFacts[0].DataSize;
+        long after = HikariHopper.Textures.ResizePlan.EstimatedSize(128, 32, harness.ViewModel.SelectionFacts[0].Format, harness.ViewModel.EstimatedMipCount(128, 32, 4));
+        Assert.True(after > 0 && after < now);
+        Assert.Equal((Core.Formatting.FormatSize(now), Core.Formatting.FormatSize(after)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.Equal(1, dialog.Outcome.Bars.Now);
+        Assert.Equal((double)after / now, dialog.Outcome.Bars.After, 6);
+        Assert.True(dialog.Outcome.Saves);
+        Assert.Empty(dialog.Outcome.Warnings);
+        // And the width follows the height.
+        dialog.HeightField.Text = "16";
+        Assert.Equal("64", dialog.WidthField.Text);
+
+        // Typing a letter is refused, as the IntValidator refuses it; an empty field is no size, and leaves the other.
+        dialog.WidthField.Text = "12x";
+        Assert.Equal("64", dialog.WidthField.Text);
+        dialog.WidthField.Text = "";
+        Assert.Equal("16", dialog.HeightField.Text);
+        Assert.False(dialog.ApplyEnabled);
+        Assert.Equal("—", dialog.Outcome.AfterValue);
+        Assert.Equal("", dialog.Outcome.AfterMemory);
+
+        // Unlocked, each field is its own; locked again, the height takes what the width gives it.
+        dialog.SetLocked(false);
+        Assert.False(dialog.LockButton.Sunken);
+        dialog.WidthField.Text = "200";
+        Assert.Equal("16", dialog.HeightField.Text);
+        Assert.Equal((200, 16), (dialog.TargetWidth, dialog.TargetHeight));
+        dialog.LockButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(dialog.Locked);
+        Assert.Equal("50", dialog.HeightField.Text);
+
+        // Mipmaps are one dropdown: none, or the full chain down to a size.
+        Assert.Equal((true, 4), (dialog.MipCombo.Generate, dialog.MipCombo.Minimum));
+        dialog.MipCombo.SelectedIndex = 0;
+        Assert.Equal((false, 1), (dialog.MipCombo.Generate, dialog.MipCombo.Minimum));
+        Assert.Equal(Core.Formatting.FormatSize(HikariHopper.Textures.ResizePlan.EstimatedSize(200, 50, harness.ViewModel.SelectionFacts[0].Format, 1)),
+            dialog.Outcome.AfterMemory);
     }
 
     [AvaloniaFact]
-    public void PowerOfTwoDialogNeedsANonPowerOfTwoTexture()
+    public void ResizeDialogTakesPercentAndQuickSizes()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        // A quick size is a share of the original, in the unit showing.
+        dialog.HalfButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("128", "32"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        // In percent the fields hold the share, the size reached kept; the outcome says the pixels.
+        dialog.UnitSwitch.Pick(1);
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(1, dialog.UnitSwitch.SelectedIndex);
+        Assert.Equal(("50", "50"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal("128 × 32", dialog.Outcome.AfterValue);
+        // Locked, the other percentage is the same one.
+        dialog.WidthField.Text = "25";
+        Assert.Equal("25", dialog.HeightField.Text);
+        Assert.Equal((64, 16), (dialog.TargetWidth, dialog.TargetHeight));
+        dialog.DoubleButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("200", "200"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal("512 × 128", dialog.Outcome.AfterValue);
+        // Larger than it is: said under the outcome, and the bar isn't a saving's.
+        Assert.Equal(["Larger than the original: no detail is added."], dialog.Outcome.Warnings);
+        Assert.False(dialog.Outcome.Saves);
+        Assert.Equal(1, dialog.Outcome.Bars.After);
+        // Back in pixels, the size reached.
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        Assert.Equal(("512", "128"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        dialog.QuarterButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("64", "16"), (dialog.WidthField.Text, dialog.HeightField.Text));
+
+        // A size that isn't a power of two is said so, and the dialog grows by the line that says it.
+        double fitted = dialog.BodyHeight;
+        dialog.WidthField.Text = "250";
+        Assert.Equal("63", dialog.HeightField.Text);
+        Assert.Equal(["250 × 63 is not a power of two."], dialog.Outcome.Warnings);
+        Assert.True(dialog.BodyHeight > fitted);
+        // Power of two rounds what the fields give, which stay as typed.
+        dialog.SnapButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(dialog.Snap);
+        Assert.True(dialog.SnapButton.Raised);
+        Assert.Equal("250", dialog.WidthField.Text);
+        Assert.Equal("256 × 64", dialog.Outcome.AfterValue);
+        Assert.Empty(dialog.Outcome.Warnings);
+        Assert.Equal(fitted, dialog.BodyHeight);
+        // Which is the size it has: nothing to apply.
+        Assert.False(dialog.ApplyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void PowerOfTwoOpensResizeWithTheRoundingOn()
     {
         TextureWindowHarness harness = Opened(Solid("odd", 100, 60), Solid("even", 64, 64));
         int odd = harness.ViewModel.TexturesModel.ToList().FindIndex(item => item.Name == "odd");
@@ -636,18 +792,227 @@ public sealed class TextureWindowTests
         harness.Settle();
         var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.PowerOfTwo);
         harness.Settle();
-        Assert.Equal("RESIZE TO POWER OF 2", dialog.Heading);
-        Assert.False(dialog.WidthField.IsEffectivelyVisible);
-        Assert.True(dialog.RoundingCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        // The same dialog, its Power of two pressed: the fields hold the size it has, the outcome the rounded one.
+        Assert.Equal("RESIZE TEXTURE", dialog.Heading);
+        Assert.True(dialog.Snap);
+        Assert.True(dialog.SnapButton.Raised);
+        Assert.True(dialog.WidthField.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        Assert.Equal(("100", "60"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal(("100 × 60", "128 × 64"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
         Assert.True(dialog.ApplyEnabled);
-        Assert.Equal($"100 × 60  →  128 × 64  ·  {harness.ViewModel.EstimatedMipCount(128, 64, 4)} mips  ·  last "
-            + harness.ViewModel.EstimatedSmallestMipDimensions(128, 64, 4), dialog.ResultText.Text);
-        dialog.Close();
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal((128, 64), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
+
+        // Left at its size, a texture has no result to warn about, however odd it is; a size typed for it has.
+        Assert.True(harness.ViewModel.ResizeSelected(100, 60, "mitchell", 4, true));
+        clock.Restart();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        var plain = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        Assert.Equal(("100 × 60", "100 × 60"), (plain.Outcome.NowValue, plain.Outcome.AfterValue));
+        Assert.Empty(plain.Outcome.Warnings);
+        plain.WidthField.Text = "90";
+        Assert.Equal(["90 × 54 is not a power of two."], plain.Outcome.Warnings);
+        plain.Close();
+        harness.Settle();
+
+        // A texture that already is a power of two has nothing to round.
         harness.ViewModel.SelectTexture(1 - odd);
         harness.Settle();
         dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.PowerOfTwo);
         harness.Settle();
         Assert.False(dialog.ApplyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void ResizingSeveralTexturesScalesEachFromItsOwnSize()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64), Solid("odd", 100, 60));
+        harness.ViewModel.SelectAllTextures();
+        harness.Settle();
+        var dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        // Several open in percent, at what they are; the header counts them and gives their sizes.
+        Assert.Equal("RESIZE 2 TEXTURES", dialog.Heading);
+        Assert.Equal(("2 textures", "100 × 60 to 256 × 64"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(("100", "100"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.False(dialog.ApplyEnabled);
+        dialog.HalfButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(("50", "50"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        Assert.Equal(("100 × 60 to 256 × 64", "50 × 30 to 128 × 32"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        Assert.Equal(["1 of 2 will not be a power of two."], dialog.Outcome.Warnings);
+        Assert.True(dialog.ApplyEnabled);
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal([("odd", 50, 30), ("wide", 128, 32)],
+            harness.ViewModel.SelectionFacts.Select(each => (each.Name, each.Width, each.Height)).OrderBy(each => each.Name));
+
+        // In pixels a quick size goes back to percent, where each keeps its shape; typed pixels set them all to one size.
+        dialog = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+        harness.Settle();
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        dialog.DoubleButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(HikariHopper.Textures.ResizeUnit.Percent, dialog.Unit);
+        Assert.Equal(("200", "200"), (dialog.WidthField.Text, dialog.HeightField.Text));
+        dialog.SetUnit(HikariHopper.Textures.ResizeUnit.Pixels);
+        dialog.SetLocked(false);
+        dialog.WidthField.Text = "64";
+        dialog.HeightField.Text = "64";
+        Assert.Equal("64 × 64", dialog.Outcome.AfterValue);
+    }
+
+    [AvaloniaFact]
+    public void FormatDialogSaysWhatEachFormatCostsAndWhatTheChangeLoses()
+    {
+        // 256 × 64, uncompressed, half transparent.
+        TextureWindowHarness harness = Opened(TextureTestKit.Bgra("wide", 256, 64, [40, 80, 160, 128]));
+        var dialog = (TextureFormatDialog)harness.Window.OpenToolDialog(TextureTool.Format);
+        harness.Settle();
+        Assert.Equal("CHANGE FORMAT", dialog.Heading);
+        // The header has the name and the format now; the dropdown opens on it.
+        Assert.Equal(("wide", "ARGB 32-bit (A8R8G8B8)"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+        Assert.Equal("A8R8G8B8", dialog.TargetName);
+        Assert.True(dialog.FormatCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+        // Each format says what it costs and keeps, in the list and, for the one picked, in the box.
+        var options = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToDictionary(option => (string)option.Value!, option => option.Note);
+        Assert.Equal("4 bpp · no alpha", options["BC1"]);
+        Assert.Equal("8 bpp · sharp alpha", options["BC2"]);
+        Assert.Equal("8 bpp · alpha", options["BC3"]);
+        Assert.Equal("4 bpp · one channel", options["BC4"]);
+        Assert.Equal("8 bpp · two channels", options["BC5"]);
+        Assert.Equal("8 bpp · alpha", options["BC7"]);
+        Assert.Equal("32 bpp · alpha", options["A8R8G8B8"]);
+        Assert.Equal("32 bpp · alpha", dialog.FormatCombo.CurrentNote);
+        // Open, every row shows its own.
+        dialog.FormatCombo.IsDropDownOpen = true;
+        harness.Settle();
+        FlatComboBoxItem[] rows = [.. dialog.FormatCombo.GetRealizedContainers().OfType<FlatComboBoxItem>()];
+        Assert.Equal(7, rows.Length);
+        Assert.All(rows, row => Assert.True(row.NoteShown, row.Label));
+        Assert.Equal("4 bpp · no alpha", rows.Single(row => row.Label == "DXT1 (BC1)").Note);
+        dialog.FormatCombo.IsDropDownOpen = false;
+        harness.Settle();
+        // An uncompressed format has no quality to pick.
+        Assert.False(dialog.QualitySwitch.IsVisible);
+        double plain = dialog.BodyHeight;
+
+        // To DXT5: an eighth of the bytes a pixel, the chain's third more, and a quality to pick.
+        dialog.FormatCombo.SelectedIndex = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, "BC3"));
+        Assert.True(dialog.QualitySwitch.IsVisible);
+        Assert.True(dialog.BodyHeight > plain);
+        Assert.Equal(0.7, dialog.Quality);
+        dialog.QualitySwitch.Pick(2);
+        Assert.Equal(1.0, dialog.Quality);
+        Assert.Equal(("ARGB 32-bit (A8R8G8B8)", "DXT5 (BC3)"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+        long now = harness.ViewModel.SelectionFacts[0].DataSize;
+        long after = HikariHopper.Textures.ResizePlan.EstimatedSize(256, 64, TextureFormat.BC3Unorm, harness.ViewModel.EstimatedMipCount(256, 64, 4));
+        Assert.Equal((Core.Formatting.FormatSize(now), Core.Formatting.FormatSize(after)), (dialog.Outcome.NowMemory, dialog.Outcome.AfterMemory));
+        Assert.True(dialog.Outcome.Saves);
+        Assert.Empty(dialog.Outcome.Warnings);
+        // Without mipmaps, the full size alone.
+        dialog.MipCombo.SelectedIndex = 0;
+        Assert.Equal(Core.Formatting.FormatSize(256 * 64), dialog.Outcome.AfterMemory);
+        dialog.MipCombo.SelectedIndex = 3;
+
+        // A format that loses what the texture has says so: DXT1 its alpha, the one and two channel formats its colour.
+        void Pick(string name) => dialog.FormatCombo.SelectedIndex = dialog.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, name));
+        Pick("BC1");
+        Assert.Equal(["DXT1 (BC1) has no alpha here, and this texture uses it."], dialog.Outcome.Warnings);
+        Pick("BC4");
+        Assert.Equal(["ATI1 (BC4) keeps the red channel only."], dialog.Outcome.Warnings);
+        Pick("BC5");
+        Assert.Equal(["ATI2 (BC5) keeps red and green only, as a normal map needs."], dialog.Outcome.Warnings);
+
+        // Applied, it is that format, with its chain.
+        Pick("BC3");
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal("DXT5 (BC3)", harness.ViewModel.SelectedFormat);
+        Assert.Equal(harness.ViewModel.EstimatedMipCount(256, 64, 4), harness.ViewModel.MipCount);
+        Assert.Equal(after, harness.ViewModel.SelectionFacts[0].DataSize);
+
+        // An opaque texture loses nothing to DXT1.
+        TextureWindowHarness opaque = Opened(Solid("solid", 64, 64));
+        var second = (TextureFormatDialog)opaque.Window.OpenToolDialog(TextureTool.Format);
+        opaque.Settle();
+        second.FormatCombo.SelectedIndex = second.FormatCombo.Items.Cast<FlatComboOption>().ToList().FindIndex(option => Equals(option.Value, "BC1"));
+        Assert.Empty(second.Outcome.Warnings);
+    }
+
+    [AvaloniaFact]
+    public void MipmapsDialogMakesTheChainOrDropsIt()
+    {
+        TextureWindowHarness harness = Opened(Solid("wide", 256, 64));
+        string filter = TextureFilterCombo.Remembered;
+        try
+        {
+            var dialog = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+            harness.Settle();
+            Assert.Equal("MIPMAPS", dialog.Heading);
+            Assert.Equal(("wide", "1 mip"), (dialog.Summary.NameShown, dialog.Summary.FactShown));
+            Assert.True(dialog.MipCombo.IsFocused, $"focused: {harness.Host.FocusManager?.GetFocusedElement()}");
+            int full = harness.ViewModel.EstimatedMipCount(256, 64, 4);
+            Assert.Equal(("1 mip", $"{full} mips"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+            // It grows: the larger bar is the one after, and no saving is drawn.
+            Assert.Equal(1, dialog.Outcome.Bars.After);
+            Assert.True(dialog.Outcome.Bars.Now < 1);
+            Assert.False(dialog.Outcome.Saves);
+            // Further down is more levels.
+            dialog.MipCombo.SelectedIndex = 1;
+            Assert.Equal($"{harness.ViewModel.EstimatedMipCount(256, 64, 1)} mips", dialog.Outcome.AfterValue);
+            dialog.MipCombo.SelectedIndex = 3;
+            dialog.FilterCombo.SelectedIndex = 3;
+            Assert.Equal("box", dialog.FilterCombo.CurrentValue);
+            dialog.Apply();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+                harness.Settle();
+            harness.Settle();
+            Assert.Equal(full, harness.ViewModel.MipCount);
+
+            // The filter applied with is the one the next dialog opens on, and the one Change format uses.
+            Assert.Equal("box", TextureFilterCombo.Remembered);
+            var resize = (TextureResizeDialog)harness.Window.OpenToolDialog(TextureTool.Resize);
+            harness.Settle();
+            Assert.Equal("box", resize.FilterCombo.CurrentValue);
+            resize.Close();
+            harness.Settle();
+
+            // None drops the chain: the full size alone is left.
+            dialog = (TextureMipmapsDialog)harness.Window.OpenToolDialog(TextureTool.Mipmaps);
+            harness.Settle();
+            Assert.Equal($"{full} mips", dialog.Summary.FactShown);
+            dialog.MipCombo.SelectedIndex = 0;
+            Assert.Equal(($"{full} mips", "1 mip"), (dialog.Outcome.NowValue, dialog.Outcome.AfterValue));
+            Assert.True(dialog.Outcome.Saves);
+            dialog.Apply();
+            clock.Restart();
+            while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+                harness.Settle();
+            harness.Settle();
+            Assert.Equal(1, harness.ViewModel.MipCount);
+            Assert.Equal((256, 64), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
+        }
+        finally
+        {
+            TextureFilterCombo.Remember(filter);
+        }
+        // Several chains are said by their range.
+        Assert.Equal("1 to 9 mips", TextureMipmapsDialog.Chains([9, 1, 4]));
+        Assert.Equal("7 mips", TextureMipmapsDialog.Chains([7, 7]));
     }
 
     [AvaloniaFact]
@@ -660,12 +1025,21 @@ public sealed class TextureWindowTests
         harness.Settle();
         TexturePasteDialog dialog = Assert.IsType<TexturePasteDialog>(harness.Window.PasteDialog);
         Assert.False(dialog.ReplaceMode);
+        Assert.Equal("PASTE IMAGE", dialog.Heading);
+        // The header says what is on the clipboard. With nothing to replace there is no choice to show: a name, focused.
+        Assert.Equal("8 × 4", dialog.SizeText.Text);
+        Assert.False(dialog.ModeSwitch.IsVisible);
+        Assert.True(dialog.NameField.IsFocused);
+        Assert.Equal("Name", dialog.NameLabel.Text);
         Assert.Equal("pasted_texture", dialog.NameField.Text);
         Assert.True(dialog.ApplyEnabled);
+        double plain = dialog.BodyHeight;
         dialog.NameField.Text = "TWO";
         Assert.False(dialog.ApplyEnabled);
-        Assert.True(dialog.ErrorText.IsVisible);
+        Assert.Equal("A texture with this name already exists", dialog.ErrorShown);
+        Assert.True(dialog.ErrorHost.IsVisible);
         Assert.True(dialog.NameField.Invalid);
+        Assert.True(dialog.BodyHeight > plain);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(dialog.IsOpen);
@@ -680,12 +1054,34 @@ public sealed class TextureWindowTests
         harness.ViewModel.RequestPasteImage().Wait();
         harness.Settle();
         TexturePasteDialog dialog = harness.Window.PasteDialog!;
+        // Over one texture, replacing it is the choice the switch opens on: it names the texture, with no field.
         Assert.True(dialog.ReplaceMode);
-        Assert.Equal(harness.ViewModel.SelectedName, dialog.NameField.Text);
-        Assert.False(dialog.NameField.IsEnabled);
-        Assert.True(dialog.ModeCombo.IsFocused);
-        dialog.ModeCombo.SelectedIndex = 1;
+        Assert.True(dialog.ModeSwitch.IsVisible);
+        Assert.Equal(0, dialog.ModeSwitch.SelectedIndex);
+        Assert.True(dialog.ModeSwitch.IsFocused);
+        Assert.Equal("Replaces", dialog.NameLabel.Text);
+        Assert.True(dialog.TargetText.IsVisible);
+        Assert.Equal(harness.ViewModel.SelectedName, dialog.TargetText.Text);
+        Assert.False(dialog.NameField.IsVisible);
+        Assert.True(dialog.ApplyEnabled);
+        // As a new texture, it asks for a name, starting from the usual one.
+        dialog.ModeSwitch.Pick(1);
+        Assert.False(dialog.ReplaceMode);
+        Assert.Equal("Name", dialog.NameLabel.Text);
+        Assert.True(dialog.NameField.IsVisible);
+        Assert.False(dialog.TargetText.IsVisible);
         Assert.Equal("pasted_texture", dialog.NameField.Text);
+        // And back, applied: the texture keeps its name and takes the image.
+        string name = harness.ViewModel.SelectedName;
+        dialog.ModeSwitch.Pick(0);
+        Assert.True(dialog.ReplaceMode);
+        dialog.Apply();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (harness.ViewModel.OperationBusy && clock.ElapsedMilliseconds < 10_000)
+            harness.Settle();
+        harness.Settle();
+        Assert.Equal(name, harness.ViewModel.SelectedName);
+        Assert.Equal((8, 4), (harness.ViewModel.SelectedWidth, harness.ViewModel.SelectedHeight));
     }
 
     [AvaloniaFact]
@@ -701,10 +1097,36 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.False(harness.Window.DropArea.OverlayVisible);
         TextureImportDialog dialog = Assert.IsType<TextureImportDialog>(harness.Window.ImportDialog);
-        Assert.Contains("Import 1 files? 1 matching names", dialog.MessageText.Text);
+        // One image, which replaces the texture of its name.
+        Assert.Equal("IMPORT 1 IMAGE", dialog.Heading);
+        Assert.Empty(dialog.NewNames);
+        Assert.Equal(["two"], dialog.ReplacedNames);
+        Assert.Empty(dialog.NotesShown);
         harness.Key(Key.Escape);
         harness.Settle();
         Assert.False(harness.ViewModel.ImportConfirmationPending);
+        Assert.Null(harness.Window.ImportDialog);
+
+        // Several: the new ones and the ones that replace a texture, by name, and a line for files that share a name.
+        using var second = new TempFolder();
+        string[] files =
+        [
+            TextureTestKit.ImageFile(folder.File("one.png")),
+            TextureTestKit.ImageFile(second.File("ONE.png")),
+            TextureTestKit.ImageFile(folder.File("decal.png")),
+            TextureTestKit.ImageFile(folder.File("trim.png")),
+            clash,
+        ];
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        dialog = Assert.IsType<TextureImportDialog>(harness.Window.ImportDialog);
+        Assert.Equal("IMPORT 5 IMAGES", dialog.Heading);
+        Assert.Equal(["decal", "trim"], dialog.NewNames);
+        Assert.Equal(["one", "two"], dialog.ReplacedNames);
+        Assert.Equal(["More than one file is named one: the last one wins."], dialog.NotesShown);
+        Assert.True(dialog.ApplyEnabled);
+        harness.Key(Key.Escape);
+        harness.Settle();
         Assert.Null(harness.Window.ImportDialog);
     }
 
@@ -802,7 +1224,7 @@ public sealed class TextureWindowTests
         harness.Settle();
         Assert.False(preview.FilteredPreview);
         Assert.False(toolbar.SmoothSelected);
-        ExplorerStateRenders.Pump(250);
+        TestWait.Pump(250);
         Assert.Equal(toolbar.FilterSwitch.Sides[0].Width, toolbar.FilterSwitch.SegmentOffset, 3);
         toolbar.FilterSwitch.Focus();
         harness.Key(Key.Space);
@@ -924,15 +1346,320 @@ public sealed class TextureWindowTests
         Assert.Equal(3, QtRaster.JsRound(2.5));
     }
 
+    // Pumps the UI until the condition holds, or fails after a few seconds.
+    private static void Until(Func<bool> condition, string what)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"Timed out waiting for {what}");
+            TextureWindowHarness.Pump();
+        }
+    }
+
     [AvaloniaFact]
-    public void ToolbarAndBarsHaveTheQmlHeights()
+    public void ALongImportShowsItsProgressAndCancelAddsNothing()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        // Each file waits to be let through, one at a time, so the import can be seen part way.
+        harness.ViewModel.ImportWorkers = 1;
+        using var gate = new SemaphoreSlim(0);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            return TextureImport.ReadTextureImage(path);
+        };
+        try
+        {
+            string[] before = [.. harness.ViewModel.Dictionary!.Names];
+            Assert.True(harness.ViewModel.ImportDroppedImages(files));
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("IMPORTING TEXTURES", overlay.Title);
+            Assert.Equal("alpha.png", overlay.Detail);
+            Assert.Equal("1/3", overlay.ProgressText);
+            Assert.True(overlay.Bar.IsVisible);
+            Assert.Equal(0, overlay.Fill.Width);
+            Assert.True(overlay.CancelButton.IsVisible && overlay.CancelButton.IsEnabled);
+
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second file");
+            Assert.Equal("beta.png", overlay.Detail);
+            Assert.Equal((LoadingOverlay.BarWidth - 2) / 3, overlay.Fill.Width, 3);
+
+            // Cancel stops it once the file in hand is read, and the dictionary is as it was.
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.False(overlay.CancelButton.IsEnabled);
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+            Assert.Null(harness.ViewModel.Work);
+            Assert.False(harness.ViewModel.OperationBusy);
+            Assert.False(overlay.Train.Animating);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastFileIsReadStillAddsNothing()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("late.png"))]));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.False(harness.ViewModel.CanUndo);
+    }
+
+    [AvaloniaFact]
+    public void AQuickImportNeverShowsTheOverlay()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        bool shown = false;
+        harness.Window.WorkOverlay.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.IsVisibleProperty && harness.Window.WorkOverlay.IsVisible)
+                shown = true;
+        };
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("quick.png"))]));
+        harness.Settle();
+        Assert.Contains("quick", harness.ViewModel.Dictionary!.Names);
+        Assert.False(shown);
+        Assert.False(harness.Window.WorkOverlay.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void ATransformShowsItsProgressAndCancelChangesNothing()
     {
         TextureWindowHarness harness = Opened();
-        Assert.Equal(Ui.Theme.TextureToolbarHeight, harness.Window.Preview.Toolbar.Bounds.Height);
-        Assert.Equal(Ui.Theme.TextureMipBarHeight, harness.Window.Preview.MipBar.Bounds.Height);
-        Assert.Equal(Ui.Theme.StatusHeight, harness.Window.StatusBar.Bounds.Height);
-        Assert.Equal(Ui.Theme.MenuHeight, harness.Window.MenuRow.Bounds.Height);
-        Assert.Equal(Ui.Theme.TextureRailWidth, harness.Window.Rail.Bounds.Width);
-        Assert.Equal("3 textures", harness.Window.StatusBar.GetVisualDescendants().OfType<TextBlock>().First().Text);
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        try
+        {
+            Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+            harness.ViewModel.SelectAllTextures();
+            Assert.True(harness.ViewModel.StartTransform("Resizing", texture =>
+            {
+                Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+                return TextureTestKit.Red(texture.Name);
+            }));
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("RESIZING", overlay.Title);
+            Assert.Equal(before[0].Name, overlay.Detail);
+            Assert.Equal("1/3", overlay.ProgressText);
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second texture");
+            Assert.Equal(before[1].Name, overlay.Detail);
+
+            // Cancelled, the transform keeps none of what it made.
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+            Assert.False(harness.ViewModel.Modified);
+            Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void AnExtractShowsItsProgressAndCancelKeepsWhatItWrote()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        var written = new List<string>();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            lock (written)
+                written.Add(texture.Name!);
+        };
+        try
+        {
+            _ = harness.ViewModel.ExtractAll();
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("EXTRACTING TEXTURES", overlay.Title);
+            Assert.Equal("1/3", overlay.ProgressText);
+            gate.Release();
+            Until(() => overlay.ProgressText == "2/3", "the second texture");
+            overlay.CancelButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            gate.Release(3);
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            // The texture in hand is finished; the rest aren't started, and what was written stays.
+            Assert.Equal(2, written.Count);
+            Assert.Equal("Extract cancelled: 2 of 3 textures were written", harness.ViewModel.Status);
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastTextureIsTransformedStillChangesNothing()
+    {
+        TextureWindowHarness harness = Opened();
+        Texture[] before = [.. harness.ViewModel.Dictionary!.Textures];
+        harness.ViewModel.SelectAllTextures();
+        Assert.True(harness.ViewModel.StartTransform("Resizing", texture => TextureTestKit.Red(texture.Name)));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelWork());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Textures);
+        Assert.False(harness.ViewModel.Modified);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Resizing cancelled: nothing was changed", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractStopsWritingWhenTheDocumentCloses()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        using var started = new SemaphoreSlim(0);
+        using var gate = new SemaphoreSlim(0);
+        int written = 0;
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) =>
+        {
+            started.Release();
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            Interlocked.Increment(ref written);
+        };
+        _ = harness.ViewModel.ExtractAll();
+        Until(() => started.CurrentCount > 0, "the first texture");
+        harness.ViewModel.CloseDocument();
+        gate.Release(3);
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        // The texture in hand finishes; none after it is written.
+        Assert.Equal(1, written);
+    }
+
+    [AvaloniaFact]
+    public void AnExtractThatFailsOddlyStillEndsAndSaysWhy()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.ExportTexture = (texture, target, path) => throw new OverflowException("too big");
+        _ = harness.ViewModel.ExtractAll();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.Null(harness.ViewModel.Work);
+        Assert.Equal("Could not extract textures: too big", harness.ViewModel.Status);
+    }
+
+    [AvaloniaFact]
+    public void ASaveShowsTheTrainWithNothingToCountOrCancel()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        TimeSpan delay = TextureEditor.WorkOverlayDelay;
+        TextureEditor.WorkOverlayDelay = TimeSpan.Zero;
+        using var gate = new SemaphoreSlim(0);
+        harness.ViewModel.Dialogs = new FakeDialogs { SaveFile = folder.File("copy.ytd") };
+        harness.ViewModel.WriteFile = (path, data) =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            File.WriteAllBytes(path, data);
+        };
+        try
+        {
+            _ = harness.ViewModel.SaveYtdAs();
+            LoadingOverlay overlay = harness.Window.WorkOverlay;
+            Until(() => overlay.IsVisible, "the overlay");
+            Assert.Equal("SAVING", overlay.Title);
+            Assert.Equal("copy.ytd", overlay.Detail);
+            Assert.False(overlay.Bar.IsVisible);
+            Assert.False(overlay.CancelButton.IsVisible);
+            Assert.False(harness.ViewModel.CancelWork());
+            gate.Release();
+            Until(() => !overlay.IsVisible, "the overlay to go");
+            harness.Settle();
+            Assert.True(File.Exists(folder.File("copy.ytd")));
+        }
+        finally
+        {
+            TextureEditor.WorkOverlayDelay = delay;
+        }
+    }
+
+    [AvaloniaFact]
+    public void AnImportReadsSeveralImagesAtOnce()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        // Each read waits until all three have started: it only finishes if they run side by side.
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            Assert.True(together.SignalAndWait(TimeSpan.FromSeconds(10)), "the images weren't read at the same time");
+            return TextureImport.ReadTextureImage(path);
+        };
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(["alpha", "beta", "gamma", "one", "three", "two"], harness.ViewModel.Dictionary!.Names.Order());
+    }
+
+    [AvaloniaFact]
+    public void When_images_read_side_by_side_fail_the_first_in_order_is_reported_and_nothing_is_added()
+    {
+        using var folder = new TempFolder();
+        string[] files = [TextureTestKit.ImageFile(folder.File("alpha.png")), TextureTestKit.ImageFile(folder.File("beta.png")),
+            TextureTestKit.ImageFile(folder.File("gamma.png"))];
+        TextureWindowHarness harness = Opened();
+        harness.ViewModel.ImportWorkers = 3;
+        using var together = new Barrier(3);
+        harness.ViewModel.ReadImportImage = path =>
+        {
+            together.SignalAndWait(TimeSpan.FromSeconds(10));
+            // Gamma fails first in time; beta, before it in the files, is the one named.
+            if (path.EndsWith("beta.png", StringComparison.Ordinal))
+            {
+                Thread.Sleep(50);
+                throw new InvalidDataException("beta is broken");
+            }
+            if (path.EndsWith("gamma.png", StringComparison.Ordinal))
+                throw new InvalidDataException("gamma is broken");
+            return TextureImport.ReadTextureImage(path);
+        };
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages(files));
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Equal("Import failed: beta.png: beta is broken", harness.ViewModel.Status);
+        Assert.False(harness.ViewModel.OperationBusy);
     }
 }

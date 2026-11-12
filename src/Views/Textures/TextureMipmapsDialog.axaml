@@ -3,22 +3,18 @@
                      xmlns:v="using:HikariHopper.Views"
                      xmlns:c="using:HikariHopper.Views.Controls"
                      x:Class="HikariHopper.Views.TextureMipmapsDialog"
-                     Heading="RECALCULATE MIPMAPS" BodyHeight="250">
-  <!-- Port of TextureMipmapsDialog.qml. -->
-  <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:TextureDialogSummary />
+                     Heading="MIPMAPS">
+  <!-- Makes the selection's mip chain again: how far down it goes (or not at all) and how it is resampled, the two
+       rows Resize ends with. Then the chain it has now beside the one it would have. -->
+  <c:QtColumnLayout Margin="12,12,12,13" Spacing="10">
+    <v:TextureDialogSummary Name="Summary" Fact="Mips" />
     <Border Classes="rule" />
-    <v:QtGrid ColumnDefinitions="Auto,12,*" RowDefinitions="Auto,8,Auto">
-      <TextBlock Classes="label" Text="Downsampling" />
-      <v:TextureFilterCombo Name="FilterCombo" Grid.Column="2" />
-      <TextBlock Classes="label" Grid.Row="2" Text="Smallest level" />
-      <v:TextureMipSizeCombo Name="MipSizeCombo" Grid.Row="2" Grid.Column="2" />
+    <v:QtGrid ColumnDefinitions="112,12,*" RowDefinitions="Auto,8,Auto">
+      <TextBlock Classes="label" Text="Mipmaps" />
+      <v:TextureMipChainCombo Name="MipCombo" Grid.Column="2" />
+      <TextBlock Classes="label" Grid.Row="2" Text="Resampling" />
+      <v:TextureFilterCombo Name="FilterCombo" Grid.Row="2" Grid.Column="2" />
     </v:QtGrid>
-    <Panel Height="56">
-      <Border Classes="result" />
-      <TextBlock Classes="caption" Text="RESULT" />
-      <TextBlock Name="ResultText" Classes="result" Margin="9,25,9,0" />
-    </Panel>
-    <Panel c:QtColumnLayout.FillHeight="True" />
+    <v:TextureOutcome Name="Outcome" />
   </c:QtColumnLayout>
 </v:TextureToolDialog>

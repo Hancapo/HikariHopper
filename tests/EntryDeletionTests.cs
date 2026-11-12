@@ -164,7 +164,7 @@ public sealed class EntryDeletionTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void ArchivePeerMovesOutOfDeletedFolder() => OnUiThread(() =>
+    public void ArchivePeerMovesOutOfDeletedFolder()
     {
         string path = SaveArchive(Path.Combine(Work, "test.rpf"), ("folder/deep/test.txt", "test"), ("keep.txt", "keep"));
         var tabs = new ExplorerTabsViewModel();
@@ -184,12 +184,12 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.Equal("Deleted 1 item from RPF", first.Status);
         Assert.Equal(".", peer.CurrentPath);
         Assert.Equal(["keep.txt"], ListedNames(peer));
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RecyclesFolderAndReleasesDescendantRpf(bool populated) => OnUiThread(() =>
+    public void RecyclesFolderAndReleasesDescendantRpf(bool populated)
     {
         string folder = Directory.CreateDirectory(Path.Combine(Work, "folder")).FullName;
         if (populated)
@@ -232,10 +232,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
             Assert.Equal("inside", File.ReadAllText(Path.Combine(Trash, "folder", "deep", "keep.txt")));
         Assert.Equal(".", peer.CurrentPath);
         Assert.DoesNotContain("folder", ListedNames(first));
-    });
+    }
 
     [AvaloniaFact]
-    public void OpenRpfDeletedInAnotherTabReturnsToItsFolder() => OnUiThread(() =>
+    public void OpenRpfDeletedInAnotherTabReturnsToItsFolder()
     {
         string archive = SaveArchive(Path.Combine(Work, "mods", "child.rpf"), ("file.txt", "x"));
         var tabs = new ExplorerTabsViewModel();
@@ -254,10 +254,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.Equal("The open RPF is being deleted in another tab", peer.Status);
         Settle(tabs);
         Assert.Empty(ListedNames(peer));
-    });
+    }
 
     [AvaloniaFact]
-    public void MovesLooseFilesToRecycleBinInBackground() => OnUiThread(() =>
+    public void MovesLooseFilesToRecycleBinInBackground()
     {
         ExplorerViewModel bridge = GameTab();
         string source = Write(Path.Combine(Work, "delete.txt"), "delete");
@@ -276,10 +276,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.False(File.Exists(source));
         Assert.Empty(bridge.EntriesModel);
         Assert.Equal("Moved 1 item to the Recycle Bin", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void RequestDeleteWithoutSelectionDoesNothing() => OnUiThread(() =>
+    public void RequestDeleteWithoutSelectionDoesNothing()
     {
         var bridge = new ExplorerViewModel();
         int confirmations = 0;
@@ -287,10 +287,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         bridge.RequestDeleteSelection();
         Assert.False(bridge.DeleteSelectedFiles());
         Assert.Equal(0, confirmations);
-    });
+    }
 
     [AvaloniaFact]
-    public void TabsReleaseArchiveHandlesAndRefreshSharedFolder() => OnUiThread(() =>
+    public void TabsReleaseArchiveHandlesAndRefreshSharedFolder()
     {
         string firstPath = SaveArchive(Path.Combine(Work, "hola", "first.rpf"));
         string secondPath = SaveArchive(Path.Combine(Work, "hola", "second.rpf"));
@@ -323,10 +323,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.Empty(first.EntriesModel);
         Assert.Empty(second.EntriesModel);
         Assert.False(second.EntryOperationBusy);
-    });
+    }
 
     [AvaloniaFact]
-    public void StaleMissingSelectionDoesNotBlockRemainingDeletions() => OnUiThread(() =>
+    public void StaleMissingSelectionDoesNotBlockRemainingDeletions()
     {
         string missing = Write(Path.Combine(Work, "first.txt"), "first");
         string remaining = Write(Path.Combine(Work, "second.txt"), "second");
@@ -340,10 +340,10 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.False(File.Exists(remaining));
         Assert.Empty(bridge.EntriesModel);
         Assert.Equal("Moved 1 item to the Recycle Bin", bridge.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public void MultiDeleteAttemptsEverySelectedFileAfterAFailure() => OnUiThread(() =>
+    public void MultiDeleteAttemptsEverySelectedFileAfterAFailure()
     {
         string blocked = Write(Path.Combine(Work, "blocked.txt"), "blocked");
         string movable = Write(Path.Combine(Work, "movable.txt"), "movable");
@@ -366,5 +366,5 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         Assert.Single(bridge.EntriesModel);
         Assert.Equal("Could not delete selected items: Could not move to the Recycle Bin: blocked.txt", bridge.Status);
         Assert.False(bridge.EntryOperationBusy);
-    });
+    }
 }

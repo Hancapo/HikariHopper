@@ -3,10 +3,10 @@ using Avalonia.Controls;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// The frameless main window (port of <c>main.qml</c>): 1360x840, at least 940x580, centred on
-/// the screen's working area, with the shared <see cref="Controls.WindowTitleBar"/> as a 38px
-/// title row that carries the explorer's menus, the 1px blue piping (rounded by the window manager
-/// on Windows 11) and invisible resize grips.
+/// The main window: 1360x840, at least 940x580, centred on the screen's working area. It is a native window whose
+/// client area covers its frame (Avalonia's extended client area), with the shared <see cref="Controls.WindowTitleBar"/>
+/// as a 38px title row that carries the explorer's menus; Windows keeps the frame's resizing, rounded corners, snap
+/// layouts, taskbar minimizing and animations.
 /// </summary>
 /// <remarks>
 /// The explorer screen goes into the <c>ExplorerScreenHost</c> placeholder <see cref="ContentControl"/>
@@ -19,7 +19,6 @@ public partial class MainWindow : Window
 {
     public MainWindow()
     {
-        QtFramelessWindow.Apply(this);
         InitializeComponent();
         ModalOverlay.StateChanged += OnModalStateChanged;
         Closed += (_, _) => ModalOverlay.StateChanged -= OnModalStateChanged;

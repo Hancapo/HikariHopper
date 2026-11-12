@@ -2,16 +2,16 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:v="using:HikariHopper.Views"
                      xmlns:c="using:HikariHopper.Views.Controls"
+                     xmlns:ui="using:HikariHopper.Ui"
                      x:Class="HikariHopper.Views.TextureRenameDialog"
-                     Heading="RENAME TEXTURE" BodyHeight="158" ApplyLabel="Rename">
-  <!-- Port of TextureRenameDialog.qml. -->
-  <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:TextureDialogSummary />
-    <Border Classes="rule" />
+                     Heading="RENAME TEXTURE" ApplyLabel="Rename">
+  <!-- Renames the selected texture: the field holds its name, so there is no header to say it again. What is wrong
+       with a name shows under the field while it is typed. -->
+  <c:QtColumnLayout Margin="12,14,12,14" Spacing="7">
     <v:QtGrid ColumnDefinitions="112,12,*">
-      <TextBlock Classes="label" Text="Texture name" />
-      <c:FlatTextField Name="NameField" Grid.Column="2" MaxLength="255" />
+      <TextBlock Classes="label" Text="Name" />
+      <c:FlatTextField Name="NameField" Grid.Column="2" Height="28" MaxLength="255" AutomationProperties.Name="Texture name" />
     </v:QtGrid>
-    <Panel c:QtColumnLayout.FillHeight="True" />
+    <Panel Name="ErrorHost" Margin="124,0,0,0" IsVisible="False" />
   </c:QtColumnLayout>
 </v:TextureToolDialog>

@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Threading;
 using HikariHopper.Rendering;
 using HikariHopper.Views.Controls;
 
@@ -18,7 +19,9 @@ namespace HikariHopper.Views;
 /// keyboard moves through them and shows, hides and frames what is selected; a right click offers the same. A filter
 /// over the rows narrows them by name. Rows come in sections: a fragment's body, its groups of drawables and its extras
 /// (toggles numbered as the game numbers them); a drawable dictionary's drawables by what they are, which can show one
-/// of each at a time.
+/// of each at a time. A fragment with a damaged state has a switch between it intact and damaged, and a drawable with
+/// embedded textures a row at the panel's foot that opens them. A collision or a navmesh lists what its colours mean instead: its materials, or its kinds of
+/// ground, edges, links and cover points, each row with its colour in place of the badge and how many wear it.
 /// </summary>
 internal sealed class PartsPanel : UserControl
 {
@@ -30,7 +33,7 @@ internal sealed class PartsPanel : UserControl
     private readonly HashSet<string> expanded = [];
     private readonly HashSet<string> swept = [];
     private readonly HashSet<string> selected = [];
-    private PartVisibility? parts;
+    private IPartList? parts;
     // While a press on an eye sweeps over the rows: what each is set to.
     private bool? sweepTo;
     // Where the keyboard is, and where a Shift range starts from.
@@ -118,6 +121,67 @@ internal sealed class PartsPanel : UserControl
         };
         DockPanel.SetDock(tools, Dock.Top);
 
+        // The drawable's embedded textures, at the panel's foot: how many, and a press opens them.
+        var texturesIcon = new LucideIcon
+        {
+            IconName = "image", Width = 14, Height = 14, Weight = 1.6, Stroke = Ui.Theme.InkAsset,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0),
+        };
+        var texturesGo = new LucideIcon
+        {
+            IconName = "chevron-right", Width = 11, Height = 11, Weight = 1.8, Stroke = Ui.Theme.TextDim,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        texturesCount.FontFamily = Ui.Theme.MonoFont;
+        texturesCount.FontSize = Ui.Theme.SmallFontSize;
+        texturesCount.Foreground = Ui.Theme.TextFaint;
+        texturesCount.VerticalAlignment = VerticalAlignment.Center;
+        texturesCount.Margin = new Thickness(8, 0, 0, 0);
+        DockPanel.SetDock(texturesIcon, Dock.Left);
+        DockPanel.SetDock(texturesGo, Dock.Right);
+        var texturesHit = new Border
+        {
+            Background = Brushes.Transparent,
+            CornerRadius = Ui.Theme.ItemCorner,
+            Padding = new Thickness(8, 0, 6, 0),
+            Height = 26,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = new DockPanel
+            {
+                Children =
+                {
+                    texturesIcon,
+                    texturesGo,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = "Embedded textures", FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize,
+                                Foreground = Ui.Theme.TextRow, VerticalAlignment = VerticalAlignment.Center,
+                            },
+                            texturesCount,
+                        },
+                    },
+                },
+            },
+        };
+        texturesHit.PointerEntered += (_, _) => texturesHit.Background = Ui.Theme.HoverBg;
+        texturesHit.PointerExited += (_, _) => texturesHit.Background = Brushes.Transparent;
+        PointerClick.Attach(texturesHit, _ => TexturesRequested?.Invoke());
+        ThemedToolTip.Set(texturesHit, "Open the embedded textures  (T)");
+        AutomationProperties.SetName(texturesHit, "Embedded textures");
+        TexturesRow.Child = texturesHit;
+        TexturesRow.Padding = new Thickness(4, 3, 4, 3);
+        TexturesRow.BorderBrush = Ui.Theme.BorderHard;
+        TexturesRow.BorderThickness = new Thickness(0, 1, 0, 0);
+        TexturesRow.IsVisible = false;
+        DockPanel.SetDock(TexturesRow, Dock.Bottom);
+
+        // The rows move under what points at one of them (the shader card) as they scroll or are laid out again.
+        rows.LayoutUpdated += (_, _) => RowsMoved?.Invoke();
         rows.Margin = new Thickness(0, 4, 0, 4);
         rows.Background = Brushes.Transparent;
         rows.PointerMoved += (_, e) =>
@@ -140,7 +204,7 @@ internal sealed class PartsPanel : UserControl
         rows.PointerCaptureLost += (_, _) => EndSweep();
         Content = new DockPanel
         {
-            Children = { header, tools, Scroller(rows) },
+            Children = { header, tools, TexturesRow, Scroller(rows) },
         };
         GotFocus += (_, _) => Refresh();
         LostFocus += (_, _) => Refresh();
@@ -168,8 +232,92 @@ internal sealed class PartsPanel : UserControl
         return scroller;
     }
 
+    private readonly TextBlock texturesCount = new();
+
+    /// <summary>The embedded textures' row at the panel's foot: there for a drawable that has some that can be opened.</summary>
+    internal Border TexturesRow { get; } = new();
+
+    /// <summary>How many embedded textures the row says there are, as shown.</summary>
+    internal string TexturesCountText => texturesCount.Text ?? "";
+
+    /// <summary>Raised when the embedded textures' row is pressed.</summary>
+    public event Action? TexturesRequested;
+
+    /// <summary>Asks for the embedded textures, as a press on their row does.</summary>
+    internal void RequestTextures()
+    {
+        if (TexturesRow.IsVisible)
+            TexturesRequested?.Invoke();
+    }
+
+    /// <summary>Shows the embedded textures' row with how many there are; none hides it.</summary>
+    public void ShowTextures(int count)
+    {
+        TexturesRow.IsVisible = count > 0;
+        texturesCount.Text = count.ToString(CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Raised when the user shows or hides parts.</summary>
     public event Action? Changed;
+
+    /// <summary>Raised when which rows are selected changes.</summary>
+    public event Action? SelectionChanged;
+
+    /// <summary>
+    /// Whether the menu offers the picked geometry's shader values: null for none (a collision, a navmesh), else
+    /// whether they can be shown for what is picked. <see cref="ShaderValuesRequested"/> shows them.
+    /// </summary>
+    internal Func<bool?>? ShaderValues { get; set; }
+
+    /// <summary>The menu's Shader values… was picked.</summary>
+    internal event Action? ShaderValuesRequested;
+
+    // The selection last told, to tell only when it changes.
+    private string[] toldSelection = [];
+
+    /// <summary>
+    /// Selects the first row a test picks, opening the rows it is under and scrolling to it, as picking it on the model
+    /// does; false when no row is picked.
+    /// </summary>
+    internal bool Reveal(Func<PartNode, bool> match)
+    {
+        List<PartNode>? Path(PartNode node)
+        {
+            if (match(node))
+                return [node];
+            foreach (PartNode child in node.Children)
+                if (Path(child) is { } below)
+                    return [node, .. below];
+            return null;
+        }
+        // The extras are toggles, not rows, so none of them can be selected.
+        foreach (PartSection section in sections.Where(section => section.Kind != PartSectionKind.Extras))
+            foreach (PartNode top in section.Nodes)
+                if (Path(top) is { } path)
+                {
+                    foreach (PartNode above in path.Take(path.Count - 1))
+                        expanded.Add(above.Key);
+                    if (Filter.Text is { Length: > 0 } && !path[^1].Name.Contains(Filter.Text.Trim(), StringComparison.OrdinalIgnoreCase))
+                        Filter.Text = "";
+                    selected.Clear();
+                    selected.Add(path[^1].Key);
+                    cursor = anchor = path[^1].Key;
+                    Refresh();
+                    if (rowControls.FirstOrDefault(row => Rows[row.Item2].Node.Key == path[^1].Key).Item1 is { } shown)
+                        shown.BringIntoView();
+                    return true;
+                }
+        return false;
+    }
+
+    /// <summary>Selects nothing, as a click on the model away from it does.</summary>
+    internal void ClearSelection()
+    {
+        if (selected.Count == 0)
+            return;
+        selected.Clear();
+        Refresh();
+    }
 
     /// <summary>Raised to turn the camera to these rows' parts: double-click, Enter, or Frame in the menu.</summary>
     public event Action<IReadOnlyList<PartNode>>? FrameRequested;
@@ -199,7 +347,7 @@ internal sealed class PartsPanel : UserControl
     /// The parts shown, or none; the panel lists them, the body's rows open, nothing selected. A drawable dictionary
     /// shows one drawable of each section until All is picked.
     /// </summary>
-    public PartVisibility? Parts
+    public IPartList? Parts
     {
         get => parts;
         set
@@ -213,12 +361,50 @@ internal sealed class PartsPanel : UserControl
                 if (section.Kind == PartSectionKind.Tree && section.Title is "" or "Body")
                     foreach (PartNode node in section.Nodes)
                         expanded.Add(node.Key);
+                // A fragment's state shown is open, the other closed.
+                else if (section.Kind == PartSectionKind.States)
+                    foreach (PartNode node in section.Nodes.Where(node => value!.State(node) != false))
+                        expanded.Add(node.Key);
             ModeRow.IsVisible = HasVariants;
             if (HasVariants && oneAtATime)
                 ApplyOneAtATime();
             Refresh();
         }
     }
+
+    /// <summary>
+    /// The same parts read or built again (with more of their textures, or a geometry given a shader entry of its own):
+    /// the rows open and selected, and the keyboard's place, stay, by key.
+    /// </summary>
+    internal void Replace(IPartList value)
+    {
+        string[] open = [.. expanded], picked = [.. selected];
+        (string? at, string? from) = (cursor, anchor);
+        replacing = true;
+        try
+        {
+            Parts = value;
+        }
+        finally
+        {
+            replacing = false;
+        }
+        // As they were, closed rows too: not the ones a new list opens.
+        expanded.Clear();
+        expanded.UnionWith(open);
+        selected.UnionWith(picked);
+        (cursor, anchor) = (at, from);
+        Refresh();
+    }
+
+    private bool replacing;
+
+    /// <summary>The row selected, when one alone is and it's listed: what the shader card points at.</summary>
+    internal Control? SelectedRow => Selection is [var node]
+        ? rowControls.FirstOrDefault(row => row.Index < Rows.Count && Rows[row.Index].Node.Key == node.Key).Row : null;
+
+    /// <summary>The rows moved: scrolled, or laid out again.</summary>
+    public event Action? RowsMoved;
 
     private bool HasVariants => sections.Any(section => section.Kind == PartSectionKind.Variants);
 
@@ -258,10 +444,12 @@ internal sealed class PartsPanel : UserControl
         Changed?.Invoke();
     }
 
-    /// <summary>The variant section a row is in, while one of each shows at a time; none otherwise.</summary>
-    private PartSection? RadioSection(PartNode node) => oneAtATime
-        ? sections.FirstOrDefault(section => section.Kind == PartSectionKind.Variants && section.Nodes.Any(each => each.Key == node.Key))
-        : null;
+    /// <summary>
+    /// The section a row picks one of: a fragment's states, always, or a variant section while one of each shows at a
+    /// time; none otherwise.
+    /// </summary>
+    private PartSection? RadioSection(PartNode node) => sections.FirstOrDefault(section =>
+        (section.Kind == PartSectionKind.States || (oneAtATime && section.Kind == PartSectionKind.Variants)) && section.Nodes.Any(each => each.Key == node.Key));
 
     /// <summary>Shows a drawable of a variant section in place of the one shown.</summary>
     internal void Pick(PartNode node)
@@ -269,9 +457,25 @@ internal sealed class PartsPanel : UserControl
         if (parts is null || RadioSection(node) is not { } section)
             return;
         foreach (PartNode each in section.Nodes)
+        {
             parts.Show(each, each.Key == node.Key);
+            // A fragment's state picked opens, and the other closes.
+            if (section.Kind == PartSectionKind.States && each.Children.Count > 0)
+                if (each.Key == node.Key)
+                    expanded.Add(each.Key);
+                else
+                    expanded.Remove(each.Key);
+        }
         Changed?.Invoke();
         Refresh();
+    }
+
+    /// <summary>Shows a fragment intact or damaged, as picking its state's row does.</summary>
+    internal void PickState(bool damaged)
+    {
+        string key = damaged ? PartVisibility.DamagedKey : PartVisibility.IntactKey;
+        if (sections.Where(section => section.Kind == PartSectionKind.States).SelectMany(section => section.Nodes).FirstOrDefault(node => node.Key == key) is { } state)
+            Pick(state);
     }
 
     /// <summary>The rows shown, in order, for tests: each a node and whether it is open.</summary>
@@ -473,6 +677,8 @@ internal sealed class PartsPanel : UserControl
     /// <summary>Lists the rows again, after the level, the filter or what is shown or selected changed.</summary>
     public void Refresh()
     {
+        // The rows of the level and the state shown.
+        sections = parts?.Sections() ?? [];
         rows.Children.Clear();
         rowControls.Clear();
         var listed = new List<(PartNode, bool)>();
@@ -536,7 +742,16 @@ internal sealed class PartsPanel : UserControl
         }
         Rows = listed;
         selected.IntersectWith(listed.Select(row => row.Item1.Key));
+        string[] now = [.. selected.Order(StringComparer.Ordinal)];
+        // Midway through a replace, the selection is put back before it's told.
+        if (!replacing && !now.SequenceEqual(toldSelection))
+        {
+            toldSelection = now;
+            SelectionChanged?.Invoke();
+        }
         bool allOpen = AllExpanded;
+        // A flat list (a collision's materials) has nothing to open or close.
+        ExpandButton.IsVisible = TreeNodes().Any(node => node.Children.Count > 0);
         ExpandButton.IconKind = allOpen ? "collapse-all" : "expand-all";
         ThemedToolTip.Set(ExpandButton, allOpen ? "Collapse all" : "Expand all");
         AutomationProperties.SetName(ExpandButton, allOpen ? "Collapse all" : "Expand all");
@@ -622,6 +837,7 @@ internal sealed class PartsPanel : UserControl
         PartKind.Group => ("S", Ui.Theme.InkAsset, "Set of drawables"),
         PartKind.Child => ("C", Ui.Theme.Brass, "Child model, bound to a bone"),
         PartKind.Geometry => ("G", Ui.Theme.InkData, "Geometry, named by its shader"),
+        PartKind.State => ("F", Ui.Theme.Brass, "Fragment state, with what is drawn only in it"),
         _ => ("D", Ui.Theme.Accent, "Drawable"),
     };
 
@@ -722,7 +938,18 @@ internal sealed class PartsPanel : UserControl
         grid.Children.Add(eye);
 
         (string letter, IImmutableSolidColorBrush badgeInk, string kind) = Badge(node.Kind);
-        var badge = new Border
+        // A mark wears the colour it is drawn in: the row is the legend's entry.
+        Control badge = node.Colour is { } colour ? new Border
+        {
+            Width = 10,
+            Height = 10,
+            CornerRadius = new CornerRadius(2),
+            Background = new ImmutableSolidColorBrush(ViewportMesh.Unpack(colour)),
+            Opacity = state == false ? .4 : 1,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        }
+        : new Border
         {
             Width = 14,
             Height = 14,
@@ -767,7 +994,9 @@ internal sealed class PartsPanel : UserControl
         };
         Grid.SetColumn(triangles, 5);
         grid.Children.Add(triangles);
-        ThemedToolTip.Set(grid, $"{node.Name}\n{kind} · {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)} triangles");
+        ThemedToolTip.Set(grid, node.Kind == PartKind.Mark
+            ? $"{node.Name}: {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)}"
+            : $"{node.Name}\n{kind} · {node.Triangles.ToString("N0", CultureInfo.InvariantCulture)} triangles");
 
         IBrush rest = isSelected ? (focused ? Ui.Theme.Selection : Ui.Theme.SelectionWash) : Brushes.Transparent;
         var row = new Border { CornerRadius = Ui.Theme.ItemCorner, Child = grid, Background = rest, Margin = new Thickness(4, 0, 4, 0) };
@@ -797,7 +1026,11 @@ internal sealed class PartsPanel : UserControl
                 Focus();
                 if (!selected.Contains(node.Key))
                     Select(node);
-                OpenMenu(row, e.GetPosition(row));
+                // At the pointer in the panel, not on the row: picking a row draws the rows again, and the menu, anchored
+                // on a row gone from the window, didn't open; only a second right click, the row picked by then, opened
+                // it. And once what the new pick sets off has run, so a window it shows can't take the keyboard from it.
+                Point at = e.GetPosition(this);
+                Dispatcher.UIThread.Post(() => OpenMenu(this, at), DispatcherPriority.Background);
                 e.Handled = true;
             }
         };
@@ -813,9 +1046,9 @@ internal sealed class PartsPanel : UserControl
             return;
         bool allShown = nodes.All(node => parts.State(node) == true);
         var items = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 200 };
-        void Item(string icon, string text, string shortcut, Action action)
+        void Item(string icon, string text, string shortcut, Action action, bool enabled = true)
         {
-            var row = new MenuRowItem(icon, text, shortcut);
+            var row = new MenuRowItem(icon, text, shortcut) { IsEnabled = enabled };
             row.Triggered += () =>
             {
                 menu?.Close();
@@ -823,13 +1056,19 @@ internal sealed class PartsPanel : UserControl
             };
             items.Children.Add(row);
         }
+        // First, the shader values of the one geometry picked; there but off for anything else picked.
+        if (ShaderValues?.Invoke() is { } canShow)
+        {
+            Item("palette", "Shader values…", "M", () => ShaderValuesRequested?.Invoke(), enabled: canShow);
+            items.Children.Add(new RetroMenuSeparator());
+        }
         Item("eye", "Show only", "Alt+click", () => ShowOnly(nodes));
         if (allShown)
             Item("eye-off", "Hide", "Del", () => SetShown(nodes, false));
         else
             Item("eye", "Show", "Space", () => SetShown(nodes, true));
         Item("eye", "Show all", "", ShowAll);
-        items.Children.Add(new Border { Height = 1, Margin = new Thickness(8, 4), Background = Ui.Theme.BorderSoft });
+        items.Children.Add(new RetroMenuSeparator());
         Item("focus", "Frame", "Enter", FrameSelection);
         Item("copy", nodes.Count == 1 ? "Copy name" : "Copy names", "Ctrl+C", () => _ = CopyNames());
         menu = DropdownWindow.OpenAt(anchor, at, items);
@@ -957,12 +1196,21 @@ internal sealed class PartsPanel : UserControl
             DockPanel.SetDock(key, Dock.Right);
             Child = new Panel { Children = { icon, new DockPanel { Margin = new Thickness(32, 0, 10, 0), Children = { key, label } } } };
             Paint(false);
-            PointerEntered += (_, _) => Paint(true);
+            PointerEntered += (_, _) => Paint(IsEnabled);
             PointerExited += (_, _) => Paint(false);
             PointerReleased += (_, e) =>
             {
-                if (e.InitialPressMouseButton == MouseButton.Left)
+                if (IsEnabled && e.InitialPressMouseButton == MouseButton.Left)
                     Triggered?.Invoke();
+            };
+            // Off, it's there to say what could be done, faded as the app's buttons that can't be used are.
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property == IsEnabledProperty)
+                {
+                    Opacity = IsEnabled ? 1 : ChromeToolButton.DisabledOpacity;
+                    Cursor = IsEnabled ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
+                }
             };
         }
 
@@ -971,8 +1219,12 @@ internal sealed class PartsPanel : UserControl
 
         public event Action? Triggered;
 
-        /// <summary>Runs the item, as a click on it does.</summary>
-        internal void Trigger() => Triggered?.Invoke();
+        /// <summary>Runs the item, as a click on it does, unless it's off.</summary>
+        internal void Trigger()
+        {
+            if (IsEnabled)
+                Triggered?.Invoke();
+        }
 
         private void Paint(bool highlighted)
         {

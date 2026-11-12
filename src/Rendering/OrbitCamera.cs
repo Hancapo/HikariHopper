@@ -26,12 +26,16 @@ internal sealed class OrbitCamera
     /// <summary>Azimuth in radians.</summary>
     public float Yaw { get; private set; } = -1;
 
-    /// <summary>Elevation in radians, kept away from the poles.</summary>
+    /// <summary>Elevation in radians, kept a hair from the poles (<see cref="MaxPitch"/>).</summary>
     public float Pitch { get; private set; } = .35f;
 
-    public Vector3 Eye => Center + new Vector3(MathF.Cos(Pitch) * MathF.Cos(Yaw), MathF.Cos(Pitch) * MathF.Sin(Yaw), MathF.Sin(Pitch)) * Distance;
+    public Vector3 Eye => Center - Forward * Distance;
 
-    public Vector3 Forward => Vector3.Normalize(Center - Eye);
+    /// <summary>
+    /// Where it looks, from its yaw and pitch alone: taking it from the centre and the eye would lose the level part far
+    /// from the origin near the poles, and leave no right.
+    /// </summary>
+    public Vector3 Forward => -new Vector3(MathF.Cos(Pitch) * MathF.Cos(Yaw), MathF.Cos(Pitch) * MathF.Sin(Yaw), MathF.Sin(Pitch));
 
     public Vector3 Right => Vector3.Normalize(Vector3.Cross(Forward, Vector3.UnitZ));
 
@@ -81,7 +85,44 @@ internal sealed class OrbitCamera
     public void Orbit(float dx, float dy)
     {
         Yaw = MathF.IEEERemainder(Yaw - dx * .006f, MathF.Tau);
-        Pitch = Math.Clamp(Pitch + dy * .006f, -1.5f, 1.5f);
+        Pitch = Math.Clamp(Pitch + dy * .006f, -MaxPitch, MaxPitch);
+    }
+
+    /// <summary>
+    /// The furthest the camera tilts up or down: all but straight, so the view keeps a right and an up (a hair from the
+    /// pole, which no one sees).
+    /// </summary>
+    public const float MaxPitch = MathF.PI / 2 - .001f;
+
+    /// <summary>
+    /// Turns to look from along a world axis (+X, -Y, +Z…), as a 3D tool's axis gizmo does: from the side, level; from
+    /// above or below, straight down or up, with +Y up the screen (so from below +X is on the left). It looks at the centre from there, at the distance it
+    /// is at; the viewer frames what it shows first, so a click shows it whole from that side.
+    /// </summary>
+    public void LookFrom(Vector3 axis)
+    {
+        if (MathF.Abs(axis.Z) > MathF.Abs(axis.X) && MathF.Abs(axis.Z) > MathF.Abs(axis.Y))
+        {
+            Yaw = -MathF.Sign(axis.Z) * MathF.PI / 2;
+            Pitch = MathF.Sign(axis.Z) * MaxPitch;
+        }
+        else
+        {
+            Yaw = MathF.Atan2(axis.Y, axis.X);
+            Pitch = 0;
+        }
+    }
+
+    /// <summary>
+    /// The ray from the eye through a pixel of a view <paramref name="width"/> by <paramref name="height"/> pixels, in
+    /// the world, for picking what is under the pointer.
+    /// </summary>
+    public (Vector3 Origin, Vector3 Direction) Ray(float x, float y, float width, float height)
+    {
+        float aspect = width / Math.Max(height, 1);
+        float across = (2 * (x + .5f) / Math.Max(width, 1) - 1) * TanHalf * aspect;
+        float up = (1 - 2 * (y + .5f) / Math.Max(height, 1)) * TanHalf;
+        return (Eye, Vector3.Normalize(Forward + Right * across + Up * up));
     }
 
     /// <summary>Moves closer for positive wheel steps, further for negative.</summary>

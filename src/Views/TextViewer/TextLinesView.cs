@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Media;
 using Avalonia.Threading;
 using HikariHopper.Core;
@@ -30,6 +31,11 @@ public readonly record struct TextMatch(int Line, int Column, int Length);
 /// the caret's line washed, a selection, and the find's matches. The type is monospaced, so columns,
 /// wrapping and hit-testing are exact sums. It sits in <see cref="Scroller"/>, which it sizes itself for.
 /// </summary>
+/// <remarks>
+/// The text is edited as typed: each edit replaces a stretch of the file's own text (tabs as tabs) in the
+/// <see cref="TextDocument"/>, and only the lines it touched are coloured and shaped again. Positions here are shown
+/// columns, always where one of the file's own characters starts, so a caret never sits inside a tab's spaces.
+/// </remarks>
 public sealed class TextLinesView : Control
 {
     private const double BaseFontSize = Ui.Theme.FontSize;
@@ -37,7 +43,11 @@ public sealed class TextLinesView : Control
     private const double TextPadding = 10;
 
     private TextDocument? document;
-    private byte[] states = [];
+    // The state each line starts in, for colouring (TextHighlighter.States); kept in step as lines come and go.
+    private List<byte> states = [];
+    private TextHistory history = new();
+    // While an edit (or an undo) puts the caret where it lands: that is no move of the caret's own.
+    private bool editing;
     private readonly Dictionary<int, List<TextSpan>> spans = [];
     // Each drawn row's shaped, coloured text, by line and the columns drawn: a redraw then only shapes the rows
     // new to it. Cleared whenever what a row looks like can change (the text, the type's size, the matches).
@@ -74,6 +84,9 @@ public sealed class TextLinesView : Control
     public TextLinesView()
     {
         Focusable = true;
+        // An input method (Japanese, Chinese...) composes in its own window by the caret, then types what it made.
+        ime = new CaretInputClient(this);
+        TextInputMethodClientRequested += (_, e) => e.Client = ime;
         Cursor = TextCursor;
         ClipToBounds = false;
         UpdateMetrics();
@@ -88,6 +101,9 @@ public sealed class TextLinesView : Control
 
     /// <summary>The caret moved, or the selection changed.</summary>
     public event EventHandler? CaretMoved;
+
+    /// <summary>The text was edited, an edit was undone or done again.</summary>
+    public event EventHandler? TextChanged;
 
     /// <summary>The scroll viewer this view is the content of, which it draws a screen of.</summary>
     public ScrollViewer? Scroller
@@ -108,10 +124,15 @@ public sealed class TextLinesView : Control
         get => document;
         set
         {
+            if (document is not null)
+                document.Changed -= OnDocumentChanged;
             document = value;
+            if (document is not null)
+                document.Changed += OnDocumentChanged;
+            history = new TextHistory();
             spans.Clear();
             shaped.Clear();
-            states = value is null ? [] : TextHighlighter.States(value.Format, value.Lines);
+            states = value is null ? [] : [.. TextHighlighter.States(value.Format, value.Lines)];
             maxColumns = value is null || value.Lines.Count == 0 ? 0 : value.Lines.Max(line => line.Length);
             anchor = caret = default;
             matches = [];
@@ -182,7 +203,7 @@ public sealed class TextLinesView : Control
         }
     }
 
-    /// <summary>The selected text, lines joined by the file's own line ending.</summary>
+    /// <summary>The selected text as the file has it: tabs as tabs, each line's own break.</summary>
     public string SelectedText
     {
         get
@@ -190,32 +211,23 @@ public sealed class TextLinesView : Control
             if (document is null || !HasSelection)
                 return "";
             (TextPosition start, TextPosition end) = Selection;
-            string newline = document.LineEnding == "CRLF" ? "\r\n" : document.LineEnding == "CR" ? "\r" : "\n";
-            var builder = new System.Text.StringBuilder();
-            for (int line = start.Line; line <= end.Line; line++)
-            {
-                int length = document.Lines[line].Length;
-                int from = line == start.Line ? Math.Min(start.Column, length) : 0;
-                int to = line == end.Line ? Math.Min(end.Column, length) : length;
-                // From the file's own line, so tabs stay tabs.
-                builder.Append(document.RawSlice(line, from, to));
-                if (line < end.Line)
-                    builder.Append(newline);
-            }
-            return builder.ToString();
+            return document.RawText(Raw(start), Raw(end)).ToString();
         }
     }
 
     /// <summary>The width of the gutter, which grows with the number of digits in the last line number.</summary>
     public double GutterWidth => (Math.Max(3, ((document?.Lines.Count ?? 0) + 1).ToString().Length) * charWidth) + 26;
 
-    /// <summary>The find's matches, and which one is current (-1 for none).</summary>
-    public void SetMatches(IReadOnlyList<TextMatch> found, int current)
+    /// <summary>
+    /// The find's matches, and which one is current (-1 for none), which is selected and brought into view unless
+    /// <paramref name="select"/> is false: the find run again after an edit leaves the caret where the typing is.
+    /// </summary>
+    public void SetMatches(IReadOnlyList<TextMatch> found, int current, bool select = true)
     {
         matches = found;
         currentMatch = current;
         shaped.Clear();
-        if (current >= 0 && current < found.Count)
+        if (select && current >= 0 && current < found.Count)
         {
             TextMatch match = found[current];
             SetSelection(new TextPosition(match.Line, match.Column), new TextPosition(match.Line, match.Column + match.Length), scroll: false);
@@ -244,6 +256,10 @@ public sealed class TextLinesView : Control
         bool changed = newAnchor != anchor || newCaret != caret;
         anchor = newAnchor;
         caret = newCaret;
+        // The caret moved by itself: what is typed next is an edit of its own, not more of the last.
+        if (!editing && changed)
+            history.Seal();
+        ime.Moved();
         if (scroll)
             BringIntoView(caret, centre: false);
         RestartBlink();
@@ -252,11 +268,30 @@ public sealed class TextLinesView : Control
             CaretMoved?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>The nearest place the caret can be: in the text, and where one of the file's own characters starts.</summary>
     private TextPosition Clamp(TextPosition position)
     {
         int line = Math.Clamp(position.Line, 0, document!.Lines.Count - 1);
-        return new TextPosition(line, Math.Clamp(position.Column, 0, document.Lines[line].Length));
+        int column = Math.Clamp(position.Column, 0, document.Lines[line].Length);
+        int index = document.ToRaw(line, column);
+        int before = document.ToShown(line, index);
+        if (before != column)
+        {
+            // Inside a tab's spaces: to whichever end of the tab is nearer.
+            int after = document.ToShown(line, index + 1);
+            column = column - before <= after - column ? before : after;
+        }
+        else if (index > 0 && document.RawLine(line) is var own && index < own.Length && char.IsSurrogatePair(own[index - 1], own[index]))
+        {
+            // Between the two halves of a surrogate pair (an emoji, say): to before the pair, so it is never split.
+            column = document.ToShown(line, index - 1);
+        }
+        return new TextPosition(line, column);
     }
+
+    private RawPosition Raw(TextPosition position) => new(position.Line, document!.ToRaw(position.Line, position.Column));
+
+    private TextPosition Shown(RawPosition position) => new(position.Line, document!.ToShown(position.Line, position.Index));
 
     /// <summary>The caret shows at once after it moves, then blinks.</summary>
     private void RestartBlink()
@@ -565,8 +600,10 @@ public sealed class TextLinesView : Control
         {
             Key.Left when ctrl => WordStep(caret, -1),
             Key.Right when ctrl => WordStep(caret, 1),
-            Key.Left => caret.Column > 0 ? caret with { Column = caret.Column - 1 } : caret.Line > 0 ? new TextPosition(caret.Line - 1, document.Lines[caret.Line - 1].Length) : caret,
-            Key.Right => caret.Column < line.Length ? caret with { Column = caret.Column + 1 } : caret.Line < document.Lines.Count - 1 ? new TextPosition(caret.Line + 1, 0) : caret,
+            Key.Left when HasSelection && !shift => Selection.Start,
+            Key.Right when HasSelection && !shift => Selection.End,
+            Key.Left => CharStep(caret, -1),
+            Key.Right => CharStep(caret, 1),
             Key.Up => caret with { Line = caret.Line - 1 },
             Key.Down => caret with { Line = caret.Line + 1 },
             Key.PageUp => caret with { Line = caret.Line - page },
@@ -581,12 +618,282 @@ public sealed class TextLinesView : Control
         {
             MoveCaret(position, extend: shift);
             e.Handled = true;
+            return;
         }
-        else if (ctrl && e.Key == Key.A)
+        bool alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        switch (e.Key)
         {
-            SelectAll();
-            e.Handled = true;
+            case Key.A when ctrl:
+                SelectAll();
+                break;
+            case Key.Back when !alt:
+                Backspace(byWord: ctrl);
+                break;
+            case Key.Delete when !alt && !shift:
+                DeleteForward(byWord: ctrl);
+                break;
+            case Key.Enter when !ctrl && !alt:
+                NewLine();
+                break;
+            // A tab character, as the file has them; the focus stays in the text.
+            case Key.Tab when !ctrl && !alt && !shift:
+                Type("\t");
+                break;
+            default:
+                return;
         }
+        e.Handled = true;
+    }
+
+    protected override void OnTextInput(TextInputEventArgs e)
+    {
+        base.OnTextInput(e);
+        if (document is null || e.Handled || string.IsNullOrEmpty(e.Text))
+            return;
+        // Enter, Tab and Backspace are keys of their own: only what they leave is typed.
+        string text = string.Concat(e.Text.Where(value => !char.IsControl(value)));
+        if (text.Length == 0)
+            return;
+        Type(text);
+        e.Handled = true;
+    }
+
+    // ---------------- Editing ----------------
+
+    public bool CanUndo => history.CanUndo;
+
+    public bool CanRedo => history.CanRedo;
+
+    /// <summary>Whether the text differs from how it was read, or last saved.</summary>
+    public bool IsModified => history.IsModified;
+
+    /// <summary>Which state the text is in now, to tell <see cref="MarkSaved"/> once it is saved.</summary>
+    public int EditState => history.State;
+
+    /// <summary>The next edit is a step of its own: what is typed while a save is under way isn't joined to what it saves.</summary>
+    public void SealEdits() => history.Seal();
+
+    /// <summary>The text as it was in <paramref name="state"/> was saved.</summary>
+    public void MarkSaved(int state) => history.MarkSaved(state);
+
+    /// <summary>Types <paramref name="text"/> (one line) over the selection, or at the caret; a run of typing is one undo step.</summary>
+    public void Type(string text)
+    {
+        if (document is null || text.Length == 0)
+            return;
+        (TextPosition start, TextPosition end) = Selection;
+        Edit(start, end, new TextRun([text], []), TextEditKind.Typing);
+    }
+
+    /// <summary>Puts <paramref name="text"/> in place of the selection, its line breaks the file's own.</summary>
+    public void Paste(string text)
+    {
+        if (document is null || text.Length == 0)
+            return;
+        (TextPosition start, TextPosition end) = Selection;
+        Edit(start, end, TextRun.Of(text, document.NewLine), TextEditKind.Other);
+    }
+
+    /// <summary>Takes the selection out, and gives back what it was; "" with nothing selected.</summary>
+    public string Cut()
+    {
+        if (document is null || !HasSelection)
+            return "";
+        string text = SelectedText;
+        (TextPosition start, TextPosition end) = Selection;
+        Edit(start, end, TextRun.Empty, TextEditKind.Other);
+        return text;
+    }
+
+    /// <summary>Starts a new line at the caret, indented as the line it leaves.</summary>
+    public void NewLine()
+    {
+        if (document is null)
+            return;
+        (TextPosition start, TextPosition end) = Selection;
+        string own = document.RawLine(start.Line);
+        int indent = 0, limit = document.ToRaw(start.Line, start.Column);
+        while (indent < limit && own[indent] is ' ' or '\t')
+            indent++;
+        Edit(start, end, new TextRun(["", own[..indent]], [document.NewLine]), TextEditKind.Other);
+    }
+
+    /// <summary>Backspace: the selection, or the character (or with <paramref name="byWord"/>, the word) before the caret.</summary>
+    public void Backspace(bool byWord = false)
+    {
+        if (document is null)
+            return;
+        if (HasSelection)
+        {
+            (TextPosition start, TextPosition end) = Selection;
+            Edit(start, end, TextRun.Empty, TextEditKind.Other);
+            return;
+        }
+        TextPosition from = byWord ? WordStep(caret, -1) : CharStep(caret, -1);
+        if (from != caret)
+            Edit(from, caret, TextRun.Empty, TextEditKind.DeleteBack);
+    }
+
+    /// <summary>Delete: the selection, or the character (or with <paramref name="byWord"/>, the word) after the caret.</summary>
+    public void DeleteForward(bool byWord = false)
+    {
+        if (document is null)
+            return;
+        if (HasSelection)
+        {
+            (TextPosition start, TextPosition end) = Selection;
+            Edit(start, end, TextRun.Empty, TextEditKind.Other);
+            return;
+        }
+        TextPosition to = byWord ? WordStep(caret, 1) : CharStep(caret, 1);
+        if (to != caret)
+            Edit(caret, to, TextRun.Empty, TextEditKind.DeleteForward);
+    }
+
+    /// <summary>Takes back the last step, the selection as it was before it; false when there is none.</summary>
+    public bool Undo()
+    {
+        if (document is null || history.Undo() is not { } step)
+            return false;
+        document.Replace(step.Start, step.InsertedEnd, step.Removed);
+        Land(Shown(step.AnchorBefore), Shown(step.CaretBefore));
+        return true;
+    }
+
+    /// <summary>Does the last step undone again, the caret after it; false when there is none.</summary>
+    public bool Redo()
+    {
+        if (document is null || history.Redo() is not { } step)
+            return false;
+        TextPosition after = Shown(document.Replace(step.Start, step.RemovedEnd, step.Inserted));
+        Land(after, after);
+        return true;
+    }
+
+    /// <summary>Replaces shown <paramref name="from"/> to <paramref name="to"/> with <paramref name="run"/>, as an undo step.</summary>
+    private void Edit(TextPosition from, TextPosition to, TextRun run, TextEditKind kind)
+    {
+        RawPosition start = Raw(from), end = Raw(to);
+        TextRun removed = document!.RawText(start, end);
+        if (removed.IsEmpty && run.IsEmpty)
+            return;
+        RawPosition anchorBefore = Raw(anchor), caretBefore = Raw(caret);
+        RawPosition after = document.Replace(start, end, run);
+        history.Record(new TextEdit(start, removed, end, run, after, anchorBefore, caretBefore, kind));
+        TextPosition landing = Shown(after);
+        Land(landing, landing);
+    }
+
+    /// <summary>Puts the selection where an edit left it, in view once the view has taken the new lines' measure.</summary>
+    private void Land(TextPosition from, TextPosition to)
+    {
+        editing = true;
+        try
+        {
+            // Laid out now, so the scroll that brings the caret into view can reach a line just added.
+            Scroller?.UpdateLayout();
+            SetSelection(from, to, scroll: true);
+        }
+        finally
+        {
+            editing = false;
+        }
+        TextChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Lines were replaced: their colouring states are worked out again from the first, only as far as they change;
+    /// what was shaped is let go of; the widest line and the wrapped rows are kept up.
+    /// </summary>
+    private void OnDocumentChanged(object? sender, TextChange change)
+    {
+        TextDocument text = document!;
+        if (change.RemovedLines != change.InsertedLines)
+        {
+            states.RemoveRange(change.Line + 1, change.RemovedLines - 1);
+            states.InsertRange(change.Line + 1, new byte[change.InsertedLines - 1]);
+        }
+        byte state = states[change.Line];
+        for (int line = change.Line; line < text.Lines.Count; line++)
+        {
+            if (line >= change.Line + change.InsertedLines && states[line] == state)
+                break;
+            states[line] = state;
+            state = TextHighlighter.Advance(text.Format, text.Lines[line], state);
+        }
+        spans.Clear();
+        shaped.Clear();
+
+        int longest = 0;
+        for (int line = change.Line; line < change.Line + change.InsertedLines; line++)
+            longest = Math.Max(longest, text.Lines[line].Length);
+        if (longest >= maxColumns)
+            maxColumns = longest;
+        else if (change.RemovedLongest >= maxColumns)
+            maxColumns = text.Lines.Max(line => line.Length);
+
+        // Wrapped, lines that each still take as many rows leave every row where it was.
+        bool rowsMoved = !wrap || change.RemovedLines != change.InsertedLines
+            || rowStarts.Length <= change.Line + change.RemovedLines;
+        for (int line = change.Line; !rowsMoved && line < change.Line + change.InsertedLines; line++)
+            rowsMoved = Math.Max(1, (int)(((long)text.Lines[line].Length + columnsPerRow - 1) / columnsPerRow))
+                != rowStarts[line + 1] - rowStarts[line];
+        if (rowsMoved)
+            InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    /// <summary>One of the file's own characters on from <paramref name="at"/> (a tab, a surrogate pair whole), or over a line break.</summary>
+    private TextPosition CharStep(TextPosition at, int direction)
+    {
+        string own = document!.RawLine(at.Line);
+        int index = document.ToRaw(at.Line, at.Column);
+        if (direction < 0)
+        {
+            if (index == 0)
+                return at.Line > 0 ? new TextPosition(at.Line - 1, document.Lines[at.Line - 1].Length) : at;
+            index -= index >= 2 && char.IsSurrogatePair(own[index - 2], own[index - 1]) ? 2 : 1;
+        }
+        else
+        {
+            if (index >= own.Length)
+                return at.Line < document.Lines.Count - 1 ? new TextPosition(at.Line + 1, 0) : at;
+            index += index + 1 < own.Length && char.IsSurrogatePair(own[index], own[index + 1]) ? 2 : 1;
+        }
+        return at with { Column = document.ToShown(at.Line, index) };
+    }
+
+    /// <summary>Where the caret is drawn, in the view.</summary>
+    private Rect CaretRect()
+    {
+        int row = !wrap ? caret.Line
+            : rowStarts.Length > caret.Line ? rowStarts[caret.Line] + caret.Column / Math.Max(1, columnsPerRow) : 0;
+        int column = wrap ? caret.Column % Math.Max(1, columnsPerRow) : caret.Column;
+        return new Rect(GutterWidth + TextPadding + column * charWidth, TextPadding + row * LineHeight, 1, LineHeight);
+    }
+
+    private readonly CaretInputClient ime;
+
+    /// <summary>
+    /// What an input method asks of the view: where the caret is, so its composing window opens there. It composes in
+    /// that window of its own and types what it made, which <see cref="OnTextInput"/> takes as typing.
+    /// </summary>
+    private sealed class CaretInputClient(TextLinesView view) : TextInputMethodClient
+    {
+        public override Visual TextViewVisual => view;
+
+        public override bool SupportsPreedit => false;
+
+        public override bool SupportsSurroundingText => false;
+
+        public override string SurroundingText => "";
+
+        public override Rect CursorRectangle => view.document is null ? default : view.CaretRect();
+
+        public override TextSelection Selection { get; set; }
+
+        /// <summary>The caret moved: the composing window follows it.</summary>
+        public void Moved() => RaiseCursorRectangleChanged();
     }
 
     private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)

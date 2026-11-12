@@ -45,7 +45,7 @@ public sealed class ClipboardTests
     [InlineData("opaque")]
     [InlineData("snapshot")]
     [InlineData("multiple")]
-    public Task PasteAddsANewTexture(string scenario) => Headless.Run(async () =>
+    public async Task PasteAddsANewTexture(string scenario)
     {
         var (viewer, clipboard, before, selection) = await PasteSetup(scenario);
         Assert.False(viewer.PasteCanReplace);
@@ -69,10 +69,10 @@ public sealed class ClipboardTests
         else
             Assert.InRange(pixel[3], 80, 120);
         AssertUndoRestores(viewer, before, selection);
-    });
+    }
 
     [AvaloniaFact]
-    public Task PasteReplacesTheSelectedTexture() => Headless.Run(async () =>
+    public async Task PasteReplacesTheSelectedTexture()
     {
         var (viewer, _, before, selection) = await PasteSetup("replace");
         before[viewer.SelectedIndex].Usage = TextureUsage.Diffuse;
@@ -88,10 +88,10 @@ public sealed class ClipboardTests
         Assert.Same(before[1 - target], after[1 - target]);
         Assert.Equal((before[target].Usage, before[target].UsageFlags), (after[target].Usage, after[target].UsageFlags));
         AssertUndoRestores(viewer, before, selection);
-    });
+    }
 
     [AvaloniaFact]
-    public Task PasteValidatesNewNames() => Headless.Run(async () =>
+    public async Task PasteValidatesNewNames()
     {
         var (viewer, _, before, _) = await PasteSetup("validation");
         Assert.Equal("Enter a texture name", viewer.PasteNameError("   "));
@@ -109,10 +109,10 @@ public sealed class ClipboardTests
         Assert.False(viewer.PastePending);
         Assert.False(viewer.Modified);
         Assert.False(viewer.CanUndo);
-    });
+    }
 
     [AvaloniaFact]
-    public Task StalePasteIsDiscarded() => Headless.Run(async () =>
+    public async Task StalePasteIsDiscarded()
     {
         var (viewer, _, _, _) = await PasteSetup("stale");
         viewer.CloseDocument();
@@ -120,10 +120,10 @@ public sealed class ClipboardTests
         Assert.False(viewer.PasteImage(true, "ignored"));
         Assert.False(viewer.HasDocument);
         Assert.False(viewer.PastePending);
-    });
+    }
 
     [AvaloniaFact]
-    public Task FailedPasteKeepsTheDocument() => Headless.Run(async () =>
+    public async Task FailedPasteKeepsTheDocument()
     {
         var (viewer, _, before, _) = await PasteSetup("failure");
         viewer.TextureFromClipboardImage = (_, _) => throw new ArgumentException("simulated paste failure");
@@ -134,7 +134,7 @@ public sealed class ClipboardTests
         Assert.Equal("Paste failed: simulated paste failure", viewer.Status);
         Assert.False(viewer.OperationBusy);
         Assert.False(viewer.CanUndo);
-    });
+    }
 
     private static void AssertUndoRestores(TextureViewerViewModel viewer, Texture[] before, int[] selection)
     {
@@ -163,7 +163,7 @@ public sealed class ClipboardTests
     }
 
     [AvaloniaFact]
-    public Task CopiesTheBaseMipWithoutChangingThePreview() => Headless.Run(async () =>
+    public async Task CopiesTheBaseMipWithoutChangingThePreview()
     {
         var (viewer, clipboard) = await CopySetup();
         viewer.SetChannel("r");
@@ -192,10 +192,10 @@ public sealed class ClipboardTests
         Assert.False(viewer.Modified);
         Assert.False(viewer.CanUndo);
         Assert.False(viewer.OperationBusy);
-    });
+    }
 
     [AvaloniaFact]
-    public Task CopyGuards() => Headless.Run(async () =>
+    public async Task CopyGuards()
     {
         var (viewer, clipboard) = await CopySetup();
         viewer.SelectAllTextures();
@@ -210,10 +210,10 @@ public sealed class ClipboardTests
         Assert.Equal(0, viewer.SelectedCount);
         Assert.False(viewer.CopySelectedImage());
         Assert.Equal("untouched", clipboard.Text);
-    });
+    }
 
     [AvaloniaFact]
-    public Task CopyFailureReportsTheDecodeError() => Headless.Run(async () =>
+    public async Task CopyFailureReportsTheDecodeError()
     {
         var (viewer, clipboard) = await CopySetup();
         viewer.DecodeImage = (_, _, _) => throw new ArgumentException("simulated image decode failure");
@@ -223,10 +223,10 @@ public sealed class ClipboardTests
         Assert.Equal("untouched", clipboard.Text);
         Assert.Equal("Could not copy image: simulated image decode failure", viewer.Status);
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task StaleCopyLeavesTheClipboardAlone() => Headless.Run(async () =>
+    public async Task StaleCopyLeavesTheClipboardAlone()
     {
         var (viewer, clipboard) = await CopySetup();
         using var started = new ManualResetEventSlim();
@@ -253,5 +253,5 @@ public sealed class ClipboardTests
         Assert.Equal(0, clipboard.ImageWrites - 0);
         Assert.False(viewer.OperationBusy);
         Assert.False(viewer.HasDocument);
-    });
+    }
 }

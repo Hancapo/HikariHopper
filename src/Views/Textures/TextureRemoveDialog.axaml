@@ -2,13 +2,14 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:v="using:HikariHopper.Views"
                      xmlns:c="using:HikariHopper.Views.Controls"
+                     xmlns:ui="using:HikariHopper.Ui"
                      x:Class="HikariHopper.Views.TextureRemoveDialog"
-                     BodyHeight="160" ApplyLabel="Remove">
-  <!-- Port of TextureRemoveDialog.qml. -->
-  <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:TextureDialogSummary />
-    <Border Classes="rule" />
-    <TextBlock Name="QuestionText" Classes="body" />
-    <Panel c:QtColumnLayout.FillHeight="True" />
+                     ApplyLabel="Remove" Destructive="True">
+  <!-- Confirms removing the selected textures: the heading asks, the names say which, and the outcome what the
+       dictionary holds now beside what it would. -->
+  <c:QtColumnLayout Margin="12,12,12,13" Spacing="9">
+    <TextBlock Name="NamesText" Foreground="{x:Static ui:Theme.TextRow}" TextWrapping="Wrap"
+               FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+    <v:TextureOutcome Name="Outcome" />
   </c:QtColumnLayout>
 </v:TextureToolDialog>

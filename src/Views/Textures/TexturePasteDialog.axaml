@@ -4,23 +4,31 @@
                      xmlns:c="using:HikariHopper.Views.Controls"
                      xmlns:ui="using:HikariHopper.Ui"
                      x:Class="HikariHopper.Views.TexturePasteDialog"
-                     Heading="PASTE TEXTURE" BodyHeight="150" ApplyLabel="Paste">
-  <!-- Port of TexturePasteDialog.qml (objectName texturePasteDialog). -->
-  <v:TextureToolDialog.Styles>
-    <Style Selector="TextBlock.label">
-      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
-    </Style>
-  </v:TextureToolDialog.Styles>
-  <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:QtGrid ColumnDefinitions="Auto,12,*" RowDefinitions="Auto,10,Auto">
-      <TextBlock Classes="label" Text="Action" />
-      <c:FlatComboBox Name="ModeCombo" Grid.Column="2" />
-      <TextBlock Classes="label" Grid.Row="2" Text="Name" />
-      <c:FlatTextField Name="NameField" Grid.Row="2" Grid.Column="2" Height="28" MaxLength="255"
-                       AutomationProperties.Name="New texture name" />
+                     Heading="PASTE IMAGE" ApplyLabel="Paste">
+  <!-- Pastes the clipboard's image: the header says what is on it; then whether it replaces the selected texture or
+       is a new one, a switch shown only when there is one to replace; and the texture it replaces, or the new one's
+       name. A row's gap is its own top margin, so a row that is hidden takes none. -->
+  <c:QtColumnLayout Margin="12,12,12,13" Spacing="10">
+    <v:QtGrid ColumnDefinitions="16,10,*,Auto">
+      <c:LucideIcon Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center" IconName="image"
+                    Stroke="{x:Static ui:Theme.InkAsset}" />
+      <TextBlock Grid.Column="2" Text="Clipboard image" Foreground="{x:Static ui:Theme.Text}" FontWeight="Bold"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
+      <TextBlock Name="SizeText" Grid.Column="3" Margin="12,0,0,0" Foreground="{x:Static ui:Theme.TextDim}"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" VerticalAlignment="Center" />
     </v:QtGrid>
-    <TextBlock Name="ErrorText" IsVisible="False" Foreground="{x:Static ui:Theme.Error}" TextWrapping="Wrap"
-               FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
-    <Panel c:QtColumnLayout.FillHeight="True" />
+    <Border Classes="rule" />
+    <v:QtGrid ColumnDefinitions="112,12,*" RowDefinitions="Auto,Auto">
+      <TextBlock Name="ModeLabel" Classes="label" Margin="0,0,0,8" Text="Paste as" />
+      <c:SegmentedSwitch Name="ModeSwitch" Grid.Column="2" Margin="0,0,0,8" Height="28" HorizontalAlignment="Left"
+                         AutomationProperties.Name="Paste as" />
+      <TextBlock Name="NameLabel" Classes="label" Grid.Row="1" Text="Name" />
+      <c:FlatTextField Name="NameField" Grid.Row="1" Grid.Column="2" Height="28" MaxLength="255"
+                       AutomationProperties.Name="New texture name" />
+      <TextBlock Name="TargetText" Grid.Row="1" Grid.Column="2" Height="28" Padding="0,6,0,0" IsVisible="False"
+                 Foreground="{x:Static ui:Theme.TextRow}" TextTrimming="CharacterEllipsis"
+                 FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+    </v:QtGrid>
+    <Panel Name="ErrorHost" Margin="124,-3,0,0" IsVisible="False" />
   </c:QtColumnLayout>
 </v:TextureToolDialog>

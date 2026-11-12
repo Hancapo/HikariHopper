@@ -10,10 +10,10 @@
              FontSize="{x:Static ui:Theme.FontSize}"
              Foreground="{x:Static ui:Theme.Text}">
   <!-- A 3D file, to look at, as a modal that fills the main window, in the image viewer's frame: a header naming
-       the file with a close mark; for a drawable, a toolbar of what is drawn and how; the 3D viewport; and the status
-       bar: what the content holds and where, for a drawable the time of day its sun is at, and the GPU. -->
+       the file with a close mark; the 3D viewport, with what is drawn over the model at its top; and the footer: for a
+       drawable its level of detail and counts, what the content holds or lacks, the camera, and the time of day. -->
   <UserControl.Styles>
-    <!-- The toolbar's wells and the buttons in them, as the texture viewer's. -->
+    <!-- The footer's wells and the buttons in them, as the texture viewer's toolbar's. -->
     <Style Selector="Border.well">
       <Setter Property="Background" Value="{x:Static ui:Theme.InsetBg}" />
       <Setter Property="CornerRadius" Value="{x:Static ui:Theme.ControlCorner}" />
@@ -25,7 +25,7 @@
       <Setter Property="Spacing" Value="2" />
     </Style>
     <Style Selector="c|ChromeToolButton.tool">
-      <Setter Property="Height" Value="24" />
+      <Setter Property="Height" Value="20" />
       <Setter Property="Width" Value="26" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Bordered" Value="False" />
@@ -40,6 +40,18 @@
       <Setter Property="Weight" Value="1.7" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Stroke" Value="{x:Static ui:Theme.TextFaint}" />
+    </Style>
+    <Style Selector="TextBlock.count">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextRow}" />
+    </Style>
+    <Style Selector="TextBlock.unit">
+      <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
+      <Setter Property="FontSize" Value="{x:Static ui:Theme.SmallFontSize}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
     </Style>
     <Style Selector="TextBlock.status">
       <Setter Property="FontFamily" Value="{x:Static ui:Theme.MonoFont}" />
@@ -66,116 +78,112 @@
                                 AutomationProperties.Name="Close the 3D viewer" />
           </Panel>
 
-          <!-- A drawable's toolbar: the level of detail; whether the sun casts shadows, the embedded textures, and a
-               fragment damaged; and, on the right, the time of day, whether the camera orbits or flies, and the camera
-               back on the model. -->
-          <Panel Name="Toolbar" DockPanel.Dock="Top" Height="{x:Static ui:Theme.ModelToolbarHeight}" Background="{x:Static ui:Theme.ChromeBg}"
-                 IsVisible="False">
-            <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
-            <DockPanel Margin="8,0,8,1">
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-                <!-- The time of day the model is lit at, which opens its slider. -->
-                <Border Classes="well">
-                  <Panel>
-                    <c:ChromeToolButton Name="TimeButton" Classes="tool" Width="80" Padding="14,0,10,0"
-                                        AutomationProperties.Name="Time of day" />
-                    <c:LucideIcon IconName="clock" Width="13" Height="13" Margin="8,0,0,0" Weight="1.6"
-                                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
-                    <c:LucideIcon IconName="chevron-down" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
-                                  HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
-                                  Stroke="{x:Static ui:Theme.TextDim}" />
-                  </Panel>
-                </Border>
-                <!-- The camera: orbiting the model, or flying. -->
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="OrbitButton" Classes="tool" IconKind="orbit" AutomationProperties.Name="Orbit camera" />
-                    <c:ChromeToolButton Name="FreeButton" Classes="tool" IconKind="free" AutomationProperties.Name="Free camera" />
-                  </StackPanel>
-                </Border>
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="FrameButton" Classes="tool" IconKind="frame" AutomationProperties.Name="Frame the model" />
-                  </StackPanel>
-                </Border>
-              </StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <!-- The levels of detail the drawable has, as segments like the texture editor's channels; none when it
-                     has only the one. -->
-                <c:SegmentedSwitch Name="LodSwitch" IsVisible="False" />
-                <Border Name="LodSeparator" Width="1" Height="14" Margin="2,0" VerticalAlignment="Center" IsVisible="False"
-                        Background="{x:Static ui:Theme.Border}" />
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="sun" AutomationProperties.Name="Shadows" />
-                  </StackPanel>
-                </Border>
-                <!-- The drawable's embedded textures, in the texture viewer. -->
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="TexturesButton" Classes="tool" IconKind="image" AutomationProperties.Name="Embedded textures" />
-                  </StackPanel>
-                </Border>
-                <!-- A fragment intact or damaged. -->
-                <Border Classes="well">
-                  <StackPanel>
-                    <c:ChromeToolButton Name="DamagedButton" Classes="tool" IconKind="damaged" AutomationProperties.Name="Damaged" />
-                  </StackPanel>
-                </Border>
-              </StackPanel>
-            </DockPanel>
-          </Panel>
+          <!-- The menu bar, as the texture editor's: File and Edit, opening over the viewport. -->
+          <Panel Name="MenuHolder" DockPanel.Dock="Top" />
 
-          <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.StatusHeight}" Background="{x:Static ui:Theme.ChromeBg}">
-            <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
-            <Grid Margin="0,1,0,0" ColumnDefinitions="Auto,*">
-              <!-- A drawable's triangles, vertices and edges. -->
-              <StackPanel Name="StatsPanel" Grid.Column="0" Orientation="Horizontal" Spacing="12" Margin="10,0,0,0" IsVisible="False">
-                <StackPanel Name="TrianglesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
-                  <c:LucideIcon Classes="stat" IconName="triangle" />
-                  <TextBlock Name="TrianglesText" Classes="status" />
-                </StackPanel>
-                <StackPanel Name="VerticesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
-                  <c:LucideIcon Classes="stat" IconName="git-commit-vertical" />
-                  <TextBlock Name="VerticesText" Classes="status" />
-                </StackPanel>
-                <StackPanel Name="EdgesStat" Orientation="Horizontal" Spacing="5" Background="Transparent">
-                  <c:LucideIcon Classes="stat" IconName="slash" />
-                  <TextBlock Name="EdgesText" Classes="status" />
-                </StackPanel>
-                <!-- How fast the free camera flies, while it does. -->
+          <!-- The footer. On the left, for a drawable: its level of detail, which opens a list of them upward, and the
+               counts of what is drawn, behind a button. Then the status line. On the right: how fast the camera flies,
+               while it does; whether it orbits or flies; and, for a drawable, the time of day it is lit at. -->
+          <Panel Name="Footer" DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.ModelFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+            <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
+            <DockPanel Margin="8,1,8,0">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
                 <StackPanel Name="SpeedStat" Orientation="Horizontal" Spacing="5" Background="Transparent" IsVisible="False">
                   <c:LucideIcon Classes="stat" IconName="gauge" />
                   <TextBlock Name="SpeedText" Classes="status" />
                 </StackPanel>
+                <c:SegmentedSwitch Name="CameraSwitch" Height="{x:Static ui:Theme.ModelFooterControlHeight}" VerticalAlignment="Center" />
+                <!-- The time of day the model is lit at, on a small dial of the day, which opens the dial above it. -->
+                <Border Name="TimeWell" Classes="well" IsVisible="False">
+                  <Panel>
+                    <c:ChromeToolButton Name="TimeButton" Classes="tool" Width="80" Padding="14,0,10,0"
+                                        AutomationProperties.Name="Time of day" />
+                    <v:TimeDial Name="TimeGlyph" Compact="True" Width="13" Height="13" Margin="8,0,0,0" Focusable="False"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <c:LucideIcon IconName="chevron-up" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                  </Panel>
+                </Border>
               </StackPanel>
-              <TextBlock Name="StatusText" Grid.Column="1" Classes="status" Margin="10,0,0,0"
+              <StackPanel Name="ModelTools" DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" IsVisible="False">
+                <!-- The level shown, with its triangles; a list of the four above it, or the one level as plain text. -->
+                <Border Name="LodWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" MinWidth="96" Padding="9,0,8,0"
+                        VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
+                        CornerRadius="{x:Static ui:Theme.ControlCorner}" Focusable="True"
+                        AutomationProperties.Name="Level of detail">
+                  <DockPanel>
+                    <c:LucideIcon Name="LodCaret" DockPanel.Dock="Right" IconName="chevron-up" Width="9" Height="9" Margin="10,0,0,0"
+                                  Weight="1.6" VerticalAlignment="Center" Stroke="{x:Static ui:Theme.TextDim}" />
+                    <TextBlock Name="LodCount" DockPanel.Dock="Right" Classes="unit" Margin="8,0,0,0" />
+                    <TextBlock Name="LodText" Classes="count" Foreground="{x:Static ui:Theme.Text}" FontSize="{x:Static ui:Theme.FontSize}" />
+                  </DockPanel>
+                </Border>
+                <!-- A vehicle's paint, the game's colours for it: its primary over its secondary, which opens the paint above. -->
+                <Border Name="PaintWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" Padding="8,0,8,0" IsVisible="False"
+                        VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
+                        CornerRadius="{x:Static ui:Theme.ControlCorner}" Focusable="True" Cursor="Hand"
+                        AutomationProperties.Name="Paint">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border CornerRadius="{x:Static ui:Theme.InnerCorner}" ClipToBounds="True" VerticalAlignment="Center"
+                            BorderBrush="#2EFFFFFF" BorderThickness="1">
+                      <Grid RowDefinitions="*,*" Width="14" Height="14">
+                        <Border Name="PaintChipPrimary" Background="#969696" />
+                        <Border Name="PaintChipSecondary" Grid.Row="1" Background="#969696" />
+                      </Grid>
+                    </Border>
+                    <TextBlock Text="Paint" Foreground="{x:Static ui:Theme.Text}" FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
+                    <c:LucideIcon IconName="chevron-up" Width="9" Height="9" Weight="1.6" VerticalAlignment="Center"
+                                  Stroke="{x:Static ui:Theme.TextDim}" />
+                  </StackPanel>
+                </Border>
+                <Border Width="1" Height="14" VerticalAlignment="Center" Background="{x:Static ui:Theme.Border}" />
+                <Border Classes="well">
+                  <StackPanel>
+                    <c:ChromeToolButton Name="StatsButton" Classes="tool" IconKind="stats" AutomationProperties.Name="Mesh counts" />
+                  </StackPanel>
+                </Border>
+                <!-- What is drawn: its triangles, vertices and edges, while the counts are on. -->
+                <StackPanel Name="StatsPanel" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                  <StackPanel Name="TrianglesStat" Orientation="Horizontal" Spacing="4" Background="Transparent">
+                    <TextBlock Name="TrianglesText" Classes="count" />
+                    <TextBlock Classes="unit" Text="tris" />
+                  </StackPanel>
+                  <StackPanel Name="VerticesStat" Orientation="Horizontal" Spacing="4" Background="Transparent">
+                    <TextBlock Name="VerticesText" Classes="count" />
+                    <TextBlock Classes="unit" Text="verts" />
+                  </StackPanel>
+                  <StackPanel Name="EdgesStat" Orientation="Horizontal" Spacing="4" Background="Transparent">
+                    <TextBlock Name="EdgesText" Classes="count" />
+                    <TextBlock Classes="unit" Text="edges" />
+                  </StackPanel>
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Name="StatusText" Classes="status" Margin="12,0,8,0"
                          Foreground="{x:Static ui:Theme.TextFaint}" TextTrimming="CharacterEllipsis" />
-            </Grid>
+            </DockPanel>
           </Panel>
 
-          <!-- What the colours mean: the materials of a collision, or a navmesh's ground and what is drawn on it. -->
-          <Border Name="LegendBar" DockPanel.Dock="Bottom" IsVisible="False" Background="{x:Static ui:Theme.ChromeBg}" Padding="10,6,10,4">
-            <WrapPanel Name="LegendPanel" ItemSpacing="14" LineSpacing="4" />
-          </Border>
-
-          <!-- The parts panel, beside the viewport: it slides open and closed, its content clipped as it does. -->
+          <!-- The parts panel, beside the viewport: it slides open and closed, its content clipped as it does. For a
+               collision or a navmesh it lists what the colours mean: the materials, or the ground and what is drawn on it. -->
           <Border Name="PartsSide" DockPanel.Dock="Left" Width="0" ClipToBounds="True">
             <v:PartsPanel Name="Parts" HorizontalAlignment="Left" />
           </Border>
-          <!-- Its edge, while it's open: dragged, it resizes the panel. -->
+          <!-- Its edge, while it's open: dragged, it resizes the panel. The panel's header runs on across it, to the
+               edge's line, so the header is as wide as the panel's body, which is the edge's colour. -->
           <Panel Name="PartsHandle" DockPanel.Dock="Left" Width="{x:Static ui:Theme.PartsEdgeWidth}" IsVisible="False"
                  Background="{x:Static ui:Theme.AppBg}" Cursor="SizeWestEast">
+            <Border Name="PartsHandleHeader" VerticalAlignment="Top" Height="{x:Static ui:Theme.ListHeaderHeight}"
+                    Background="{x:Static ui:Theme.ListHeaderBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,0,1" />
             <Border Width="1" HorizontalAlignment="Right" Background="{x:Static ui:Theme.BorderHard}" />
           </Panel>
 
           <v:ViewportHost Name="Viewport" />
         </DockPanel>
 
-        <!-- Drawn over the viewport's left edge, each in a window of its own (ViewportOverlay), as Blender draws its
-             toolbar over its view: at the top, the parts panel's arrow, a tab on the edge that shows or hides it; and,
-             centred on the viewport's height, a drawable's tool strip: whether its skeleton, collision and lights are
+        <!-- Drawn over the viewport, each in a window of its own (ViewportOverlay), as Blender draws its tools over its
+             view: at the left edge's top, the parts panel's arrow, a tab that shows or hides it; and centred at the top,
+             a drawable's overlay row: whether the sun casts shadows, and whether its skeleton, collision and lights are
              drawn over it. Taken from here when the viewer is made. -->
         <Panel Name="ToolsHolder" IsVisible="False">
           <Border Name="PartsTab" Padding="1,2,2,2" TextElement.Foreground="{x:Static ui:Theme.Text}"
@@ -185,13 +193,13 @@
                                 CornerRadius="{x:Static ui:Theme.InnerCorner}" IconKind="back" IconSize="10"
                                 IconThickness="1.7" Cursor="Hand" AutomationProperties.Name="Parts" />
           </Border>
-          <!-- The overlay toggles, joined into one rounded column with no panel behind them, as Blender's viewport
+          <!-- The overlay toggles, joined into one rounded row with no panel behind them, as Blender's viewport
                buttons are: each a solid segment, the accent when on, its glyph faded when the model has nothing to
                show (its tooltip says so). -->
           <Border Name="ToolStrip" TextElement.Foreground="{x:Static ui:Theme.Text}">
             <Border.Styles>
               <Style Selector="c|ChromeToolButton.tool">
-                <Setter Property="Width" Value="26" />
+                <Setter Property="Width" Value="30" />
                 <Setter Property="Height" Value="26" />
                 <Setter Property="Bordered" Value="False" />
                 <Setter Property="Segment" Value="True" />
@@ -202,14 +210,20 @@
               </Style>
             </Border.Styles>
             <c:RoundedClip Radius="{x:Static ui:Theme.ControlRadius}">
-              <StackPanel Spacing="1" Background="{x:Static ui:Theme.BorderHard}">
+              <StackPanel Orientation="Horizontal" Spacing="1" Background="{x:Static ui:Theme.BorderHard}">
+                <c:ChromeToolButton Name="ShadowsButton" Classes="tool" IconKind="shadows" AutomationProperties.Name="Shadows" />
                 <c:ChromeToolButton Name="SkeletonButton" Classes="tool" IconKind="skeleton" AutomationProperties.Name="Skeleton" />
                 <c:ChromeToolButton Name="SolidButton" Classes="tool" IconKind="collision" AutomationProperties.Name="Collision" />
                 <c:ChromeToolButton Name="LightsButton" Classes="tool" IconKind="lights" AutomationProperties.Name="Lights" />
               </StackPanel>
             </c:RoundedClip>
           </Border>
+          <!-- The world's axes as the camera sees them, at the view's top right: an axis clicked looks along it. -->
+          <v:AxesGizmo Name="Gizmo" />
         </Panel>
+
+        <!-- Where the viewer asks whether to save its changes before it closes; the viewport hides while it does. -->
+        <v:TextureDialogLayer Name="DialogLayer" />
 
         <!-- The card's outline, drawn over the content so the content keeps the whole card. -->
         <Border BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.SheetCorner}"

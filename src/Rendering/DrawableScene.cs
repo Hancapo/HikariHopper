@@ -1,6 +1,7 @@
 using System.Numerics;
 using CommonFury.Assets;
 using CommonFury.Numerics;
+using CommonFury.Textures;
 using CommonFury.Vertices;
 using FiveFury.Drawables;
 using FiveFury.Textures;
@@ -52,7 +53,87 @@ internal sealed class DrawableScene
     public required SurfaceVertex[] Vertices { get; init; }
     public required uint[] Indices { get; init; }
     public required IReadOnlyList<SurfacePart> Parts { get; init; }
-    public required IReadOnlyList<SurfaceMaterial> Materials { get; init; }
+
+    private readonly SurfaceMaterial[] materials = [];
+
+    public required IReadOnlyList<SurfaceMaterial> Materials { get => materials; init => materials = [.. value]; }
+
+    /// <summary>The geometry each of <see cref="Parts"/> is drawn from: a geometry split by bone is several parts.</summary>
+    public IReadOnlyList<DrawableGeometry> Geometries { get; init; } = [];
+
+    /// <summary>The list of shader entries each of <see cref="Sources"/> is in: its drawable's, or its owner's.</summary>
+    public IReadOnlyList<List<DrawableMaterial>> SourceLists { get; init; } = [];
+
+    // Builds the scene again from the drawables as they are now, with the same textures.
+    private Func<DrawableScene>? rebuild;
+
+    /// <summary>
+    /// The scene built again from the drawables as they are now (a geometry moved to a shader entry of its own, say),
+    /// with the same textures and the same file to write; none when it wasn't built from drawables.
+    /// </summary>
+    public DrawableScene? Rebuild()
+    {
+        if (rebuild?.Invoke() is not { } again)
+            return null;
+        again.Writer = Writer;
+        return again;
+    }
+
+    /// <summary>How many geometries are drawn with a shader entry: what an edit of it changes.</summary>
+    public int GeometriesUsing(DrawableMaterial material)
+    {
+        var geometries = new HashSet<DrawableGeometry>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < Parts.Count && i < Geometries.Count; i++)
+            if (Parts[i].Material < Sources.Count && Sources[Parts[i].Material] == material)
+                geometries.Add(Geometries[i]);
+        return geometries.Count;
+    }
+
+    /// <summary>The file the drawables were read from, written again as they are now: with their shader values as edited.</summary>
+    public Func<byte[]>? Writer { get; set; }
+
+    /// <summary>The shader entry each of <see cref="Materials"/> is made from, in the drawables read: what its values edit.</summary>
+    public IReadOnlyList<DrawableMaterial> Sources { get; init; } = [];
+
+    // Makes a shader entry ready to draw, with the textures the scene found for it, in a vehicle's paint.
+    private Func<DrawableMaterial, VehiclePaint, SurfaceMaterial>? remake;
+
+    /// <summary>The colours its vehicle's paint slots are drawn in; the game's grey until <see cref="Repaint"/>.</summary>
+    public VehiclePaint Paint { get; private set; } = VehiclePaint.Unset;
+
+    /// <summary>Whether a material reads a vehicle's paint slots, so <see cref="Paint"/> shows on it.</summary>
+    public bool Paintable => materials.Any(material => material.Vehicle);
+
+    /// <summary>
+    /// Draws its vehicle's paint slots in <paramref name="paint"/>'s colours: the vehicle materials made again, whose
+    /// indices it gives; none when the scene can't make its materials again.
+    /// </summary>
+    public IReadOnlyList<int> Repaint(VehiclePaint paint)
+    {
+        if (remake is null)
+            return [];
+        Paint = paint;
+        var changed = new List<int>();
+        for (int i = 0; i < materials.Length && i < Sources.Count; i++)
+            if (materials[i].Vehicle)
+            {
+                materials[i] = remake(Sources[i], paint);
+                changed.Add(i);
+            }
+        return changed;
+    }
+
+    /// <summary>
+    /// Makes <see cref="Materials"/>[<paramref name="index"/>] again from its shader entry, after its values changed,
+    /// with the same textures; false when the scene doesn't know its entry.
+    /// </summary>
+    public bool Remake(int index)
+    {
+        if (remake is null || index < 0 || index >= materials.Length || index >= Sources.Count)
+            return false;
+        materials[index] = remake(Sources[index], Paint);
+        return true;
+    }
 
     /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
     public int EmbeddedTextureCount { get; init; }
@@ -105,6 +186,9 @@ internal sealed class DrawableScene
 
         var diagnostics = new List<string>();
         var materials = new List<SurfaceMaterial>();
+        var sources = new List<DrawableMaterial>();
+        var sourceLists = new List<List<DrawableMaterial>>();
+        var geometries = new List<DrawableGeometry>();
         // By material list: a drawable placed more than once shares its materials, as do drawables using another's.
         var firstMaterial = new Dictionary<List<DrawableMaterial>, int>(ReferenceEqualityComparer.Instance);
         var placed = new List<(DrawableGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary,
@@ -115,12 +199,14 @@ internal sealed class DrawableScene
             SceneModel scene = models[index];
             Drawable drawable = scene.Drawable;
             // A drawable can use the shaders of another, its owner (as a fragment's pieces do).
-            List<DrawableMaterial> sources = drawable.Materials.Count > 0 ? drawable.Materials : drawable.ShaderOwner?.Materials ?? [];
-            if (!firstMaterial.TryGetValue(sources, out int first))
+            List<DrawableMaterial> entries = drawable.Materials.Count > 0 ? drawable.Materials : drawable.ShaderOwner?.Materials ?? [];
+            if (!firstMaterial.TryGetValue(entries, out int first))
             {
                 first = materials.Count;
-                firstMaterial.Add(sources, first);
-                materials.AddRange(sources.Select(material => SurfaceMaterial.From(material, Resolve)));
+                firstMaterial.Add(entries, first);
+                materials.AddRange(entries.Select(material => SurfaceMaterial.From(material, Resolve)));
+                sources.AddRange(entries);
+                sourceLists.AddRange(entries.Select(_ => entries));
             }
 
             int best = Enumerable.Range(0, 4).Where(lod => drawable.Lods[(DrawableLod)lod].Models.Count > 0).DefaultIfEmpty(-1).First();
@@ -140,7 +226,7 @@ internal sealed class DrawableScene
                     // A fragment's skinned drawable is split by the part each triangle's bone belongs to.
                     IReadOnlyDictionary<int, string>? boneParts = model.SkeletonBinding.HasSkin != 0 ? scene.BoneGroups : null;
                     foreach (DrawableGeometry geometry in model.Geometries)
-                        if (geometry.MaterialIndex < sources.Count)
+                        if (geometry.MaterialIndex < entries.Count)
                             placed.Add((geometry, transform, first + geometry.MaterialIndex, index, lod, group,
                                 lod == best && scene.Variant != ModelVariant.Damaged, boneParts));
                 }
@@ -198,6 +284,8 @@ internal sealed class DrawableScene
                 foreach (uint index in used)
                     sum += vertices[baseVertex + (int)index].Position;
                 if (triangles.Count > 0)
+                    geometries.Add(geometry);
+                if (triangles.Count > 0)
                     parts.Add(new SurfacePart(material, first, (uint)triangles.Count, baseVertex, used.Count > 0 ? sum / used.Count : Vector3.Zero,
                         model, lod, name, primary, used.Count, CountEdges(indices, (int)first, triangles.Count)));
             }
@@ -213,7 +301,12 @@ internal sealed class DrawableScene
             Variants = [.. models.Select(m => m.Variant)],
             EmbeddedTextureCount = own.Count,
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
-            Materials = [.. materials],
+            Materials = materials,
+            Sources = sources,
+            SourceLists = sourceLists,
+            Geometries = geometries,
+            rebuild = () => Build(models, lookup, fragmentBound, fragmentLights),
+            remake = (material, paint) => SurfaceMaterial.From(material, Resolve, paint),
             Diagnostics = diagnostics,
         };
     }

@@ -1,3 +1,4 @@
+using HikariHopper.Core;
 using HikariHopper.ViewModels;
 
 namespace HikariHopper.Tests;
@@ -19,7 +20,7 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void DeletingNestedRpfReturnsPeerToRoot() => OnUiThread(() =>
+    public void DeletingNestedRpfReturnsPeerToRoot()
     {
         string path = SaveArchive(Path.Combine(Work, "outer.rpf"), ("inner.rpf", Archive("inner.rpf", ("payload.txt", "example"))));
         var tabs = new ExplorerTabsViewModel();
@@ -43,10 +44,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.True(peer.CreateEmptyRpf("replacement"));
         Settle(tabs);
         Assert.Equal(["replacement.rpf"], ListedNames(first));
-    });
+    }
 
     [AvaloniaFact]
-    public void SharedArchiveCreationImportAndDeletion() => OnUiThread(() =>
+    public void SharedArchiveCreationImportAndDeletion()
     {
         var (tabs, first, peer, path) = SharedArchive();
         var contentChanges = new List<object>();
@@ -68,10 +69,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.DoesNotContain("new.rpf", ListedNames(peer));
         Assert.Equal(Bytes("untouched"), ReadSavedEntry(path, "sibling.txt"));
         Assert.Equal(Bytes("imported"), ReadSavedEntry(path, "import.txt"));
-    });
+    }
 
     [AvaloniaFact]
-    public void FailedEntryWriteRestoresPeers() => OnUiThread(() =>
+    public void FailedEntryWriteRestoresPeers()
     {
         var (tabs, first, peer, path) = SharedArchive();
         File.SetAttributes(path, FileAttributes.ReadOnly);
@@ -93,10 +94,10 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.True(first.CreateEmptyRpf("retry"));
         Settle(tabs);
         Assert.Contains("retry.rpf", ListedNames(peer));
-    });
+    }
 
     [AvaloniaFact]
-    public void InFlightWriteBlocksCompetingWritesAndReopening() => OnUiThread(() =>
+    public void InFlightWriteBlocksCompetingWritesAndReopening()
     {
         MakeGame(executable: "GTA5_Enhanced.exe");
         string archive = SaveArchive(Path.Combine(Work, "shared.rpf"), ("file.txt", "x"));
@@ -142,21 +143,73 @@ public sealed class ArchiveWriteCoordinationTests : ExplorerTestBase
         Assert.False(peer.EntryOperationBusy);
         Assert.DoesNotContain("delete.txt", ListedNames(peer));
         Assert.False(File.Exists(Path.Combine(Work, "blocked.rpf")));
-    });
+    }
 
-    [AvaloniaFact]
-    public void ArchiveWritesReleaseEveryTabsHandle() => OnUiThread(() =>
+    /// <summary>
+    /// The game's texture tables made in the background, holding <paramref name="archive"/> open as making them does
+    /// until <paramref name="release"/> is set; <paramref name="reading"/> is set once it's open.
+    /// </summary>
+    private Task TablesReading(string archive, ManualResetEventSlim reading, ManualResetEventSlim release) =>
+        GameTextures.Share(Work, () =>
+        {
+            using var held = new FileStream(archive, FileMode.Open, FileAccess.Read, FileShare.Read);
+            reading.Set();
+            release.Wait(TimeSpan.FromSeconds(30));
+            return new GameTextures.Tables();
+        }).Load();
+
+    [Fact]
+    public void AnArchiveTheGamesTablesAreReadFromIsRewrittenOnceTheyAreMade()
     {
-        var (tabs, first, peer, path) = SharedArchive();
-        var requests = new List<string>();
-        first.ArchiveWriteRequested += (_, root) => requests.Add(root);
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        Task tables = TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
 
-        Assert.True(first.CreateFolder("made"));
-        Settle(tabs);
+        // Windows can't replace the archive while the tables hold it, so the write waits for them rather than fail.
+        Task write = Task.Run(() => ArchiveWriter.ReplaceEntry(archive, null, "data/handling.meta", "<Item edited=\"1\" />"u8.ToArray()));
+        Assert.False(write.Wait(TimeSpan.FromMilliseconds(300)));
+        release.Set();
+        write.Wait(TimeSpan.FromSeconds(10));
+        Assert.True(tables.IsCompletedSuccessfully);
+        Assert.Equal("<Item edited=\"1\" />", System.Text.Encoding.UTF8.GetString(ReadSavedEntry(archive, "data/handling.meta")!));
+    }
 
-        Assert.Equal([path], requests);
-        Assert.Contains("made", ListedNames(peer));
-        Assert.Contains("made", ListedNames(first));
-        Assert.Equal("Created made", first.Status);
-    });
+    [Fact]
+    public void AnArchiveTheGamesTablesAreReadFromIsRenamedOnceTheyAreMade()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
+
+        var folder = new EntryCreationTarget(Directory: Path.Combine(Work, "mods"));
+        Task rename = Task.Run(() => EntryOperations.RenameAt(folder, "mod.rpf", "renamed.rpf"));
+        Assert.False(rename.Wait(TimeSpan.FromMilliseconds(300)));
+        release.Set();
+        rename.Wait(TimeSpan.FromSeconds(10));
+        Assert.True(File.Exists(Path.Combine(Work, "mods", "renamed.rpf")));
+    }
+
+    [Fact]
+    public void ALooseFileIsntHeldUpByTheGamesTables()
+    {
+        string archive = SaveArchive(Path.Combine(Work, "mods", "mod.rpf"), ("data/handling.meta", "<Item />"));
+        Write(Path.Combine(Work, "mods", "readme.txt"), "notes");
+        using var reading = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        TablesReading(archive, reading, release);
+        Assert.True(reading.Wait(TimeSpan.FromSeconds(10)));
+        try
+        {
+            EntryOperations.RenameAt(new EntryCreationTarget(Directory: Path.Combine(Work, "mods")), "readme.txt", "notes.txt");
+            Assert.True(File.Exists(Path.Combine(Work, "mods", "notes.txt")));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
 }

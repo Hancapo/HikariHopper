@@ -25,6 +25,19 @@ public partial class TextureUnsavedChangesDialog : TextureModalDialog
         };
     }
 
+    /// <summary>The document asked about, when it isn't the texture viewer's: a 3D viewer's file, say.</summary>
+    public string? DocumentName
+    {
+        get => documentName;
+        set
+        {
+            documentName = value;
+            OnViewModelChanged(null);
+        }
+    }
+
+    private string? documentName;
+
     public event EventHandler? SaveRequested;
 
     public event EventHandler? DiscardRequested;
@@ -34,7 +47,7 @@ public partial class TextureUnsavedChangesDialog : TextureModalDialog
         base.OnViewModelChanged(property);
         if (QuestionText is null)
             return;
-        QuestionText.Text = $"Save changes to {ViewModel?.SourceName ?? ""}?";
+        QuestionText.Text = $"Save changes to {documentName ?? ViewModel?.SourceName ?? ""}?";
         SaveButton.IsEnabled = ViewModel is not { OperationBusy: true };
     }
 }

@@ -238,6 +238,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         CreateLighting();
         CreateSurfacePipelines();
         CreateAntialiasing();
+        CreateOutline();
         Resize(width, height);
         ThrowIfFailed();
     }
@@ -280,15 +281,16 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         if (mesh is null)
             return;
         origin = mesh.Origin;
-        if (mesh.Vertices.Count > 0)
+        // What the mesh shows: its marks that the parts panel hides are left out.
+        ViewportVertex[] vertices = mesh.ToArray();
+        if (vertices.Length > 0)
         {
-            ViewportVertex[] vertices = mesh.ToArray();
             vertexBuffer = Upload((ReadOnlySpan<ViewportVertex>)vertices, ViewportVertex.Size);
             vertexCount = (uint)vertices.Length;
         }
-        if (mesh.Segments.Count > 0)
+        ViewportSegment[] segments = mesh.SegmentArray();
+        if (segments.Length > 0)
         {
-            ViewportSegment[] segments = mesh.SegmentArray();
             segmentBuffer = Upload((ReadOnlySpan<ViewportSegment>)segments, ViewportSegment.Size);
             segmentCount = (uint)segments.Length;
         }
@@ -362,6 +364,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         depthView = depth.CreateView();
         CreateHdr();
         CreateAntialiasingTargets();
+        CreateOutlineTargets();
     }
 
     /// <summary>Draws and presents a frame.</summary>
@@ -479,6 +482,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.SetBindGroup(2, lightGroup!);
             mapped.Draw(3);
             mapped.End();
+            DrawOutline(encoder);
             // The solid collision over the model, its nearest surface only, then the lines over everything.
             if (solidBuffer is not null)
             {
@@ -586,6 +590,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         vertexBuffer?.Destroy();
         segmentBuffer?.Destroy();
         DisposeAntialiasing();
+        DestroyOutline();
         ClearSurfaces();
         surface?.Unconfigure();
     }

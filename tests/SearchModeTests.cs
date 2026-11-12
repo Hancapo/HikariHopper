@@ -16,18 +16,6 @@ public sealed class SearchModeTests : ExplorerTestBase
     private static int Row(ExplorerViewModel bridge, string path) =>
         Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Path == path);
 
-    /// <summary>Waits for the index and the searches it sets off, and delivers their results.</summary>
-    private static async Task Searched(ExplorerViewModel bridge)
-    {
-        for (int round = 0; round < 4; round++)
-        {
-            await bridge.SearchIndexSettled;
-            Dispatcher.UIThread.RunJobs();
-            await bridge.SearchSettled;
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private string inner = "";
     private string update = "";
 
@@ -68,6 +56,40 @@ public sealed class SearchModeTests : ExplorerTestBase
         Assert.StartsWith("Missing ) to close a group", bridge.SearchError);
         Assert.Equal("No files", bridge.TabTitle);
         Assert.Empty(bridge.EntriesModel);
+    }
+
+    [AvaloniaFact]
+    public async Task ACancelledExtractOfResultsCountsEveryPlaceTheyCameFrom()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch();
+        bridge.SetSearchText("readme");
+        await Searched(bridge);
+        Assert.Equal(3, bridge.SearchHitCount);
+        bridge.SelectAllEntries();
+        string output = Path.GetFullPath(Path.Combine(Work, "..", "out-results"));
+        Dialogs.Folders.Enqueue(output);
+        int started = 0;
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ =>
+        {
+            Interlocked.Increment(ref started);
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        };
+        // The loose readme and the archived ones are read one place after another, counted all together.
+        Assert.True(await bridge.ExtractSelection());
+        gate.Release();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref started) < 2)
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), "Timed out waiting for the second file");
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.True(bridge.CancelWork());
+        gate.Release(5);
+        Settle(bridge);
+        Assert.Equal(2, Directory.GetFiles(output, "*", SearchOption.AllDirectories).Length);
+        Assert.Equal("Cancelled extracting 3 items: 2 of 3 files were written", bridge.Status);
     }
 
     [AvaloniaFact]
@@ -170,8 +192,8 @@ public sealed class SearchModeTests : ExplorerTestBase
         var ytd = new RpfArchive("textures.rpf");
         ytd.AddResource("vehicles/adder.ytd", Textures.TextureTestKit.Bytes(Textures.TextureTestKit.Dictionary("adder_body")));
         ytd.Save(Path.Combine(Work, "textures.rpf"));
-        TextDocument? opened = null;
-        bridge.TextFileOpened += (_, document) => opened = document;
+        TextFile? opened = null;
+        bridge.TextFileOpened += (_, file) => opened = file;
         bridge.BeginSearch();
         bridge.SetSearchText("readme");
         await Searched(bridge);
@@ -179,7 +201,9 @@ public sealed class SearchModeTests : ExplorerTestBase
         // A text file in a nested RPF: in the viewer, and the results stay.
         bridge.ActivateEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"));
         Assert.True(bridge.IsSearching);
-        Assert.Equal("readme.txt", opened?.Name);
+        Assert.Equal("readme.txt", opened?.Document.Name);
+        // Saved back where it was found, into its RPF, as from its folder.
+        Assert.NotNull(opened?.SaveTarget);
         Assert.Equal(3, bridge.SearchHitCount);
 
         // A texture dictionary in an RPF: in the texture editor, its saves going back to that RPF.

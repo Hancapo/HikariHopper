@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using HikariHopper.Core;
 using HikariHopper.Infrastructure;
@@ -35,13 +36,14 @@ public sealed partial class ExplorerViewModel : ObservableObject
         nameof(SelectionCount), nameof(SelectionDeletable),
     ];
     private static readonly string[] SortProperties = [nameof(SortColumn), nameof(SortAscending)];
-    private static readonly string[] GameLoadingProperties = [nameof(GameLoading), nameof(GameLoadingName)];
+    private static readonly string[] GameLoadingProperties = [nameof(GameLoading), nameof(GameLoadingName), nameof(GameLoadingStage)];
     private static readonly string[] TreeFocusProperties = [nameof(TreeFocusIndex), nameof(TreeFocusPath)];
 
     private readonly ItemCollection<EntryItem> entries = [];
     private readonly ItemCollection<TreeItem> tree = [];
     private readonly HashSet<int> modelSelectedRows = [];
     private bool gameLoading;
+    private bool gameIndexing;
     private string gameLoadingName = "";
     private string currentPath = ".";
     private List<string> history = [];
@@ -72,8 +74,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <summary>A game was opened; the argument is its root folder.</summary>
     public event EventHandler<string>? GameOpened;
 
-    /// <summary>A text file was opened from the list, for the text viewer to show.</summary>
-    public event EventHandler<TextDocument>? TextFileOpened;
+    /// <summary>A text file was opened from the list, for the text viewer to show and edit.</summary>
+    public event EventHandler<TextFile>? TextFileOpened;
 
     /// <summary>An image file was opened for viewing; the image viewer shows it.</summary>
     public event EventHandler<ImageViewerViewModel>? ImageFileOpened;
@@ -251,6 +253,10 @@ public sealed partial class ExplorerViewModel : ObservableObject
     public bool GameLoading => gameLoading;
 
     public string GameLoadingName => gameLoadingName;
+
+    /// <summary>What the game load is doing, for its loading screen: its keys, then, when the game's archives changed
+    /// since the last time, the textures its models take from elsewhere (<see cref="GameTextures"/>).</summary>
+    public string GameLoadingStage => gameIndexing ? "INDEXING TEXTURES" : "LOADING GAME";
 
     public string EntryDragMimeType => EntryDragMime;
 
@@ -442,8 +448,37 @@ public sealed partial class ExplorerViewModel : ObservableObject
         SetGameLoading(true);
         SetStatus($"Loading {gameLoadingName}…");
         Func<string, LoadedGame> loader = GameLoader;
-        Enqueue(() => loader(path), GameLoadCompleted, GameLoadFailed);
+        Enqueue(() =>
+        {
+            LoadedGame game = loader(path);
+            ReadGameTextures(game);
+            return game;
+        }, GameLoadCompleted, GameLoadFailed);
         return true;
+    }
+
+    /// <summary>
+    /// Reads where the game keeps models' textures beyond the models themselves (<see cref="GameTextures"/>) as part of
+    /// loading it, so a model opened afterwards has them from its first frame: from the cache in a moment, or, when the
+    /// game's archives changed, from the whole game, which the loading screen says. Tables that can't be made don't stop
+    /// the game from loading; its models open without them.
+    /// </summary>
+    private void ReadGameTextures(LoadedGame game)
+    {
+        try
+        {
+            GameTextures.ForGame(game).Load(() => Dispatcher.UIThread.Post(() =>
+            {
+                if (!gameLoading || gameIndexing)
+                    return;
+                gameIndexing = true;
+                RaiseAll(GameLoadingProperties);
+                SetStatus($"Indexing the textures of {gameLoadingName}…");
+            })).Wait();
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+        }
     }
 
     private void GameLoadCompleted(object? result)
@@ -477,7 +512,10 @@ public sealed partial class ExplorerViewModel : ObservableObject
             return;
         gameLoading = loading;
         if (!loading)
+        {
             gameLoadingName = "";
+            gameIndexing = false;
+        }
         RaiseAll(GameLoadingProperties);
         RaiseEntryOperationStateChanged();
     }
@@ -485,8 +523,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private void PublishOpenedGame()
     {
         GameSettings.RememberGameRoot(Provider.GamePath);
-        // Where the game keeps models' textures beyond the models themselves, worked out in the background now, so
-        // the 3D viewer has it when a model opens.
+        // Where the game keeps models' textures beyond the models themselves: read while the game loaded, unless it was
+        // opened without the loading screen; then in the background now, so the 3D viewer has it when a model opens.
         if (LoadedGameOfProvider() is { } game)
             _ = GameTextures.ForGame(game).Load();
         GameOpened?.Invoke(this, Provider.GamePath);

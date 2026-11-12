@@ -43,6 +43,9 @@ public partial class TextureEditor : UserControl, IModalContent
     private TextureUnsavedChangesDialog? unsavedDialog;
     private TextureImportDialog? importDialog;
     private TexturePasteDialog? pasteDialog;
+    // A long task shows the loading overlay only once it has run this long, so a quick one doesn't flash it.
+    internal static TimeSpan WorkOverlayDelay { get; set; } = TimeSpan.FromMilliseconds(400);
+    private readonly DispatcherTimer workReveal;
 
     /// <summary>For the XAML designer only: an editor over an empty view model.</summary>
     public TextureEditor() : this(new TextureViewerViewModel())
@@ -59,6 +62,13 @@ public partial class TextureEditor : UserControl, IModalContent
         SplitGrid.ColumnDefinitions[0].Width = new GridLength(Ui.Theme.TextureRailWidth);
 
         viewModel.PropertyChanged += ViewModelChanged;
+        workReveal = new DispatcherTimer { Interval = WorkOverlayDelay };
+        workReveal.Tick += (_, _) =>
+        {
+            workReveal.Stop();
+            RefreshWorkOverlay(reveal: true);
+        };
+        WorkOverlay.CancelRequested += (_, _) => viewModel.CancelWork();
         viewModel.OpenRequested += (_, _) =>
         {
             closeApproved = false;
@@ -263,6 +273,43 @@ public partial class TextureEditor : UserControl, IModalContent
             RefreshTitle();
         if (e.PropertyName == nameof(TextureViewerViewModel.CanImportImages))
             RefreshDropEnabled();
+        if (e.PropertyName == nameof(TextureViewerViewModel.Work))
+            RefreshWorkOverlay(reveal: false);
+    }
+
+    /// <summary>
+    /// Shows the running long task on the loading overlay: what it is, the item in hand, the share done and the count
+    /// when it has them, and Cancel when it can stop. It appears <see cref="WorkOverlayDelay"/> into the task
+    /// (<paramref name="reveal"/> is that moment) and goes when the task ends.
+    /// </summary>
+    private void RefreshWorkOverlay(bool reveal)
+    {
+        WorkProgress? work = viewModel.Work;
+        if (work is null)
+        {
+            workReveal.Stop();
+            WorkOverlay.IsVisible = false;
+            WorkOverlay.IsRunning = false;
+            WorkOverlay.CanCancel = false;
+            return;
+        }
+        WorkOverlay.Title = work.Title;
+        WorkOverlay.Detail = work.Current;
+        WorkOverlay.Progress = work.Fraction;
+        WorkOverlay.ProgressText = work.Count;
+        if (WorkOverlay.IsVisible)
+            return;
+        if (reveal || WorkOverlayDelay <= TimeSpan.Zero)
+        {
+            WorkOverlay.CanCancel = work.Cancellable;
+            WorkOverlay.IsVisible = true;
+            WorkOverlay.IsRunning = true;
+        }
+        else if (!workReveal.IsEnabled)
+        {
+            workReveal.Interval = WorkOverlayDelay;
+            workReveal.Start();
+        }
     }
 
     private void RefreshTitle()

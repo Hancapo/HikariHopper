@@ -8,8 +8,12 @@ namespace HikariHopper.Rendering;
 // the overlay over it (present.wgsl).
 internal sealed unsafe partial class ViewportRenderer
 {
-    /// <summary>The frame's format: every pass draws to it in linear light, stored as sRGB.</summary>
-    internal const TextureFormat FrameFormat = TextureFormat.RGBA8UnormSrgb;
+    /// <summary>
+    /// The frame's format: every pass draws to it in linear light, at half-float precision, so what is blended over
+    /// what (the glow over the sky, the outline's wash) isn't rounded to 8 bits in between; the frame is dithered once,
+    /// as it goes to the window (present.wgsl).
+    /// </summary>
+    internal const TextureFormat FrameFormat = TextureFormat.RGBA16Float;
 
     // The overlay of blended pixels: linear colour, alpha one where CMAA2 wrote.
     private const TextureFormat BlendedFormat = TextureFormat.RGBA16Float;

@@ -35,21 +35,26 @@
           </Panel>
           <v:TextureViewerMenuRow Name="MenuRow" DockPanel.Dock="Top" />
           <v:TextureViewerStatusBar Name="StatusBar" DockPanel.Dock="Bottom" />
-          <v:TextureImageDropArea Name="DropArea">
-            <v:TextureImageDropArea.Body>
-              <Grid Name="SplitGrid">
-                <Grid.ColumnDefinitions>
-                  <!-- Width: Theme.TextureRailWidth, set in code. -->
-                  <ColumnDefinition MinWidth="280" MaxWidth="440" />
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <v:TextureRail Name="Rail" Grid.Column="0" />
-                <v:TexturePreview Name="Preview" Grid.Column="2" />
-                <c:SplitViewHandle Grid.Column="1" />
-              </Grid>
-            </v:TextureImageDropArea.Body>
-          </v:TextureImageDropArea>
+          <Panel>
+            <v:TextureImageDropArea Name="DropArea">
+              <v:TextureImageDropArea.Body>
+                <Grid Name="SplitGrid">
+                  <Grid.ColumnDefinitions>
+                    <!-- Width: Theme.TextureRailWidth, set in code. -->
+                    <ColumnDefinition MinWidth="280" MaxWidth="440" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <v:TextureRail Name="Rail" Grid.Column="0" />
+                  <v:TexturePreview Name="Preview" Grid.Column="2" />
+                  <c:SplitViewHandle Grid.Column="1" />
+                </Grid>
+              </v:TextureImageDropArea.Body>
+            </v:TextureImageDropArea>
+            <!-- A long task (an import, a transform, an extract, a save): the loading overlay over the rail and the
+                 preview, with its progress and Cancel when it has them. -->
+            <v:LoadingOverlay Name="WorkOverlay" IsVisible="False" />
+          </Panel>
         </DockPanel>
 
         <v:TextureDialogLayer Name="DialogLayer" />

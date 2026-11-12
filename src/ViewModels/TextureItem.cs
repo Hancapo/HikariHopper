@@ -1,5 +1,6 @@
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommonFury.Textures;
 using FiveFury.Textures;
 using HikariHopper.Core;
 using HikariHopper.Textures;
@@ -46,6 +47,12 @@ public sealed partial class TextureItem : ObservableObject
     public string DataSizeLabel { get; }
 
     public int MipCount { get; }
+
+    /// <summary>The mip count as the list shows it: "1 MIP", "7 MIPS".</summary>
+    public string MipLabel => Mips(MipCount).ToUpperInvariant();
+
+    /// <summary>A mip count in words: "1 mip", "7 mips".</summary>
+    internal static string Mips(int count) => count == 1 ? "1 mip" : $"{count} mips";
 
     /// <summary>Thumbnail key, empty until the thumbnail is decoded (QML <c>thumbnailUrl</c>).</summary>
     [ObservableProperty]

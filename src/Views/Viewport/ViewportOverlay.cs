@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 
@@ -22,18 +23,25 @@ internal sealed class ViewportOverlay
 
     private readonly Control viewport;
     private readonly Control content;
-    // Where it goes: this far in from the viewport's left edge, and this far down from its top, or centred on its height.
-    private readonly double left;
-    private readonly double? top;
+    // Where it goes: this far in from the viewport's left edge, or from its right, or centred across it; and this far
+    // down from its top, or centred on its height.
+    private double? left;
+    private readonly double? right;
+    private double? top;
     private Window? window;
     private Window? owner;
     private bool wanted;
 
-    public ViewportOverlay(Control viewport, Control content, double left = 0, double? top = null)
+    public ViewportOverlay(Control viewport, Control content, double? left = 0, double? top = null, double? right = null)
     {
         this.viewport = viewport;
         this.content = content;
-        this.left = left;
+        // Windows keeps a window at least about 39 px tall, more than the overlay row is: the content keeps its own
+        // size at the window's top left, and the rest of the window stays transparent, so nothing stretches into it.
+        content.HorizontalAlignment = HorizontalAlignment.Left;
+        content.VerticalAlignment = VerticalAlignment.Top;
+        this.left = right is null ? left : null;
+        this.right = right;
         this.top = top;
         viewport.PropertyChanged += (_, e) =>
         {
@@ -49,6 +57,22 @@ internal sealed class ViewportOverlay
                 Place();
         };
     }
+
+    /// <summary>Moves it to this far in from the viewport's left and down from its top, as a row it points at moves.</summary>
+    public void MoveTo(double fromLeft, double fromTop)
+    {
+        if (left == fromLeft && top == fromTop)
+            return;
+        left = fromLeft;
+        top = fromTop;
+        Place();
+    }
+
+    /// <summary>How far in from the viewport's left it is put; none when it's centred or set from the right.</summary>
+    public double? Left => left;
+
+    /// <summary>How far down from the viewport's top it is put; none when it's centred on its height.</summary>
+    public double? Top => top;
 
     /// <summary>Its window, once it has been shown.</summary>
     public Window? Window => window;
@@ -82,7 +106,9 @@ internal sealed class ViewportOverlay
         window ??= Create();
         content.Measure(Size.Infinity);
         double height = Math.Max(content.DesiredSize.Height, content.Bounds.Height);
-        window.Position = viewport.PointToScreen(new Point(left, top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
+        double width = Math.Max(content.DesiredSize.Width, content.Bounds.Width);
+        double x = right is { } fromRight ? viewport.Bounds.Width - width - fromRight : left ?? Math.Round((viewport.Bounds.Width - width) / 2);
+        window.Position = viewport.PointToScreen(new Point(x, top ?? Math.Round((viewport.Bounds.Height - height) / 2)));
         if (!window.IsVisible)
         {
             window.Show(main);
@@ -107,6 +133,19 @@ internal sealed class ViewportOverlay
         Hide();
         window?.Close();
         window = null;
+    }
+
+    /// <summary>
+    /// Takes the keyboard into its window, for a field in it opened for typing: it isn't activated by a click, so it is
+    /// asked to be.
+    /// </summary>
+    public void TakeKeyboard() => window?.Activate();
+
+    /// <summary>Gives the keyboard back to the main window, once typing in it ends.</summary>
+    public void ReturnKeyboard()
+    {
+        if (window?.IsActive == true)
+            owner?.Activate();
     }
 
     private void OwnerMoved(object? sender, PixelPointEventArgs e) => Place();

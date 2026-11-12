@@ -10,9 +10,6 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class RenameTests : ExplorerTestBase
 {
-    private static int Row(ExplorerViewModel bridge, string name) =>
-        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
-
     private ExplorerViewModel Game()
     {
         MakeGame();
@@ -28,7 +25,7 @@ public sealed class RenameTests : ExplorerTestBase
     public void RenamingALooseFileMovesItAndSelectsIt()
     {
         ExplorerViewModel bridge = Game();
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         Assert.True(bridge.CanRenameSelection);
         Assert.Equal("notes.txt", bridge.RenameSource);
         Assert.True(bridge.RenameSelected("readme.txt"));
@@ -43,7 +40,7 @@ public sealed class RenameTests : ExplorerTestBase
     public void AFolderCanChangeOnlyTheCaseOfItsName()
     {
         ExplorerViewModel bridge = Game();
-        bridge.SelectEntry(Row(bridge, "pack"));
+        bridge.SelectEntry(RowFor(bridge, "pack"));
         Assert.Equal("", bridge.RenameNameError("Pack"));
         Assert.True(bridge.RenameSelected("Pack"));
         Settle(bridge);
@@ -55,14 +52,14 @@ public sealed class RenameTests : ExplorerTestBase
     public void ATakenNameIsRefusedAndTheSameNameDoesNothing()
     {
         ExplorerViewModel bridge = Game();
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         Assert.Equal("An entry with this name already exists", bridge.RenameNameError("PACK"));
         Assert.False(bridge.RenameSelected("pack"));
         Assert.True(bridge.RenameSelected("notes.txt"));
         Assert.False(bridge.EntryOperationBusy);
         Assert.True(File.Exists(Path.Combine(Work, "notes.txt")));
         // Several selected: nothing to rename.
-        bridge.SelectEntry(Row(bridge, "pack"), KeyModifiers.Control);
+        bridge.SelectEntry(RowFor(bridge, "pack"), KeyModifiers.Control);
         Assert.False(bridge.CanRenameSelection);
     }
 
@@ -73,10 +70,10 @@ public sealed class RenameTests : ExplorerTestBase
         string path = SaveArchive(Path.Combine(Work, "mods.rpf"), ("data/carcols.meta", "<Item />"), ("readme.txt", "hello"));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(path);
-        bridge.SelectEntry(Row(bridge, "readme.txt"));
+        bridge.SelectEntry(RowFor(bridge, "readme.txt"));
         Assert.True(bridge.RenameSelected("install.txt"));
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "data"));
+        bridge.SelectEntry(RowFor(bridge, "data"));
         Assert.True(bridge.RenameSelected("meta"));
         Settle(bridge);
         Assert.Equal(["install.txt", "meta"], bridge.EntriesModel.Select(item => item.Name).Order());
@@ -98,11 +95,11 @@ public sealed class RenameTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        TestWait.Settle();
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         window.KeyPress(Key.F2, RawInputModifiers.None, PhysicalKey.F2, null);
         window.KeyRelease(Key.F2, RawInputModifiers.None, PhysicalKey.F2, null);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         WorkspaceView workspace = window.GetVisualDescendantsOf<WorkspaceView>();
         ExplorerCreateDialog dialog = Assert.IsType<ExplorerCreateDialog>(workspace.CreateDialog);
@@ -114,7 +111,7 @@ public sealed class RenameTests : ExplorerTestBase
         dialog.Field.Text = "todo.txt";
         dialog.Submit();
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
         Assert.True(File.Exists(Path.Combine(Work, "todo.txt")));
         window.Close();
     }

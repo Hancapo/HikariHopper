@@ -546,12 +546,12 @@ public sealed partial class ExplorerViewModel
                 SetStatus($"{name} isn't a text file");
                 return;
             }
-            TextFileOpened?.Invoke(this, TextDocument.Load(name, file.Data));
+            TextFileOpened?.Invoke(this, new TextFile(TextDocument.Load(name, file.Data)) { SaveTarget = SaveTargetOf(file.Source, file.Target, name) });
             SetStatus($"Opened {name}");
         }
         else if (model)
         {
-            ModelFileOpened?.Invoke(this, ModelFileOf(hit, file.Data));
+            ModelFileOpened?.Invoke(this, ModelFileOf(hit, file));
             SetStatus($"Opened {name}");
         }
         else
@@ -587,8 +587,9 @@ public sealed partial class ExplorerViewModel
     /// there, read now; the game's for its archetypes; and the folder's other dictionaries, as the index lists them,
     /// each read where it lives only when the search for a texture reaches it.
     /// </summary>
-    private ModelFile ModelFileOf(SearchHit hit, byte[] data)
+    private ModelFile ModelFileOf(SearchHit hit, (byte[] Data, string Source, ArchiveEntryTarget? Target) file)
     {
+        byte[] data = file.Data;
         string name = hit.Name;
         List<SearchHit> dictionaries = ModelFile.IsDrawableName(name)
             ? [.. SearchSiblings(hit).Where(sibling => sibling.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
@@ -614,6 +615,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = named,
             GameDictionaries = GameDictionaries(name),
+            GamePaints = GamePaints(name),
             GameSky = game is not null ? SkyOf(game) : null,
             Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>
             {
@@ -623,6 +625,7 @@ public sealed partial class ExplorerViewModel
                     () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0]);
             })],
             OpenTextures = saved => OpenHitTextures(hit, saved),
+            SaveTarget = SaveTargetOf(file.Source, file.Target, name),
         };
     }
 
@@ -678,7 +681,7 @@ public sealed partial class ExplorerViewModel
         var staging = new DragStaging();
         clipboardStaging = staging;
         return StartReadOperation($"Copying {noun}…", ReaderWork(hits, (reader, records) => reader.ExportEntries(records, staging.Name)),
-            result => _ = PutOnClipboard((List<string>)result!, noun), "copy");
+            result => _ = PutOnClipboard((List<string>)result!, noun), "copy", cancelled: stopped => CancelledStatus($"Copying {noun}…", "nothing was copied"));
     }
 
     private bool ExtractSearchFiles(IReadOnlyList<SearchHit> hits, string folder, string noun) =>
@@ -687,7 +690,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {noun} to {folder}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {noun}…"));
 
     private bool ExtractSearchArchive(SearchHit hit, string folder) =>
         StartReadOperation($"Extracting {hit.Name}…", ReaderWork<string>([hit], (reader, records) => [reader.ExtractArchiveContents(records[0], folder)]),
@@ -695,7 +698,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {hit.Name} to {((List<string>)result!)[0]}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {hit.Name}…"));
 
     private Task<EntryProperties?> ReadSearchProperties(SearchHit hit)
     {
@@ -797,15 +800,19 @@ public sealed partial class ExplorerViewModel
             if (searching && searchIndex is not null)
                 searchIndexTask = searchIndex.Refresh();
         }
+        // One RPF after another, each swapped in as it is done: shown, but not stopped part way.
+        OperationProgress reports = BeginWork(progress, cancellable: false);
         Enqueue(work, result =>
         {
+            EndWork();
             done(result);
             Settle();
         }, message =>
         {
+            EndWork();
             SetStatus($"Could not {failureLabel}: {message}");
             Settle();
-        });
+        }, reports);
         return true;
     }
 }

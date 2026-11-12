@@ -22,7 +22,7 @@ public sealed class TextureViewerTests
     }
 
     [AvaloniaFact]
-    public Task TextureItemExposesViewerMetadata() => Headless.Run(() =>
+    public void TextureItemExposesViewerMetadata()
     {
         var item = new TextureItem(Red("paint"));
         Assert.Equal("paint", item.Name);
@@ -34,10 +34,10 @@ public sealed class TextureViewerTests
         Assert.Equal("16 B", item.DataSizeLabel);
         Assert.Equal("", item.ThumbnailUrl);
         Assert.Null(item.Thumbnail);
-    });
+    }
 
     [AvaloniaFact]
-    public Task LoadingPublishesPreviewAndThumbnailBitmaps() => Headless.Run(() =>
+    public void LoadingPublishesPreviewAndThumbnailBitmaps()
     {
         TextureViewerViewModel viewer = Opened("textures.ytd", Bytes(Dictionary("paint", "detail")));
         Assert.True(viewer.HasDocument);
@@ -57,10 +57,10 @@ public sealed class TextureViewerTests
         Assert.Contains("/preview/0/g/0/", viewer.PreviewUrl);
         viewer.SetChannel("rgb");
         Assert.Equal("g", viewer.Channel);
-    });
+    }
 
     [AvaloniaFact]
-    public Task SwitchingChannelsShowsTheViewAtOnceWithoutDecodingAgain() => Headless.Run(() =>
+    public void SwitchingChannelsShowsTheViewAtOnceWithoutDecodingAgain()
     {
         TextureViewerViewModel viewer = Opened("textures.ytd", Bytes(Dictionary("paint", "detail")));
         Settle(viewer); // The other channels of the mip on screen are made in the background.
@@ -82,7 +82,7 @@ public sealed class TextureViewerTests
         Assert.Equal([255, 255, 255, 255], FirstPixel(Assert.IsAssignableFrom<Bitmap>(viewer.PreviewImage)));
         Settle(viewer);
         Assert.Equal(0, decodes); // Every view came from the RGBA decoded once.
-    });
+    }
 
     /// <summary>A BGRA texture of one colour with its full mip chain.</summary>
     private static Texture Mipped(string name, int width, int height)
@@ -110,7 +110,7 @@ public sealed class TextureViewerTests
     }
 
     [AvaloniaFact]
-    public Task Thumbnails_decode_a_small_mip_rather_than_the_whole_texture() => Headless.Run(() =>
+    public void Thumbnails_decode_a_small_mip_rather_than_the_whole_texture()
     {
         TextureViewerViewModel viewer = Viewer();
         var decoded = new List<(string Name, int Mip)>();
@@ -127,20 +127,20 @@ public sealed class TextureViewerTests
         Assert.DoesNotContain(("wide", 0), decoded); // The first is the one previewed, at its full size.
         Assert.Equal(new Avalonia.PixelSize(96, 96), viewer.TexturesModel[0].Thumbnail!.PixelSize);
         Assert.Equal(new Avalonia.PixelSize(96, 48), viewer.TexturesModel[1].Thumbnail!.PixelSize);
-    });
+    }
 
     [AvaloniaFact]
-    public Task A_preview_bitmap_holds_the_textures_RGBA_as_it_is() => Headless.Run(() =>
+    public void A_preview_bitmap_holds_the_textures_RGBA_as_it_is()
     {
         // Copied, not worked out per pixel: unpremultiplied RGBA, the alpha kept apart.
         using var bitmap = TextureBitmaps.Create(new RgbaImage(2, 1, [10, 20, 30, 64, 200, 100, 50, 255]));
         Assert.Equal(Avalonia.Platform.PixelFormat.Rgba8888, bitmap.Format);
         Assert.Equal(Avalonia.Platform.AlphaFormat.Unpremul, bitmap.AlphaFormat);
         Assert.Equal([10, 20, 30, 64], FirstPixel(bitmap));
-    });
+    }
 
     [AvaloniaFact]
-    public Task RenamingKeepsTheTexturesThumbnail() => Headless.Run(() =>
+    public void RenamingKeepsTheTexturesThumbnail()
     {
         TextureViewerViewModel viewer = Opened("textures.ytd", Bytes(Dictionary("paint", "detail")));
         TextureItem before = viewer.TexturesModel[viewer.SelectedIndex];
@@ -156,10 +156,10 @@ public sealed class TextureViewerTests
         Assert.Equal(url, after.ThumbnailUrl);
         Settle(viewer);
         Assert.Same(thumbnail, viewer.TexturesModel[viewer.SelectedIndex].Thumbnail);
-    });
+    }
 
     [AvaloniaFact]
-    public Task UndoesRenameAndRemoveOperations() => Headless.Run(() =>
+    public void UndoesRenameAndRemoveOperations()
     {
         TextureViewerViewModel viewer = Loaded(new TextureSet([Red("paint"), Red("detail")], GameTarget.Legacy));
         Assert.True(viewer.RenameSelected("body"));
@@ -190,10 +190,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.Modified);
         Assert.False(viewer.CanUndo);
         viewer.Shutdown();
-    });
+    }
 
     [AvaloniaFact]
-    public Task UndoAfterSaveCreatesPendingChangesAgain() => Headless.Run(() =>
+    public void UndoAfterSaveCreatesPendingChangesAgain()
     {
         TextureViewerViewModel viewer = Loaded(new TextureSet([Red("paint")], GameTarget.Legacy));
         Assert.True(viewer.RenameSelected("body"));
@@ -203,10 +203,10 @@ public sealed class TextureViewerTests
         Assert.True(viewer.Undo());
         Assert.Equal("paint", viewer.SelectedName);
         Assert.True(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task SavingIsDistinctFromPendingChanges() => Headless.Run(() =>
+    public void SavingIsDistinctFromPendingChanges()
     {
         TextureViewerViewModel viewer = Loaded(new TextureSet([Red("paint")], GameTarget.Legacy));
         Assert.True(viewer.RenameSelected("body"));
@@ -224,10 +224,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.Saving);
         Assert.False(viewer.Modified);
         Assert.Equal([true], finished);
-    });
+    }
 
     [AvaloniaFact]
-    public Task ControlShiftAndContextSelection() => Headless.Run(() =>
+    public void ControlShiftAndContextSelection()
     {
         TextureViewerViewModel viewer = FiveTextures();
         viewer.SelectTexture(1);
@@ -254,14 +254,14 @@ public sealed class TextureViewerTests
         Assert.True(viewer.RemoveSelected());
         Assert.Equal(0, viewer.TextureCount);
         Assert.True(viewer.HasDocument);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData("resize")]
     [InlineData("power")]
     [InlineData("mips")]
     [InlineData("format")]
-    public Task BatchOperationsAndSingleUndo(string operation) => Headless.Run(() =>
+    public void BatchOperationsAndSingleUndo(string operation)
     {
         TextureViewerViewModel viewer = FiveTextures();
         Texture[] originals = [.. viewer.Dictionary!.Textures];
@@ -313,10 +313,10 @@ public sealed class TextureViewerTests
         Assert.Equal([0, 2], Selected(viewer));
         Assert.False(viewer.Modified);
         Assert.Equal(originals, viewer.Dictionary!.Textures);
-    });
+    }
 
     [AvaloniaFact]
-    public Task PowerOfTwoSkipsValidTextures() => Headless.Run(() =>
+    public void PowerOfTwoSkipsValidTextures()
     {
         TextureViewerViewModel viewer = FiveTextures();
         viewer.SelectTexture(0);
@@ -326,10 +326,10 @@ public sealed class TextureViewerTests
         Settle(viewer);
         Assert.Same(unchanged, viewer.Dictionary!.Textures[1]);
         Assert.Equal((16, 32), (viewer.Dictionary.Textures[0].Width, viewer.Dictionary.Textures[0].Height));
-    });
+    }
 
     [AvaloniaFact]
-    public Task FailedBatchDoesNotCommitPartialResults() => Headless.Run(() =>
+    public void FailedBatchDoesNotCommitPartialResults()
     {
         TextureViewerViewModel viewer = FiveTextures();
         Texture[] originals = [.. viewer.Dictionary!.Textures];
@@ -344,10 +344,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.CanUndo);
         Assert.Equal("Resizing failed: texture_2: simulated conversion failure", viewer.Status);
         Assert.Equal(originals, viewer.Dictionary!.Textures);
-    });
+    }
 
     [AvaloniaFact]
-    public Task SelectionIsStableDuringBatch() => Headless.Run(() =>
+    public void SelectionIsStableDuringBatch()
     {
         TextureViewerViewModel viewer = FiveTextures();
         using var started = new ManualResetEventSlim();
@@ -376,10 +376,10 @@ public sealed class TextureViewerTests
         }
         Settle(viewer);
         Assert.Equal([1, 3], Selected(viewer));
-    });
+    }
 
     [AvaloniaFact]
-    public Task RemoveSelectionAndRestoreInOneUndo() => Headless.Run(async () =>
+    public async Task RemoveSelectionAndRestoreInOneUndo()
     {
         TextureViewerViewModel viewer = FiveTextures();
         viewer.SelectTexture(1);
@@ -398,10 +398,10 @@ public sealed class TextureViewerTests
         Assert.Equal(Enumerable.Range(0, 5).Select(index => $"texture_{index}"), Names(viewer));
         Assert.Equal([1, 3], Selected(viewer));
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task ExtractsOnlySelectedTextures() => Headless.Run(async () =>
+    public async Task ExtractsOnlySelectedTextures()
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { Folder = folder.Path };
@@ -410,6 +410,9 @@ public sealed class TextureViewerTests
         viewer.SelectTexture(1);
         viewer.SelectTexture(3, KeyModifiers.Control);
         await viewer.ExtractSelected();
+        // Several are written on the work pool, one at a time.
+        Settle(viewer);
+        Assert.Null(viewer.Work);
         Assert.Equal(["texture_1.dds", "texture_3.dds"],
             Directory.GetFiles(folder.Path, "*.dds").Select(Path.GetFileName).Order());
         Assert.Equal("Extracted 2 textures", viewer.Status);
@@ -425,13 +428,14 @@ public sealed class TextureViewerTests
 
         dialogs.Folder = folder.File("all");
         await viewer.ExtractAll();
+        Settle(viewer);
         Assert.Equal("Extracted 5 textures", viewer.Status);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task RemoveDuplicatesKeepsFirstAndUndoRestoresOriginal(GameTarget target) => Headless.Run(() =>
+    public void RemoveDuplicatesKeepsFirstAndUndoRestoresOriginal(GameTarget target)
     {
         TextureSet dictionary = Dictionary(target, "Paint", "detail", "paint", "Paint", "unique");
         TextureViewerViewModel viewer = Loaded(dictionary);
@@ -460,10 +464,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.Modified);
         Assert.ThrowsAny<Exception>(() => YtdSaving.Serialize(viewer.Dictionary));
         Assert.True(viewer.RemoveDuplicatesByName());
-    });
+    }
 
     [AvaloniaFact]
-    public Task NoDuplicatesIsNoop() => Headless.Run(() =>
+    public void NoDuplicatesIsNoop()
     {
         TextureViewerViewModel viewer = Viewer();
         Assert.Equal(0, viewer.DuplicateTextureCount);
@@ -473,10 +477,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.RemoveDuplicatesByName());
         Assert.False(viewer.Modified);
         Assert.False(viewer.CanUndo);
-    });
+    }
 
     [AvaloniaFact]
-    public Task DuplicateCleanupIgnoresSelectionButRespectsBusyState() => Headless.Run(() =>
+    public void DuplicateCleanupIgnoresSelectionButRespectsBusyState()
     {
         TextureViewerViewModel viewer = Loaded(Dictionary("same", "SAME", "other"));
         viewer.SelectTexture(0, KeyModifiers.Control);
@@ -495,12 +499,12 @@ public sealed class TextureViewerTests
         Assert.True(viewer.Undo());
         Settle(viewer);
         Assert.Equal(0, viewer.SelectedCount);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task ResizeToPowerOfTwoRoundTripAndUndo(GameTarget target) => Headless.Run(() =>
+    public void ResizeToPowerOfTwoRoundTripAndUndo(GameTarget target)
     {
         Texture source = Bgra("paint", 30, 50, [0, 0, 255, 128]);
         TextureViewerViewModel viewer = Opened("paint.ytd", Bytes(new TextureSet([source], target)));
@@ -524,10 +528,10 @@ public sealed class TextureViewerTests
         Assert.Equal((30, 50), (viewer.SelectedWidth, viewer.SelectedHeight));
         Assert.Equal(original.Data.ToArray(), viewer.Dictionary!.Textures[0].Data.ToArray());
         Assert.False(viewer.Modified);
-    });
+    }
 
     [AvaloniaFact]
-    public Task PowerOfTwoValidationRespectsTheEditionLimit() => Headless.Run(() =>
+    public void PowerOfTwoValidationRespectsTheEditionLimit()
     {
         TextureViewerViewModel viewer = Loaded(new TextureSet([Bgra("wide", 0x7FFF, 1, [0, 0, 0, 255])], GameTarget.Legacy));
         Assert.Equal(0x7FFF, viewer.MaximumDimension);
@@ -542,10 +546,10 @@ public sealed class TextureViewerTests
         Assert.False(viewer.ChangeSelectedFormat("BC6H", 1, "mitchell", 1));
         Assert.Equal("Unsupported texture format: BC6H", viewer.Status);
         Assert.Equal(0xFFFF, Loaded(Dictionary(GameTarget.Enhanced, "a")).MaximumDimension);
-    });
+    }
 
     [AvaloniaFact]
-    public Task EstimatesAndFormatOptionsMatchThePythonSlots() => Headless.Run(() =>
+    public void EstimatesAndFormatOptionsMatchThePythonSlots()
     {
         TextureViewerViewModel viewer = Viewer();
         Assert.Equal(7, viewer.EstimatedMipCount(256, 512, 4));
@@ -555,10 +559,10 @@ public sealed class TextureViewerTests
             viewer.FormatOptions.Select(option => option.Label));
         Assert.Equal(TextureFormatNames.Editable, viewer.FormatOptions.Select(option => option.Value));
         Assert.Equal("No texture dictionary loaded", viewer.Status);
-    });
+    }
 
     [AvaloniaFact]
-    public Task ReplaceFromImageKeepsSizeFormatAndMips() => Headless.Run(async () =>
+    public async Task ReplaceFromImageKeepsSizeFormatAndMips()
     {
         using var folder = new TempFolder();
         var source = TextureProcessing.Encode(Solid(16, 8, 0, 0, 255, 255),
@@ -576,7 +580,7 @@ public sealed class TextureViewerTests
         Assert.True(pixel[0] > 190 && pixel[1] < 100 && pixel[2] < 100 && pixel[3] == 255, string.Join(",", pixel));
         Assert.Equal("Replace texture", viewer.UndoLabel);
         Assert.Equal(["Replace texture from image"], dialogs.Titles);
-    });
+    }
 
     internal static byte[] FirstPixel(Bitmap bitmap)
     {

@@ -97,7 +97,7 @@
                         HorizontalAlignment="Right" VerticalAlignment="Top">
               <TextBlock Text="{Binding DataSizeLabel}" />
               <TextBlock Text="{Binding FormatName}" />
-              <TextBlock Text="{Binding MipCount, StringFormat='{}{0} MIPS'}" />
+              <TextBlock Text="{Binding MipLabel}" />
             </StackPanel>
           </Panel>
         </DataTemplate>

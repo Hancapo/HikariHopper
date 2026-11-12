@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using HikariHopper.Core;
+using HikariHopper.Infrastructure;
 using HikariHopper.Rendering;
 using HikariHopper.ViewModels;
 using HikariHopper.Views.Controls;
@@ -19,6 +20,11 @@ public partial class ModelViewer : UserControl, IModalContent
     // The parts arrow and the tool strip, over the viewport.
     private readonly ViewportOverlay partsTab;
     private readonly ViewportOverlay toolStrip;
+    private readonly ViewportOverlay gizmo;
+    // The picked geometry's shader values, at the view's top left, and what has been changed in them.
+    private readonly ViewportOverlay shaderCard;
+    private readonly ShaderEdits shaderEdits = new();
+    private readonly ShaderValuesCard card;
 
     /// <summary>An empty viewer, for the XAML loader and previews.</summary>
     public ModelViewer() : this(new ModelFile("", []))
@@ -32,10 +38,52 @@ public partial class ModelViewer : UserControl, IModalContent
         WindowToolTip.SetIsEnabled(this, true);
         ToolsHolder.Children.Clear();
         partsTab = new ViewportOverlay(Viewport, PartsTab, top: Ui.Theme.PartsTabTop);
-        toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: Ui.Theme.ToolStripInset);
+        // Centred across the view's top.
+        toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: null, top: Ui.Theme.ToolStripInset);
+        gizmo = new ViewportOverlay(Viewport, Gizmo, top: Ui.Theme.GizmoInset, right: Ui.Theme.GizmoInset);
+        // An axis looks at the model from that side, orbiting it: flying stops, as framing it does.
+        Gizmo.AxisPicked += axis =>
+        {
+            SetFreeCamera(false);
+            Viewport.LookFrom(axis);
+        };
+        Gizmo.Dragged += (dx, dy) => Viewport.Turn(dx, dy);
+        Viewport.CameraTurned += () => Gizmo.Basis = Viewport.CameraBasis;
+        Gizmo.Basis = Viewport.CameraBasis;
+        card = new ShaderValuesCard(shaderEdits);
+        WindowToolTip.SetIsEnabled(card, true);
+        shaderCard = new ViewportOverlay(Viewport, card, left: Ui.Theme.ShaderCardLeft, top: Ui.Theme.ToolStripInset);
+        // It points at the row it shows, and follows it as the rows scroll and the card grows.
+        Parts.RowsMoved += PlaceCard;
+        card.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty)
+                PlaceCard();
+        };
+        card.TypingStarted += shaderCard.TakeKeyboard;
+        card.TypingEnded += shaderCard.ReturnKeyboard;
+        shaderEdits.Changed += ShowEdited;
+        shaderEdits.StructureChanged += Rebuild;
+        card.SplitRequested = SplitPicked;
+        // Closed, the card goes; the pick stays.
+        card.CloseRequested += CloseShaderValues;
+        // The parts panel's menu offers the picked geometry's shader values, for a drawable.
+        Parts.ShaderValues = () => surfaces is null ? null : PickedMaterial() is not null;
+        Parts.ShaderValuesRequested += () => OpenShaderValues();
+        shaderEdits.Saved += RefreshTitle;
+        Viewport.CommandPressed += (key, shift) => Command(key, shift);
+        Viewport.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty)
+                card.Room = Viewport.Bounds.Height - 2 * Ui.Theme.ToolStripInset;
+        };
         WindowToolTip.SetIsEnabled(PartsTab, true);
         WindowToolTip.SetIsEnabled(ToolStrip, true);
+        documentName = file.Name;
+        saveTarget = file.SaveTarget;
         TitleText.Text = file.Name;
+        Menus = BuildMenus();
+        MenuHolder.Children.Add(Menus);
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
         StatusText.Text = file.Data.Length > 0 ? $"Reading {file.Name}…" : "Starting the GPU…";
@@ -54,10 +102,9 @@ public partial class ModelViewer : UserControl, IModalContent
             StatusText.Text = $"The 3D view couldn't start: {error.Message}";
             StatusText.Foreground = Ui.Theme.Error;
         };
-        Viewport.EscapePressed += Close;
-        SunSlider.Value = Math.Round(DayCycle.DefaultHours * 4);
-        SunText.Text = TimeButton.Text = Clock(DayCycle.DefaultHours);
-        SunSlider.Moved += (_, quarters) => SetHours(quarters / 4f);
+        Viewport.EscapePressed += Escape;
+        TimeButton.Text = TimeDial.Clock(DayCycle.DefaultHours);
+        Dial.Moved += SetHours;
         timeBody = TimeBody();
         TimeButton.Click += (_, _) => ToggleTime();
         ThemedToolTip.Set(TimeButton, "Time of day");
@@ -68,31 +115,68 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsHandle.PointerReleased += (_, e) => EndResize(e.Pointer);
         PartsHandle.PointerCaptureLost += (_, _) => EndResize(null);
         Parts.Width = partsWidth;
-        LodSwitch.SideRequested += (_, index) =>
+        LodWell.PointerPressed += (_, e) =>
         {
-            if (visibility is { } shown && index >= 0 && index < shown.Levels.Count)
-                SetLevel(shown.Levels[index]);
+            if (e.GetCurrentPoint(LodWell).Properties.IsLeftButtonPressed)
+            {
+                ToggleLevels();
+                e.Handled = true;
+            }
         };
-        TexturesButton.Click += (_, _) => OpenTextures();
-        DamagedButton.Click += (_, _) => SetDamaged(visibility?.Damaged != true);
+        PaintWell.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(PaintWell).Properties.IsLeftButtonPressed)
+            {
+                TogglePaint();
+                e.Handled = true;
+            }
+        };
+        PaintWell.PointerEntered += (_, _) => PaintPaintWell();
+        PaintWell.PointerExited += (_, _) => PaintPaintWell();
+        PaintWell.KeyDown += (_, e) =>
+        {
+            if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space)
+            {
+                TogglePaint();
+                e.Handled = true;
+            }
+        };
+        LodWell.PointerEntered += (_, _) => PaintLevelWell();
+        LodWell.PointerExited += (_, _) => PaintLevelWell();
+        LodWell.KeyDown += (_, e) =>
+        {
+            if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space)
+            {
+                ToggleLevels();
+                e.Handled = true;
+            }
+        };
+        StatsButton.Click += (_, _) => SetStatsShown(!statsShown);
+        CameraSwitch.Sides.Add(new SwitchSide { Icon = "orbit", Label = "Orbit", ToolTip = "Orbit  (V)" });
+        CameraSwitch.Sides.Add(new SwitchSide
+        {
+            Icon = "fly",
+            Label = "Fly",
+            ToolTip = "Fly  (V)\nW A S D to move, Q and E down and up, Shift faster\nDrag to look, wheel for speed",
+        });
+        CameraSwitch.RefreshSides();
+        CameraSwitch.SideRequested += (_, index) => SetFreeCamera(index == 1);
+        Avalonia.Automation.AutomationProperties.SetName(CameraSwitch, "Camera");
         this.file = file;
         Parts.Changed += ShowParts;
+        Parts.SelectionChanged += ShowPicked;
+        Viewport.Clicked += (from, direction) => PickAt(from, direction);
         Parts.FrameRequested += FrameParts;
-        FrameButton.Click += (_, _) => Reframe();
+        Parts.TexturesRequested += () => OpenTextures();
         SkeletonButton.Click += (_, _) => SetOverlay(Overlay.Skeleton, !skeletonShown);
         SolidButton.Click += (_, _) => SetOverlay(Overlay.Solid, !solidShown);
         LightsButton.Click += (_, _) => SetOverlay(Overlay.Lights, !lightsShown);
-        OrbitButton.Click += (_, _) => SetFreeCamera(false);
-        FreeButton.Click += (_, _) => SetFreeCamera(true);
         Viewport.SpeedChanged += ShowSpeed;
-        ThemedToolTip.Set(OrbitButton, "Orbit camera  (V)");
-        ThemedToolTip.Set(FreeButton, "Free camera  (V)\nW A S D to move, Q and E down and up, Shift faster\nDrag to look, wheel for speed");
-        ThemedToolTip.Set(SpeedStat, "Free camera speed");
+        ThemedToolTip.Set(SpeedStat, "How fast the camera flies");
         ThemedToolTip.Set(ShadowsButton, "Shadows  (H)");
-        ThemedToolTip.Set(FrameButton, "Frame the model, orbiting it  (F)");
-        ThemedToolTip.Set(TrianglesStat, "Triangles");
-        ThemedToolTip.Set(VerticesStat, "Vertices");
-        ThemedToolTip.Set(EdgesStat, "Edges");
+        ThemedToolTip.Set(StatsButton, "Triangles, vertices and edges drawn");
+        ThemedToolTip.Set(LodWell, "Level of detail  (1 to 4)");
+        PaintLevelWell();
         RefreshToggles();
         Viewport.ShortcutPressed += key => Shortcut(key);
     }
@@ -135,12 +219,25 @@ public partial class ModelViewer : UserControl, IModalContent
                 button.ClearValue(ForegroundProperty);
         }
         Set(ShadowsButton, Viewport.Shadows);
-        Set(DamagedButton, visibility?.Damaged == true);
         Set(SkeletonButton, skeletonShown);
         Set(SolidButton, solidShown);
         Set(LightsButton, lightsShown);
-        Set(OrbitButton, !Viewport.FreeCamera);
-        Set(FreeButton, Viewport.FreeCamera);
+        Set(StatsButton, statsShown);
+        CameraSwitch.SelectedIndex = Viewport.FreeCamera ? 1 : 0;
+    }
+
+    // Whether the footer shows what is drawn counted, kept for the next viewer.
+    private static bool statsShown;
+
+    /// <summary>Whether the footer counts what is drawn: its triangles, vertices and edges.</summary>
+    internal static bool StatsShown => statsShown;
+
+    /// <summary>Shows the counts beside their button, or only the button; the next viewer opens the same way.</summary>
+    internal void SetStatsShown(bool shown)
+    {
+        statsShown = shown;
+        StatsPanel.IsVisible = shown;
+        RefreshToggles();
     }
 
     /// <summary>What can be drawn over the model.</summary>
@@ -201,8 +298,8 @@ public partial class ModelViewer : UserControl, IModalContent
     }
 
     /// <summary>
-    /// Orbits the model or flies: flying, the viewport takes the keyboard for W, A, S, D, Q and E, and the status bar
-    /// says how fast it goes.
+    /// Orbits the model or flies: flying, the viewport takes the keyboard for W, A, S, D, Q and E, and the footer says
+    /// how fast it goes, beside the switch.
     /// </summary>
     internal void SetFreeCamera(bool on)
     {
@@ -228,6 +325,8 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private readonly ModelFile file;
     private PartVisibility? visibility;
+    // A collision's or a navmesh's marks, which the parts panel lists in place of a drawable's parts.
+    private MeshParts? marks;
     // What the drawable is read from: the file's bytes, until its embedded textures are saved into it; the textures
     // saved for a fragment or dictionary, which can't take them back, over its own; and the game's dictionaries, once found.
     private byte[] data = [];
@@ -240,7 +339,7 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal bool OpenTextures()
     {
-        if (!TexturesButton.IsEnabled || file.OpenTextures is not { } open)
+        if (!texturesAvailable || file.OpenTextures is not { } open)
             return false;
         open(saved => TexturesSaved = ShowSaved(saved));
         return true;
@@ -248,6 +347,10 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>Done once the drawable is shown with the textures last saved in the texture viewer.</summary>
     internal Task TexturesSaved { get; private set; } = Task.CompletedTask;
+
+    // The textures were saved after the drawable shown was read, and it couldn't be read again with them: written, it
+    // would put the old ones back, so it isn't saved until it is read again.
+    private bool texturesStale;
 
     /// <summary>
     /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
@@ -261,9 +364,22 @@ public partial class ModelViewer : UserControl, IModalContent
             data = saved.Data;
         else
             savedTextures = saved.Textures;
+        // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then;
+        // the drawable shown has the textures as they were, and isn't saved over them.
+        if (shaderEdits.HasUnsavedSplits)
+        {
+            texturesStale = true;
+            return;
+        }
         (ModelContent? again, string? failure) = await Task.Run(() => Read(file, data, gameDictionaries, savedTextures));
         if (closed)
             return;
+        // Nor when one was given while it was read.
+        if (shaderEdits.HasUnsavedSplits)
+        {
+            texturesStale = true;
+            return;
+        }
         if (again?.Surfaces is { } after)
         {
             ShowAgain(after);
@@ -279,10 +395,8 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (visibility is null || surfaces is not { HasDamaged: true })
             return false;
-        visibility.Damaged = damaged;
-        Parts.Refresh();
-        ShowParts();
-        RefreshToggles();
+        // Through the panel, which opens the state's row and asks for the parts to be drawn again.
+        Parts.PickState(damaged);
         return true;
     }
 
@@ -291,17 +405,15 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The drawable shown, once read.</summary>
     internal DrawableScene? Surfaces => surfaces;
 
-    /// <summary>The textures button, off when there are none or they can't be opened; its tooltip says how many.</summary>
+    // Whether the drawable has embedded textures that can be opened.
+    private bool texturesAvailable;
+
+    /// <summary>The embedded textures' row at the foot of the parts panel, with how many; none when there are none or they can't be opened.</summary>
     private void ShowTextures(DrawableScene scene)
     {
         int count = scene.EmbeddedTextureCount;
-        TexturesButton.IsEnabled = count > 0 && file.OpenTextures is not null;
-        ThemedToolTip.Set(TexturesButton, count switch
-        {
-            0 => "No embedded textures",
-            1 => "1 embedded texture  (T)",
-            _ => $"{count} embedded textures  (T)",
-        });
+        texturesAvailable = count > 0 && file.OpenTextures is not null;
+        Parts.ShowTextures(texturesAvailable ? count : 0);
     }
 
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
@@ -327,11 +439,12 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Slides the parts panel open or closed; its edge's arrow points the way it would go.</summary>
     internal void SetPartsShown(bool shown)
     {
-        partsShown = shown && visibility is not null;
+        partsShown = shown && Parts.Parts is not null;
         PartsHandle.IsVisible = partsShown;
         PartsSide.Transitions ??= PartsSlide;
         PartsSide.Width = partsShown ? partsWidth : 0;
         PartsArrow.IconKind = partsShown ? "back" : "forward";
+        PlaceCard();
         ThemedToolTip.Set(PartsArrow, partsShown ? "Hide the parts  (P)" : "Show the parts  (P)");
         RefreshToggles();
     }
@@ -372,10 +485,525 @@ public partial class ModelViewer : UserControl, IModalContent
         PartsSide.Transitions = PartsSlide;
     }
 
+    /// <summary>
+    /// Picks the geometry a ray from the world meets first, as a click on the model does: its row is selected in the parts
+    /// panel, opened to it, and it is outlined; a click on nothing picks nothing.
+    /// </summary>
+    internal bool PickAt(System.Numerics.Vector3 from, System.Numerics.Vector3 direction)
+    {
+        if (visibility is null)
+            return false;
+        if (visibility.PartAt(from, direction) is int part
+            && Parts.Reveal(node => node.Kind == PartKind.Geometry && node.Parts.Count == 1 && node.Parts[0] == part))
+            return true;
+        Parts.ClearSelection();
+        return false;
+    }
+
+    // What is selected in the parts panel is outlined on the model: a drawable's geometries under the rows. One geometry
+    // picked has its shader values in the card.
+    private void ShowPicked()
+    {
+        if (visibility is null)
+            return;
+        Viewport.Pick(Parts.Selection.SelectMany(node => node.Parts).Distinct());
+        ShowCard();
+    }
+
+    /// <summary>The shader values card, while it shows.</summary>
+    internal ShaderValuesCard Card => card;
+
+    /// <summary>The shader values card's window over the viewport.</summary>
+    internal ViewportOverlay CardOverlay => shaderCard;
+
+    /// <summary>What has been changed in the drawable's shader values.</summary>
+    internal ShaderEdits ShaderEdits => shaderEdits;
+
+    /// <summary>
+    /// Shows the shader values of the geometry picked, one geometry at the level shown, in the card, under the name of
+    /// what it belongs to; with anything else picked, or nothing, there is no card.
+    /// </summary>
+    private void ShowCard()
+    {
+        // A number being typed goes to the geometry it was typed for, before the card shows another.
+        card.FinishTyping();
+        FiveFury.Drawables.DrawableMaterial? material = PickedMaterial();
+        // Not asked for, or nothing to show for what's picked now: no card, and it stays closed until asked for again.
+        if (!cardOpen || material is null)
+        {
+            cardOpen = false;
+            shaderCard.IsWanted = false;
+            return;
+        }
+        string owner = "";
+        int geometries = 1;
+        if (surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node])
+        {
+            geometries = scene.GeometriesUsing(material);
+            owner = Parts.Parts is PartVisibility parts ? OwnerOf(parts, node) ?? file.Name : "";
+        }
+        // The same entry, built again (for a geometry given one of its own): the card keeps its rows, and a drag on them.
+        if (material is not null && material == card.Material && owner == card.Title)
+            card.SetShared(geometries);
+        else
+            card.Show(owner, material, geometries);
+        (cardScene, cardPart) = material is not null && Parts.Selection is [{ Parts: [int first, ..] }]
+            ? (surfaces, first) : ((DrawableScene?)null, (int?)null);
+        card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
+        shaderCard.IsWanted = material is not null;
+        PlaceCard();
+    }
+
+    private bool cardOpen;
+
+    /// <summary>
+    /// Whether the shader values card is open: opened from the parts panel's menu or with M, for the one geometry
+    /// picked; while open it follows the pick, and it closes when the pick has no one geometry's values to show.
+    /// </summary>
+    internal bool ShaderValuesOpen => cardOpen;
+
+    /// <summary>The shader entry of the one geometry picked, at the level shown; none for anything else.</summary>
+    private FiveFury.Drawables.DrawableMaterial? PickedMaterial() =>
+        surfaces is { } scene && Parts.Selection is [{ Kind: PartKind.Geometry } node]
+            && node.Parts.Select(part => scene.Parts[part].Material).Distinct().ToArray() is [int index] && index < scene.Sources.Count
+            ? scene.Sources[index] : null;
+
+    /// <summary>Opens the shader values card for the geometry picked; false when there's none to show.</summary>
+    internal bool OpenShaderValues()
+    {
+        if (PickedMaterial() is null)
+            return false;
+        cardOpen = true;
+        ShowCard();
+        return true;
+    }
+
+    /// <summary>Closes the shader values card; the pick stays.</summary>
+    internal void CloseShaderValues()
+    {
+        cardOpen = false;
+        shaderCard.IsWanted = false;
+    }
+
+    // Escape closes the card first, then the viewer.
+    private void Escape()
+    {
+        if (cardOpen)
+            CloseShaderValues();
+        else
+            Close();
+    }
+
+    /// <summary>
+    /// The other parts a picked part's geometry is drawn as, by name: those its bones split it into (a vehicle's body
+    /// panels), and where else its drawable is placed (a wheel at each of its bones).
+    /// </summary>
+    internal static List<string> AlsoDrawnOn(DrawableScene scene, int picked)
+    {
+        string NameOf(int part) => scene.Parts[part].Group is { Length: > 0 } group ? group
+            : scene.Parts[part].Model < scene.Models.Count ? scene.Models[scene.Parts[part].Model].Name : "";
+        string own = NameOf(picked);
+        var names = new List<string>();
+        for (int i = 0; i < scene.Parts.Count && i < scene.Geometries.Count; i++)
+            if (scene.Geometries[i] == scene.Geometries[picked] && NameOf(i) is { Length: > 0 } name && name != own && !names.Contains(name))
+                names.Add(name);
+        return names;
+    }
+
+    /// <summary>
+    /// Puts the card beside the row it shows, out of the parts panel's edge, its notch at the row's middle and the
+    /// whole of it in the view, below the parts arrow; with the panel closed, or the row scrolled away, at the view's
+    /// top left without a notch.
+    /// </summary>
+    private void PlaceCard()
+    {
+        if (!shaderCard.IsWanted)
+            return;
+        double inset = Ui.Theme.ToolStripInset, height = Viewport.Bounds.Height;
+        double cardHeight = card.Bounds.Height > 0 ? card.Bounds.Height : card.DesiredSize.Height;
+        if (partsShown && Parts.SelectedRow is { IsEffectivelyVisible: true } row
+            && row.TranslatePoint(new Point(0, row.Bounds.Height / 2), Viewport) is { } middle && middle.Y >= 0 && middle.Y <= height)
+        {
+            double first = Ui.Theme.PartsTabTop + PartsTab.Bounds.Height + 6;
+            double top = Math.Clamp(middle.Y - 20, first, Math.Max(first, height - cardHeight - inset));
+            shaderCard.MoveTo(0, Math.Round(top));
+            card.PointAt(middle.Y - Math.Round(top));
+        }
+        else
+        {
+            shaderCard.MoveTo(Ui.Theme.ShaderCardLeft, inset);
+            card.PointAt(null);
+        }
+    }
+
+    /// <summary>Where the card is put, from the view's left and top, and where its notch points (none when it doesn't).</summary>
+    internal (double? Left, double? Top, double? Notch) CardPlace => (shaderCard.Left, shaderCard.Top, card.PointedAt);
+
+    // The name of the row a geometry's row is under: its model, or its drawable.
+    private static string? OwnerOf(PartVisibility parts, PartNode node)
+    {
+        string? Find(IEnumerable<PartNode> nodes, string? above)
+        {
+            foreach (PartNode candidate in nodes)
+            {
+                if (candidate.Key == node.Key && candidate.Kind == PartKind.Geometry)
+                    return above;
+                if (Find(candidate.Children, candidate.Name) is { } found)
+                    return found;
+            }
+            return null;
+        }
+        return parts.Sections().Select(section => Find(section.Nodes, null)).FirstOrDefault(found => found is not null);
+    }
+
+    /// <summary>
+    /// Gives the picked geometry a copy of the entry it shares, as This one asks at its first change: the card takes the
+    /// copy, and the drawables are drawn again with it.
+    /// </summary>
+    private FiveFury.Drawables.DrawableMaterial? SplitPicked()
+    {
+        // The geometry the card shows, which a change typed before another was picked still belongs to.
+        if (surfaces is not { } scene || scene != cardScene || cardPart is not int part || part >= scene.Parts.Count
+            || card.Material is not { } shared)
+            return null;
+        int index = scene.Parts[part].Material;
+        if (index >= scene.Sources.Count || scene.Sources[index] != shared)
+            return null;
+        FiveFury.Drawables.DrawableMaterial copy = shaderEdits.Split(scene.Geometries[part], scene.SourceLists[index], shared);
+        // Taken before the scene is built again, so the card keeps its rows.
+        card.Adopt(copy);
+        Rebuild();
+        return copy;
+    }
+
+    // The scene and the part whose geometry's entry the card shows.
+    private DrawableScene? cardScene;
+    private int? cardPart;
+
+    /// <summary>
+    /// The drawables drawn again as they are now, after a geometry was given an entry of its own or moved back: as they
+    /// were shown, the camera and what is picked kept.
+    /// </summary>
+    private void Rebuild()
+    {
+        if (surfaces?.Rebuild() is { } after)
+            ShowAgain(after, carry: false);
+    }
+
+    /// <summary>An entry's values changed: every material drawn with it is drawn again with them.</summary>
+    private void ShowEdited(FiveFury.Drawables.DrawableMaterial material)
+    {
+        // A drag changes values at the pointer's rate: they are drawn, and the title marked, once a frame.
+        edited.Add(material);
+        if (frameAsked)
+            return;
+        frameAsked = true;
+        if (TopLevel.GetTopLevel(this) is { } top)
+            top.RequestAnimationFrame(_ => FlushEdits());
+        else
+            Dispatcher.UIThread.Post(FlushEdits, DispatcherPriority.Render);
+    }
+
+    private readonly HashSet<FiveFury.Drawables.DrawableMaterial> edited = new(ReferenceEqualityComparer.Instance);
+    private bool frameAsked;
+
+    /// <summary>Draws the entries changed since the last frame with their values now, and marks the title.</summary>
+    internal void FlushEdits()
+    {
+        frameAsked = false;
+        if (surfaces is { } scene && edited.Count > 0)
+            for (int i = 0; i < scene.Sources.Count; i++)
+                if (edited.Contains(scene.Sources[i]) && scene.Remake(i))
+                    Viewport.UpdateMaterial(i);
+        edited.Clear();
+        RefreshTitle();
+    }
+
+    /// <summary>
+    /// The viewer's Ctrl keys: Z undoes the last change to the shader values, Y (or Shift+Z) redoes it, S saves them,
+    /// Shift+S saves them as another file, and W closes the viewer.
+    /// </summary>
+    internal bool Command(char key, bool shift = false)
+    {
+        if (char.ToUpperInvariant(key) == 'W')
+        {
+            Close();
+            return true;
+        }
+        if (!contentShown || surfaces is null)
+            return false;
+        switch (char.ToUpperInvariant(key), shift)
+        {
+            case ('Z', false):
+                return Undo();
+            case ('Y', _) or ('Z', true):
+                return Redo();
+            case ('S', false):
+                return Save();
+            case ('S', true):
+                _ = SaveAs();
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Takes the last change to the shader values back, and draws it at once.</summary>
+    internal bool Undo()
+    {
+        bool undone = shaderEdits.Undo();
+        FlushEdits();
+        return undone;
+    }
+
+    /// <summary>Does the last change undone again, and draws it at once.</summary>
+    internal bool Redo()
+    {
+        bool redone = shaderEdits.Redo();
+        FlushEdits();
+        return redone;
+    }
+
+    // The file's name as shown, and where Save puts it: as opened, until it is saved as another file.
+    private string documentName;
+    private SaveTarget? saveTarget;
+    private bool savedElsewhere;
+
+    /// <summary>The file's name in the title, marked with an asterisk while it has unsaved changes.</summary>
+    private void RefreshTitle() => TitleText.Text = shaderEdits.Dirty ? $"{documentName} *" : documentName;
+
+    /// <summary>Whether the file can be saved where it lives: it was opened from one, and can be written again.</summary>
+    internal bool CanSave => saveTarget is not null && surfaces?.Writer is not null;
+
+    private bool saving;
+
+    /// <summary>The last save, done once it is written (true) or failed (false).</summary>
+    internal Task<bool> Saving { get; private set; } = Task.FromResult(false);
+
+    /// <summary>
+    /// Saves the shader values changed (Ctrl+S): the whole file is written again from what was read, as it is now, and
+    /// put where it lives, into its RPF or over the loose file, off the UI thread. False when nothing is changed, a
+    /// save is under way, or the file can't be saved.
+    /// </summary>
+    internal bool Save()
+    {
+        if (saving || !shaderEdits.Dirty || saveTarget is not { } target)
+            return false;
+        return SaveTo(target, documentName, null);
+    }
+
+    /// <summary>
+    /// Saves the drawable as it is now, its shader values included, as a loose file picked for it (Ctrl+Shift+S), which
+    /// Save then saves to; changed or not, so a file in an RPF can be saved out as it is. False when it can't be written
+    /// or nothing was picked.
+    /// </summary>
+    internal async Task<bool> SaveAs()
+    {
+        if (saving || surfaces?.Writer is null)
+            return false;
+        string extension = Path.GetExtension(file.Name);
+        string kind = extension.ToLowerInvariant() switch { ".yft" => "Fragment", ".ydd" => "Drawable dictionary", _ => "Drawable" };
+        string? path = await Dialogs.PickSaveFileAsync($"Save {documentName} as", documentName,
+            [new FileFilter(kind, [$"*{extension}"])]);
+        if (string.IsNullOrEmpty(path) || closed)
+            return false;
+        string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : Path.ChangeExtension(path, extension);
+        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
+        string name = Path.GetFileName(destination);
+        if (!SaveTo(target, name, () =>
+            {
+                // From now on it is that file: Save saves there, and the title says so.
+                saveTarget = target;
+                documentName = name;
+                savedElsewhere = true;
+                RefreshTitle();
+            }))
+            return false;
+        return await Saving;
+    }
+
+    // Writes the file as it is now through a target, off the UI thread; then, once it is written, runs afterwards.
+    private bool SaveTo(SaveTarget target, string name, Action? afterwards)
+    {
+        if (surfaces?.Writer is not { } write)
+            return false;
+        if (texturesStale)
+        {
+            ShowSaveFailure(name, "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values");
+            return false;
+        }
+        // What is written is what the values are now; a change made while it is put in place stays a change.
+        ShaderSnapshot saved = shaderEdits.Snapshot();
+        byte[] bytes;
+        try
+        {
+            bytes = write();
+            target.Prepare?.Invoke();
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            ShowSaveFailure(name, error.Message);
+            return false;
+        }
+        saving = true;
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = $"Saving {name}…";
+        Saving = Finish();
+        return true;
+
+        async Task<bool> Finish()
+        {
+            string? failure = null;
+            try
+            {
+                await Task.Run(() => target.Write(bytes));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                failure = error.Message;
+            }
+            saving = false;
+            if (failure is null)
+            {
+                // Read again from what was saved, from now on.
+                data = bytes;
+                afterwards?.Invoke();
+                shaderEdits.MarkSaved(saved);
+                if (gameTexturesWaiting && !closed && !shaderEdits.HasUnsavedSplits)
+                {
+                    gameTexturesWaiting = false;
+                    GameTexturesAdded = AddGameTextures(file, Task.FromResult(gameDictionaries));
+                }
+            }
+            target.Finished?.Invoke(failure is null);
+            if (failure is not null)
+                ShowSaveFailure(name, failure);
+            else if (!closed)
+                StatusText.Text = $"Saved {name}";
+            return failure is null;
+        }
+    }
+
+    private void ShowSaveFailure(string name, string message)
+    {
+        StatusText.Text = $"Couldn't save {name}: {message}";
+        StatusText.Foreground = Ui.Theme.Error;
+    }
+
+    /// <summary>The file pickers Save as and Extract ask; the app's, unless a test gives its own.</summary>
+    internal IFileDialogs Dialogs { get; set; } = AppServices.Dialogs;
+
+    /// <summary>Whether the drawable has textures of its own to extract.</summary>
+    internal bool HasEmbeddedTextures => surfaces is { EmbeddedTextureCount: > 0 };
+
+    /// <summary>
+    /// Extracts the drawable's own textures, as they are now, to DDS files in a folder picked for them, as the texture
+    /// editor's Extract all does; false when there are none or no folder was picked.
+    /// </summary>
+    internal async Task<bool> ExtractTextures()
+    {
+        if (!HasEmbeddedTextures)
+            return false;
+        string? folder = await Dialogs.PickFolderAsync("Extract embedded textures");
+        if (string.IsNullOrEmpty(folder) || closed)
+            return false;
+        int count;
+        try
+        {
+            (IReadOnlyList<FiveFury.Textures.Texture> own, _) = ModelContent.EmbeddedTextures(file.Name, data);
+            // A fragment's or dictionary's textures as last saved in the texture editor, over its own.
+            IReadOnlyList<FiveFury.Textures.Texture> textures = savedTextures is { Count: > 0 } saved ? saved : own;
+            var dictionary = new FiveFury.Textures.TextureDictionary();
+            dictionary.Textures.AddRange(textures);
+            count = FiveFury.Textures.TextureDirectory.ExportDds(dictionary, folder).Count;
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            StatusText.Text = $"Couldn't extract the textures: {error.Message}";
+            StatusText.Foreground = Ui.Theme.Error;
+            return false;
+        }
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = count == 1 ? "Extracted 1 texture" : $"Extracted {count} textures";
+        return true;
+    }
+
+    /// <summary>The menu bar under the title: File and Edit.</summary>
+    internal ViewerMenuRow Menus { get; }
+
+    private ViewerMenuRow BuildMenus() => new(
+        ("File",
+        [
+            new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
+            new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => surfaces?.Writer is not null && !saving),
+            null,
+            new("Embedded textures…", "T", () => OpenTextures(), () => texturesAvailable && !savedElsewhere),
+            new("Extract embedded textures…", "", () => _ = ExtractTextures(), () => HasEmbeddedTextures),
+            null,
+            new("Close", "Ctrl+W", Close),
+        ]),
+        ("Edit",
+        [
+            new("Undo", "Ctrl+Z", () => Undo(), () => shaderEdits.CanUndo),
+            new("Redo", "Ctrl+Y", () => Redo(), () => shaderEdits.CanRedo),
+            null,
+            new("Reset the picked shader's values", "", () => { if (card.Material is { } material) shaderEdits.ResetAll(material); },
+                () => card.Material is { } material && ShaderEdits.ValuesOf(material).Any(value => shaderEdits.IsChanged(material, value.Name))),
+            new("Reset every shader value", "", shaderEdits.ResetEverything, () => shaderEdits.AnyChanged),
+        ]));
+
+    // Whether the viewer may close with its changes unsaved: the dialog was told not to save them.
+    private bool closeApproved;
+    // Counts the closes asked for and the dialogs cancelled: a save from the dialog closes the viewer only while its
+    // close is still the last one asked for.
+    private int closeRequest;
+    private TextureUnsavedChangesDialog? unsavedDialog;
+
+    /// <summary>The dialog asking whether to save before the viewer closes, while it is open.</summary>
+    internal TextureUnsavedChangesDialog? UnsavedDialog => unsavedDialog is { IsOpen: true } ? unsavedDialog : null;
+
+    /// <summary>
+    /// Asks whether to save the changed shader values before the viewer closes: Save closes it once they are saved,
+    /// Don't save closes it, Cancel stays. The viewport, a native window that would cover the dialog, hides meanwhile.
+    /// </summary>
+    private void AskToSave()
+    {
+        if (UnsavedDialog is not null)
+            return;
+        Viewport.IsVisible = false;
+        int request = closeRequest;
+        var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
+        dialog.SaveRequested += async (_, _) =>
+        {
+            bool saved = Save() && await Saving;
+            // Closes as asked, unless a later close or cancel came meanwhile: asking again if a change made while it
+            // was written is unsaved.
+            if (request != closeRequest)
+                return;
+            if (saved)
+                Close();
+            else
+                ShowViewportAgain();
+        };
+        dialog.DiscardRequested += (_, _) =>
+        {
+            closeApproved = true;
+            Close();
+        };
+        dialog.Rejected += (_, _) =>
+        {
+            closeRequest++;
+            ShowViewportAgain();
+        };
+        unsavedDialog = dialog;
+        dialog.Open(DialogLayer);
+    }
+
+    private void ShowViewportAgain() => Viewport.IsVisible = IsOpen && overlay?.IsTopmost != false && !closed;
+
     /// <summary>Turns the camera to the parts under these rows of the parts panel.</summary>
     internal void FrameParts(IReadOnlyList<PartNode> nodes)
     {
-        if (visibility?.Bounds(nodes) is { } box)
+        if (Parts.Parts?.Bounds(nodes) is { } box)
             Viewport.Focus(box);
     }
 
@@ -385,55 +1013,305 @@ public partial class ModelViewer : UserControl, IModalContent
         if (visibility is null || !visibility.Levels.Contains(lod))
             return;
         visibility.Lod = lod;
-        LodSwitch.SelectedIndex = IndexOf(visibility.Levels, lod);
+        levelsDropdown?.Close();
         Parts.Refresh();
         ShowParts();
     }
 
-    /// <summary>The levels the drawable has as segments, the one shown raised; none when it has only the one.</summary>
-    private void ShowLevels()
+    private CarPaints? carPaints;
+    private int?[] paintIndices = new int?[VehiclePaint.Slots.Length];
+    private DropdownWindow? paintDropdown;
+    private long paintClosedAt;
+
+    /// <summary>The game's colours for the vehicle shown and its combinations of them; none for anything else.</summary>
+    internal CarPaints? CarPaints => carPaints;
+
+    /// <summary>The six paint slots' colour numbers the vehicle is drawn in.</summary>
+    internal IReadOnlyList<int?> PaintIndices => paintIndices;
+
+    /// <summary>The paint's dropdown, while it's open.</summary>
+    internal PaintPanel? PaintPanel { get; private set; }
+
+    private static int?[] Slots(IReadOnlyList<int?> indices) =>
+        [.. Enumerable.Range(0, VehiclePaint.Slots.Length).Select(slot => slot < indices.Count ? indices[slot] : null)];
+
+    /// <summary>The paint's well, for a vehicle the game has colours for: its primary over its secondary.</summary>
+    private void ShowPaint()
     {
-        LodSwitch.Sides.Clear();
-        IReadOnlyList<int> levels = visibility?.Levels ?? [];
-        foreach (int lod in levels)
-        {
-            string name = PartVisibility.LevelName(lod);
-            string shortName = PartVisibility.ShortLevelName(lod);
-            LodSwitch.Sides.Add(new SwitchSide { Text = shortName, Width = 14 + 7 * shortName.Length, Label = name, ToolTip = $"{name} detail  ({lod + 1})" });
-        }
-        LodSwitch.RefreshSides();
-        LodSwitch.IsVisible = LodSeparator.IsVisible = levels.Count > 1;
-        LodSwitch.SelectedIndex = visibility is null ? -1 : IndexOf(levels, visibility.Lod);
+        PaintWell.IsVisible = carPaints is not null;
+        if (carPaints is null)
+            return;
+        Avalonia.Media.IBrush Chip(int slot) => carPaints.Colour(paintIndices[slot]) is { } colour
+            ? new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb((byte)(colour.Argb >> 16), (byte)(colour.Argb >> 8), (byte)colour.Argb))
+            : new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb(150, 150, 150));
+        PaintChipPrimary.Background = Chip(0);
+        PaintChipSecondary.Background = Chip(1);
+        string Named(int slot) => carPaints.Colour(paintIndices[slot])?.Name ?? "the game's grey";
+        ThemedToolTip.Set(PaintWell, $"Paint: {Named(0)} over {Named(1)}");
+        PaintPaintWell();
     }
 
-    private static int IndexOf(IReadOnlyList<int> levels, int lod)
+    // The well brightens under the pointer, and while its dropdown is open.
+    private void PaintPaintWell() =>
+        PaintWell.Background = PaintWell.IsPointerOver || paintDropdown is not null ? HoverWell : Ui.Theme.InsetBg;
+
+    /// <summary>Paints the vehicle with the six slots' colour numbers <paramref name="indices"/>.</summary>
+    internal void SetPaint(IReadOnlyList<int?> indices)
     {
-        for (int i = 0; i < levels.Count; i++)
-            if (levels[i] == lod)
-                return i;
-        return -1;
+        if (carPaints is null || surfaces is not { } scene)
+            return;
+        paintIndices = Slots(indices);
+        previewing = false;
+        Repaint(scene, paintIndices);
+        ShowPaint();
+    }
+
+    private bool previewing;
+
+    /// <summary>
+    /// Shows the vehicle in <paramref name="indices"/> while a colour is under the pointer in the paint's dropdown,
+    /// without taking them as its paint; with none, as its paint again.
+    /// </summary>
+    internal void PreviewPaint(IReadOnlyList<int?>? indices)
+    {
+        if (carPaints is null || surfaces is not { } scene || indices is null && !previewing)
+            return;
+        previewing = indices is not null;
+        Repaint(scene, indices is null ? paintIndices : Slots(indices));
+    }
+
+    private void Repaint(DrawableScene scene, int?[] indices)
+    {
+        foreach (int index in scene.Repaint(VehiclePaint.Of(carPaints!, indices)))
+            Viewport.UpdateMaterial(index);
+    }
+
+    /// <summary>Opens the paint above its well, or closes it.</summary>
+    internal void TogglePaint()
+    {
+        if (paintDropdown is not null)
+        {
+            paintDropdown.Close();
+            return;
+        }
+        // The press on the well that just closed it, by taking the keyboard from it, doesn't open it again.
+        if (carPaints is null || Environment.TickCount64 - paintClosedAt < 400)
+            return;
+        var panel = new PaintPanel(carPaints, paintIndices);
+        panel.Changed += SetPaint;
+        panel.Previewing += PreviewPaint;
+        paintDropdown = DropdownWindow.OpenAbove(PaintWell, panel, 4);
+        if (paintDropdown is null)
+            return;
+        PaintPanel = panel;
+        panel.Focus();
+        PaintPaintWell();
+        paintDropdown.Closed += (_, _) =>
+        {
+            paintDropdown = null;
+            PaintPanel = null;
+            PreviewPaint(null);
+            paintClosedAt = Environment.TickCount64;
+            PaintPaintWell();
+        };
+    }
+
+    private DropdownWindow? levelsDropdown;
+    private long levelsClosedAt;
+
+    /// <summary>Whether the list of levels is open.</summary>
+    internal bool LevelsOpen => levelsDropdown is not null;
+
+    /// <summary>The rows of the open list of levels: each level's key, name and triangles, and whether the drawable has it.</summary>
+    internal IReadOnlyList<LevelRow> LevelRows { get; private set; } = [];
+
+    /// <summary>Whether the drawable has more than one level, so its well opens a list of them.</summary>
+    private bool LevelsChoosable => visibility is { Levels.Count: > 1 };
+
+    /// <summary>The level shown, with its triangles, in the footer; the well opens a list only when there is a choice.</summary>
+    private void ShowLevels()
+    {
+        if (visibility is null)
+            return;
+        LodText.Text = PartVisibility.LevelName(visibility.Lod);
+        LodCount.Text = PartsPanel.Compact(visibility.Stats().Triangles);
+        LodCaret.IsVisible = LevelsChoosable;
+        LodWell.Cursor = LevelsChoosable ? new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) : null;
+        LodWell.Focusable = LevelsChoosable;
+        PaintLevelWell();
+    }
+
+    // A dropdown's well under the pointer, as the app's comboboxes have it.
+    private static readonly Avalonia.Media.Immutable.ImmutableSolidColorBrush HoverWell = new(Ui.Theme.Lighter(Ui.Theme.InsetBg.Color, 1.35));
+
+    // The well brightens under the pointer, and while its list is open, when it has one.
+    private void PaintLevelWell() =>
+        LodWell.Background = LevelsChoosable && (LodWell.IsPointerOver || levelsDropdown is not null) ? HoverWell : Ui.Theme.InsetBg;
+
+    /// <summary>Opens the list of the four levels above the footer, or closes it; a level the drawable lacks is faded.</summary>
+    internal void ToggleLevels()
+    {
+        if (levelsDropdown is not null)
+        {
+            levelsDropdown.Close();
+            return;
+        }
+        if (!LevelsChoosable || Environment.TickCount64 - levelsClosedAt < 400)
+            return;
+        var rows = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 196 };
+        var listed = new List<LevelRow>();
+        for (int lod = 0; lod < 4; lod++)
+        {
+            int level = lod;
+            bool has = visibility!.Levels.Contains(lod);
+            var row = new LevelRow(lod, has ? visibility.TrianglesAt(lod).ToString("N0", System.Globalization.CultureInfo.InvariantCulture) : "none", has, lod == visibility.Lod);
+            row.Triggered += () => SetLevel(level);
+            rows.Children.Add(row);
+            listed.Add(row);
+        }
+        LevelRows = listed;
+        levelsDropdown = DropdownWindow.OpenAbove(LodWell, rows, 4);
+        if (levelsDropdown is null)
+            return;
+        // From the keyboard: the level shown marked to start with, Up and Down to another, Enter or Space to pick it.
+        foreach (LevelRow row in listed)
+            row.Highlighted = row.Lod == visibility!.Lod;
+        levelsDropdown.KeyDown += (_, e) => e.Handled |= LevelsKey(e.Key);
+        PaintLevelWell();
+        levelsDropdown.Closed += (_, _) =>
+        {
+            levelsDropdown = null;
+            levelsClosedAt = Environment.TickCount64;
+            LevelRows = [];
+            PaintLevelWell();
+        };
+    }
+
+    /// <summary>
+    /// A key in the open list of levels: Up and Down move the mark over the levels the drawable has, Enter or Space picks
+    /// the one marked, 1 to 4 a level. False for any other key.
+    /// </summary>
+    internal bool LevelsKey(Avalonia.Input.Key key)
+    {
+        if (LevelRows.Count == 0)
+            return false;
+        int marked = LevelRows.ToList().FindIndex(row => row.Highlighted);
+        switch (key)
+        {
+            case Avalonia.Input.Key.Up or Avalonia.Input.Key.Down:
+                int step = key == Avalonia.Input.Key.Down ? 1 : -1;
+                for (int at = marked + step; at >= 0 && at < LevelRows.Count; at += step)
+                    if (LevelRows[at].Available)
+                    {
+                        foreach (LevelRow row in LevelRows)
+                            row.Highlighted = row == LevelRows[at];
+                        break;
+                    }
+                return true;
+            case Avalonia.Input.Key.Enter or Avalonia.Input.Key.Space:
+                if (marked >= 0)
+                    LevelRows[marked].Trigger();
+                return true;
+            case >= Avalonia.Input.Key.D1 and <= Avalonia.Input.Key.D4:
+                LevelRows[key - Avalonia.Input.Key.D1].Trigger();
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>A level in the footer's list: its key, its name, its triangles; faded, and not picked, when the drawable lacks it.</summary>
+    internal sealed class LevelRow : Border
+    {
+        private readonly TextBlock name;
+        private bool highlighted;
+
+        public LevelRow(int lod, string triangles, bool available, bool current)
+        {
+            Lod = lod;
+            Available = available;
+            Height = Ui.Theme.MenuItemHeight;
+            CornerRadius = Ui.Theme.InnerCorner;
+            Background = Avalonia.Media.Brushes.Transparent;
+            Opacity = available ? 1 : Views.Controls.ChromeToolButton.DisabledOpacity;
+            if (available)
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            var key = new TextBlock { Text = (lod + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), Width = 22, Margin = new Thickness(9, 0, 0, 0), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextFaint, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            var count = new TextBlock { Text = triangles, Margin = new Thickness(18, 0, 10, 0), FontFamily = Ui.Theme.MonoFont, FontSize = Ui.Theme.SmallFontSize, Foreground = Ui.Theme.TextDim, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            name = new TextBlock { Text = PartVisibility.LevelName(lod), FontFamily = Ui.Theme.UiFont, FontSize = Ui.Theme.FontSize, Foreground = current ? Ui.Theme.Text : Ui.Theme.TextRow, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            DockPanel.SetDock(key, Dock.Left);
+            DockPanel.SetDock(count, Dock.Right);
+            Child = new DockPanel { Children = { key, count, name } };
+            Triangles = triangles;
+            PointerEntered += (_, _) => Paint();
+            PointerExited += (_, _) => Paint();
+            PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton == Avalonia.Input.MouseButton.Left)
+                    Trigger();
+            };
+        }
+
+        public int Lod { get; }
+
+        public bool Available { get; }
+
+        /// <summary>Whether the keyboard's mark is on it: it fills as under the pointer.</summary>
+        public bool Highlighted
+        {
+            get => highlighted;
+            set
+            {
+                highlighted = value;
+                Paint();
+            }
+        }
+
+        private void Paint() =>
+            Background = highlighted || (Available && IsPointerOver) ? Ui.Theme.HoverChrome : Avalonia.Media.Brushes.Transparent;
+
+        /// <summary>Its triangles as listed, or "none".</summary>
+        public string Triangles { get; }
+
+        public event Action? Triggered;
+
+        /// <summary>Picks the level, as a click does, when the drawable has it.</summary>
+        internal void Trigger()
+        {
+            if (Available)
+                Triggered?.Invoke();
+        }
     }
 
     /// <summary>Draws what the parts panel and the level say, and counts it.</summary>
     private void ShowParts()
     {
+        // A collision or a navmesh is drawn again without the marks hidden; the camera stays where it is.
+        if (marks is not null)
+            Viewport.Show(marks.Mesh);
         if (visibility is null)
             return;
         Viewport.ShowParts(visibility.Mask());
+        // What is picked, again: another level's rows keep their keys but not their parts.
+        ShowPicked();
         (int triangles, int vertices, int edges) = visibility.Stats();
         static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         TrianglesText.Text = Count(triangles);
         VerticesText.Text = Count(vertices);
         EdgesText.Text = Count(edges);
+        ShowLevels();
     }
 
     /// <summary>
-    /// The toolbar's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
-    /// X damaged, B skeleton, C bounds, K solid collision, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free camera moves with.
+    /// The viewer's keys, from the viewport or the viewer: P parts, 1 to 4 the level of detail, H shadows, T textures,
+    /// X damaged, B skeleton, K collision, L lights, V orbit or fly, F frame. None is W, A, S, D, Q or E, which the free
+    /// camera moves with.
     /// </summary>
     internal bool Shortcut(char key)
     {
-        if (!Toolbar.IsVisible)
+        if (!contentShown)
+            return false;
+        // A collision or a navmesh has the camera's keys, and the parts panel's when it has something to list.
+        if (surfaces is null && char.ToUpperInvariant(key) is not ('V' or 'F') && !(marks is not null && char.ToUpperInvariant(key) == 'P'))
             return false;
         switch (char.ToUpperInvariant(key))
         {
@@ -459,6 +1337,13 @@ public partial class ModelViewer : UserControl, IModalContent
                 return true;
             case 'T':
                 return OpenTextures();
+            case 'M':
+                if (cardOpen)
+                {
+                    CloseShaderValues();
+                    return true;
+                }
+                return OpenShaderValues();
             case >= '1' and <= '4':
                 SetLevel(key - '1');
                 return true;
@@ -470,7 +1355,21 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         base.OnKeyDown(e);
         // Typing in a field (the parts filter) isn't a shortcut.
-        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None || e.Source is TextBox)
+        if (e.Handled || e.Source is TextBox)
+            return;
+        if (e.KeyModifiers == Avalonia.Input.KeyModifiers.Control && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z)
+        {
+            if (Command((char)('A' + (e.Key - Avalonia.Input.Key.A))))
+                e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers == (Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift) && e.Key is >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z)
+        {
+            if (Command((char)('A' + (e.Key - Avalonia.Input.Key.A)), shift: true))
+                e.Handled = true;
+            return;
+        }
+        if (e.KeyModifiers != Avalonia.Input.KeyModifiers.None)
             return;
         char? key = e.Key switch
         {
@@ -482,17 +1381,8 @@ public partial class ModelViewer : UserControl, IModalContent
             e.Handled = true;
     }
 
-    /// <summary>The time of day in its dropdown: quarter hours, with marks every six hours.</summary>
-    internal TextureMipSlider SunSlider { get; } = new() { Maximum = 96, TickCount = 5, Width = 212 };
-
-    /// <summary>The time of day the slider is at, in the dropdown's corner.</summary>
-    internal TextBlock SunText { get; } = new()
-    {
-        FontFamily = Ui.Theme.MonoFont,
-        FontSize = Ui.Theme.SmallFontSize,
-        Foreground = Ui.Theme.Text,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-    };
+    /// <summary>The time of day in its dropdown: a dial of the day, the sun or moon on it, in quarter hours.</summary>
+    internal TimeDial Dial { get; } = new() { Width = 152, Height = 152 };
 
     private readonly Control timeBody;
     private DropdownWindow? timeDropdown;
@@ -503,37 +1393,13 @@ public partial class ModelViewer : UserControl, IModalContent
 
     private Control TimeBody()
     {
-        Avalonia.Automation.AutomationProperties.SetName(SunSlider, "Time of day");
-        DockPanel.SetDock(SunText, Dock.Right);
-        return new StackPanel
-        {
-            Margin = new Thickness(12, 10, 12, 12),
-            Spacing = 10,
-            Children =
-            {
-                new DockPanel
-                {
-                    Children =
-                    {
-                        SunText,
-                        new TextBlock
-                        {
-                            Text = "Time of day",
-                            FontFamily = Ui.Theme.UiFont,
-                            FontSize = Ui.Theme.SmallFontSize,
-                            Foreground = Ui.Theme.TextDim,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                        },
-                    },
-                },
-                SunSlider,
-            },
-        };
+        Avalonia.Automation.AutomationProperties.SetName(Dial, "Time of day");
+        return new Border { Padding = new Thickness(12, 10, 12, 12), Child = Dial };
     }
 
     /// <summary>
-    /// Opens the time of day's slider under its button, a window of its own so the viewport doesn't cover it, or closes
-    /// it; the button sits raised while it is open.
+    /// Opens the time of day's dial above its button, a window of its own so the viewport doesn't cover it, or closes
+    /// it; the button sits raised while it is open, and the dial takes the keyboard.
     /// </summary>
     internal void ToggleTime()
     {
@@ -545,10 +1411,11 @@ public partial class ModelViewer : UserControl, IModalContent
         // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
         if (Environment.TickCount64 - timeClosedAt < 400)
             return;
-        timeDropdown = DropdownWindow.OpenUnder(TimeButton, timeBody, 2);
+        timeDropdown = DropdownWindow.OpenAbove(TimeWell, timeBody, 4, right: true);
         if (timeDropdown is null)
             return;
         TimeButton.Sunken = true;
+        Dial.Focus();
         timeDropdown.Closed += (_, _) =>
         {
             timeDropdown = null;
@@ -561,20 +1428,16 @@ public partial class ModelViewer : UserControl, IModalContent
     internal void SetHours(float hours)
     {
         Viewport.SetTime(hours);
-        SunText.Text = TimeButton.Text = Clock(hours);
-        SunSlider.SyncValue((int)Math.Round(hours * 4));
+        TimeButton.Text = TimeDial.Clock(hours);
+        Dial.Hours = TimeGlyph.Hours = hours;
     }
 
     /// <summary>The time of day the model is lit at, in hours.</summary>
     internal float Hours => Viewport.Hours;
 
-    private static string Clock(float hours)
-    {
-        int minutes = (int)Math.Round(hours * 60) % (24 * 60);
-        return $"{minutes / 60:00}:{minutes % 60:00}";
-    }
-
     private bool started;
+    // Whether something was read to show, which the keys act on.
+    private bool contentShown;
 
     /// <summary>What the file holds, where and how big, or why it can't be read: the status bar's line, once read.</summary>
     internal string Location { get; private set; } = "";
@@ -589,21 +1452,75 @@ public partial class ModelViewer : UserControl, IModalContent
         // Shown at once with the textures at hand (its own, the ones beside it, and the game's if its texture tables are
         // ready); while the tables are still being worked out, the game's are added when they come.
         Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
-        IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
+        // Whether the read has the game's: the tables may be done by the time it is, and it still wouldn't.
+        bool gameIncluded = pending is { IsCompletedSuccessfully: true };
+        IReadOnlyList<NearbyDictionary> game = gameIncluded ? pending!.Result : [];
         data = file.Data;
         gameDictionaries = game;
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
+        // A vehicle from a game is painted in the first of its colour combinations, as the game spawns it: from the first
+        // frame on when the game's texture tables are ready, otherwise once they are. It doesn't wait for them, which
+        // can take seconds while they are worked out afresh.
+        Task<CarPaints?>? asked = content?.Surfaces is { Paintable: true } ? file.GamePaints : null;
+        if (asked is { IsCompletedSuccessfully: true, Result: { } paints } && content?.Surfaces is { } painted)
+            ChoosePaint(paints, painted);
         Location = content is not null ? Locate(content) : failure!;
+        ShowPaint();
+        if (asked is { IsCompleted: false })
+            PaintsAdded = PaintWhenReady(asked);
         if (started)
             StatusText.Text = Location;
-        if (content?.Surfaces is { } first && pending is { IsCompleted: false } && Missing(first) > 0)
+        if (content?.Surfaces is { } first && pending is not null && !gameIncluded && Missing(first) > 0)
             GameTexturesAdded = AddGameTextures(file, pending);
+    }
+
+    /// <summary>Done once a vehicle shown before the game's texture tables were ready has its paint, or it never will.</summary>
+    internal Task PaintsAdded { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// Takes the game's colours for the vehicle and paints <paramref name="scene"/> in their first combination; gives the
+    /// materials it made again.
+    /// </summary>
+    private IReadOnlyList<int> ChoosePaint(CarPaints paints, DrawableScene scene)
+    {
+        carPaints = paints;
+        paintIndices = paints.Combinations.Count > 0 ? Slots(paints.Combinations[0]) : new int?[VehiclePaint.Slots.Length];
+        return scene.Repaint(VehiclePaint.Of(paints, paintIndices));
+    }
+
+    /// <summary>
+    /// Paints a vehicle shown in the game's grey once the game's texture tables are ready, and shows its paint's well;
+    /// the drawable shown then, which a reload may have replaced since, is the one painted.
+    /// </summary>
+    private async Task PaintWhenReady(Task<CarPaints?> asked)
+    {
+        CarPaints? paints;
+        try
+        {
+            paints = await asked;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException
+            or NotSupportedException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        if (paints is null || closed || carPaints is not null || surfaces is not { Paintable: true } scene)
+            return;
+        foreach (int index in ChoosePaint(paints, scene))
+            Viewport.UpdateMaterial(index);
+        ShowPaint();
     }
 
     /// <summary>Done once the game's textures have been added to the drawable shown, or there were none to add.</summary>
     internal Task GameTexturesAdded { get; private set; } = Task.CompletedTask;
 
+    // The game's dictionaries came while a geometry's entry of its own was unsaved: they are added once it is saved.
+    private bool gameTexturesWaiting;
+
     private bool closed;
+
+    /// <summary>Whether it has closed, or begun to.</summary>
+    internal bool Closing => closed;
 
     /// <summary>
     /// Waits for the game's dictionaries for the drawable shown, then reads it again with them and shows that in its
@@ -622,15 +1539,22 @@ public partial class ModelViewer : UserControl, IModalContent
             or NotSupportedException or UnauthorizedAccessException)
         {
         }
+        // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then
+        // (nor when one was given while it was read): the game's textures are added once it is saved.
         if (game.Count > 0 && !closed && surfaces is { } before)
         {
-            byte[] current = data;
-            IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
-            (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
-            if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+            gameDictionaries = game;
+            if (shaderEdits.HasUnsavedSplits)
+                gameTexturesWaiting = true;
+            else
             {
-                gameDictionaries = game;
-                ShowAgain(after);
+                byte[] current = data;
+                IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
+                (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
+                if (!closed && shaderEdits.HasUnsavedSplits)
+                    gameTexturesWaiting = true;
+                else if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+                    ShowAgain(after);
             }
         }
         if (!closed && started)
@@ -642,15 +1566,25 @@ public partial class ModelViewer : UserControl, IModalContent
         scene.Materials.SelectMany(material => material.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
     /// <summary>The same drawable read again (with more of its textures), shown in place of the one shown, as it was.</summary>
-    private void ShowAgain(DrawableScene after)
+    private void ShowAgain(DrawableScene after, bool carry = true)
     {
         PartVisibility? before = visibility;
+        // Read again, it has the textures as saved.
+        if (carry)
+            texturesStale = false;
+        // The shader values changed so far go into the drawables read again, which are drawn with them.
+        if (carry && surfaces is { } shown)
+            foreach (int index in shaderEdits.Carry(shown.Sources, after.Sources))
+                after.Remake(index);
+        // In the paint it had.
+        if (carPaints is not null)
+            after.Repaint(VehiclePaint.Of(carPaints, paintIndices));
         Viewport.Show(after);
         surfaces = after;
         visibility = new PartVisibility(after);
         if (before is not null)
             visibility.KeepFrom(before);
-        Parts.Parts = visibility;
+        Parts.Replace(visibility);
         ShowParts();
         overlays = after.Overlays;
         if (skeletonShown || lightsShown)
@@ -681,45 +1615,54 @@ public partial class ModelViewer : UserControl, IModalContent
         if (content.Box.IsEmpty)
             return "Nothing in it";
         Viewport.Frame(content.Box);
+        contentShown = true;
+        gizmo.IsWanted = true;
         System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
         if (content.Surfaces is { } surfaces)
         {
             Viewport.Show(surfaces);
-            // A drawable is lit by the game's light, and has the toolbar; collisions and navmeshes are drawn flat.
-            Toolbar.IsVisible = true;
+            // A drawable is lit by the game's light, and has the whole footer and the overlays; its parts panel opens
+            // when asked for.
+            ModelTools.IsVisible = TimeWell.IsVisible = true;
             partsTab.IsWanted = toolStrip.IsWanted = true;
             ShowStats(surfaces);
             visibility = new PartVisibility(surfaces);
             ShowLevels();
             Parts.Parts = visibility;
-            SetPartsShown(true);
+            SetPartsShown(false);
             ShowTextures(surfaces);
             ShowOverlayButtons(surfaces);
             this.surfaces = surfaces;
-            DamagedButton.IsEnabled = surfaces.HasDamaged;
-            ThemedToolTip.Set(DamagedButton, surfaces.HasDamaged ? "Damaged  (X)" : "No damaged state");
             RefreshToggles();
-            ShowLegend([]);
             // What isn't shown as the game shows it, under the status line.
             ToolTip.SetTip(StatusText, surfaces.Diagnostics.Count > 0 ? string.Join("\n", surfaces.Diagnostics) : null);
             return Describe(surfaces);
         }
         Viewport.Show(content.Mesh);
-        ShowLegend(content.Mesh.Legend);
+        // Collisions and navmeshes are drawn flat: of the footer, they have the camera, and the parts panel lists what
+        // their colours mean (a collision's materials), to show, hide and find each, when asked for.
+        ModelTools.IsVisible = TimeWell.IsVisible = false;
+        var listed = new MeshParts(content.Mesh);
+        marks = listed.Any ? listed : null;
+        Parts.Parts = marks;
+        Parts.ShowTextures(0);
+        partsTab.IsWanted = marks is not null;
+        SetPartsShown(false);
+        RefreshToggles();
         int triangles = content.Mesh.TriangleCount, skipped = content.Mesh.Skipped.Values.Sum();
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"{triangles:N0} {(triangles == 1 ? "triangle" : "triangles")}{(skipped > 0 ? $" ({skipped:N0} shapes not drawn)" : "")} · "
             + $"{size.X:0.#} × {size.Y:0.#} × {size.Z:0.#} m at {center.X:0.#}, {center.Y:0.#}, {center.Z:0.#}");
     }
 
-    /// <summary>A drawable's triangles, vertices and edges, beside the status line.</summary>
+    /// <summary>A drawable's triangles, vertices and edges, beside their button while it is on.</summary>
     private void ShowStats(DrawableScene scene)
     {
         static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         TrianglesText.Text = Count(scene.TriangleCount);
         VerticesText.Text = Count(scene.VertexCount);
         EdgesText.Text = Count(scene.EdgeCount);
-        StatsPanel.IsVisible = true;
+        StatsPanel.IsVisible = statsShown;
     }
 
     /// <summary>
@@ -737,51 +1680,8 @@ public partial class ModelViewer : UserControl, IModalContent
         };
     }
 
-    /// <summary>The most entries the legend lists; the rest are counted.</summary>
-    private const int LegendLength = 14;
-
-    /// <summary>The legend's entries as shown, most used first.</summary>
-    internal IReadOnlyList<LegendEntry> LegendShown { get; private set; } = [];
-
-    private void ShowLegend(IReadOnlyList<LegendEntry> legend)
-    {
-        LegendEntry[] ordered = [.. legend.OrderByDescending(entry => entry.Count)];
-        LegendShown = [.. ordered.Take(LegendLength)];
-        LegendHidden = [.. ordered.Skip(LegendLength)];
-        LegendPanel.Children.Clear();
-        foreach (LegendEntry entry in LegendShown)
-        {
-            Control item = LegendItem(entry);
-            ToolTip.SetTip(item, $"{entry.Name}: {entry.Count:N0}");
-            LegendPanel.Children.Add(item);
-        }
-        if (LegendHidden.Count > 0)
-        {
-            // The rest, swatches and all, in the tooltip of their count.
-            var rest = new StackPanel { Spacing = 4 };
-            foreach (LegendEntry entry in LegendHidden)
-                rest.Children.Add(LegendItem(entry, $"{entry.Name}: {entry.Count:N0}"));
-            var more = new TextBlock { Text = $"+{LegendHidden.Count} more", Classes = { "status" }, Foreground = Ui.Theme.TextFaint };
-            ToolTip.SetTip(more, rest);
-            LegendPanel.Children.Add(more);
-        }
-        LegendBar.IsVisible = LegendShown.Count > 0;
-    }
-
-    /// <summary>The legend's entries left out of the bar, listed in the tooltip of its "+N more".</summary>
-    internal IReadOnlyList<LegendEntry> LegendHidden { get; private set; } = [];
-
-    private static Control LegendItem(LegendEntry entry, string? text = null)
-    {
-        var item = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
-        item.Children.Add(new Border
-        {
-            Width = 10, Height = 10, CornerRadius = new CornerRadius(2), VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Background = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(ViewportMesh.Unpack(entry.Colour)),
-        });
-        item.Children.Add(new TextBlock { Text = text ?? entry.Name, Classes = { "status" } });
-        return item;
-    }
+    /// <summary>What the parts panel lists for a collision or a navmesh: what its colours mean. None for a drawable.</summary>
+    internal MeshParts? Marks => marks;
 
     /// <summary>The control the viewer opens over, in the main window.</summary>
     public Control? Anchor { get; set; }
@@ -791,8 +1691,11 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The parts arrow, drawn over the viewport's top left in a window of its own.</summary>
     internal ViewportOverlay PartsTabOverlay => partsTab;
 
-    /// <summary>The tool strip, drawn over the viewport's left edge, centred on its height, in a window of its own.</summary>
+    /// <summary>The overlay row, drawn over the viewport's top, centred across it, in a window of its own.</summary>
     internal ViewportOverlay ToolStripOverlay => toolStrip;
+
+    /// <summary>The axes gizmo, drawn over the viewport's top right in a window of its own.</summary>
+    internal ViewportOverlay GizmoOverlay => gizmo;
 
     /// <summary>The viewer closed; its GPU resources are let go.</summary>
     public event EventHandler? Closed;
@@ -817,6 +1720,8 @@ public partial class ModelViewer : UserControl, IModalContent
                 ModalOverlay.StackChanged -= OverlaysChanged;
                 partsTab.Close();
                 toolStrip.Close();
+                gizmo.Close();
+                shaderCard.Close();
                 overlay = null;
                 Closed?.Invoke(this, EventArgs.Empty);
             };
@@ -844,12 +1749,39 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
+        if (!closeApproved && !closed)
+        {
+            // Already asked: the dialog answers.
+            if (UnsavedDialog is not null)
+                return;
+            int request = ++closeRequest;
+            // What is unsaved is known once a save under way is written: it waits for that first.
+            if (saving)
+            {
+                _ = CloseOnceSaved(request);
+                return;
+            }
+            if (shaderEdits.Dirty && CanSave)
+            {
+                AskToSave();
+                return;
+            }
+        }
         closed = true;
         timeDropdown?.Close();
+        levelsDropdown?.Close();
+        paintDropdown?.Close();
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();
     }
 
-    void IModalContent.RequestClose() => Close();
+    private async Task CloseOnceSaved(int request)
+    {
+        await Saving;
+        if (request == closeRequest)
+            Close();
+    }
+
+    void IModalContent.RequestClose() => Escape();
 }

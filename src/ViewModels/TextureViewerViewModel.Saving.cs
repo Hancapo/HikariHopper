@@ -1,6 +1,7 @@
 using CommonFury;
 using CommonFury.IO;
 using CommonFury.Textures;
+using FiveFury;
 using FiveFury.Textures;
 using HikariHopper.Infrastructure;
 using HikariHopper.Textures;
@@ -11,6 +12,13 @@ public sealed partial class TextureViewerViewModel
 {
     /// <summary>Writes bytes to a loose file atomically (Python <c>atomic_write_bytes</c>); replaceable by tests.</summary>
     internal Action<string, byte[]> WriteFile { get; set; } = (path, data) => AtomicFile.Write(path, data);
+
+    /// <summary>
+    /// Writes one texture of an extract to a DDS file in a folder: through the library's export, so each keeps its
+    /// checks on the name. Replaceable by tests, to see an extract part way.
+    /// </summary>
+    internal Action<Texture, GameTarget, string> ExportTexture { get; set; } =
+        (texture, target, folder) => TextureDirectory.ExportDds(new TextureSet([texture], target).ToDictionary(), folder);
 
     /// <summary>Saves into the source: through the archive saver for RPF entries, otherwise to the loose file.</summary>
     public bool SaveYtd()
@@ -101,19 +109,66 @@ public sealed partial class TextureViewerViewModel
         ExtractTo(dictionary, folder);
     }
 
+    /// <summary>
+    /// Writes each texture to a DDS file in <paramref name="folder"/> on the work pool, a bar counting them; Cancel stops
+    /// it between textures, and those already written stay.
+    /// </summary>
     private void ExtractTo(TextureSet textures, string folder)
     {
-        IReadOnlyList<string> extracted;
-        try
+        if (OperationBusy)
+            return;
+        Texture[] items = [.. textures.Textures];
+        if (items.Length == 0)
         {
-            extracted = TextureDirectory.ExportDds(textures.ToDictionary(), folder);
-        }
-        catch (Exception exception) when (IsFileError(exception))
-        {
-            SetStatus($"Could not extract textures: {exception.Message}");
+            SetStatus("Extracted 0 textures");
             return;
         }
-        SetStatus($"Extracted {extracted.Count} textures");
+        GameTarget target = textures.Target;
+        Action<Texture, GameTarget, string> export = ExportTexture;
+        operationBusy = true;
+        CancellationToken cancel = BeginWork("EXTRACTING TEXTURES", items.Length, items[0].Name ?? "", cancellable: true);
+        SetStatus($"Extracting {items.Length} textures…");
+        EmitStateChanged();
+        int token = generation;
+        pool.Start(() =>
+        {
+            for (int index = 0; index < items.Length; index++)
+            {
+                int done = index;
+                if (cancel.IsCancellationRequested)
+                {
+                    Post(() => ExtractFinished(token, done, items.Length, null, cancelled: true));
+                    return;
+                }
+                string name = items[index].Name ?? "";
+                Post(() => WorkReached(token, done, name));
+                try
+                {
+                    export(items[index], target, folder);
+                }
+                catch (Exception exception)
+                {
+                    // Any failure ends the extract with its reason, so the editor never stays busy.
+                    string message = exception.Message;
+                    Post(() => ExtractFinished(token, done, items.Length, message, cancelled: false));
+                    return;
+                }
+            }
+            Post(() => ExtractFinished(token, items.Length, items.Length, null, cancelled: false));
+        }, PriorityTransform);
+    }
+
+    private void ExtractFinished(int token, int written, int total, string? error, bool cancelled)
+    {
+        if (token != generation)
+            return;
+        operationBusy = false;
+        EndWork();
+        string kept = $"{written} of {total} textures were written";
+        SetStatus(error is not null ? $"Could not extract textures: {error}{(written > 0 ? $" ({kept})" : "")}"
+            : cancelled ? $"Extract cancelled: {kept}"
+            : $"Extracted {total} textures");
+        EmitStateChanged();
     }
 
     private Func<TextureSet, byte[]> Serializer()
@@ -135,6 +190,8 @@ public sealed partial class TextureViewerViewModel
         operationBusy = true;
         saving = true;
         savingRootPath = rootPath;
+        // One write: the overlay shows the train, with nothing to count and nothing to cancel.
+        BeginWork("SAVING", 0, label, cancellable: false);
         SetStatus($"Saving {label}…");
         EmitStateChanged();
         try
@@ -171,6 +228,7 @@ public sealed partial class TextureViewerViewModel
         FinishSourceWrite(true);
         operationBusy = false;
         saving = false;
+        EndWork();
         if (sourceUpdate is { } update)
         {
             (sourcePath, sourceName) = update;
@@ -196,6 +254,7 @@ public sealed partial class TextureViewerViewModel
         FinishSourceWrite(false);
         operationBusy = false;
         saving = false;
+        EndWork();
         SetStatus($"Could not save {label}: {message}");
         EmitStateChanged();
         SaveFinished?.Invoke(this, false);

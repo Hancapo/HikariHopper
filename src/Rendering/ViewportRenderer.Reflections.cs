@@ -8,12 +8,12 @@ namespace HikariHopper.Rendering;
 // The reflection maps drawables reflect (reflection_map.wgsl), dual paraboloids with a full mip chain each, as GTA's
 // is. The sky map is GTA's sky at the viewer's time of day as the game draws it into its reflection map, with the
 // stand-in ground below the horizon, redrawn when the time changes. The scene map is what drawables reflect: like the
-// game's, drawn each frame from the camera, the sky map with the drawables over it, which reflect only the sky map
-// themselves.
+// game's, drawn each frame from the camera, the sky map with the backdrop's floor below its horizon and the drawables
+// over it, which reflect only the sky map themselves.
 internal sealed unsafe partial class ViewportRenderer
 {
     internal const uint ReflectionWidth = 512, ReflectionHeight = 256;
-    private const int SkyBytes = 10 * 16, ReflectionViewBytes = 32;
+    private const int SkyBytes = 10 * 16, ReflectionViewBytes = 32, FloorBytes = 5 * 16;
 
     /// <summary>A reflection map, its mips one by one, and each mip's view for drawing the next from.</summary>
     private sealed record ReflectionMap(Texture Texture, TextureView View, TextureView[] Mips, BindGroup[] Sources);
@@ -27,7 +27,9 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroupLayout? reflectionViewLayout;
     private readonly Buffer?[] reflectionViewBuffers = new Buffer?[2];
     private readonly BindGroup?[] reflectionViewGroups = new BindGroup?[2];
-    private RenderPipeline? reflectionPipeline, downsamplePipeline;
+    private Buffer? floorBuffer;
+    private BindGroup? floorGroup;
+    private RenderPipeline? reflectionPipeline, downsamplePipeline, floorPipeline;
 
     /// <summary>The reflection map's mip count, which the surfaces' mip curve is in terms of, as the game's is.</summary>
     internal static uint ReflectionMips => (uint)BitOperations.Log2(ReflectionWidth) + 1;
@@ -161,6 +163,50 @@ internal sealed unsafe partial class ViewportRenderer
         }));
         reflectionPipeline = Pipeline("fs_reflection_map", [skyLayout]);
         downsamplePipeline = Pipeline("fs_reflection_downsample", [skyLayout, sourceLayout]);
+
+        // The backdrop's floor, blended over the scene map's sky below the horizon, before its drawables.
+        BindGroupLayout floorLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = FloorBytes },
+                },
+            ],
+        });
+        floorBuffer = device.CreateBuffer(new BufferDescriptor { Size = FloorBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        floorGroup = device.CreateBindGroup(new BindGroupDescriptor
+        {
+            Layout = floorLayout,
+            Entries = [new BindGroupEntry { Binding = 0, Buffer = floorBuffer, Size = FloorBytes }],
+        });
+        floorPipeline = gpu.Pipeline($"reflection-map/fs_reflection_floor/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [skyLayout, floorLayout] }),
+            Vertex = new VertexState { Module = shader.Value, EntryPoint = "vs_reflection_map" },
+            Fragment = new FragmentState
+            {
+                Module = shader.Value,
+                EntryPoint = "fs_reflection_floor",
+                Targets = new[]
+                {
+                    new ColorTargetState
+                    {
+                        Format = HdrFormat,
+                        Blend = new BlendState
+                        {
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.One },
+                        },
+                        WriteMask = ColorWriteMask.All,
+                    },
+                },
+            },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
+        }));
     }
 
     /// <summary>
@@ -187,7 +233,8 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>
     /// Draws the scene map for this frame, as GTA draws its reflection map: from the camera, the sky map with the
-    /// drawables drawn over it into each hemisphere's half (lit with the sky map), then its mips.
+    /// backdrop's floor below its horizon and the drawables drawn over it into each hemisphere's half (lit with the sky
+    /// map), then its mips.
     /// </summary>
     private void DrawSceneReflections(CommandEncoder encoder)
     {
@@ -199,6 +246,11 @@ internal sealed unsafe partial class ViewportRenderer
             Span<Vector4> view = [new Vector4(eye, far), new Vector4(side == 0 ? 1 : -1, 0, 0, 0)];
             queue.WriteBuffer(reflectionViewBuffers[side]!, 0, (ReadOnlySpan<Vector4>)view);
         }
+        // The floor as the backdrop draws it, lit as a grey card is by the timecycle's light.
+        Vector4[] palette = ViewportPalette.Linear();
+        float light = Vector3.Dot(Timecycle.GroundRadiance(cycle, key.Direction), new Vector3(.2126f, .7152f, .0722f)) / .18f;
+        Span<Vector4> floor = [new Vector4(Camera.Eye, Ground), new Vector4(GridSpacing(Camera.Radius), light, 0, 0), palette[2], palette[3], palette[4]];
+        queue.WriteBuffer(floorBuffer!, 0, (ReadOnlySpan<Vector4>)floor);
         var whole = new Extent3D(ReflectionWidth, ReflectionHeight, 1);
         encoder.CopyTextureToTexture(
             new TexelCopyTextureInfo { Texture = skyMap!.Texture, MipLevel = 0, Aspect = TextureAspect.All },
@@ -215,6 +267,10 @@ internal sealed unsafe partial class ViewportRenderer
                 DepthClearValue = 1,
             },
         });
+        pass.SetPipeline(floorPipeline!);
+        pass.SetBindGroup(0, skyGroup!);
+        pass.SetBindGroup(1, floorGroup!);
+        pass.Draw(3);
         pass.SetBindGroup(0, sceneGroup);
         pass.SetBindGroup(2, skyLightGroup!);
         // The upper hemisphere on the right half, the lower on the left.

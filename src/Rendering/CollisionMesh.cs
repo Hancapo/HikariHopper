@@ -53,17 +53,22 @@ internal sealed class CollisionMesh
         return name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
     }
 
+    /// <summary>The heading the parts panel lists a collision's materials under.</summary>
+    internal const string Section = "Materials";
+
+    // What is drawn next wears the material's mark, which the parts panel lists.
     private void Material(BoundMaterialType type)
     {
         colour = Colour(type);
         material = Name(type);
+        mesh.Mark(material, colour, Section);
     }
 
     /// <summary>Counts the material for the legend if the shape just added drew anything: skipped ones don't count.</summary>
     private void Counted(int trianglesBefore)
     {
         if (material is not null && mesh.TriangleCount > trianglesBefore)
-            mesh.Explain(material, colour);
+            mesh.Explain(material, colour, Section);
     }
 
     private void Add(Bound bound, Matrix4x4 parent)
@@ -113,7 +118,10 @@ internal sealed class CollisionMesh
             if (polygon.MaterialIndex < geometry.Materials.Count)
                 Material(geometry.Materials[polygon.MaterialIndex].Type);
             else
+            {
                 (colour, material) = (Fallback, null);
+                mesh.Mark(-1);
+            }
             bool inRange = true;
             for (int i = 0; i < polygon.VertexCount; i++)
                 inRange &= polygon.VertexIndex(i) < vertices.Count;

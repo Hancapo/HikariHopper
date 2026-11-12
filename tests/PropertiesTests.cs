@@ -12,12 +12,9 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class PropertiesTests : ExplorerTestBase
 {
-    private static int Row(ExplorerViewModel bridge, string name) =>
-        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
-
     private static EntryProperties Read(ExplorerViewModel bridge, string name)
     {
-        bridge.SelectEntry(Row(bridge, name));
+        bridge.SelectEntry(RowFor(bridge, name));
         Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
         Settle(bridge);
         Assert.True(reading.IsCompleted);
@@ -130,7 +127,7 @@ public sealed class PropertiesTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         File.Delete(Path.Combine(Work, "notes.txt"));
         Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
         Settle(bridge);
@@ -147,9 +144,9 @@ public sealed class PropertiesTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "a.txt"));
+        bridge.SelectEntry(RowFor(bridge, "a.txt"));
         Task<EntryProperties?> reading = bridge.ReadSelectionProperties();
-        bridge.SelectEntry(Row(bridge, "b.txt"));
+        bridge.SelectEntry(RowFor(bridge, "b.txt"));
         Settle(bridge);
         Assert.Null(reading.Result);
     }
@@ -165,13 +162,13 @@ public sealed class PropertiesTests : ExplorerTestBase
         Settle(bridge);
         var menu = new ExplorerContextMenu { DataContext = bridge };
 
-        bridge.SelectEntry(Row(bridge, "a.txt"));
+        bridge.SelectEntry(RowFor(bridge, "a.txt"));
         menu.Refresh();
         Assert.True(menu.PropertiesItem.IsVisible);
         Assert.True(menu.PropertiesItem.IsEnabled);
         Assert.Equal("Alt+Enter", menu.PropertiesItem.ShortcutText);
 
-        bridge.SelectEntry(Row(bridge, "b.txt"), KeyModifiers.Control);
+        bridge.SelectEntry(RowFor(bridge, "b.txt"), KeyModifiers.Control);
         menu.Refresh();
         Assert.False(menu.PropertiesItem.IsVisible);
         Assert.False(bridge.CanShowProperties);
@@ -194,18 +191,24 @@ public sealed class PropertiesTests : ExplorerTestBase
         ExplorerViewModel bridge = session.Tabs.ActiveBridge;
         bridge.OpenGame(Work);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
-        bridge.SelectEntry(Row(bridge, "notes.txt"));
+        TestWait.Settle();
+        bridge.SelectEntry(RowFor(bridge, "notes.txt"));
         window.KeyPress(Key.Enter, RawInputModifiers.Alt, PhysicalKey.Enter, null);
         window.KeyRelease(Key.Enter, RawInputModifiers.Alt, PhysicalKey.Enter, null);
         Settle(bridge);
-        ExplorerStateRenders.Pump(300);
+        TestWait.Settle();
 
         WorkspaceView workspace = window.GetVisualDescendantsOf<WorkspaceView>();
         PropertiesDialog sheet = Assert.IsType<PropertiesDialog>(workspace.PropertiesSheet);
         Assert.True(sheet.IsOpen);
         Assert.Equal("PROPERTIES", sheet.Heading);
         Assert.Equal("notes.txt", sheet.Properties.Name);
+        // As tall as what it shows: a file's few rows, not its whole share of the window (560 here), and nothing to scroll.
+        Assert.True(sheet.FitsContent);
+        Assert.Equal(sheet.FittedHeight, sheet.Bounds.Height);
+        Assert.InRange(sheet.Bounds.Height, 200, 420);
+        var scroller = Assert.IsType<Avalonia.Controls.ScrollViewer>(sheet.Content);
+        Assert.True(scroller.Extent.Height <= scroller.Viewport.Height);
         window.Close();
     }
 }

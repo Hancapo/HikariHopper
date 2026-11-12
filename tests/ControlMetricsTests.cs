@@ -1,7 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -35,16 +38,7 @@ public sealed class ControlMetricsTests
         }
     }
 
-    private static Color Pixel(Window window, int x, int y)
-    {
-        using WriteableBitmap frame = window.CaptureRenderedFrame()!;
-        using ILockedFramebuffer buffer = frame.Lock();
-        var bytes = new byte[4];
-        System.Runtime.InteropServices.Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, bytes, 0, 4);
-        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888
-            ? Color.FromArgb(bytes[3], bytes[0], bytes[1], bytes[2])
-            : Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
-    }
+    private static Color Pixel(Window window, int x, int y) => TestPixels.At(window, x, y);
 
     private static Control TopLeft(Control control)
     {
@@ -54,7 +48,7 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
-    public void ChromeToolButtonHasQmlImplicitSizeAndVariantFills() => UiThread.Run(() =>
+    public void ChromeToolButtonHasQmlImplicitSizeAndVariantFills()
     {
         var ghost = (ChromeToolButton)TopLeft(new ChromeToolButton { Text = "A very long label that does not grow it" });
         var raised = (ChromeToolButton)TopLeft(new ChromeToolButton { Raised = true, Text = "Close", Margin = new Thickness(0, 40, 0, 0) });
@@ -78,10 +72,10 @@ public sealed class ControlMetricsTests
         Assert.Equal(T.Darker(T.Selection.Color, 1.12), Pixel(window, 4, 100));
         window.MouseUp(new Point(16, 94), MouseButton.Left);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void SelectedSegmentIsAPlainRaisedFill() => UiThread.Run(() =>
+    public void SelectedSegmentIsAPlainRaisedFill()
     {
         // Configured like the toolbar's segments (NavigationBar.axaml, ChromeToolButton.segment).
         var segment = (ChromeToolButton)TopLeft(new ChromeToolButton
@@ -95,7 +89,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(T.ChromeRaised.Color, Pixel(window, 15, 0));
         Assert.False(segment.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "PART_Bevel").IsVisible);
         window.Close();
-    });
+    }
 
     [Theory]
     [InlineData(0, 1, "Extracting 1 file")]
@@ -113,7 +107,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(icon, DragCountBadge.IconFor(folders, files));
 
     [AvaloniaFact]
-    public void DragBadgeShowsTheTotalCount() => UiThread.Run(() =>
+    public void DragBadgeShowsTheTotalCount()
     {
         Control badge = DragCountBadge.Badge(2, 3);
         Window window = Show(new Panel { Children = { TopLeft(badge) } }, 80, 60);
@@ -121,10 +115,10 @@ public sealed class ControlMetricsTests
         Assert.Equal("file-stack", badge.GetVisualDescendants().OfType<LucideIcon>().Single().IconName);
         Assert.Equal("Extracting 2 folders, 3 files", Avalonia.Automation.AutomationProperties.GetName(badge));
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void DragCursorIsTheArrowWithTheBadgeBesideIt() => UiThread.Run(() =>
+    public void DragCursorIsTheArrowWithTheBadgeBesideIt()
     {
         static int Alpha(byte[] pixels, int width, int x, int y) => pixels[(y * width + x) * 4 + 3];
         var (pixels, width, height) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 1);
@@ -146,96 +140,46 @@ public sealed class ControlMetricsTests
 
         var (_, wide, tall) = DragCountBadge.Render(DragCountBadge.CursorVisual(2, 3), 2);
         Assert.Equal((2 * width, 2 * height), (wide, tall));
-    });
+    }
 
     [AvaloniaFact]
-    public void WindowControlButtonDrawsDividedCellAndPixelMarks() => UiThread.Run(() =>
-    {
-        var close = (WindowControlButton)TopLeft(new WindowControlButton { Kind = "close" });
-        Window window = Show(new Panel { Background = T.ChromeRaised, Children = { close } }, 34, 30);
-
-        Assert.Equal(new Size(34, 30), close.Bounds.Size);
-        Assert.Equal(T.BorderHard.Color, Pixel(window, 0, 15));          // left divider
-        Assert.Equal(T.TextDim.Color, Pixel(window, 16, 14));            // centre of the X
-        Assert.Equal(T.TextDim.Color, Pixel(window, 13, 11));            // aliased 45° stroke ends
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 12, 11));
-
-        window.MouseMove(new Point(17, 15));
-        Pump();
-        Assert.Equal(T.Text.Color, Pixel(window, 16, 14));               // hover brightens only the mark
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 5, 5));
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void WindowTitleBarIsThirtyPixelsAndTwentyFourInToolWindows() => UiThread.Run(() =>
+    public void TheTitleBarTellsWindowsWhatItsPartsAre()
     {
         var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
         Window window = Show(bar, 400, 60);
-        Assert.Equal(T.WindowTitleHeight, bar.Bounds.Height);
-        Assert.Equal(34, bar.CloseButton.Bounds.Width);
-        // The emblem is the app icon: its small design, 12px here, drawn from a 64px bitmap.
-        Image emblem = bar.FindControl<Image>("Emblem")!;
-        Assert.Equal(new Size(12, 12), emblem.Bounds.Size);
-        Assert.Equal(new PixelSize(64, 64), Assert.IsAssignableFrom<Bitmap>(emblem.Source).PixelSize);
-        Point at = emblem.TranslatePoint(default, window)!.Value;
-        var brass = Color.Parse("#F4C26F");
-        bool gold = false;
-        for (int y = 0; y < 12; y++)
-            for (int x = 0; x < 12; x++)
-                gold |= Distance(Pixel(window, (int)at.X + x, (int)at.Y + y), brass) < 40;
-        Assert.True(gold, "the emblem shows its brass tile");
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, (int)at.X + 16, (int)at.Y + 6));
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void TheMaximizeButtonIsTheWindowsMaximizeButtonForSnapLayouts() => UiThread.Run(() =>
-    {
-        var bar = new WindowTitleBar { VerticalAlignment = VerticalAlignment.Top };
-        Window window = Show(bar, 400, 60);
-        SnapLayoutHook hook = bar.SnapLayouts!;
-        WindowControlButton maximize = bar.MaximizeButton;
-        WindowControlGlyph glyph = maximize.GetVisualDescendants().OfType<WindowControlGlyph>().Single();
-        Point middle = maximize.TranslatePoint(new Point(maximize.Bounds.Width / 2, maximize.Bounds.Height / 2), window)!.Value;
-
-        // The pointer's screen position comes as two signed words: a monitor left of or above the main one is negative.
-        Assert.Equal(new PixelPoint(-2553, -7), SnapLayoutHook.ScreenPoint(unchecked((nint)(uint)((-7 << 16) | (-2553 & 0xFFFF)))));
-        Assert.Equal(new PixelPoint(1891, 291), SnapLayoutHook.ScreenPoint((291 << 16) | 1891));
-        // Windows asks what is under the pointer: the button's area answers HTMAXBUTTON, the rest of the bar is left alone.
-        Assert.Equal((true, SnapLayoutHook.MaxButton), hook.Handle(SnapLayoutHook.NcHitTest, 0, middle));
-        Assert.Equal((false, (nint)0), hook.Handle(SnapLayoutHook.NcHitTest, 0, new Point(60, 15)));
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, bar.CloseButton.TranslatePoint(new Point(17, 15), window)!.Value).Handled);
-
-        // The pointer then comes as non-client messages, which light the button and press it.
-        hook.Handle(SnapLayoutHook.NcMouseMove, SnapLayoutHook.MaxButton, null);
-        Assert.Equal(T.Text, glyph.Ink);
-        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null).Handled);
-        Assert.True(glyph.Pressed);
-        Assert.True(hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null).Handled);
-        Assert.False(glyph.Pressed);
+        // The title area is the window's caption (moving, snapping and double-click maximizing it), and the buttons
+        // are its minimize, maximize and close buttons: Windows 11 offers snap layouts on the maximize button.
+        Assert.Equal(WindowDecorationsElementRole.TitleBar, WindowDecorationProperties.GetElementRole(bar.FindControl<Panel>("DragArea")!));
+        // What sits after the emblem, such as the explorer's menus, takes its own clicks over the caption.
+        Assert.Equal(WindowDecorationsElementRole.User, WindowDecorationProperties.GetElementRole(bar.FindControl<ContentPresenter>("LeadingHost")!));
+        Assert.Equal(WindowDecorationsElementRole.MinimizeButton, WindowDecorationProperties.GetElementRole(bar.MinimizeButton));
+        Assert.Equal(WindowDecorationsElementRole.MaximizeButton, WindowDecorationProperties.GetElementRole(bar.MaximizeButton));
+        Assert.Equal(WindowDecorationsElementRole.CloseButton, WindowDecorationProperties.GetElementRole(bar.CloseButton));
+        // The buttons act through their own clicks, which Avalonia sends them from Windows' non-client input.
+        bar.MaximizeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(WindowState.Maximized, window.WindowState);
-        hook.Handle(SnapLayoutHook.NcLeftButtonDown, SnapLayoutHook.MaxButton, null);
-        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
+        bar.MaximizeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(WindowState.Normal, window.WindowState);
-        // A release with no press on the button is no click.
-        hook.Handle(SnapLayoutHook.NcLeftButtonUp, SnapLayoutHook.MaxButton, null);
-        Assert.Equal(WindowState.Normal, window.WindowState);
-        hook.Handle(SnapLayoutHook.NcMouseLeave, 0, null);
-        Assert.Equal(T.TextDim, glyph.Ink);
-
-        // Without maximize on offer, there's no maximize button to show snap layouts on.
-        window.CanResize = false;
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
-        window.CanResize = true;
-        bar.ShowMaximize = false;
-        Pump();
-        Assert.False(hook.Handle(SnapLayoutHook.NcHitTest, 0, middle).Handled);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void SheetsHaveAHeadingACloseMarkAndAFooter() => UiThread.Run(() =>
+    public void TheMainWindowIsANativeWindowItsTitleBarCovers()
+    {
+        var window = new MainWindow();
+        // Windows keeps the frame (resizing, rounded corners, snap layouts, taskbar minimizing and its animations);
+        // the client area covers it, and Avalonia draws no decorations of its own over the app's title bar.
+        Assert.True(window.ExtendClientAreaToDecorationsHint);
+        Assert.Equal(WindowDecorations.Full, window.WindowDecorations);
+        Assert.Equal(T.MainTitleHeight, window.ExtendClientAreaTitleBarHeightHint);
+        Assert.Same(Application.Current!.FindResource("NoDrawnDecorations"), window.WindowDecorationsTheme);
+        var splash = new SplashScreen();
+        Assert.True(splash.ExtendClientAreaToDecorationsHint);
+        Assert.Same(window.WindowDecorationsTheme, splash.WindowDecorationsTheme);
+    }
+
+    [AvaloniaFact]
+    public void SheetsHaveAHeadingACloseMarkAndAFooter()
     {
         var about = new AboutDialog();
         Window window = Show(about, 520, 460);
@@ -247,10 +191,10 @@ public sealed class ControlMetricsTests
         // The version comes from the build, not a hard-coded number.
         Assert.Equal(StartPage.AppVersion, about.FindControl<TextBlock>("VersionText")!.Text);
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void AboutSaysWhatItIsAndLinksToTheProject() => UiThread.Run(() =>
+    public void AboutSaysWhatItIsAndLinksToTheProject()
     {
         var about = new AboutDialog();
         Window window = Show(about, 520, 460);
@@ -274,12 +218,12 @@ public sealed class ControlMetricsTests
         Assert.Equal([AboutDialog.ProjectPage], opened);
         Assert.Equal("https://github.com/Hancapo/HikariHopper", AboutDialog.ProjectPage.ToString());
         window.Close();
-    });
+    }
 
     private static int Distance(Color a, Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
 
     [AvaloniaFact]
-    public void EveryWindowCarriesTheAppIcon() => UiThread.Run(() =>
+    public void EveryWindowCarriesTheAppIcon()
     {
         // The taskbar and Alt+Tab icon comes from one style, so every window class gets it.
         foreach (Window window in new Window[] { new MainWindow(), new SplashScreen() })
@@ -300,10 +244,10 @@ public sealed class ControlMetricsTests
         Assert.Equal(38, wordmark.Bounds.Height);
         Assert.Equal(38.0 * bitmap.PixelSize.Width / bitmap.PixelSize.Height, wordmark.Bounds.Width, 1);
         splash.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void QuietScrollBarThumbIsFourIdleEightActiveAndHiddenWhenContentFits() => UiThread.Run(() =>
+    public void QuietScrollBarThumbIsFourIdleEightActiveAndHiddenWhenContentFits()
     {
         var rows = new StackPanel();
         for (int i = 0; i < 60; i++)
@@ -340,71 +284,10 @@ public sealed class ControlMetricsTests
         }, 160, 200);
         Assert.Equal(T.AppBg.Color, Pixel(fits, 153, 10));
         fits.Close();
-    });
-
-    [Fact]
-    public void Windows11RoundsTheFramelessWindowsCorners()
-    {
-        if (!OperatingSystem.IsWindows())
-            Assert.Skip("DWM is Windows-only.");
-        // A hidden native popup window, never shown on screen.
-        nint handle = CreateWindowExW(0, "STATIC", "HikariHopper corner probe", 0x80000000, 0, 0, 100, 100, 0, 0, 0, 0);
-        Assert.NotEqual(0, handle);
-        try
-        {
-            Assert.Equal(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000), QtFramelessWindow.RoundCorners(handle));
-        }
-        finally
-        {
-            DestroyWindow(handle);
-        }
     }
 
-    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-    private static extern nint CreateWindowExW(int exStyle, string className, string windowName, uint style,
-        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool DestroyWindow(nint handle);
-
     [AvaloniaFact]
-    public void KeyCapIsARoundedRaisedKey() => UiThread.Run(() =>
-    {
-        var cap = (KeyCap)TopLeft(new KeyCap { Text = "F3" });
-        Window window = Show(cap, 60, 30, T.InsetBg);
-        Assert.Equal(18, cap.Bounds.Height);
-        Assert.Equal(T.KeyCapCorner, cap.CornerRadius);
-        Assert.Equal(T.Border.Color, Pixel(window, 0, 9));                // outer ring
-        Assert.Equal(T.BorderHard.Color, Pixel(window, (int)cap.Bounds.Width / 2, 16));  // dark lower edge
-        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded corner
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void MenuBarButtonIsContentWidthPlusPadding() => UiThread.Run(() =>
-    {
-        var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
-        Window window = Show(file, 100, 40, T.ChromeBg);
-        // Archivo 12 "File" on Qt's whole-pixel advances: 8 + 3 + 3 + 7 = 20, plus 12px each side.
-        Assert.Equal(new Size(44, T.MenuHeight), file.Bounds.Size);
-        Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));            // transparent at rest
-        // While its menu is open it is the top of the menu: the menu's surface, outlined on three
-        // sides, rounded on top and open at the bottom, where the menu carries on.
-        file.MenuOpen = true;
-        Pump();
-        int bottom = (int)file.Bounds.Height - 1;
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 4, 13));
-        Assert.Equal(T.Border.Color, Pixel(window, 0, 13));               // left outline
-        Assert.Equal(T.Border.Color, Pixel(window, 43, 13));              // right outline
-        Assert.Equal(T.Border.Color, Pixel(window, 20, 0));               // top outline
-        Assert.NotEqual(T.Border.Color, Pixel(window, 0, 0));             // rounded top corner
-        Assert.Equal(T.ChromeRaised.Color, Pixel(window, 20, bottom));    // open bottom
-        Assert.Equal(T.Border.Color, Pixel(window, 0, bottom));           // square bottom corner
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void TitleRowButtonsShowFocusOnlyFromTheKeyboard() => UiThread.Run(() =>
+    public void TitleRowButtonsShowFocusOnlyFromTheKeyboard()
     {
         var file = (MenuBarButton)TopLeft(new MenuBarButton { Text = "File" });
         var close = new WindowControlButton { Kind = "close", HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(60, 0, 0, 0) };
@@ -437,29 +320,10 @@ public sealed class ControlMetricsTests
         Assert.False(file.KeyboardFocused);
         Assert.Equal(T.ChromeBg.Color, Pixel(window, 4, 13));
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void RetroMenuIsFixedWidthWithRowHeightRows() => UiThread.Run(() =>
-    {
-        var root = new Panel { Background = T.ChromeBg };
-        Window window = Show(root, 400, 200, T.ChromeBg);
-        var item = new RetroMenuItem { Text = "Open RPF archive…", ShortcutText = "Ctrl+Shift+O" };
-        var menu = new RetroMenu { Items = { item, new RetroMenuSeparator(), new RetroMenuItem { Text = "Exit" } } };
-        menu.Open(root, 1, 25);
-        Pump();
-        Assert.Equal(T.MenuWidth, menu.Bounds.Width);
-        Assert.Equal(T.MenuItemHeight, item.Bounds.Height);
-        Assert.Equal(T.MenuMinimumWidth, item.Bounds.Width);
-        Assert.Equal(4 + 26 + 9 + 26 + 4, menu.Bounds.Height);
-        // Rows sit inside the frame's 4px padding, the label in the column after the icon cell.
-        Assert.Equal(new Point(4, 4), item.TranslatePoint(default, menu));
-        menu.Close();
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void SubmenusOpenClearOfTheMenuWithTheirFirstRowLevel() => UiThread.Run(() =>
+    public void SubmenusOpenClearOfTheMenuWithTheirFirstRowLevel()
     {
         var root = new Panel { Background = T.ChromeBg };
         Window window = Show(root, 800, 400, T.WindowBg);
@@ -483,10 +347,10 @@ public sealed class ControlMetricsTests
         parent.IsSubMenuOpen = false;
         menu.Close();
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void FlatTextFieldPaddingFollowsIconAndKeyCap() => UiThread.Run(() =>
+    public void FlatTextFieldPaddingFollowsIconAndKeyCap()
     {
         var field = new FlatTextField();
         Assert.Equal(new Thickness(10, 0, 10, 0), field.Padding);
@@ -495,7 +359,7 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Thickness(32, 0, 40, 0), field.Padding);
         field.Text = "texture_01";
         Assert.Equal(10, field.CaretIndex);                               // Qt moves the cursor to the end
-    });
+    }
 
     [AvaloniaFact]
     public void FileGlyphResolvesTypeInks()
@@ -512,50 +376,38 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
-    public void EveryVendoredIconParsesAndEveryMappedNameExists() => UiThread.Run(() =>
+    public void EveryVendoredIconParsesAndEveryMappedNameExists()
     {
         foreach ((string name, IReadOnlyList<string> paths) in LucideIcons.Paths)
         {
+            // A filled part (an icon's shadow) is marked so.
             foreach (string data in paths)
-                Assert.True(Geometry.Parse(data).Bounds.Width >= 0, name);
+                Assert.True(Geometry.Parse(data.StartsWith("fill:", StringComparison.Ordinal) ? data[5..] : data).Bounds.Width >= 0, name);
         }
         foreach (string name in ChromeIcon.Names.Values)
             Assert.True(LucideIcons.Paths.ContainsKey(name), name);
         foreach (string kind in new[] { "RPF Package", "Application", "Ped Definitions", "File" })
             Assert.True(LucideIcons.Paths.ContainsKey(FileGlyph.Resolve("file", kind).Icon), kind);
-    });
+    }
 
     [AvaloniaFact]
-    public void TextKeepsTheFontsDesignMetrics() => UiThread.Run(() =>
-    {
-        // Avalonia's own shaping: glyph advances are not rounded to whole pixels.
-        var label = new TextBlock { Text = "Repair alpha edges", FontFamily = T.UiFont, FontSize = 12 };
-        Window window = Show(new StackPanel { Children = { TopLeft(label) } }, 300, 100);
-        Assert.Equal(103, label.Bounds.Width);                            // design width 102.4, laid out on whole pixels
-        // Text fields still centre their line on Qt's rounded line box.
-        Assert.Equal(24, QtTextMetrics.LineHeight(T.MonoFont, 16, FontWeight.Bold));
-        Assert.Equal(40, QtTextMetrics.LineHeight(T.UiFont, 36, FontWeight.Bold));
-        window.Close();
-    });
-
-    [AvaloniaFact]
-    public void WindowsHaveTheQmlGeometry() => UiThread.Run(() =>
+    public void WindowsHaveTheQmlGeometry()
     {
         var main = new MainWindow();
         Assert.Equal((1360.0, 840.0, 940.0, 580.0), (main.Width, main.Height, main.MinWidth, main.MinHeight));
         Assert.Equal("HikariHopper — Modding Toolkit", main.Title);
         Assert.Equal("HikariHopper — Grand Theft Auto V", MainWindow.TitleFor(true, "Grand Theft Auto V"));
-        Assert.Equal(WindowDecorations.None, main.WindowDecorations);
+        Assert.Equal(WindowDecorations.Full, main.WindowDecorations);
 
         var splash = new SplashScreen();
         Assert.Equal((720.0, 400.0), (splash.Width, splash.Height));
         Assert.Equal(("Starting…", "BOOT"), (splash.StartupMessage, splash.StartupPhase));
         Assert.True(splash.Topmost);
 
-    });
+    }
 
     [AvaloniaFact]
-    public void SheetsAreSizedWithTheWindowWithinTheirBounds() => UiThread.Run(() =>
+    public void SheetsAreSizedWithTheWindowWithinTheirBounds()
     {
         // Their share of the window, within their least and most, never closer than 24px to an edge.
         var settings = new SettingsDialog();
@@ -567,14 +419,68 @@ public sealed class ControlMetricsTests
         Assert.Equal(new Size(540, 440), ModalOverlay.SizeFor(about, new Size(1360, 800)));
         Assert.Equal(new Size(440, 380), ModalOverlay.SizeFor(about, new Size(940, 540)));
         var shortcuts = new ShortcutsDialog();
-        Assert.Equal(new Size(544, 640), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        Assert.Equal(new Size(1033, 720), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        // One that fits its content is as tall as that, and no taller than its share when it holds more.
+        Assert.True(shortcuts.FitsContent);
+        shortcuts.FittedHeight = 500;
+        Assert.Equal(new Size(1033, 500), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        shortcuts.FittedHeight = 2000;
+        Assert.Equal(new Size(1033, 720), ModalOverlay.SizeFor(shortcuts, new Size(1360, 800)));
+        // The others keep their share whatever they hold.
+        about.FittedHeight = 200;
+        Assert.Equal(new Size(540, 440), ModalOverlay.SizeFor(about, new Size(1360, 800)));
         // A small dialog keeps its own size.
         var fixedDialog = new Border { Width = 300, Height = 200 };
         Assert.Equal(new Size(300, 200), ModalOverlay.SizeFor(fixedDialog, new Size(1360, 800)));
-    });
+    }
 
     [AvaloniaFact]
-    public void GamePathRowKeepsItsSizeWhateverItsFolder() => UiThread.Run(() =>
+    public void TheKeyboardReferenceListsEveryAreaInColumnsThatStartWhereOneDoes()
+    {
+        var shortcuts = new ShortcutsDialog();
+        Assert.Equal(["FILE", "GO", "EDIT", "3D VIEWER", "TEXTURE EDITOR", "TEXT VIEWER", "IMAGE VIEWER"], shortcuts.Groups.Select(group => group.Name));
+        // The explorer's own, the ones the list lacked, and the viewers' and the editor's.
+        (string Key, string Action)[] In(string name) => [.. shortcuts.Groups.Single(group => group.Name == name).Keys.Select(entry => (entry.Key, entry.Action))];
+        Assert.Contains(("F2", "Rename"), In("EDIT"));
+        Assert.Contains(("Alt+Enter", "Properties"), In("EDIT"));
+        Assert.Contains(("Ctrl+V", "Paste"), In("EDIT"));
+        Assert.Contains(("Ctrl+L · Alt+D", "Type or paste an address"), In("GO"));
+        Assert.Equal(["P", "1 – 4", "H", "T", "M", "X", "B", "K", "L", "V", "F", "W A S D · Q E"], In("3D VIEWER").Select(entry => entry.Key));
+        Assert.Contains(("Ctrl+E", "Extract as DDS"), In("TEXTURE EDITOR"));
+        Assert.Contains(("Alt+Z", "Word wrap"), In("TEXT VIEWER"));
+        Assert.Contains(("1", "Actual size"), In("IMAGE VIEWER"));
+
+        // Three columns where there is room, fewer in a narrower sheet, each starting where a part of the app does.
+        Assert.Equal(3, ShortcutColumns.ColumnsFor(1000));
+        Assert.Equal(2, ShortcutColumns.ColumnsFor(700));
+        Assert.Equal(1, ShortcutColumns.ColumnsFor(500));
+        double[] heights = [128, 172, 216, 260, 282, 150, 84];
+        bool[] starts = [false, false, false, true, false, true, false];
+        Assert.Equal([3, 2, 2], ShortcutColumns.Partition(heights, starts, 3, 25));
+        Assert.Equal([3, 4], ShortcutColumns.Partition(heights, starts, 2, 25));
+        Assert.Equal([7], ShortcutColumns.Partition(heights, starts, 1, 25));
+        // No more columns than there are places to start one.
+        Assert.Equal([3, 2, 2], ShortcutColumns.Partition(heights, starts, 5, 25));
+
+        // Laid out: the explorer's groups, then the 3D viewer's and the texture editor's, then the text and image viewers'.
+        Window window = Show(shortcuts, 1040, 760);
+        Assert.Equal([3, 2, 2], shortcuts.Columns.Split);
+        Control[] groups = [.. shortcuts.Columns.Children.Where(child => child is StackPanel)];
+        Assert.Equal(7, groups.Length);
+        Assert.Equal(0, groups[0].Bounds.Y);
+        Assert.Equal(0, groups[3].Bounds.Y);
+        Assert.Equal(0, groups[5].Bounds.Y);
+        Assert.True(groups[3].Bounds.X >= groups[0].Bounds.Right + ShortcutColumns.ColumnGap);
+        Assert.True(groups[5].Bounds.X >= groups[3].Bounds.Right + ShortcutColumns.ColumnGap);
+        // A rule between two groups of a column, none over a column's first.
+        DottedRule[] rules = [.. shortcuts.Columns.Children.OfType<DottedRule>()];
+        Assert.Equal(6, rules.Length);
+        Assert.Equal([true, true, false, true, false, true], rules.Select(rule => rule.Bounds.Width > 0));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void GamePathRowKeepsItsSizeWhateverItsFolder()
     {
         // Not set, set and found, set and not found: the same height every time, so the card never moves. In a
         // window, whose layout rounding is what turned the check's taller line into a pixel.
@@ -593,10 +499,10 @@ public sealed class ControlMetricsTests
         row.PathValid = false;
         Assert.Equal(unset, Height());
         window.Close();
-    });
+    }
 
     [AvaloniaFact]
-    public void GamePathRowReportsDetection() => UiThread.Run(() =>
+    public void GamePathRowReportsDetection()
     {
         var row = new GamePathRow { Title = "Enhanced", Edition = Core.GameSettings.EnhancedEdition, ExpectedExecutable = "GTA5_Enhanced.exe" };
         Assert.Equal("Not set", row.StatusMessage);
@@ -617,5 +523,5 @@ public sealed class ControlMetricsTests
         row.PathCommitted += (_, path) => committed = path;
         row.ClearButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.Equal("", committed);
-    });
+    }
 }

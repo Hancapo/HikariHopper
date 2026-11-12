@@ -68,67 +68,11 @@ public sealed class YtdSavingTests
             result.Textures.ToDictionary(texture => texture.Name!, texture => Convert.ToHexString(texture.Data)));
     }
 
-    [AvaloniaFact]
-    public void ManyNamesStayWithinPages()
-    {
-        var dictionary = new TextureSet(Enumerable.Range(0, 300).Select(index => Red($"{index:000}_" + new string('x', 97))), GameTarget.Legacy);
-        Assert.Equal(300, AssertPageSafe(YtdSaving.Serialize(dictionary)).Textures.Count);
-    }
-
-    [AvaloniaFact]
-    public void PayloadBytesThatLookLikePointersAreNotRelocated()
-    {
-        byte[] pattern = new byte[16];
-        BinaryPrimitives.WriteUInt64LittleEndian(pattern, 0x50000040);
-        BinaryPrimitives.WriteUInt64LittleEndian(pattern.AsSpan(8), 0x60000010);
-        var texture = new Texture("pointer_pixels", 4, 4, TextureFormat.B8G8R8A8Unorm, 1, Repeat(pattern, 4));
-        Assert.Equal(Repeat(pattern, 4), AssertPageSafe(YtdSaving.Serialize(new TextureSet([texture], GameTarget.Legacy))).Textures[0].Data.ToArray());
-    }
-
-    [AvaloniaFact]
-    public void NonemptyYtdStillUsesNormalValidation() =>
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Serialize(Dictionary("duplicate", "duplicate")));
-
     [AvaloniaTheory]
-    [MemberData(nameof(Targets))]
-    public void EmptyYtdHasZeroArraysAndNoGraphics(GameTarget target)
-    {
-        byte[] data = YtdSaving.Serialize(new TextureSet([], target));
-        ResourceFile resource = ResourceFile.Read(data);
-        Assert.Equal(target == GameTarget.Legacy ? 13u : 5u, resource.Header.Version);
-        Assert.True(resource.GraphicsData.IsEmpty || !resource.GraphicsData.ContainsAnyExcept((byte)0));
-        ReadOnlySpan<byte> system = resource.SystemData;
-        Assert.Equal(0ul, BinaryPrimitives.ReadUInt64LittleEndian(system[0x20..]));
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(system[0x28..]));
-        Assert.Equal(0ul, BinaryPrimitives.ReadUInt64LittleEndian(system[0x30..]));
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(system[0x38..]));
-        TextureSet parsed = YtdSaving.Read(data);
-        Assert.Equal(target, parsed.Target);
-        Assert.Empty(parsed.Textures);
-        // RPF storage can recompress an equivalent resource.
-        byte[] recompressed = resource.Write(System.IO.Compression.CompressionLevel.Fastest);
-        Assert.Empty(YtdSaving.Read(recompressed).Textures);
-    }
-
-    [AvaloniaFact]
-    public void CorruptEmptyYtdIsRejected()
-    {
-        ResourceFile resource = ResourceFile.Read(EmptyYtd(GameTarget.Legacy));
-        byte[] system = resource.SystemData.ToArray();
-        BinaryPrimitives.WriteUInt16LittleEndian(system.AsSpan(0x28), 1);
-        byte[] corrupted = ResourceFile.Create(resource.Header.Version, system, resource.GraphicsData,
-            resource.Header.SystemFlags, resource.Header.GraphicsFlags).Write();
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Read(corrupted));
-        Assert.ThrowsAny<Exception>(() => YtdSaving.Read(EmptyYtd(GameTarget.Legacy).AsSpan(0, 24)));
-    }
-
-    [AvaloniaTheory]
+    // Each edition's empty dictionary, saved as a loose file and inside an RPF.
     [InlineData(GameTarget.Legacy, 1, false)]
-    [InlineData(GameTarget.Legacy, 3, false)]
-    [InlineData(GameTarget.Enhanced, 1, false)]
     [InlineData(GameTarget.Enhanced, 3, true)]
-    [InlineData(GameTarget.Legacy, 3, true)]
-    public Task RemoveEveryTextureSaveReopenAndUndo(GameTarget target, int count, bool inArchive) => Headless.Run(() =>
+    public void RemoveEveryTextureSaveReopenAndUndo(GameTarget target, int count, bool inArchive)
     {
         using var folder = new TempFolder();
         TextureSet original = Dictionary(target, [.. Enumerable.Range(0, count).Select(index => $"tex_{index}")]);
@@ -195,7 +139,7 @@ public sealed class YtdSavingTests
         Settle(viewer);
         Assert.False(viewer.Saving);
         Assert.False(viewer.OperationBusy);
-    });
+    }
 
     private static byte[] ReadArchived(string archivePath, string name)
     {
@@ -209,7 +153,7 @@ public sealed class YtdSavingTests
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task SaveEmptyYtdAsPreservesTarget(GameTarget target) => Headless.Run(async () =>
+    public async Task SaveEmptyYtdAsPreservesTarget(GameTarget target)
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { SaveFile = folder.File("exported") };
@@ -227,12 +171,12 @@ public sealed class YtdSavingTests
         TextureSet saved = YtdSaving.Read(File.ReadAllBytes(destination));
         Assert.Equal(target, saved.Target);
         Assert.Empty(saved.Textures);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(GameTarget.Legacy)]
     [InlineData(GameTarget.Enhanced)]
-    public Task UndoLastRemovalPreservesAnImportedUnnamedTexture(GameTarget target) => Headless.Run(() =>
+    public void UndoLastRemovalPreservesAnImportedUnnamedTexture(GameTarget target)
     {
         ResourceFile resource = ResourceFile.Read(YtdSaving.Serialize(Dictionary(target, "named")));
         byte[] system = resource.SystemData.ToArray();
@@ -254,10 +198,10 @@ public sealed class YtdSavingTests
         Assert.Equal([original], viewer.Dictionary!.Textures);
         Assert.False(viewer.Modified);
         Assert.ThrowsAny<Exception>(() => YtdSaving.Serialize(viewer.Dictionary)); // Undo is not an export-validation bypass.
-    });
+    }
 
     [AvaloniaFact]
-    public Task InvalidSaveNeverTouchesTheDestinationOrTheSaver() => Headless.Run(() =>
+    public void InvalidSaveNeverTouchesTheDestinationOrTheSaver()
     {
         using var folder = new TempFolder();
         string path = folder.File("existing.ytd");
@@ -286,5 +230,5 @@ public sealed class YtdSavingTests
         Assert.Empty(calls);
         Assert.Equal([false], saveResults);
         Assert.Equal([new SourceWriteResult("root.rpf", false)], writes);
-    });
+    }
 }

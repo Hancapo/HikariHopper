@@ -72,7 +72,17 @@ public static class ArchiveWriter
         return current;
     }
 
+    // Each edit reads the root RPF afresh and replaces it whole, so two at once would lose the first one's change: an
+    // explorer change, a texture save and a model save each wait for the one before to be written.
+    private static readonly Lock EditGate = new();
+
     private static void Edit(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
+    {
+        lock (EditGate)
+            EditAlone(rootPath, crypto, edit);
+    }
+
+    private static void EditAlone(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
     {
         string path = Path.GetFullPath(rootPath);
         string staging = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
@@ -84,10 +94,15 @@ public static class ArchiveWriter
                 for (ArchiveNode? node = edit(root); node?.Parent is not null; node = node.Parent)
                     node.Entry!.Replace(node.Archive.Write(crypto), node.Entry.Compression);
                 using var output = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                root.Archive.Write(output, crypto);
+                // Measured against the archive as it was, and stopped mid-write if asked: the staging file goes, and
+                // the archive is as it was.
+                root.Archive.Write(OperationProgress.Current.Track(output, new FileInfo(path).Length, Path.GetFileName(path)), crypto);
                 output.Flush(flushToDisk: true);
             }
             finally { root.Close(); }
+            GameTextures.WaitForArchiveReaders(path);
+            // The last moment to stop: after this the archive is the new one.
+            OperationProgress.Current.Check();
             File.Move(staging, path, overwrite: true);
         }
         finally

@@ -8,7 +8,7 @@ namespace HikariHopper.Views;
 /// <summary>
 /// The chassis of every texture tool dialog (port of <c>TextureToolDialog.qml</c>): 520px wide,
 /// <c>SheetHeaderHeight + BodyHeight + DialogFooterHeight</c> tall, in the sheets' card: a raised header with
-/// the spaced <see cref="Heading"/> and a close mark, the body, and a footer with Cancel and the green apply button.
+/// the spaced <see cref="Heading"/> and a close mark, the body, and a footer with Cancel and the apply button, green unless it removes something.
 /// </summary>
 /// <remarks>
 /// Apply is enabled while <see cref="ApplyEnabled"/> holds and no operation runs; clicking it
@@ -29,10 +29,16 @@ public class TextureToolDialog : TextureModalDialog
     public static readonly StyledProperty<bool> ApplyEnabledProperty =
         AvaloniaProperty.Register<TextureToolDialog, bool>(nameof(ApplyEnabled), true);
 
+    /// <summary>The apply button removes something: it wears the error colour, as the explorer's Delete does.</summary>
+    public static readonly StyledProperty<bool> DestructiveProperty =
+        AvaloniaProperty.Register<TextureToolDialog, bool>(nameof(Destructive));
+
     public static readonly StyledProperty<double> BodyHeightProperty =
         AvaloniaProperty.Register<TextureToolDialog, double>(nameof(BodyHeight), 280);
 
     private ChromeToolButton? applyButton;
+    // Whether the body is as tall as its content (FitBody), measured once the dialog is in a window.
+    private bool fitsBody;
 
     public TextureToolDialog()
     {
@@ -58,6 +64,12 @@ public class TextureToolDialog : TextureModalDialog
         set => SetValue(ApplyEnabledProperty, value);
     }
 
+    public bool Destructive
+    {
+        get => GetValue(DestructiveProperty);
+        set => SetValue(DestructiveProperty, value);
+    }
+
     public double BodyHeight
     {
         get => GetValue(BodyHeightProperty);
@@ -67,7 +79,7 @@ public class TextureToolDialog : TextureModalDialog
     /// <summary>Runs the dialog's command; true accepts and closes the dialog.</summary>
     public Func<bool>? ApplyAction { get; set; }
 
-    /// <summary>The green apply button, once templated.</summary>
+    /// <summary>The apply button, once templated: green, or the error colour when <see cref="Destructive"/>.</summary>
     public ChromeToolButton? ApplyButton => applyButton;
 
     protected override Type StyleKeyOverride => typeof(TextureToolDialog);
@@ -91,6 +103,7 @@ public class TextureToolDialog : TextureModalDialog
         applyButton = e.NameScope.Find<ChromeToolButton>("PART_ApplyButton");
         if (applyButton is not null)
             applyButton.Click += (_, _) => Apply();
+        UpdateApplyStyle();
         UpdateApplyEnabled();
     }
 
@@ -101,6 +114,8 @@ public class TextureToolDialog : TextureModalDialog
             UpdateHeight();
         else if (change.Property == ApplyEnabledProperty)
             UpdateApplyEnabled();
+        else if (change.Property == DestructiveProperty)
+            UpdateApplyStyle();
     }
 
     protected override void OnViewModelChanged(string? property)
@@ -110,7 +125,38 @@ public class TextureToolDialog : TextureModalDialog
             UpdateApplyEnabled();
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (fitsBody)
+            FitBody();
+    }
+
     private void UpdateHeight() => Height = Ui.Theme.SheetHeaderHeight + BodyHeight + FooterHeight;
+
+    /// <summary>
+    /// Makes the body as tall as what is in it, at the dialog's width: for a dialog whose content comes and goes
+    /// (a warning under its outcome), in place of a height written by hand.
+    /// </summary>
+    protected void FitBody()
+    {
+        fitsBody = true;
+        // Not before it is in a window: measuring it there would style it without the app's styles, for good.
+        if (Content is not Control body || VisualRoot is null)
+            return;
+        // Measured again even at the same width: what changed is inside it. The card's own border is a pixel on each side.
+        body.InvalidateMeasure();
+        body.Measure(new Size(DialogWidth - 2, double.PositiveInfinity));
+        BodyHeight = Math.Ceiling(body.DesiredSize.Height);
+    }
+
+    private void UpdateApplyStyle()
+    {
+        if (applyButton is null)
+            return;
+        applyButton.Primary = !Destructive;
+        applyButton.Destructive = Destructive;
+    }
 
     private void UpdateApplyEnabled()
     {

@@ -81,8 +81,8 @@ public class ChromeToolButton : Button
     private static readonly IImmutableSolidColorBrush AccentDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.Accent.Color, 1.12));
     private static readonly IImmutableSolidColorBrush SegmentDown = new ImmutableSolidColorBrush(Ui.Theme.Darker(Ui.Theme.ChromeRaised.Color, 1.12));
 
-    /// <summary>A disabled segment's glyph, faded well below an off one's.</summary>
-    internal const double DisabledSegmentOpacity = .32;
+    /// <summary>A disabled button's glyph or text, faded well below an enabled one's, so it doesn't read as merely idle.</summary>
+    internal const double DisabledOpacity = .32;
 
     private Border? background;
     private Border? bevel;
@@ -251,7 +251,7 @@ public class ChromeToolButton : Button
             if (on && !IsSet(ForegroundProperty))
                 ink = Ui.Theme.Text;
         }
-        icon.Opacity = label.Opacity = Segment && !IsEffectivelyEnabled ? DisabledSegmentOpacity : 1;
+        icon.Opacity = label.Opacity = IsEffectivelyEnabled ? 1 : DisabledOpacity;
         icon.Width = icon.Height = IconSize;
         icon.Thickness = IconThickness;
         icon.IsVisible = IconKind.Length > 0;

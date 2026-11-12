@@ -11,9 +11,6 @@ public sealed class ExtractionTests : ExplorerTestBase
 {
     private string Output(string name) => Path.GetFullPath(Path.Combine(Work, "..", "out-" + name));
 
-    private static int Row(ExplorerViewModel bridge, string name) =>
-        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
-
     [AvaloniaFact]
     public async Task ExtractingFromAnArchiveWritesTheFilesAndFolders()
     {
@@ -21,8 +18,8 @@ public sealed class ExtractionTests : ExplorerTestBase
         string path = SaveArchive(Path.Combine(Work, "mods.rpf"), ("data/carcols.meta", "<Item />"), ("readme.txt", "hello"));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(path);
-        bridge.SelectEntry(Row(bridge, "data"));
-        bridge.SelectEntry(Row(bridge, "readme.txt"), Avalonia.Input.KeyModifiers.Control);
+        bridge.SelectEntry(RowFor(bridge, "data"));
+        bridge.SelectEntry(RowFor(bridge, "readme.txt"), Avalonia.Input.KeyModifiers.Control);
         string output = Output("archive");
         Dialogs.Folders.Enqueue(output);
 
@@ -52,8 +49,8 @@ public sealed class ExtractionTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "notes"));
-        bridge.SelectEntry(Row(bridge, "loose.txt"), Avalonia.Input.KeyModifiers.Control);
+        bridge.SelectEntry(RowFor(bridge, "notes"));
+        bridge.SelectEntry(RowFor(bridge, "loose.txt"), Avalonia.Input.KeyModifiers.Control);
         string output = Output("loose");
         Dialogs.Folders.Enqueue(output);
 
@@ -71,7 +68,7 @@ public sealed class ExtractionTests : ExplorerTestBase
         string path = SaveArchive(Path.Combine(Work, "mods.rpf"), ("data.v1/a.txt", "a"));
         var bridge = new ExplorerViewModel();
         bridge.OpenArchive(path);
-        bridge.SelectEntry(Row(bridge, "data.v1"));
+        bridge.SelectEntry(RowFor(bridge, "data.v1"));
         string output = Output("dotted");
         // A file already has the folder's name there.
         Write(Path.Combine(output, "data.v1"), "file");
@@ -90,7 +87,7 @@ public sealed class ExtractionTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "mods.rpf"));
+        bridge.SelectEntry(RowFor(bridge, "mods.rpf"));
         Dialogs.Folders.Enqueue(Work);
 
         Assert.True(await bridge.ExtractArchiveContent());
@@ -107,7 +104,7 @@ public sealed class ExtractionTests : ExplorerTestBase
         var bridge = new ExplorerViewModel();
         bridge.OpenGame(Work);
         Settle(bridge);
-        bridge.SelectEntry(Row(bridge, "touhou.rpf"));
+        bridge.SelectEntry(RowFor(bridge, "touhou.rpf"));
         Assert.True(bridge.CanExtractArchiveContent);
         string output = Output("content");
         Dialogs.Folders.Enqueue(output);
@@ -122,14 +119,14 @@ public sealed class ExtractionTests : ExplorerTestBase
 
         // A nested RPF's own content, from inside its parent.
         bridge.OpenArchive(Path.Combine(Work, "touhou.rpf"));
-        bridge.SelectEntry(Row(bridge, "inner.rpf"));
+        bridge.SelectEntry(RowFor(bridge, "inner.rpf"));
         Dialogs.Folders.Enqueue(output);
         Assert.True(await bridge.ExtractArchiveContent());
         Settle(bridge);
         Assert.Equal("x", File.ReadAllText(Path.Combine(output, "inner", "deep", "x.txt")));
 
         // Only an RPF has content to extract.
-        bridge.SelectEntry(Row(bridge, "textures"));
+        bridge.SelectEntry(RowFor(bridge, "textures"));
         Assert.False(bridge.CanExtractArchiveContent);
         Assert.False(await bridge.ExtractArchiveContent());
     }
@@ -155,7 +152,7 @@ public sealed class ExtractionTests : ExplorerTestBase
         bridge.OpenGame(Work);
         Settle(bridge);
         var menu = new ExplorerContextMenu { DataContext = bridge };
-        bridge.SelectEntry(Row(bridge, "touhou.rpf"));
+        bridge.SelectEntry(RowFor(bridge, "touhou.rpf"));
         menu.Refresh();
         Assert.True(menu.ExtractItem.IsVisible);
         Assert.True(menu.ExtractContentItem.IsVisible);

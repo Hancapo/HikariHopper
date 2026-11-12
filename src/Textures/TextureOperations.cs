@@ -82,15 +82,33 @@ public static class TextureOperations
         TextureProcessing.GenerateMipmaps(texture, TextureDimensions.MipStopSize(texture.Width, texture.Height, minMipSize),
             filter, DefaultQuality);
 
+    /// <summary>The texture with its full-size level alone: the chain stops where it starts. Mip 0 keeps its encoded bytes.</summary>
+    public static Texture DropMipmaps(Texture texture, ImageFilter filter) => texture.MipCount <= 1
+        ? texture
+        : TextureProcessing.GenerateMipmaps(texture, Math.Max(texture.Width, texture.Height), filter, DefaultQuality);
+
+    /// <summary>
+    /// Whether any of the texture's pixels is less than opaque, read from a small level of its chain: enough to say
+    /// whether a format without alpha would lose something.
+    /// </summary>
+    public static bool UsesAlpha(Texture texture)
+    {
+        int mip = 0;
+        while (mip + 1 < texture.MipCount && Math.Max(texture.Width >> (mip + 1), texture.Height >> (mip + 1)) >= 64)
+            mip++;
+        return TextureProcessing.Decode(texture, mip).HasTransparency;
+    }
+
     /// <summary>Port of <c>_change_texture_format</c>: TexFury <c>to_format</c> re-encodes mip 0 into the new format and
     /// regenerates the full chain. An explicit BC1 choice is opaque, as TexFury's <c>BC1</c>.</summary>
-    public static Texture ChangeFormat(Texture texture, TextureFormat format, float quality, ImageFilter filter, int minMipSize)
+    public static Texture ChangeFormat(Texture texture, TextureFormat format, float quality, ImageFilter filter, int minMipSize,
+        bool generateMipmaps = true)
     {
         var options = new TextureEncodingOptions
         {
             Format = format,
             Quality = Math.Clamp(quality, 0, 1),
-            GenerateMipmaps = true,
+            GenerateMipmaps = generateMipmaps,
             MinimumMipDimension = TextureDimensions.MipStopSize(texture.Width, texture.Height, minMipSize),
             MipFilter = filter,
         };

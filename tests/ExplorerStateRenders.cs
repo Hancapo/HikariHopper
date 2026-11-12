@@ -24,7 +24,8 @@ public sealed class ExplorerStateRenders
 {
     private const string EnhancedPath = @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced";
 
-    [AvaloniaFact]
+    // A tool for PR screenshots, not a test: run only when asked for (--explicit only).
+    [AvaloniaFact(Explicit = true)]
     public void RenderAll()
     {
         string? states = Environment.GetEnvironmentVariable("HH_STATES");
@@ -84,7 +85,7 @@ public sealed class ExplorerStateRenders
         };
         session.Attach(window);
         window.Show();
-        Pump(150);
+        TestWait.Pump(150);
         MouseButton? held = null;
         Point heldAt = default;
         foreach (JsonElement op in state.GetProperty("ops").EnumerateArray())
@@ -138,7 +139,7 @@ public sealed class ExplorerStateRenders
                     }
                     if (kind != "press")
                     {
-                        Pump(20);
+                        TestWait.Pump(20);
                         window.MouseUp(point, button);
                         held = null;
                     }
@@ -203,7 +204,7 @@ public sealed class ExplorerStateRenders
                     bridge.SetFoldersVisible(op[1].GetBoolean());
                     break;
                 case "wait":
-                    Pump(op[1].GetInt32());
+                    TestWait.Pump(op[1].GetInt32());
                     break;
                 case "wheel":
                 {
@@ -213,16 +214,16 @@ public sealed class ExplorerStateRenders
                     break;
                 }
             }
-            Pump(80);
+            TestWait.Pump(80);
         }
-        Pump(250);
+        TestWait.Pump(250);
         using (var frame = window.CaptureRenderedFrame())
             frame?.Save(Path.Combine(output, name + ".png"), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
         if (held is { } button2)
             window.MouseUp(heldAt, button2);
         window.Close();
         // Let a slow load finish before the next state starts.
-        Pump(state.GetProperty("ops").EnumerateArray().Any(op => op[0].GetString() == "slow_load") ? 4500 : 30);
+        TestWait.Pump(state.GetProperty("ops").EnumerateArray().Any(op => op[0].GetString() == "slow_load") ? 4500 : 30);
     }
 
     private static int RowOf(ExplorerViewModel bridge, string name)
@@ -241,24 +242,4 @@ public sealed class ExplorerStateRenders
         2 => KeyModifiers.Shift,
         _ => KeyModifiers.None,
     };
-
-    /// <summary>
-    /// Runs the dispatcher loop (jobs and timers) for about <paramref name="milliseconds"/>, rendering
-    /// every few milliseconds. <c>RunJobs</c> alone never promotes due DispatcherTimers.
-    /// </summary>
-    internal static void Pump(int milliseconds)
-    {
-        var clock = Stopwatch.StartNew();
-        do
-        {
-            var frame = new DispatcherFrame();
-            int slice = (int)Math.Max(1, Math.Min(10, milliseconds - clock.ElapsedMilliseconds));
-            _ = Task.Delay(slice).ContinueWith(_ => Dispatcher.UIThread.Post(() => frame.Continue = false, DispatcherPriority.Send));
-            Dispatcher.UIThread.PushFrame(frame);
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-        }
-        while (clock.ElapsedMilliseconds < milliseconds);
-        Dispatcher.UIThread.RunJobs();
-        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-    }
 }

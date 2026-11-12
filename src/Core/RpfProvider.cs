@@ -328,6 +328,7 @@ public sealed class RpfProvider
         string root = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(root);
         var exported = new List<string>();
+        OperationProgress.Current.Expect(entries.Sum(FileCount));
         foreach (EntryRecord entry in entries)
         {
             string destination = SafeExportChild(root, entry.Name);
@@ -347,6 +348,8 @@ public sealed class RpfProvider
         string root = Path.GetFullPath(destination);
         Directory.CreateDirectory(root);
         var written = new List<string>();
+        // Counted file by file, and stopped between files; what was written stays.
+        OperationProgress.Current.Expect(entries.Sum(FileCount));
         foreach (EntryRecord entry in entries)
         {
             string target = FreeChild(root, SafeExportChild(root, entry.Name), entry.IsDirectory);
@@ -394,8 +397,21 @@ public sealed class RpfProvider
     private void ExportArchiveContents(ArchiveNode node, string target)
     {
         Directory.CreateDirectory(target);
-        foreach (EntryRecord child in ArchiveRecords(node, "."))
+        EntryRecord[] children = [.. ArchiveRecords(node, ".")];
+        OperationProgress.Current.Expect(children.Sum(FileCount));
+        foreach (EntryRecord child in children)
             ExportArchiveEntry(child, SafeExportChild(target, child.Name));
+    }
+
+    /// <summary>How many files <paramref name="entry"/> is: one for a file, everything in a folder for a folder.</summary>
+    private int FileCount(EntryRecord entry)
+    {
+        if (!entry.IsDirectory)
+            return 1;
+        if (entry.ArchiveItem is { } item)
+            return ArchiveRecords(item.Node, item.LocalPath).Sum(FileCount);
+        string path = GameEntryCandidate(entry);
+        return Directory.Exists(path) ? Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Count() : 0;
     }
 
     /// <summary>
@@ -426,6 +442,7 @@ public sealed class RpfProvider
         {
             if (EntryOperations.IsLinkedPath(source))
                 throw new ArgumentException("Extraction through linked files or folders is not supported");
+            OperationProgress.Current.Item(Path.GetFileName(source));
             File.Copy(source, target);
             return;
         }
@@ -828,6 +845,7 @@ public sealed class RpfProvider
         }
         if (entry.ArchiveItem?.Entry is not RpfFileEntry file)
             throw new ArgumentException($"Archive entry is unavailable: {entry.Name}");
+        OperationProgress.Current.Item(entry.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         File.WriteAllBytes(destination, file.ReadStandalone());
     }

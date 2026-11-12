@@ -34,6 +34,11 @@ internal sealed partial class ViewportHost : NativeControlHost
     private bool dragging;
     private int mouseX;
     private int mouseY;
+    // Where the left button went down, and whether it moved off it: a press that doesn't is a click, which picks.
+    private int pressX;
+    private int pressY;
+    private bool pressMoved;
+    private int[] picked = [];
     private int surfaceWidth;
     private int surfaceHeight;
     // What is framed, the world's origin until a file says where its content is; and what is shown.
@@ -110,6 +115,19 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.ShowOverlays(segments);
     }
 
+    /// <summary>Outlines these of the drawable's parts, by index, as picked; none outlines none.</summary>
+    internal void Pick(IEnumerable<int> parts)
+    {
+        picked = [.. parts];
+        renderer?.Pick(picked);
+    }
+
+    /// <summary>The parts outlined, by index.</summary>
+    internal IReadOnlyList<int> Picked => picked;
+
+    /// <summary>Raised when the view is clicked without dragging, with the ray from the eye through the pointer, in the world.</summary>
+    public event Action<System.Numerics.Vector3, System.Numerics.Vector3>? Clicked;
+
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
     internal void ShowParts(bool[] shown)
     {
@@ -122,6 +140,46 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         renderer?.Focus(box);
         InvalidateVisual();
+    }
+
+    /// <summary>The camera's right, up and forward in the world, for the axes gizmo; a new camera's before the GPU starts.</summary>
+    public (System.Numerics.Vector3 Right, System.Numerics.Vector3 Up, System.Numerics.Vector3 Forward) CameraBasis
+    {
+        get
+        {
+            Rendering.OrbitCamera camera = renderer?.Camera ?? Unstarted;
+            return (camera.Right, camera.Up, camera.Forward);
+        }
+    }
+
+    private static readonly Rendering.OrbitCamera Unstarted = new();
+
+    /// <summary>Raised after a frame that turned the camera, on the UI thread.</summary>
+    public event Action? CameraTurned;
+
+    // How the camera was turned at the last frame, to tell when it turns.
+    private (float Yaw, float Pitch) turned = (float.NaN, float.NaN);
+
+    /// <summary>Looks from along a world axis, as the gizmo asks.</summary>
+    public void LookFrom(System.Numerics.Vector3 axis)
+    {
+        if (renderer is null)
+            return;
+        // Framed first, as F frames it, so the view shows it whole from that side wherever the camera was.
+        renderer.Frame(framed);
+        renderer.Camera.LookFrom(axis);
+        CameraTurned?.Invoke();
+    }
+
+    /// <summary>Orbits the camera (or turns it, flying) by a drag in pixels, as a drag on the view does.</summary>
+    public void Turn(float dx, float dy)
+    {
+        if (renderer?.Camera is not { } camera)
+            return;
+        if (camera.Free)
+            camera.Look(dx, dy);
+        else
+            camera.Orbit(dx, dy);
     }
 
     /// <summary>Points the camera back at what was framed last.</summary>
@@ -149,12 +207,13 @@ internal sealed partial class ViewportHost : NativeControlHost
         }
     }
 
-    /// <summary>Shows these triangles in place of anything before.</summary>
+    /// <summary>Shows these triangles in place of anything before; again, after the marks it shows changed.</summary>
     public void Show(ViewportMesh? mesh)
     {
         shown = mesh;
         surfaces = null;
         renderer?.Show(mesh);
+        InvalidateVisual();
     }
 
     /// <summary>Shows a drawable's surfaces in place of anything before.</summary>
@@ -162,10 +221,20 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         surfaces = drawable;
         partsShown = null;
+        picked = [];
         overlays = [];
         solid = [];
         shown = null;
         renderer?.Show(drawable);
+    }
+
+    /// <summary>
+    /// Draws the drawable shown's material <paramref name="index"/> as the scene now has it, after its values were edited.
+    /// </summary>
+    internal void UpdateMaterial(int index)
+    {
+        if (surfaces is not null && index >= 0 && index < surfaces.Materials.Count)
+            renderer?.UpdateMaterial(index, surfaces.Materials[index]);
     }
 
     /// <summary>WebGPU started, with the GPU it draws with.</summary>
@@ -176,6 +245,9 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     /// <summary>Escape was pressed while the viewport had the keyboard.</summary>
     public event Action? EscapePressed;
+
+    /// <summary>A letter was pressed with Ctrl, without Alt, while the viewport had the keyboard (Ctrl+Z, say), and whether with Shift.</summary>
+    public event Action<char, bool>? CommandPressed;
 
     /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
     public event Action<char>? ShortcutPressed;
@@ -214,6 +286,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 renderer.Show(surfaces);
                 if (partsShown is not null)
                     renderer.ShowParts(partsShown);
+                renderer.Pick(picked);
                 renderer.ShowOverlays(overlays);
                 renderer.ShowSolid(solid);
             }
@@ -258,6 +331,11 @@ internal sealed partial class ViewportHost : NativeControlHost
                 }
                 Fly(renderer.Camera);
                 renderer.Draw();
+                if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
+                {
+                    turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
+                    CameraTurned?.Invoke();
+                }
             }
         }
         catch (InvalidOperationException error)
@@ -372,12 +450,15 @@ internal sealed partial class ViewportHost : NativeControlHost
             case LeftDown:
             case RightDown when r.Camera.Free:
                 (mouseX, mouseY) = Point(lParam);
+                if (message == LeftDown)
+                    (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
                 dragging = true;
                 SetFocus(window);
                 SetCapture(window);
                 return 0;
             case MouseMove when dragging:
                 (int x, int y) = Point(lParam);
+                pressMoved |= Math.Abs(x - pressX) + Math.Abs(y - pressY) > 3;
                 if (r.Camera.Free)
                     r.Camera.Look(x - mouseX, y - mouseY);
                 else
@@ -386,6 +467,12 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case LeftUp:
             case RightUp when dragging:
+                if (message == LeftUp && dragging && !pressMoved)
+                {
+                    (int clickX, int clickY) = Point(lParam);
+                    (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
+                    Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                }
                 dragging = false;
                 ReleaseCapture();
                 return 0;
@@ -402,6 +489,11 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case KeyPressed when wParam == 0x1B:
                 Dispatcher.UIThread.Post(() => EscapePressed?.Invoke());
+                return 0;
+            case KeyPressed when (uint)wParam is >= 0x41 and <= 0x5A && GetKeyState(0x11) < 0 && GetKeyState(0x12) >= 0:
+                char command = (char)wParam;
+                bool shift = GetKeyState(0x10) < 0;
+                Dispatcher.UIThread.Post(() => CommandPressed?.Invoke(command, shift));
                 return 0;
             case KeyPressed when (uint)wParam is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A && GetKeyState(0x11) >= 0 && GetKeyState(0x12) >= 0:
                 char key = (char)wParam;

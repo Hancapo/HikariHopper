@@ -22,7 +22,7 @@ public sealed class TextViewerInputTests
         window.Show();
         var viewer = new TextViewer(TextDocument.Load("notes.txt", Encoding.UTF8.GetBytes(text.ToString()))) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(400);
+        TestWait.Settle();
         return (window, viewer);
     }
 
@@ -58,13 +58,13 @@ public sealed class TextViewerInputTests
         window.MouseMove(below, RawInputModifiers.LeftMouseButton);
         int caretThen = viewer.Lines.Caret.Line;
         // Held still past the edge, it goes on scrolling on its own.
-        ExplorerStateRenders.Pump(500);
+        TestWait.Until(() => viewer.Lines.Caret.Line > caretThen + 5, "the drag to scroll on past the edge");
         Assert.True(scroller.Offset.Y > 0);
         Assert.True(viewer.Lines.Caret.Line > caretThen + 5, $"{viewer.Lines.Caret.Line} vs {caretThen}");
         Assert.Equal(new TextPosition(2, 0), viewer.Lines.Selection.Start);
         window.MouseUp(below, MouseButton.Left);
         double stopped = scroller.Offset.Y;
-        ExplorerStateRenders.Pump(200);
+        TestWait.Pump(200);
         Assert.Equal(stopped, scroller.Offset.Y);
         Assert.False(viewer.Lines.IsSelecting);
         window.Close();
@@ -87,7 +87,7 @@ public sealed class TextViewerInputTests
         // A click on a line number picks the line; a drag down the numbers picks more.
         TextLinesView view = viewer.Lines;
         Point number = view.TranslatePoint(new Point(10, 10 + 5.5 * view.LineHeight), window)!.Value;
-        ExplorerStateRenders.Pump(600);
+        TestWait.Settle();
         window.MouseDown(number, MouseButton.Left);
         Assert.Equal((new TextPosition(5, 0), new TextPosition(6, 0)), viewer.Lines.Selection);
         window.MouseMove(number + new Point(0, 2 * view.LineHeight), RawInputModifiers.LeftMouseButton);
@@ -113,14 +113,14 @@ public sealed class TextViewerInputTests
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var viewer = new TextViewer(TextDocument.Load("min.json", Encoding.UTF8.GetBytes(text.ToString()))) { Anchor = window.ExplorerScreenHost };
         viewer.Present();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         using (var first = window.CaptureRenderedFrame()!)
         {
         }
         for (int frame = 0; frame < 5; frame++)
         {
             viewer.TextScroller.Offset = new Vector(frame * 400_000, 0);
-            ExplorerStateRenders.Pump(20);
+            TestWait.Pump(20);
             using var shot = window.CaptureRenderedFrame()!;
         }
         // Only the columns on screen are drawn: whole lines would take seconds a frame.
@@ -144,7 +144,7 @@ public sealed class TextViewerInputTests
             Assert.Same(view, window.InputHitTest(point));
             window.MouseDown(point, MouseButton.Left);
             window.MouseUp(point, MouseButton.Left);
-            ExplorerStateRenders.Pump(400);
+            TestWait.Settle();
             Assert.True(view.IsFocused);
             Assert.Equal(expected, view.Caret);
         }
@@ -168,7 +168,7 @@ public sealed class TextViewerInputTests
         ScrollViewer scroller = viewer.TextScroller;
         // Focus elsewhere, so the caret's blink can't draw the view again between two frames.
         viewer.FindField.Focus();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         Frame(window);
 
         // A few lines down: what was drawn moves, nothing is drawn again, and it looks as a fresh drawing would.
@@ -188,7 +188,7 @@ public sealed class TextViewerInputTests
 
         // Sideways, the gutter has to follow, so it always draws again.
         view.Document = TextDocument.Load("wide.txt", Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(new string('w', 400) + "\r\n", 50))));
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         Frame(window);
         renders = view.Renders;
         scroller.Offset = new Vector(40, scroller.Offset.Y);
@@ -205,16 +205,17 @@ public sealed class TextViewerInputTests
         Point middle = At(window, viewer, 8, 4);
         window.MouseWheel(middle, new Vector(0, -1));
         // It eases out: a notch's whole distance once the glide has settled.
-        ExplorerStateRenders.Pump(900);
+        TestWait.Until(() => Math.Abs(scroller.Offset.Y - SmoothScrolling.NotchDistance) < 1, "the glide to cover a notch");
+        TestWait.Pump(50);
         double scrolled = scroller.Offset.Y;
         Assert.Equal(SmoothScrolling.NotchDistance, scrolled, 1);
 
         // Focus goes to the find field and back to the text by a click: the view stays where it is.
         viewer.FindField.Focus();
-        ExplorerStateRenders.Pump(50);
+        TestWait.Pump(50);
         window.MouseDown(middle, MouseButton.Left);
         window.MouseUp(middle, MouseButton.Left);
-        ExplorerStateRenders.Pump(100);
+        TestWait.Pump(100);
         Assert.True(viewer.Lines.IsFocused);
         Assert.Equal(scrolled, scroller.Offset.Y, 1);
         window.Close();

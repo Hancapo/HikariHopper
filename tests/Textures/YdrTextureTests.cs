@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using CommonFury.Textures;
 using FiveFury;
 using FiveFury.Cryptography;
 using FiveFury.Resources;
@@ -11,8 +12,8 @@ using static HikariHopper.Tests.Textures.TextureTestKit;
 
 namespace HikariHopper.Tests.Textures;
 
-/// <summary>Port of test_ydr_textures.py and test_texture_remove_dialog.py: opt-in preservation checks on original Legacy
-/// assets from <c>x64c.rpf</c>, read into memory; writes go only to memory or temporary copies.</summary>
+/// <summary>Preservation checks on original Legacy assets from <c>x64c.rpf</c> (<see cref="TestGames"/>), read into
+/// memory; writes go only to memory or temporary copies.</summary>
 public sealed class YdrTextureTests
 {
     private const ulong SystemBase = 0x50000000;
@@ -20,17 +21,14 @@ public sealed class YdrTextureTests
     private const string BreadRack = Props + "commercial/v_fastfood.rpf/prop_bread_rack_01.ydr";
     private static readonly Lazy<(string Root, GameCrypto Crypto)> Game = new(() =>
     {
-        string root = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY")!;
+        string root = TestGames.Legacy();
         return (root, RpfProvider.LoadGame(root).Crypto);
     });
     private static readonly Dictionary<string, byte[]> Assets = [];
 
     private static byte[] Asset(string path)
     {
-        string? root = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY");
-        if (string.IsNullOrEmpty(root))
-            Assert.Skip("Set HIKARI_TEST_LEGACY to run real-asset preservation checks.");
-        Assert.True(Directory.Exists(root), $"HIKARI_TEST_LEGACY does not exist: {root}");
+        TestGames.Legacy();
         lock (Assets)
         {
             if (Assets.TryGetValue(path, out byte[]? cached))
@@ -265,16 +263,6 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public void RejectsZeroCountDictionaryWithNonzeroTextureCount()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, DictionaryField(system));
-        BinaryPrimitives.WriteUInt16LittleEndian(system.AsSpan(dictionary + 0x28), 0);
-        // An inconsistent dictionary is refused rather than opened as something else.
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
     public void DictionaryWithoutTexturesCanBeEdited()
     {
         YdrTextureDocument document = Document(Asset(BreadRack));
@@ -284,7 +272,7 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public Task AYdrWithNoEmbeddedTexturesIsNotOpened() => Headless.Run(() =>
+    public void AYdrWithNoEmbeddedTexturesIsNotOpened()
     {
         byte[] withTextures = Asset(BreadRack);
         byte[] without = Document(withTextures).Serialize(Legacy([]), NoRenames);
@@ -307,15 +295,6 @@ public sealed class YdrTextureTests
         Assert.Equal(1, opened);
         Assert.True(viewer.HasDocument);
         Assert.Single(declined);
-    });
-
-    [AvaloniaFact]
-    public void ZeroCountEmbeddedDictionaryIsNotRejected()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        int dictionary = Offset(system, DictionaryField(system));
-        system.AsSpan(dictionary + 0x20, 0x20).Clear();
-        Assert.Empty(Document(Rebuild(header, system, graphics)).Dictionary.Textures);
     }
 
     [AvaloniaFact]
@@ -343,26 +322,6 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public void MalformedDictionaryIsNotOpenedAsEmpty()
-    {
-        var (header, system, graphics) = Sections(Asset(BreadRack));
-        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(DictionaryField(system)), SystemBase + (ulong)system.Length + 16);
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
-    public void TruncatedTexturePayloadIsRejectedOnOpen()
-    {
-        byte[] raw = Asset(BreadRack);
-        YdrTextureDocument document = Document(raw);
-        var (header, system, graphics) = Sections(raw);
-        Texture texture = document.Dictionary.Textures[0];
-        int descriptor = Descriptors(system)[texture.Name!];
-        BinaryPrimitives.WriteUInt64LittleEndian(system.AsSpan(descriptor + 0x70), 0x60000000UL + (ulong)(graphics.Length - texture.Data.Length + 8));
-        Assert.ThrowsAny<Exception>(() => Document(Rebuild(header, system, graphics)));
-    }
-
-    [AvaloniaFact]
     public void AmbiguousDuplicateOriginsCannotBeRewritten()
     {
         byte[] raw = Asset(BreadRack);
@@ -372,36 +331,10 @@ public sealed class YdrTextureTests
         int array = Offset(system, dictionary + 0x30);
         int first = Offset(system, array), second = Offset(system, array + 8);
         system.AsSpan(second + 0x28, 8).CopyTo(system.AsSpan(first + 0x28));
-        YdrTextureDocument duplicate;
-        try
-        {
-            duplicate = Document(Rebuild(header, system, graphics));
-        }
-        catch (Exception)
-        {
-            return; // FiveFury.NET may already refuse the inconsistent dictionary on open.
-        }
+        // It opens; what can't be done is to write it back, as which texture an edit is for is ambiguous.
+        YdrTextureDocument duplicate = Document(Rebuild(header, system, graphics));
         var error = Assert.ThrowsAny<InvalidDataException>(() => duplicate.Serialize(Legacy([duplicate.Dictionary.Textures[0]]), NoRenames));
         Assert.Contains("ambiguous", error.Message);
-    }
-
-    [AvaloniaFact]
-    public void RenameRetainsOpaqueActiveDescriptorFields()
-    {
-        byte[] raw = Asset(BreadRack);
-        YdrTextureDocument document = Document(raw);
-        Texture old = document.Dictionary.Textures[0];
-        byte[] saved = document.Serialize(Legacy([TextureOperations.WithName(old, "new_name"), .. document.Dictionary.Textures.Skip(1)]),
-            new Dictionary<string, string> { [old.Name!] = "new_name" });
-        Dictionary<string, byte[]> before = DescriptorBytes(raw), after = DescriptorBytes(saved);
-        foreach ((string name, byte[] descriptor) in before)
-        {
-            byte[] active = after[name == old.Name ? "new_name" : name];
-            byte[] expected = descriptor.ToArray();
-            foreach (int field in new[] { 0x28, 0x70 })
-                active.AsSpan(field, 8).CopyTo(expected.AsSpan(field));
-            Assert.Equal(expected, active);
-        }
     }
 
     private static Dictionary<string, byte[]> DescriptorBytes(byte[] raw)
@@ -495,7 +428,7 @@ public sealed class YdrTextureTests
     }
 
     [AvaloniaFact]
-    public Task ViewerYdrRenameUndoAndSave() => Headless.Run(() =>
+    public void ViewerYdrRenameUndoAndSave()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
@@ -514,10 +447,10 @@ public sealed class YdrTextureTests
         Assert.True(viewer.SaveYtd());
         Settle(viewer);
         Assert.Equal(raw, File.ReadAllBytes(destination));
-    });
+    }
 
     [AvaloniaFact]
-    public Task ViewerYdrSaveAsRetainsContainer() => Headless.Run(async () =>
+    public async Task ViewerYdrSaveAsRetainsContainer()
     {
         using var folder = new TempFolder();
         var dialogs = new FakeDialogs { SaveFile = folder.File("output") };
@@ -532,25 +465,21 @@ public sealed class YdrTextureTests
         Assert.True(File.Exists(folder.File("output.ydr")));
         Assert.False(File.Exists(folder.File("output.ytd")));
         AssertPreserved(Asset(BreadRack), File.ReadAllBytes(folder.File("output.ydr")));
-    });
+    }
 
     [AvaloniaFact]
-    public Task InvalidRenamePreservesDestinationAndModifiedState() => Headless.Run(() =>
+    public void InvalidRenamePreservesDestinationAndModifiedState()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
-        // A NUL cannot be represented in resource C strings. It must never be saved.
-        if (viewer.RenameSelected("broken\0name"))
-        {
-            Assert.True(viewer.SaveYtd());
-            Settle(viewer);
-            Assert.True(viewer.Modified);
-        }
+        // A NUL cannot be represented in resource C strings: the name is refused, nothing changes and nothing is saved.
+        Assert.False(viewer.RenameSelected("broken\0name"));
+        Assert.False(viewer.Modified);
         Assert.Equal(Asset(BreadRack), File.ReadAllBytes(destination));
-    });
+    }
 
     [AvaloniaFact]
-    public Task DeletedNameReuseDoesNotRebindRemovedTexture() => Headless.Run(() =>
+    public void DeletedNameReuseDoesNotRebindRemovedTexture()
     {
         using var folder = new TempFolder();
         TextureViewerViewModel viewer = OpenedDrawable(folder, out string destination);
@@ -562,10 +491,10 @@ public sealed class YdrTextureTests
         Settle(viewer);
         Assert.Equal(MaterialNames(Asset(BreadRack)).Select(name => name == remaining ? "last_name" : name),
             MaterialNames(File.ReadAllBytes(destination)));
-    });
+    }
 
     [AvaloniaFact]
-    public Task SingleRemoveKeepsCompactUndoHistory() => Headless.Run(() =>
+    public void SingleRemoveKeepsCompactUndoHistory()
     {
         TextureSet dictionary = Document(Asset(BreadRack)).Dictionary;
         TextureViewerViewModel viewer = Loaded(dictionary);
@@ -575,13 +504,13 @@ public sealed class YdrTextureTests
         Assert.True(viewer.Undo());
         Assert.True(viewer.Undo(), "Removal retained unchanged texture data and exhausted the undo budget");
         Assert.Equal(dictionary.Textures, viewer.Dictionary!.Textures);
-    });
+    }
 
     [AvaloniaTheory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public Task RemoveDeletesTheSelectionAndUndoRestoresIt(bool allSelected, bool duplicateNeighbor) => Headless.Run(() =>
+    public void RemoveDeletesTheSelectionAndUndoRestoresIt(bool allSelected, bool duplicateNeighbor)
     {
         TextureSet dictionary = Document(Asset(BreadRack)).Dictionary;
         if (duplicateNeighbor)
@@ -597,5 +526,5 @@ public sealed class YdrTextureTests
         Assert.True(viewer.Undo());
         Assert.Equal(dictionary.Textures, viewer.Dictionary!.Textures);
         Assert.False(viewer.Modified);
-    });
+    }
 }

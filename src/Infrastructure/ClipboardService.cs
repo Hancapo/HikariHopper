@@ -8,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using CommonFury.Textures;
 using FiveFury.Textures;
 
 namespace HikariHopper.Infrastructure;

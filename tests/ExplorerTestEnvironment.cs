@@ -30,6 +30,8 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly string previousRegistryPath;
     private readonly string previousKeyCache;
     private readonly Func<string, LoadedGame> previousGameLoader;
+    private readonly Func<string, GameTarget, GameCrypto, GameTextures.Tables> previousTableBuilder;
+    private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
     private readonly string registryPath;
@@ -55,6 +57,9 @@ public abstract class ExplorerTestBase : IDisposable
         // So are the game's texture tables.
         GameTextures.CacheFolder = Path.Combine(scratch, "texture-cache");
         GameTextures.ForgetAll();
+        // And a scratch game, which has no models, has empty ones, at once.
+        previousTableBuilder = GameTextures.Builder;
+        GameTextures.Builder = (_, _, _) => new GameTextures.Tables();
         // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
         Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
         Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(null);
@@ -91,6 +96,8 @@ public abstract class ExplorerTestBase : IDisposable
         AppServices.Dialogs = previousDialogs;
         AppServices.Clipboard = previousClipboard;
         ExplorerViewModel.GameLoader = previousGameLoader;
+        GameTextures.Builder = previousTableBuilder;
+        ExplorerViewModel.SearchDelay = previousSearchDelay;
         GameKeys.CachePath = previousKeyCache;
         AppSettings.RegistryPath = previousRegistryPath;
         Registry.CurrentUser.DeleteSubKeyTree(registryPath, throwOnMissingSubKey: false);
@@ -188,10 +195,6 @@ public abstract class ExplorerTestBase : IDisposable
         ReadSavedEntry(archivePath, entryPath) is not null;
 
     /// <summary>Kept so explorer tests read as before; <c>[AvaloniaFact]</c> already runs them on the UI thread.</summary>
-    protected static void OnUiThread(Action body) => body();
-
-    protected static Task OnUiThreadAsync(Func<Task> body) => body();
-
     /// <summary>Waits for every queued operation and delivers results (Python's <c>waitForDone</c> + events).</summary>
     protected static void Settle(params ExplorerViewModel[] bridges)
     {
@@ -208,8 +211,22 @@ public abstract class ExplorerTestBase : IDisposable
     protected static List<string> ListedNames(ExplorerViewModel bridge) =>
         bridge.EntriesModel.Select(item => item.Name).ToList();
 
+    /// <summary>The row of the one entry called <paramref name="name"/>.</summary>
     protected static int RowFor(ExplorerViewModel bridge, string name) =>
-        bridge.EntriesModel.Select((item, index) => (item, index)).First(pair => pair.item.Name == name).index;
+        Enumerable.Range(0, bridge.EntriesModel.Count).Single(row => bridge.EntriesModel[row].Name == name);
+
+    /// <summary>Waits for the search index and the searches it sets off, and delivers their results.</summary>
+    protected static async Task Searched(ExplorerViewModel bridge)
+    {
+        for (int round = 0; round < 4; round++)
+        {
+            await bridge.SearchIndexSettled;
+            Dispatcher.UIThread.RunJobs();
+            await bridge.SearchSettled;
+            Dispatcher.UIThread.RunJobs();
+        }
+        TestWait.Settle();
+    }
 
     protected static List<string> TreeLabels(ExplorerViewModel bridge) =>
         bridge.TreeModel.Select(item => item.Label).ToList();
@@ -267,9 +284,9 @@ public abstract class ExplorerTestBase : IDisposable
 
         public event EventHandler? Changed { add { } remove { } }
 
-        public Task<FiveFury.Textures.RgbaImage?> GetImageAsync() => Task.FromResult<FiveFury.Textures.RgbaImage?>(null);
+        public Task<CommonFury.Textures.RgbaImage?> GetImageAsync() => Task.FromResult<CommonFury.Textures.RgbaImage?>(null);
 
-        public Task<bool> SetImageAsync(FiveFury.Textures.RgbaImage image) => Task.FromResult(false);
+        public Task<bool> SetImageAsync(CommonFury.Textures.RgbaImage image) => Task.FromResult(false);
 
         /// <summary>The files on the clipboard, as a copy here or in Windows Explorer leaves them.</summary>
         public List<string> Files { get; } = [];

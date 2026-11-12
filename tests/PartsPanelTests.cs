@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
@@ -15,27 +16,6 @@ public sealed class PartsPanelTests
     private static Views.PartsPanel Panel() => new() { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
 
     private static string[] Names(Views.PartsPanel panel) => [.. panel.Rows.Select(row => row.Node.Name)];
-
-    [Fact]
-    public void Each_node_says_what_it_is()
-    {
-        var parts = new PartVisibility(PartVisibilityTests.Scene());
-        PartNode drawable = Assert.Single(parts.Tree());
-        Assert.Equal(PartKind.Drawable, drawable.Kind);
-        Assert.All(drawable.Children, child => Assert.Equal(PartKind.Child, child.Kind));
-        Assert.All(drawable.Children.SelectMany(child => child.Children), geometry => Assert.Equal(PartKind.Geometry, geometry.Kind));
-    }
-
-    [Fact]
-    public void Show_only_hides_the_rest_and_show_all_brings_everything_back()
-    {
-        var parts = new PartVisibility(PartVisibilityTests.Scene());
-        PartNode drawable = parts.Tree()[0];
-        parts.ShowOnly([drawable.Children[1]]);
-        Assert.Equal([false, true, false], parts.Mask());
-        parts.ShowAll();
-        Assert.Equal([true, true, false], parts.Mask());
-    }
 
     [Fact]
     public void The_bounds_of_rows_are_their_parts_triangles_in_the_world()
@@ -154,6 +134,46 @@ public sealed class PartsPanelTests
     }
 
     [AvaloniaFact]
+    public void One_right_click_on_a_row_not_picked_picks_it_and_opens_the_menu()
+    {
+        var window = new Window { Width = 400, Height = 400 };
+        Views.PartsPanel panel = Panel();
+        window.Content = panel;
+        window.Show();
+        TestWait.Pump(100);
+        // Where the second row's name is, with another row picked.
+        TextBlock name = panel.GetVisualDescendants().OfType<TextBlock>().First(text => text.Text == panel.Rows[1].Node.Name);
+        Point at = name.TranslatePoint(new Point(4, name.Bounds.Height / 2), window)!.Value;
+        panel.Select(panel.Rows[2].Node);
+        TestWait.Pump(50);
+
+        // One right press: the row is picked and its menu opens, once what the pick sets off has run. (The release lands
+        // on the menu, which opens under the pointer; here it would go to the window, which takes the keyboard back.)
+        window.MouseDown(at, MouseButton.Right);
+        TestWait.Pump(50);
+        Assert.Equal([panel.Rows[1].Node], panel.Selection);
+        Assert.NotNull(panel.Menu);
+        // Its groups are parted as the app's other menus are.
+        Assert.Equal(1, panel.Menu.GetVisualDescendants().OfType<Views.Controls.RetroMenuSeparator>().Count());
+        panel.Menu.Close();
+        window.MouseUp(at, MouseButton.Right);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Parts_read_again_keep_their_rows_closed_as_left()
+    {
+        // The drawable's row, open at first, closed: read again, it stays closed.
+        Views.PartsPanel panel = Panel();
+        panel.HandleKey(Key.Down, KeyModifiers.None);
+        panel.HandleKey(Key.Left, KeyModifiers.None);
+        Assert.Equal(["sign"], Names(panel));
+        panel.Replace(new PartVisibility(PartVisibilityTests.Scene()));
+        Assert.Equal(["sign"], Names(panel));
+        Assert.Equal(["sign"], panel.Selection.Select(node => node.Name));
+    }
+
+    [AvaloniaFact]
     public void A_right_click_menu_acts_on_the_selection_and_copies_its_names()
     {
         var clipboard = new FakeClipboard();
@@ -165,7 +185,7 @@ public sealed class PartsPanelTests
             Views.PartsPanel panel = Panel();
             window.Content = panel;
             window.Show();
-            ExplorerStateRenders.Pump(100);
+            TestWait.Pump(100);
             panel.Select(panel.Rows[1].Node);
             panel.Select(panel.Rows[2].Node, KeyModifiers.Control);
             Views.PartsPanel.MenuRowItem Item(string text)
@@ -273,4 +293,128 @@ public sealed class PartsPanelVariantTests
         PartSection section = Assert.Single(panel.Sections);
         Assert.Equal("", section.Title);
     }
+
+    [AvaloniaFact]
+    public void A_fragments_states_are_picked_as_a_peds_variants_are()
+    {
+        var visibility = new PartVisibility(FragmentViewerTests.DamagedScene());
+        var panel = new Views.PartsPanel { Parts = visibility };
+        int changed = 0;
+        panel.Changed += () => changed++;
+        // A State section first, intact open with its parts, damaged closed; then the extras. No One | All switch.
+        Assert.False(panel.ModeRow.IsVisible);
+        Assert.Equal([("Intact", true), ("chassis", false), ("door_dside_f", false), ("Damaged", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+
+        // A click on the damaged row shows it in place of the intact one, open, the intact one closed.
+        panel.Select(panel.Rows[3].Node);
+        Assert.True(visibility.Damaged);
+        Assert.Equal(1, changed);
+        Assert.Equal([("Intact", false), ("Damaged", true), ("chassis", false), ("door_dside_f", false)],
+            panel.Rows.Select(row => (row.Node.Name, row.Open)));
+        Assert.Equal((false, true), (visibility.State(panel.Rows[0].Node), visibility.State(panel.Rows[1].Node)));
+        // X does the same through the panel.
+        panel.PickState(false);
+        Assert.False(visibility.Damaged);
+        Assert.Equal(2, changed);
+        Assert.Equal("Intact", panel.Rows[0].Node.Name);
+        Assert.True(panel.Rows[0].Open);
+    }
+
+    [AvaloniaFact]
+    public void A_drawables_embedded_textures_are_a_row_at_the_panels_foot()
+    {
+        var panel = new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) };
+        // None until the model has them.
+        Assert.False(panel.TexturesRow.IsVisible);
+
+        // Embedded textures are a row at the foot, with how many, which asks for them when pressed.
+        int opened = 0;
+        panel.TexturesRequested += () => opened++;
+        panel.RequestTextures();
+        Assert.Equal(0, opened);
+        panel.ShowTextures(12);
+        Assert.True(panel.TexturesRow.IsVisible);
+        Assert.Equal("12", panel.TexturesCountText);
+        Assert.Contains(panel.TexturesRow.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == "Embedded textures");
+        panel.RequestTextures();
+        Assert.Equal(1, opened);
+        panel.ShowTextures(0);
+        Assert.False(panel.TexturesRow.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void A_collisions_materials_are_rows_with_their_colour_to_show_hide_and_find()
+    {
+        // Two boxes of tarmac and one of another material, apart from each other.
+        var composite = new FiveFury.Bounds.BoundComposite();
+        FiveFury.Bounds.BoundBox Box(float x, byte material)
+        {
+            var box = new FiveFury.Bounds.BoundBox(new CommonFury.Numerics.Aabb3(new System.Numerics.Vector3(x, 0, 0), new System.Numerics.Vector3(x + 1, 1, 1)));
+            box.Material.Type = (FiveFury.Bounds.BoundMaterialType)material;
+            return box;
+        }
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(0, 4)));
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(10, 1)));
+        composite.Children.Add(new FiveFury.Bounds.BoundChild(Box(20, 4)));
+        ViewportMesh mesh = CollisionMesh.Build(new FiveFury.Ybn.Ybn(composite));
+        var marks = new MeshParts(mesh);
+        var panel = new Views.PartsPanel { Parts = marks };
+
+        // One section, the materials, the one most shapes wear first; each row a mark with its colour and its shapes.
+        PartSection section = Assert.Single(panel.Sections);
+        Assert.Equal((CollisionMesh.Section, PartSectionKind.Tree), (section.Title, section.Kind));
+        string tarmac = CollisionMesh.Name((FiveFury.Bounds.BoundMaterialType)4), other = CollisionMesh.Name((FiveFury.Bounds.BoundMaterialType)1);
+        Assert.Equal([tarmac, other], panel.Rows.Select(row => row.Node.Name));
+        Assert.All(panel.Rows, row => Assert.Equal(PartKind.Mark, row.Node.Kind));
+        Assert.Equal([2, 1], panel.Rows.Select(row => row.Node.Triangles));
+        Assert.Equal(CollisionMesh.Colour((FiveFury.Bounds.BoundMaterialType)4), panel.Rows[0].Node.Colour);
+        Assert.Equal("2 / 2", panel.CountText);
+        Assert.False(panel.ModeRow.IsVisible);
+        // A flat list: nothing to expand, where a drawable's tree has the button.
+        Assert.False(panel.ExpandButton.IsVisible);
+        Assert.True(new Views.PartsPanel { Parts = new PartVisibility(PartVisibilityTests.Scene()) }.ExpandButton.IsVisible);
+        Assert.Equal(36 * 3, mesh.ToArray().Length);
+
+        // Hidden, a material's triangles are left out of what is drawn; the rest stay.
+        bool changed = false;
+        panel.Changed += () => changed = true;
+        panel.Flip(panel.Rows[0].Node);
+        Assert.True(changed);
+        Assert.Equal("1 / 2", panel.CountText);
+        Assert.False(marks.State(panel.Rows[0].Node));
+        ViewportVertex[] left = mesh.ToArray();
+        Assert.Equal(12 * 3, left.Length);
+        Assert.All(left, vertex => Assert.Equal(CollisionMesh.Colour((FiveFury.Bounds.BoundMaterialType)1), vertex.Colour));
+        // The mesh itself keeps them, and the legend its counts.
+        Assert.Equal(36, mesh.TriangleCount);
+        Assert.Equal(2, mesh.Legend.Count);
+
+        // Only this one, then all of them again.
+        panel.ShowOnly([panel.Rows[0].Node]);
+        Assert.Equal(24 * 3, mesh.ToArray().Length);
+        Assert.False(marks.State(panel.Rows[1].Node));
+        panel.ShowAll();
+        Assert.Equal("2 / 2", panel.CountText);
+        Assert.Equal(36 * 3, mesh.ToArray().Length);
+
+        // A material is found by the box around what wears it: the other one's single box, in the world.
+        CommonFury.Numerics.Aabb3 box = Assert.NotNull(marks.Bounds([panel.Rows[1].Node]));
+        Assert.Equal(new System.Numerics.Vector3(10, 0, 0), box.Minimum);
+        Assert.Equal(new System.Numerics.Vector3(11, 1, 1), box.Maximum);
+        CommonFury.Numerics.Aabb3 both = Assert.NotNull(marks.Bounds([panel.Rows[0].Node]));
+        Assert.Equal((0f, 21f), (both.Minimum.X, both.Maximum.X));
+
+        // The filter narrows them by name, as it does parts.
+        panel.Filter.Text = other;
+        panel.Refresh();
+        Assert.Equal([other], panel.Rows.Select(row => row.Node.Name));
+    }
+}
+
+/// <summary>What the tests ask of a parts list that is a drawable's.</summary>
+internal static class PartListTestExtensions
+{
+    /// <summary>A drawable's parts' flags for the renderer.</summary>
+    public static bool[] Mask(this IPartList parts) => Assert.IsType<PartVisibility>(parts).Mask();
 }

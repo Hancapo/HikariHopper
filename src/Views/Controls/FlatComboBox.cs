@@ -11,7 +11,8 @@ namespace HikariHopper.Views.Controls;
 
 /// <summary>
 /// One entry of a <see cref="FlatComboBox"/> model: QML's <c>{ label, value, supported, note }</c>.
-/// An unsupported entry is listed disabled with its <see cref="Note"/> as the reason.
+/// An unsupported entry is listed disabled with its <see cref="Note"/> as the reason; a supported one's note says
+/// something about it (what a format costs), at the right of its row and of the closed box.
 /// </summary>
 public sealed record FlatComboOption(string Label, object? Value = null, bool Supported = true, string? Note = null);
 
@@ -112,7 +113,7 @@ public class FlatComboBox : ComboBox
         {
             option.Label = LabelOf(item);
             option.Supported = item is not FlatComboOption { Supported: false };
-            option.Note = item is FlatComboOption { Supported: false, Note: { } note } ? note : "";
+            option.Note = item is FlatComboOption { Note: { } note } ? note : "";
             option.IsEnabled = option.Supported;
             option.IsHighlighted = index == HighlightedIndex;
         }
@@ -293,12 +294,17 @@ public class FlatComboBoxItem : ComboBoxItem
 
     private FlatComboBox? Owner => ItemsControl.ItemsControlFromItemContainer(this) as FlatComboBox;
 
+    /// <summary>Whether the row shows its note.</summary>
+    internal bool NoteShown => note?.IsVisible == true;
+
     private void Refresh()
     {
         if (background is null || label is null || note is null)
             return;
         background.Background = IsHighlighted && Supported ? Ui.Theme.Accent : Brushes.Transparent;
         label.Foreground = !Supported ? Ui.Theme.TextFaint : IsHighlighted ? Ui.Theme.Text : Ui.Theme.TextRow;
-        note.IsVisible = !Supported && Note.Length > 0;
+        // A note shows for any option that has one: why a disabled one is, or what a supported one costs.
+        note.IsVisible = Note.Length > 0;
+        note.Foreground = IsHighlighted && Supported ? Ui.Theme.Text : Ui.Theme.TextDim;
     }
 }

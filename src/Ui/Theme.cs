@@ -69,6 +69,8 @@ public static class Theme
     // Green appears only on rows that the marquee has actually included.
     // Modals: the dim over the blurred window behind them.
     public static IImmutableSolidColorBrush ModalDim { get; } = Rgba(0.090, 0.094, 0.165, 0.38);
+    // The loading overlay: a deeper dim, so the train and its caption stand clear of what is behind.
+    public static IImmutableSolidColorBrush LoadingDim { get; } = Rgba(0.090, 0.094, 0.165, 0.78);
 
     public static IImmutableSolidColorBrush MarqueeFill { get; } = Rgba(0.173, 0.176, 0.263, 0.24);
     public static IImmutableSolidColorBrush MarqueeBorder { get; } = Rgba(0.776, 0.784, 0.855, 0.82);
@@ -182,7 +184,12 @@ public static class Theme
     public const double TextureRowHeight = 62;
     public const double TextureThumbnailSize = 50;
     public const double TextureToolbarHeight = 38;
-    public const double ModelToolbarHeight = TextureToolbarHeight;
+
+    /// <summary>The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time.</summary>
+    public const double ModelFooterHeight = ExplorerStatusHeight;
+
+    /// <summary>The controls in it, as the explorer's view switch in a shorter bar.</summary>
+    public const double ModelFooterControlHeight = 24;
 
     /// <summary>The 3D viewer's parts panel's edge, dragged to resize it.</summary>
     public const double PartsEdgeWidth = 5;
@@ -190,8 +197,14 @@ public static class Theme
     /// <summary>How far the 3D viewer's parts arrow sits below the viewport's top.</summary>
     public const double PartsTabTop = 8;
 
-    /// <summary>How far the 3D viewer's tool strip sits in from the viewport's left edge.</summary>
+    /// <summary>How far the 3D viewer's axes gizmo sits in from the viewport's top right corner.</summary>
+    public const double GizmoInset = 6;
+
+    /// <summary>How far the 3D viewer's overlay row sits below the viewport's top, centred across it.</summary>
     public const double ToolStripInset = 8;
+
+    /// <summary>How far the 3D viewer's shader values card sits in from the viewport's left, clear of the parts arrow.</summary>
+    public const double ShaderCardLeft = 24;
     public const double TextureMipBarHeight = 32;
     public const double TextureCheckerCellSize = 16;
 
