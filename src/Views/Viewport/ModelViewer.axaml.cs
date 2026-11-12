@@ -19,6 +19,7 @@ public partial class ModelViewer : UserControl, IModalContent
     // The parts arrow and the tool strip, over the viewport.
     private readonly ViewportOverlay partsTab;
     private readonly ViewportOverlay toolStrip;
+    private readonly ViewportOverlay gizmo;
 
     /// <summary>An empty viewer, for the XAML loader and previews.</summary>
     public ModelViewer() : this(new ModelFile("", []))
@@ -34,6 +35,16 @@ public partial class ModelViewer : UserControl, IModalContent
         partsTab = new ViewportOverlay(Viewport, PartsTab, top: Ui.Theme.PartsTabTop);
         // Centred across the view's top.
         toolStrip = new ViewportOverlay(Viewport, ToolStrip, left: null, top: Ui.Theme.ToolStripInset);
+        gizmo = new ViewportOverlay(Viewport, Gizmo, top: Ui.Theme.GizmoInset, right: Ui.Theme.GizmoInset);
+        // An axis looks at the model from that side, orbiting it: flying stops, as framing it does.
+        Gizmo.AxisPicked += axis =>
+        {
+            SetFreeCamera(false);
+            Viewport.LookFrom(axis);
+        };
+        Gizmo.Dragged += (dx, dy) => Viewport.Turn(dx, dy);
+        Viewport.CameraTurned += () => Gizmo.Basis = Viewport.CameraBasis;
+        Gizmo.Basis = Viewport.CameraBasis;
         WindowToolTip.SetIsEnabled(PartsTab, true);
         WindowToolTip.SetIsEnabled(ToolStrip, true);
         TitleText.Text = file.Name;
@@ -824,6 +835,7 @@ public partial class ModelViewer : UserControl, IModalContent
             return "Nothing in it";
         Viewport.Frame(content.Box);
         contentShown = true;
+        gizmo.IsWanted = true;
         System.Numerics.Vector3 size = content.Box.Size, center = content.Box.Center;
         if (content.Surfaces is { } surfaces)
         {
@@ -901,6 +913,9 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The overlay row, drawn over the viewport's top, centred across it, in a window of its own.</summary>
     internal ViewportOverlay ToolStripOverlay => toolStrip;
 
+    /// <summary>The axes gizmo, drawn over the viewport's top right in a window of its own.</summary>
+    internal ViewportOverlay GizmoOverlay => gizmo;
+
     /// <summary>The viewer closed; its GPU resources are let go.</summary>
     public event EventHandler? Closed;
 
@@ -924,6 +939,7 @@ public partial class ModelViewer : UserControl, IModalContent
                 ModalOverlay.StackChanged -= OverlaysChanged;
                 partsTab.Close();
                 toolStrip.Close();
+                gizmo.Close();
                 overlay = null;
                 Closed?.Invoke(this, EventArgs.Empty);
             };

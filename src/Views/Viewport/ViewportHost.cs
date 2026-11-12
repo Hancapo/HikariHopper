@@ -124,6 +124,46 @@ internal sealed partial class ViewportHost : NativeControlHost
         InvalidateVisual();
     }
 
+    /// <summary>The camera's right, up and forward in the world, for the axes gizmo; a new camera's before the GPU starts.</summary>
+    public (System.Numerics.Vector3 Right, System.Numerics.Vector3 Up, System.Numerics.Vector3 Forward) CameraBasis
+    {
+        get
+        {
+            Rendering.OrbitCamera camera = renderer?.Camera ?? Unstarted;
+            return (camera.Right, camera.Up, camera.Forward);
+        }
+    }
+
+    private static readonly Rendering.OrbitCamera Unstarted = new();
+
+    /// <summary>Raised after a frame that turned the camera, on the UI thread.</summary>
+    public event Action? CameraTurned;
+
+    // How the camera was turned at the last frame, to tell when it turns.
+    private (float Yaw, float Pitch) turned = (float.NaN, float.NaN);
+
+    /// <summary>Looks from along a world axis, as the gizmo asks.</summary>
+    public void LookFrom(System.Numerics.Vector3 axis)
+    {
+        if (renderer is null)
+            return;
+        // Framed first, as F frames it, so the view shows it whole from that side wherever the camera was.
+        renderer.Frame(framed);
+        renderer.Camera.LookFrom(axis);
+        CameraTurned?.Invoke();
+    }
+
+    /// <summary>Orbits the camera (or turns it, flying) by a drag in pixels, as a drag on the view does.</summary>
+    public void Turn(float dx, float dy)
+    {
+        if (renderer?.Camera is not { } camera)
+            return;
+        if (camera.Free)
+            camera.Look(dx, dy);
+        else
+            camera.Orbit(dx, dy);
+    }
+
     /// <summary>Points the camera back at what was framed last.</summary>
     public void Reframe() => renderer?.Frame(framed);
 
@@ -259,6 +299,11 @@ internal sealed partial class ViewportHost : NativeControlHost
                 }
                 Fly(renderer.Camera);
                 renderer.Draw();
+                if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
+                {
+                    turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
+                    CameraTurned?.Invoke();
+                }
             }
         }
         catch (InvalidOperationException error)
