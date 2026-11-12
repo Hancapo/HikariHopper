@@ -42,7 +42,7 @@ public sealed partial class ExplorerViewModel
         var staging = new DragStaging();
         clipboardStaging = staging;
         return StartReadOperation($"Copying {noun}…", () => Provider.ExportEntries(selection, staging.Name),
-            result => _ = PutOnClipboard((List<string>)result!, noun), "copy");
+            result => _ = PutOnClipboard((List<string>)result!, noun), "copy", cancelled: stopped => CancelledStatus($"Copying {noun}…", "nothing was copied"));
     }
 
     /// <summary>Paste: copies the files and folders on the clipboard into the folder shown; a name already here gets " (2)".</summary>

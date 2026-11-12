@@ -50,14 +50,22 @@ public sealed partial class ExplorerViewModel
     /// Runs <paramref name="operation"/> after every previously queued one (one at a time, FIFO) and
     /// delivers its result or error message on the UI thread.
     /// </summary>
-    private void Enqueue(Func<object?> operation, Action<object?> completed, Action<string> failed)
+    private void Enqueue(Func<object?> operation, Action<object?> completed, Action<string> failed,
+        OperationProgress? progress = null, Action<OperationProgress>? cancelled = null)
     {
         operationQueue = operationQueue.ContinueWith(_ =>
         {
             object? result;
             try
             {
-                result = operation();
+                // The file loops it runs report through this, and stop when asked.
+                using (progress?.Use())
+                    result = operation();
+            }
+            catch (OperationCanceledException) when (progress is not null && cancelled is not null)
+            {
+                Dispatcher.UIThread.Post(() => cancelled(progress));
+                return;
             }
             catch (Exception error)
             {
@@ -195,12 +203,18 @@ public sealed partial class ExplorerViewModel
             return false;
         }
         Func<string> operation = operationFactory(target);
-        return StartEntryOperation(target, $"create {label}", $"Creating {label}…", () => operation(), EntryCreationCompleted);
+        // Inside an RPF it is one rewrite, stopped safely before the swap; a new RPF on disk is written in place.
+        return StartEntryOperation(target, $"create {label}", $"Creating {label}…", () => operation(), EntryCreationCompleted,
+            cancellable: target.InArchive);
     }
 
     /// <param name="target">An <see cref="EntryCreationTarget"/> or <see cref="EntryDeletionTarget"/>.</param>
+    /// <param name="cancelled">What the status says when it is cancelled: by default that nothing was changed, as a write
+    /// into an RPF stops before the archive is swapped and a loose import undoes what it copied.</param>
+    /// <param name="cancellable">Whether it offers Cancel at all.</param>
     private bool StartEntryOperation(object target, string failureLabel, string progressLabel,
-        Func<object?> operation, Action<object, object?> completed)
+        Func<object?> operation, Action<object, object?> completed, Func<OperationProgress, string>? cancelled = null,
+        bool cancellable = true)
     {
         if (EntryOperationBusy)
             return false;
@@ -218,9 +232,33 @@ public sealed partial class ExplorerViewModel
             EntryOperationFailed(target, failureLabel, error.Message);
             return false;
         }
-        Enqueue(operation, result => completed(target, result),
-            message => EntryOperationFailed(target, failureLabel, message));
+        OperationProgress progress = BeginWork(progressLabel, cancellable);
+        Enqueue(operation, result =>
+        {
+            EndWork();
+            completed(target, result);
+        }, message =>
+        {
+            EndWork();
+            EntryOperationFailed(target, failureLabel, message);
+        }, progress, stopped =>
+        {
+            EndWork();
+            EntryOperationCancelled(target, cancelled?.Invoke(stopped) ?? CancelledStatus(progressLabel, "nothing was changed"));
+        });
         return true;
+    }
+
+    private void EntryOperationCancelled(object target, string status)
+    {
+        if (RefreshOperationTarget(target))
+        {
+            ClearSelection();
+            RefreshEntries();
+        }
+        SetStatus(status);
+        ContentChanged?.Invoke(this, target);
+        FinishEntryOperation();
     }
 
     private static EntryCreationTarget LocationOf(object target) =>
@@ -334,7 +372,10 @@ public sealed partial class ExplorerViewModel
         string progress = target.InArchive
             ? $"Deleting {count} {noun} from RPF…"
             : $"Moving {count} {noun} to the Recycle Bin…";
-        return StartEntryOperation(target, "delete selected items", progress, operation, EntryDeletionCompleted);
+        // Moved to the Recycle Bin one at a time, what was moved stays there; an RPF stops before it is swapped.
+        Func<OperationProgress, string>? cancelled = target.InArchive ? null
+            : stopped => CancelledStatus(progress, $"{stopped.Succeeded} of {stopped.Total} {noun} were moved to the Recycle Bin");
+        return StartEntryOperation(target, "delete selected items", progress, operation, EntryDeletionCompleted, cancelled);
     }
 
     private void EntryDeletionCompleted(object target, object? result)

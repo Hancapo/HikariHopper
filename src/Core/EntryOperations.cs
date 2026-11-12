@@ -181,12 +181,17 @@ public static class EntryOperations
             var destinations = Place(resolved, taken, name => Directory.Exists(Path.Combine(folderAt, name)), conflict)
                 .Select(item => (item.Source, Destination: Path.Combine(folderAt, item.Name), item.Replace)).ToList();
             var created = new List<string>();
+            var replaced = new List<(string Original, string Backup)>();
+            // Counted file by file; stopped between files, what was copied is undone as for a failure.
+            OperationProgress.Current.Expect(destinations.Sum(item => FileCount(item.Source)));
             try
             {
                 foreach (var (source, destination, replace) in destinations)
-                    CopyLoose(source, destination, created, replace);
+                    CopyLoose(source, destination, created, replaced, replace);
+                // A Cancel during the last file is still a Cancel.
+                OperationProgress.Current.Check();
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException)
             {
                 // Undone deepest first: what a folder held goes before the folder.
                 for (int index = created.Count - 1; index >= 0; index--)
@@ -200,7 +205,20 @@ public static class EntryOperations
                     }
                     catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
                 }
+                // And the files it replaced are put back as they were.
+                for (int index = replaced.Count - 1; index >= 0; index--)
+                {
+                    try
+                    { File.Move(replaced[index].Backup, replaced[index].Original, overwrite: true); }
+                    catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+                }
                 throw;
+            }
+            foreach (var (_, backup) in replaced)
+            {
+                try
+                { File.Delete(backup); }
+                catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
             }
             return destinations.Select(item => Path.GetFileName(item.Destination)).ToArray();
         }
@@ -218,9 +236,13 @@ public static class EntryOperations
             var existing = directory.Children.Select(child => child.Name).ToList();
             var finals = Place(resolved, existing,
                 name => directory.Children.Any(child => child is RpfDirectoryEntry && string.Equals(child.Name, name, StringComparison.OrdinalIgnoreCase)), conflict);
-            // File-backed: FiveFury reads each source while the archive is written right after.
+            // File-backed: FiveFury reads each source while the archive is written right after, so the write is what
+            // takes the time, and it grows by about what is added.
             foreach (var (source, name, replace) in finals)
+            {
                 AddToArchive(archive, EntryNames.ArchiveChildPath(target.InternalDirectory, name), source, replace);
+                OperationProgress.Current.ExpectExtraBytes(ByteCount(source));
+            }
             written.AddRange(finals.Select(item => item.Name));
         });
         return written;
@@ -285,21 +307,46 @@ public static class EntryOperations
         return final;
     }
 
+    /// <summary>How many files <paramref name="path"/> is: one for a file, everything in a folder for a folder.</summary>
+    private static int FileCount(string path) =>
+        Directory.Exists(path) ? Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Count() : 1;
+
+    /// <summary>How many bytes <paramref name="path"/> holds, a folder's files all together.</summary>
+    private static long ByteCount(string path) => Directory.Exists(path)
+        ? new DirectoryInfo(path).EnumerateFiles("*", SearchOption.AllDirectories).Sum(file => file.Length)
+        : File.Exists(path) ? new FileInfo(path).Length : 0;
+
     /// <summary>
     /// Copies a file, or a folder and everything in it, recording each thing it makes in <paramref name="created"/>.
-    /// With <paramref name="replace"/>, a file already there is replaced (written beside it, then moved over it) and a
-    /// folder already there is merged into.
+    /// With <paramref name="replace"/>, a file already there is replaced (written beside it, the old one moved aside to
+    /// a backup recorded in <paramref name="replaced"/>, then the new one moved in) and a folder already there is merged
+    /// into.
     /// </summary>
-    private static void CopyLoose(string source, string destination, List<string> created, bool replace = false)
+    private static void CopyLoose(string source, string destination, List<string> created,
+        List<(string Original, string Backup)> replaced, bool replace = false)
     {
+        if (File.Exists(source))
+            OperationProgress.Current.Item(Path.GetFileName(source));
         if (File.Exists(source) && replace && File.Exists(destination))
         {
             string staging = destination + ".hikari-replace";
+            string backup = destination + ".hikari-backup";
             File.Copy(source, staging, overwrite: true);
             try
             {
                 CopyStat(source, staging);
-                File.Move(staging, destination, overwrite: true);
+                File.Move(destination, backup, overwrite: true);
+            }
+            catch
+            {
+                File.Delete(staging);
+                throw;
+            }
+            // Kept until the import is done, so an undone import can put the old file back.
+            replaced.Add((destination, backup));
+            try
+            {
+                File.Move(staging, destination);
             }
             catch
             {
@@ -332,12 +379,12 @@ public static class EntryOperations
             created.Add(destination);
         }
         foreach (string file in Directory.EnumerateFiles(source))
-            CopyLoose(file, Path.Combine(destination, Path.GetFileName(file)), created, replace);
+            CopyLoose(file, Path.Combine(destination, Path.GetFileName(file)), created, replaced, replace);
         foreach (string folder in Directory.EnumerateDirectories(source))
         {
             if (IsLinkedPath(folder))
                 continue;
-            CopyLoose(folder, Path.Combine(destination, Path.GetFileName(folder)), created, replace);
+            CopyLoose(folder, Path.Combine(destination, Path.GetFileName(folder)), created, replaced, replace);
         }
     }
 
@@ -397,8 +444,11 @@ public static class EntryOperations
             throw new ArgumentException("No loose items were selected for deletion");
         int moved = 0;
         var failed = new List<string>();
+        // Item by item; stopped between them, what was moved stays in the Recycle Bin, from where it comes back.
+        OperationProgress.Current.Expect(target.LoosePaths.Count);
         foreach (string path in target.LoosePaths)
         {
+            OperationProgress.Current.Item(Path.GetFileName(path));
             if (!Path.Exists(path))
                 continue;
             if (IsLinkedPath(path) || !RecycleBin.MoveToTrash(path))
@@ -407,6 +457,7 @@ public static class EntryOperations
                 continue;
             }
             moved++;
+            OperationProgress.Current.Succeed();
         }
         if (failed.Count > 0)
             throw new IOException($"Could not move to the Recycle Bin: {string.Join(", ", failed)}");

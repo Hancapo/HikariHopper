@@ -59,6 +59,40 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ACancelledExtractOfResultsCountsEveryPlaceTheyCameFrom()
+    {
+        ExplorerViewModel bridge = Game();
+        bridge.BeginSearch();
+        bridge.SetSearchText("readme");
+        await Searched(bridge);
+        Assert.Equal(3, bridge.SearchHitCount);
+        bridge.SelectAllEntries();
+        string output = Path.GetFullPath(Path.Combine(Work, "..", "out-results"));
+        Dialogs.Folders.Enqueue(output);
+        int started = 0;
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ =>
+        {
+            Interlocked.Increment(ref started);
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        };
+        // The loose readme and the archived ones are read one place after another, counted all together.
+        Assert.True(await bridge.ExtractSelection());
+        gate.Release();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref started) < 2)
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), "Timed out waiting for the second file");
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.True(bridge.CancelWork());
+        gate.Release(5);
+        Settle(bridge);
+        Assert.Equal(2, Directory.GetFiles(output, "*", SearchOption.AllDirectories).Length);
+        Assert.Equal("Cancelled extracting 3 items: 2 of 3 files were written", bridge.Status);
+    }
+
+    [AvaloniaFact]
     public async Task AScopeKeepsTheSearchToAFolderItsSubfoldersOrAnRpf()
     {
         ExplorerViewModel bridge = Game();

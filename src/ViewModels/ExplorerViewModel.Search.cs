@@ -681,7 +681,7 @@ public sealed partial class ExplorerViewModel
         var staging = new DragStaging();
         clipboardStaging = staging;
         return StartReadOperation($"Copying {noun}…", ReaderWork(hits, (reader, records) => reader.ExportEntries(records, staging.Name)),
-            result => _ = PutOnClipboard((List<string>)result!, noun), "copy");
+            result => _ = PutOnClipboard((List<string>)result!, noun), "copy", cancelled: stopped => CancelledStatus($"Copying {noun}…", "nothing was copied"));
     }
 
     private bool ExtractSearchFiles(IReadOnlyList<SearchHit> hits, string folder, string noun) =>
@@ -690,7 +690,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {noun} to {folder}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {noun}…"));
 
     private bool ExtractSearchArchive(SearchHit hit, string folder) =>
         StartReadOperation($"Extracting {hit.Name}…", ReaderWork<string>([hit], (reader, records) => [reader.ExtractArchiveContents(records[0], folder)]),
@@ -698,7 +698,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {hit.Name} to {((List<string>)result!)[0]}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {hit.Name}…"));
 
     private Task<EntryProperties?> ReadSearchProperties(SearchHit hit)
     {
@@ -800,15 +800,19 @@ public sealed partial class ExplorerViewModel
             if (searching && searchIndex is not null)
                 searchIndexTask = searchIndex.Refresh();
         }
+        // One RPF after another, each swapped in as it is done: shown, but not stopped part way.
+        OperationProgress reports = BeginWork(progress, cancellable: false);
         Enqueue(work, result =>
         {
+            EndWork();
             done(result);
             Settle();
         }, message =>
         {
+            EndWork();
             SetStatus($"Could not {failureLabel}: {message}");
             Settle();
-        });
+        }, reports);
         return true;
     }
 }

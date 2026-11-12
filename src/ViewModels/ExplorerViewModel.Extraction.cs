@@ -31,7 +31,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {noun} to {folder}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {noun}…"));
     }
 
     /// <summary>Extract all content…: asks for a folder and writes the selected RPF's content into a folder named after it there.</summary>
@@ -51,7 +51,7 @@ public sealed partial class ExplorerViewModel
             {
                 SetStatus($"Extracted {archive.Name} to {result}");
                 ShowExtracted(folder);
-            }, "extract");
+            }, "extract", cancelled: ExtractCancelled($"Extracting {archive.Name}…"));
     }
 
     /// <summary>Lists the folder shown again when the extraction went into it, so what was written appears.</summary>
@@ -80,7 +80,10 @@ public sealed partial class ExplorerViewModel
     /// Runs work that only reads here (extracting, copying out of an archive) on the operation queue; nothing may change
     /// while it does. <paramref name="verb"/> names it in a failure.
     /// </summary>
-    private bool StartReadOperation(string progress, Func<object?> work, Action<object?> done, string verb, Action? failed = null)
+    /// <param name="cancelled">What the status says when it is cancelled, with failed's clean-up run; none offers no
+    /// Cancel.</param>
+    private bool StartReadOperation(string progress, Func<object?> work, Action<object?> done, string verb, Action? failed = null,
+        Func<OperationProgress, string>? cancelled = null)
     {
         if (EntryOperationBusy)
             return false;
@@ -88,16 +91,29 @@ public sealed partial class ExplorerViewModel
         TextureViewer.SetExternalWriteBusy(true);
         RaiseEntryOperationStateChanged();
         SetStatus(progress);
+        OperationProgress reports = BeginWork(progress, cancellable: cancelled is not null);
         Enqueue(work, result =>
         {
+            EndWork();
             FinishEntryOperation();
             done(result);
         }, message =>
         {
+            EndWork();
             SetStatus($"Could not {verb}: {message}");
+            FinishEntryOperation();
+            failed?.Invoke();
+        }, reports, stopped =>
+        {
+            EndWork();
+            SetStatus(cancelled!(stopped));
             FinishEntryOperation();
             failed?.Invoke();
         });
         return true;
     }
+
+    /// <summary>What a cancelled extract says: the files it wrote stay where they are.</summary>
+    private static Func<OperationProgress, string> ExtractCancelled(string progress) =>
+        stopped => CancelledStatus(progress, $"{stopped.Done} of {stopped.Total} files were written");
 }
