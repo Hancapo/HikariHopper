@@ -30,7 +30,7 @@ public partial class TextureMipmapsDialog : TextureToolDialog
         int minimum = MipSizeCombo.CurrentValue is int value ? value : 0;
         ResultText.Text = vm.SelectedCount > 1
             ? "Recalculate each texture at its original dimensions"
-            : $"{vm.MipCount} mips  →  {vm.EstimatedMipCount(vm.SelectedWidth, vm.SelectedHeight, minimum)} mips  ·  last "
+            : $"{ViewModels.TextureItem.Mips(vm.MipCount)}  →  {ViewModels.TextureItem.Mips(vm.EstimatedMipCount(vm.SelectedWidth, vm.SelectedHeight, minimum))}  ·  last "
               + vm.EstimatedSmallestMipDimensions(vm.SelectedWidth, vm.SelectedHeight, minimum);
     }
 }

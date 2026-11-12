@@ -47,6 +47,6 @@ public partial class TextureDialogSummary : UserControl
         NameText.Text = multiple ? $"{viewModel.SelectedCount} textures selected" : viewModel.SelectedName;
         DetailText.Text = multiple
             ? "Applies to all selected textures."
-            : $"Original  {viewModel.SelectedDimensions}  ·  {viewModel.SelectedFormat}  ·  {viewModel.MipCount} mips";
+            : $"Original  {viewModel.SelectedDimensions}  ·  {viewModel.SelectedFormat}  ·  {TextureItem.Mips(viewModel.MipCount)}";
     }
 }

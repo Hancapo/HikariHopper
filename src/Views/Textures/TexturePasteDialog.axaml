@@ -12,7 +12,7 @@
     </Style>
   </v:TextureToolDialog.Styles>
   <c:QtColumnLayout Margin="12" Spacing="10">
-    <v:QtGrid ColumnDefinitions="Auto,12,*" RowDefinitions="Auto,10,Auto">
+    <v:QtGrid ColumnDefinitions="112,12,*" RowDefinitions="Auto,10,Auto">
       <TextBlock Classes="label" Text="Action" />
       <c:FlatComboBox Name="ModeCombo" Grid.Column="2" />
       <TextBlock Classes="label" Grid.Row="2" Text="Name" />

@@ -43,7 +43,9 @@ public partial class TextureMipBar : UserControl
     {
         int mipLevel = viewModel?.MipLevel ?? 0;
         int mipCount = viewModel?.MipCount ?? 0;
-        MipText.Text = $"MIP {mipLevel} / {Math.Max(0, mipCount - 1)}";
+        // A texture with one level has nothing to step through: it says so, without a slider.
+        MipText.Text = mipCount > 1 ? $"MIP {mipLevel} / {mipCount - 1}" : mipCount == 1 ? "1 MIP" : "";
+        Slider.IsVisible = mipCount > 1;
         SizeText.Text = $"{viewModel?.PreviewWidth ?? 0} × {viewModel?.PreviewHeight ?? 0}";
         Slider.Maximum = Math.Max(0, mipCount - 1);
         Slider.TickCount = mipCount;
