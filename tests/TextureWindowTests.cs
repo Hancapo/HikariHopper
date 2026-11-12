@@ -999,6 +999,23 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void ACancelAcceptedAfterTheLastFileIsReadStillAddsNothing()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        string[] before = [.. harness.ViewModel.Dictionary!.Names];
+        Assert.True(harness.ViewModel.ImportDroppedImages([TextureTestKit.ImageFile(folder.File("late.png"))]));
+        // The worker is done and its result posted, but the UI has not taken it yet when Cancel is clicked.
+        Assert.True(harness.ViewModel.WaitForBackgroundWork(TimeSpan.FromSeconds(10)));
+        Assert.True(harness.ViewModel.CancelImageImport());
+        harness.Settle();
+        Assert.Equal(before, harness.ViewModel.Dictionary!.Names);
+        Assert.Null(harness.ViewModel.ImageImport);
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.False(harness.ViewModel.CanUndo);
+    }
+
+    [AvaloniaFact]
     public void AQuickImportNeverShowsTheOverlay()
     {
         using var folder = new TempFolder();

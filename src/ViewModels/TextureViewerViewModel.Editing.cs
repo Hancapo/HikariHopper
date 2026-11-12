@@ -628,15 +628,22 @@ public sealed partial class TextureViewerViewModel
                 return;
             }
             var result = order.Select(key => KeyValuePair.Create(key, imported[key])).ToArray();
-            Post(() => ImageImportCompleted(token, result));
+            Post(() => ImageImportCompleted(token, cancel, result));
         }, PriorityTransform);
         return true;
     }
 
-    private void ImageImportCompleted(int token, IReadOnlyList<KeyValuePair<string, Texture>> imported)
+    private void ImageImportCompleted(int token, CancellationTokenSource cancel,
+        IReadOnlyList<KeyValuePair<string, Texture>> imported)
     {
         if (token != generation)
             return;
+        // A Cancel accepted after the worker's last look still wins: nothing is added.
+        if (cancel.IsCancellationRequested)
+        {
+            ImageImportCancelled(token);
+            return;
+        }
         operationBusy = false;
         imageImport = null;
         OnPropertyChanged(nameof(ImageImport));
