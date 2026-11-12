@@ -52,30 +52,55 @@ internal sealed class PaintPanel : Border
     public event Action<IReadOnlyList<int?>>? Changed;
 
     /// <summary>
-    /// A colour is under the pointer: the six slots' colour numbers with it in the slot being picked, to show the
-    /// vehicle in until the pointer leaves the colours; none once it has, to show it as picked again.
+    /// A colour or a combination is under the pointer: the six slots' colour numbers to show the vehicle in while it
+    /// is; none once the pointer is off it, to show the vehicle as picked again.
     /// </summary>
     public event Action<IReadOnlyList<int?>?>? Previewing;
 
     /// <summary>The colour shown on the vehicle while the pointer is over it; none when the vehicle shows its own.</summary>
     public int? PreviewColour { get; private set; }
 
+    /// <summary>The combination shown on the vehicle while the pointer is over it; none when the vehicle shows its own.</summary>
+    public int? PreviewedCombination { get; private set; }
+
     /// <summary>Shows the vehicle with <paramref name="colour"/> in the slot being picked, or as picked with none.</summary>
     public void Preview(int? colour)
     {
-        if (PickingSlot is null)
-            colour = null;
-        if (colour == PreviewColour)
-            return;
-        PreviewColour = colour;
-        if (colour is null)
+        if (PickingSlot is not { } slot || colour is null)
         {
-            Previewing?.Invoke(null);
+            EndPreview();
             return;
         }
+        if (colour == PreviewColour)
+            return;
+        (PreviewColour, PreviewedCombination) = (colour, null);
         int?[] shown = [.. indices];
-        shown[PickingSlot!.Value] = colour;
+        shown[slot] = colour;
         Previewing?.Invoke(shown);
+    }
+
+    /// <summary>Shows the vehicle in the model's <paramref name="combination"/>, or as picked with none.</summary>
+    public void PreviewCombination(int? combination)
+    {
+        if (PickingSlot is not null || combination is not { } shown)
+        {
+            EndPreview();
+            return;
+        }
+        if (shown == PreviewedCombination)
+            return;
+        (PreviewColour, PreviewedCombination) = (null, shown);
+        int?[] combo = paints.Combinations[shown];
+        Previewing?.Invoke([.. Enumerable.Range(0, indices.Length).Select(slot => slot < combo.Length ? combo[slot] : null)]);
+    }
+
+    // The vehicle as picked again, if a colour or a combination was shown on it.
+    private void EndPreview()
+    {
+        if (PreviewColour is null && PreviewedCombination is null)
+            return;
+        (PreviewColour, PreviewedCombination) = (null, null);
+        Previewing?.Invoke(null);
     }
 
     /// <summary>The six slots' colour numbers.</summary>
@@ -102,6 +127,7 @@ internal sealed class PaintPanel : Border
         int?[] combo = paints.Combinations[combination];
         for (int slot = 0; slot < indices.Length; slot++)
             indices[slot] = slot < combo.Length ? combo[slot] : null;
+        (PreviewColour, PreviewedCombination) = (null, null);
         Changed?.Invoke(indices);
         ShowSlots();
     }
@@ -113,7 +139,7 @@ internal sealed class PaintPanel : Border
     public void PickColour(int slot, int colour)
     {
         indices[slot] = colour;
-        PreviewColour = null;
+        (PreviewColour, PreviewedCombination) = (null, null);
         Changed?.Invoke(indices);
         if (PickingSlot == slot)
             Child = Picker(slot, paints.Colour(colour), paints.Finishes);
@@ -134,6 +160,7 @@ internal sealed class PaintPanel : Border
     /// <summary>Shows the game's colours to pick <paramref name="slot"/>'s from, in the finish of the one it has.</summary>
     public void ShowPicker(int slot)
     {
+        EndPreview();
         PickingSlot = slot;
         CarColour? current = paints.Colour(indices[slot]);
         IReadOnlyList<string> finishes = paints.Finishes;
@@ -144,7 +171,7 @@ internal sealed class PaintPanel : Border
     /// <summary>Shows the combinations and the slots.</summary>
     public void ShowSlots()
     {
-        Preview(null);
+        EndPreview();
         PickingSlot = null;
         var body = new StackPanel { Margin = new Thickness(12, 10, 12, 8), Spacing = 8 };
         if (paints.Combinations.Count > 0)
@@ -207,8 +234,18 @@ internal sealed class PaintPanel : Border
         string names = string.Join(", ", new[] { 0, 1, 2 }.Select(slot => slot < combo.Length ? paints.Colour(combo[slot])?.Name : null).OfType<string>().Distinct());
         Avalonia.Automation.AutomationProperties.SetName(tile, $"Combination {combination + 1}: {names}");
         ThemedToolTip.Set(tile, names);
-        tile.PointerEntered += (_, _) => { if (!selected) tile.Background = Ui.Theme.HoverChrome; };
-        tile.PointerExited += (_, _) => { if (!selected) tile.Background = Brushes.Transparent; };
+        tile.PointerEntered += (_, _) =>
+        {
+            if (!selected)
+                tile.Background = Ui.Theme.HoverChrome;
+            PreviewCombination(combination);
+        };
+        tile.PointerExited += (_, _) =>
+        {
+            if (!selected)
+                tile.Background = Brushes.Transparent;
+            PreviewCombination(null);
+        };
         tile.PointerPressed += (_, e) =>
         {
             if (e.GetCurrentPoint(tile).Properties.IsLeftButtonPressed)
@@ -318,10 +355,14 @@ internal sealed class PaintPanel : Border
                     Name(colour);
                     Preview(colour.Index);
                 };
+                // Off a colour, the vehicle and the name line show the slot's own again: from one colour straight to the
+                // next, that is undone in the same move, before a frame is drawn.
                 cell.PointerExited += (_, _) =>
                 {
                     if (!on)
                         chip.BoxShadow = NoRing;
+                    Name(current);
+                    Preview(null);
                 };
                 cell.PointerPressed += (_, e) =>
                 {
@@ -350,14 +391,7 @@ internal sealed class PaintPanel : Border
             body.Children.Add(switcher);
         }
         Fill();
-        var well = new Border { Background = Ui.Theme.InsetBg, CornerRadius = Ui.Theme.ControlCorner, Padding = new Thickness(5), HorizontalAlignment = HorizontalAlignment.Left, Child = swatches };
-        // Off the colours, the vehicle and the name line show the slot's own colour again.
-        well.PointerExited += (_, _) =>
-        {
-            Name(current);
-            Preview(null);
-        };
-        body.Children.Add(well);
+        body.Children.Add(new Border { Background = Ui.Theme.InsetBg, CornerRadius = Ui.Theme.ControlCorner, Padding = new Thickness(5), HorizontalAlignment = HorizontalAlignment.Left, Child = swatches });
         Name(current);
         body.Children.Add(hovered);
         return body;

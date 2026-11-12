@@ -287,7 +287,7 @@ public sealed class CarPaintTests
     }
 
     [AvaloniaFact]
-    public void A_colour_under_the_pointer_is_shown_on_the_vehicle_until_the_pointer_leaves_the_colours()
+    public void A_colour_or_combination_under_the_pointer_is_shown_on_the_vehicle_until_the_pointer_is_off_it()
     {
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
         var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
@@ -297,24 +297,39 @@ public sealed class CarPaintTests
         Vector3 silver = Srgb(0xFF5A5E66), red = Srgb(0xFFC00E1A);
         viewer.TogglePaint();
         Views.PaintPanel panel = viewer.PaintPanel!;
+        var top = (Avalonia.Controls.TopLevel)Avalonia.Controls.TopLevel.GetTopLevel(panel)!;
+        ExplorerStateRenders.Pump(50);
+        Avalonia.Controls.Control Named(Func<string, bool> name) => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel)
+            .OfType<Avalonia.Controls.Control>().First(control => Avalonia.Automation.AutomationProperties.GetName(control) is { } named && name(named));
+        void Over(Avalonia.Controls.Control control, Avalonia.Point at)
+        {
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, Avalonia.VisualExtensions.TranslatePoint(control, at, top)!.Value);
+            ExplorerStateRenders.Pump(20);
+        }
+        Avalonia.Point Middle(Avalonia.Controls.Control control) => new(control.Bounds.Width / 2, control.Bounds.Height / 2);
+
+        // The pointer over the second combination: the vehicle shows all its slots, and its paint is still the first.
+        Avalonia.Controls.Control tile = Named(name => name.StartsWith("Combination 2:", StringComparison.Ordinal));
+        Over(tile, Middle(tile));
+        Assert.Equal(1, panel.PreviewedCombination);
+        Assert.Equal([red.X, red.Y, red.Z], Drawn());
+        Assert.Equal([4, 12, 111, 156, 0, 0], viewer.PaintIndices);
+        Over(panel, new Avalonia.Point(2, 2));
+        Assert.Null(panel.PreviewedCombination);
+        Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
+
+        // The pointer over Metallic Red in the primary's colours: the vehicle shows it, its paint still silver.
         panel.ShowPicker(0);
         ExplorerStateRenders.Pump(50);
-
-        // The pointer over Metallic Red: the vehicle shows it, and its paint is still the silver it had.
-        var top = (Avalonia.Controls.TopLevel)Avalonia.Controls.TopLevel.GetTopLevel(panel)!;
-        Avalonia.Controls.Control Cell(string name) => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel)
-            .OfType<Avalonia.Controls.Control>().First(control => Avalonia.Automation.AutomationProperties.GetName(control) == name);
-        Avalonia.Controls.Control cell = Cell(Paints.Colour(27)!.Name);
-        Avalonia.Point centre = Avalonia.VisualExtensions.TranslatePoint(cell, new Avalonia.Point(cell.Bounds.Width / 2, cell.Bounds.Height / 2), top)!.Value;
-        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, centre);
-        ExplorerStateRenders.Pump(20);
+        Avalonia.Controls.Control cell = Named(name => name == Paints.Colour(27)!.Name);
+        Over(cell, Middle(cell));
         Assert.Equal(27, panel.PreviewColour);
         Assert.Equal([red.X, red.Y, red.Z], Drawn());
         Assert.Equal(4, viewer.PaintIndices[0]);
 
-        // Off the colours, back to the silver; and a preview the dropdown closes on goes with it.
-        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, new Avalonia.Point(2, 2));
-        ExplorerStateRenders.Pump(20);
+        // Over the well where it has no colour, back to the silver; and a preview the dropdown closes on goes with it.
+        var row = (Avalonia.Controls.Control)Avalonia.VisualTree.VisualExtensions.GetVisualParent(cell)!;
+        Over(row, new Avalonia.Point(row.Bounds.Width - 6, row.Bounds.Height / 2));
         Assert.Null(panel.PreviewColour);
         Assert.Equal([silver.X, silver.Y, silver.Z], Drawn());
         panel.Preview(27);
