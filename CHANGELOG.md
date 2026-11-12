@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Saving into, renaming or deleting an RPF in the game folder no longer fails with "Access to the path is denied" while the game's textures are being indexed after it opens. ([#185](https://github.com/Hancapo/HikariHopper/pull/185))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09
