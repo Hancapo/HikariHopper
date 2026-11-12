@@ -17,7 +17,8 @@ namespace HikariHopper.Core;
 /// fix/touhou.rpf, or OpenIV's mods folder) take part too, over the game's own files.
 /// FiveFury works that out from the whole game mounted, which holds over a gigabyte; that is done once in the
 /// background when the game loads, and what it gives is kept as a few tables, cached on disk until the game's archives
-/// change.
+/// change. FiveFury's own index of what each archive holds and declares is kept beside them, so making the tables again
+/// after an archive changes reads only that archive, not the whole game.
 /// </summary>
 public sealed class GameTextures
 {
@@ -52,6 +53,9 @@ public sealed class GameTextures
     /// <summary>The tables of the game at <paramref name="gameRoot"/>, shared by every caller.</summary>
     public static GameTextures ForGame(LoadedGame game) =>
         Shared.GetOrAdd(Path.TrimEndingDirectorySeparator(Path.GetFullPath(game.Root)), path => new GameTextures(path, game.Target, game.Crypto));
+
+    /// <summary>Where FiveFury keeps its index of each archive the tables are made from, for every game.</summary>
+    internal static string IndexFolder => Path.Combine(CacheFolder, "Index");
 
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
@@ -136,7 +140,7 @@ public sealed class GameTextures
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or EndOfStreamException)
         {
         }
-        Tables made = Tables.Build(root, target, crypto);
+        Tables made = Tables.Build(root, target, crypto, new GameIndexCache(IndexFolder));
         try
         {
             Directory.CreateDirectory(CacheFolder);
@@ -218,10 +222,14 @@ public sealed class GameTextures
         private static readonly uint MapDetail = new Hash32("mapdetail").Value;
         private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
-        public static Tables Build(string root, GameTarget target, GameCrypto crypto)
+        /// <summary>
+        /// The tables, from the whole game mounted; with <paramref name="index"/>, FiveFury takes each archive it has seen
+        /// unchanged from there, which gives the same tables in under half the time.
+        /// </summary>
+        public static Tables Build(string root, GameTarget target, GameCrypto crypto, GameIndexCache? index = null)
         {
             var tables = new Tables();
-            using GameInstallation game = GameInstallation.Open(root, target, crypto);
+            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index });
             // The RPFs the game doesn't mount itself, over its own files; one that can't be read is left out.
             var mounted = new HashSet<string>(game.FileSystem.Mounts.Select(mount => mount.SourcePath), StringComparer.OrdinalIgnoreCase);
             int priority = ExtraArchivePriority;

@@ -1,3 +1,4 @@
+using FiveFury.Assets;
 using FiveFury.Rpf;
 using HikariHopper.Core;
 
@@ -81,5 +82,32 @@ public sealed class RealGameTests
                 return found;
         }
         return null;
+    }
+
+    [Fact]
+    public void FiveFurysArchiveIndexGivesTheSameTextureTables()
+    {
+        string root = LegacyRoot()!;
+        LoadedGame game = RpfProvider.LoadGame(root);
+        string scratch = Directory.CreateTempSubdirectory("hikari-index-").FullName;
+        try
+        {
+            byte[] Written(GameTextures.Tables tables)
+            {
+                string path = Path.Combine(scratch, "tables.bin");
+                tables.Write(path, [1]);
+                return File.ReadAllBytes(path);
+            }
+            byte[] without = Written(GameTextures.Tables.Build(root, game.Target, game.Crypto));
+            string index = Path.Combine(scratch, "Index");
+            // Made with the index empty, which fills it, then with every archive taken from it.
+            Assert.Equal(without, Written(GameTextures.Tables.Build(root, game.Target, game.Crypto, new GameIndexCache(index))));
+            Assert.NotEmpty(Directory.EnumerateFiles(index, "*", SearchOption.AllDirectories));
+            Assert.Equal(without, Written(GameTextures.Tables.Build(root, game.Target, game.Crypto, new GameIndexCache(index))));
+        }
+        finally
+        {
+            Directory.Delete(scratch, recursive: true);
+        }
     }
 }
