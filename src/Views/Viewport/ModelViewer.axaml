@@ -169,9 +169,12 @@
           <Border Name="PartsSide" DockPanel.Dock="Left" Width="0" ClipToBounds="True">
             <v:PartsPanel Name="Parts" HorizontalAlignment="Left" />
           </Border>
-          <!-- Its edge, while it's open: dragged, it resizes the panel. -->
+          <!-- Its edge, while it's open: dragged, it resizes the panel. The panel's header runs on across it, to the
+               edge's line, so the header is as wide as the panel's body, which is the edge's colour. -->
           <Panel Name="PartsHandle" DockPanel.Dock="Left" Width="{x:Static ui:Theme.PartsEdgeWidth}" IsVisible="False"
                  Background="{x:Static ui:Theme.AppBg}" Cursor="SizeWestEast">
+            <Border Name="PartsHandleHeader" VerticalAlignment="Top" Height="{x:Static ui:Theme.ListHeaderHeight}"
+                    Background="{x:Static ui:Theme.ListHeaderBg}" BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,0,1" />
             <Border Width="1" HorizontalAlignment="Right" Background="{x:Static ui:Theme.BorderHard}" />
           </Panel>
 
