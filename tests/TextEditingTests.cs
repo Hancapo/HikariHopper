@@ -692,4 +692,38 @@ public sealed class TextEditingTests : ExplorerTestBase
         Assert.StartsWith("Couldn't save a.txt:", viewer.StatusText.Text);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void ATextSaveIntoAnRpfKeepsItsTabAndThePeersBusyUntilWritten()
+    {
+        string path = SaveArchive(Path.Combine(Work, "shared.rpf"), ("readme.txt", "hello"), ("keep.txt", "untouched"));
+        var tabs = new ExplorerTabsViewModel();
+        ExplorerViewModel first = tabs.ActiveBridge;
+        first.OpenArchive(path);
+        tabs.NewTab();
+        ExplorerViewModel peer = tabs.ActiveBridge;
+        peer.OpenArchive(path);
+        TextFile? opened = null;
+        first.TextFileOpened += (_, file) => opened = file;
+        first.ActivateEntry(RowFor(first, "readme.txt"));
+        Assert.NotNull(opened?.SaveTarget);
+
+        var viewer = new TextViewer(opened!);
+        viewer.Lines.MoveCaret(new TextPosition(0, 5));
+        viewer.Lines.Type("!");
+        var changes = new List<string?>();
+        first.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        Assert.True(viewer.Save());
+        // Under way, this tab and the peer on the same RPF write nothing else.
+        Assert.True(first.EntryOperationBusy);
+        Assert.True(peer.EntryOperationBusy);
+        Assert.Contains(nameof(ExplorerViewModel.EntryOperationBusy), changes);
+        Wait(viewer.Saving);
+        Assert.True(viewer.Saving.Result, viewer.StatusText.Text);
+        Assert.False(first.EntryOperationBusy);
+        Assert.False(peer.EntryOperationBusy);
+        Settle(tabs);
+        Assert.Equal("hello!"u8.ToArray(), ReadSavedEntry(path, "readme.txt"));
+        Assert.Equal("untouched"u8.ToArray(), ReadSavedEntry(path, "keep.txt"));
+    }
 }
