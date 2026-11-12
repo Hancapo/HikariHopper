@@ -1436,20 +1436,57 @@ public partial class ModelViewer : UserControl, IModalContent
         data = file.Data;
         gameDictionaries = game;
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
-        // A vehicle from a game is painted in the first of its colour combinations, as the game spawns it, from the first
-        // frame on; read with the game's texture tables, so at hand by now.
-        if (content?.Surfaces is { Paintable: true } painted && file.GamePaints is { } asked && await asked is { } paints)
-        {
-            carPaints = paints;
-            paintIndices = paints.Combinations.Count > 0 ? Slots(paints.Combinations[0]) : new int?[VehiclePaint.Slots.Length];
-            painted.Repaint(VehiclePaint.Of(paints, paintIndices));
-        }
+        // A vehicle from a game is painted in the first of its colour combinations, as the game spawns it: from the first
+        // frame on when the game's texture tables are ready, otherwise once they are. It doesn't wait for them, which
+        // can take seconds while they are worked out afresh.
+        Task<CarPaints?>? asked = content?.Surfaces is { Paintable: true } ? file.GamePaints : null;
+        if (asked is { IsCompletedSuccessfully: true, Result: { } paints } && content?.Surfaces is { } painted)
+            ChoosePaint(paints, painted);
         Location = content is not null ? Locate(content) : failure!;
         ShowPaint();
+        if (asked is { IsCompleted: false })
+            PaintsAdded = PaintWhenReady(asked);
         if (started)
             StatusText.Text = Location;
         if (content?.Surfaces is { } first && pending is not null && !gameIncluded && Missing(first) > 0)
             GameTexturesAdded = AddGameTextures(file, pending);
+    }
+
+    /// <summary>Done once a vehicle shown before the game's texture tables were ready has its paint, or it never will.</summary>
+    internal Task PaintsAdded { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// Takes the game's colours for the vehicle and paints <paramref name="scene"/> in their first combination; gives the
+    /// materials it made again.
+    /// </summary>
+    private IReadOnlyList<int> ChoosePaint(CarPaints paints, DrawableScene scene)
+    {
+        carPaints = paints;
+        paintIndices = paints.Combinations.Count > 0 ? Slots(paints.Combinations[0]) : new int?[VehiclePaint.Slots.Length];
+        return scene.Repaint(VehiclePaint.Of(paints, paintIndices));
+    }
+
+    /// <summary>
+    /// Paints a vehicle shown in the game's grey once the game's texture tables are ready, and shows its paint's well;
+    /// the drawable shown then, which a reload may have replaced since, is the one painted.
+    /// </summary>
+    private async Task PaintWhenReady(Task<CarPaints?> asked)
+    {
+        CarPaints? paints;
+        try
+        {
+            paints = await asked;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or ArgumentException
+            or NotSupportedException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        if (paints is null || closed || carPaints is not null || surfaces is not { Paintable: true } scene)
+            return;
+        foreach (int index in ChoosePaint(paints, scene))
+            Viewport.UpdateMaterial(index);
+        ShowPaint();
     }
 
     /// <summary>Done once the game's textures have been added to the drawable shown, or there were none to add.</summary>

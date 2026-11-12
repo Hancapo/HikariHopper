@@ -219,6 +219,28 @@ public sealed class CarPaintTests
     }
 
     [AvaloniaFact]
+    public void A_vehicle_opened_while_the_games_tables_are_worked_out_is_shown_at_once_and_painted_when_they_are()
+    {
+        // The tables can take seconds to make afresh: the car doesn't wait for its paint.
+        var paints = new TaskCompletionSource<CarPaints?>();
+        Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = paints.Task });
+        Assert.True(viewer.Reading.IsCompletedSuccessfully);
+        Assert.Equal(150 / 255f, viewer.Surfaces!.Materials[0].Uniforms[16], 4);
+        Assert.False(viewer.PaintWell.IsVisible);
+        Assert.False(viewer.PaintsAdded.IsCompleted);
+
+        // Once they are done, it takes its first combination and its well, as it would have from the start.
+        paints.SetResult(Paints);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.PaintsAdded.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            ExplorerStateRenders.Pump(10);
+        Vector3 silver = Srgb(0xFF5A5E66);
+        Assert.Equal([silver.X, silver.Y, silver.Z], viewer.Surfaces!.Materials[0].Uniforms[16..19]);
+        Assert.Equal([4, 12, 111, 156, 0, 0], viewer.PaintIndices);
+        Assert.True(viewer.PaintWell.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void A_vehicle_from_a_game_opens_in_its_first_combination_and_its_paint_is_picked_in_the_footer()
     {
         Views.ModelViewer viewer = Open(new ModelFile("car.ydr", Car()) { GamePaints = Task.FromResult<CarPaints?>(Paints) });
