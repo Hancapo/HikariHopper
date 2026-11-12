@@ -41,6 +41,29 @@ public sealed class LoadingOverlayTests
         return bytes;
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_train_never_shown_asks_for_nothing(bool reduced)
+    {
+        Ui.Motion.ReducedOverride = reduced;
+        try
+        {
+            // As every tab's texture editor makes one up front, whose overlay may never show.
+            var train = new LoadingTrain();
+            Assert.False(train.Animating);
+            Assert.False(train.Watching);
+            // Past the watcher's first look, too.
+            TestWait.Pump(600);
+            Assert.False(train.Animating);
+            Assert.False(train.Watching);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
     [AvaloniaFact]
     public void The_train_moves_only_while_the_overlay_runs_and_motion_is_on()
     {
