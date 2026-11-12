@@ -51,8 +51,9 @@
                 </Grid>
               </v:TextureImageDropArea.Body>
             </v:TextureImageDropArea>
-            <!-- A long import: the loading overlay over the rail and the preview, with its progress and Cancel. -->
-            <v:LoadingOverlay Name="ImportOverlay" IsVisible="False" Title="IMPORTING TEXTURES" />
+            <!-- A long task (an import, a transform, an extract, a save): the loading overlay over the rail and the
+                 preview, with its progress and Cancel when it has them. -->
+            <v:LoadingOverlay Name="WorkOverlay" IsVisible="False" />
           </Panel>
         </DockPanel>
 

@@ -410,6 +410,9 @@ public sealed class TextureViewerTests
         viewer.SelectTexture(1);
         viewer.SelectTexture(3, KeyModifiers.Control);
         await viewer.ExtractSelected();
+        // Several are written on the work pool, one at a time.
+        Settle(viewer);
+        Assert.Null(viewer.Work);
         Assert.Equal(["texture_1.dds", "texture_3.dds"],
             Directory.GetFiles(folder.Path, "*.dds").Select(Path.GetFileName).Order());
         Assert.Equal("Extracted 2 textures", viewer.Status);
@@ -425,6 +428,7 @@ public sealed class TextureViewerTests
 
         dialogs.Folder = folder.File("all");
         await viewer.ExtractAll();
+        Settle(viewer);
         Assert.Equal("Extracted 5 textures", viewer.Status);
     }
 

@@ -43,9 +43,9 @@ public partial class TextureEditor : UserControl, IModalContent
     private TextureUnsavedChangesDialog? unsavedDialog;
     private TextureImportDialog? importDialog;
     private TexturePasteDialog? pasteDialog;
-    // An import shows the loading overlay only once it has run this long, so a quick one doesn't flash it.
-    internal static TimeSpan ImportOverlayDelay { get; set; } = TimeSpan.FromMilliseconds(400);
-    private readonly DispatcherTimer importReveal;
+    // A long task shows the loading overlay only once it has run this long, so a quick one doesn't flash it.
+    internal static TimeSpan WorkOverlayDelay { get; set; } = TimeSpan.FromMilliseconds(400);
+    private readonly DispatcherTimer workReveal;
 
     /// <summary>For the XAML designer only: an editor over an empty view model.</summary>
     public TextureEditor() : this(new TextureViewerViewModel())
@@ -62,13 +62,13 @@ public partial class TextureEditor : UserControl, IModalContent
         SplitGrid.ColumnDefinitions[0].Width = new GridLength(Ui.Theme.TextureRailWidth);
 
         viewModel.PropertyChanged += ViewModelChanged;
-        importReveal = new DispatcherTimer { Interval = ImportOverlayDelay };
-        importReveal.Tick += (_, _) =>
+        workReveal = new DispatcherTimer { Interval = WorkOverlayDelay };
+        workReveal.Tick += (_, _) =>
         {
-            importReveal.Stop();
-            RefreshImportOverlay(reveal: true);
+            workReveal.Stop();
+            RefreshWorkOverlay(reveal: true);
         };
-        ImportOverlay.CancelRequested += (_, _) => viewModel.CancelImageImport();
+        WorkOverlay.CancelRequested += (_, _) => viewModel.CancelWork();
         viewModel.OpenRequested += (_, _) =>
         {
             closeApproved = false;
@@ -273,41 +273,42 @@ public partial class TextureEditor : UserControl, IModalContent
             RefreshTitle();
         if (e.PropertyName == nameof(TextureViewerViewModel.CanImportImages))
             RefreshDropEnabled();
-        if (e.PropertyName == nameof(TextureViewerViewModel.ImageImport))
-            RefreshImportOverlay(reveal: false);
+        if (e.PropertyName == nameof(TextureViewerViewModel.Work))
+            RefreshWorkOverlay(reveal: false);
     }
 
     /// <summary>
-    /// Shows the running image import on the loading overlay: the file being read, the share done and the count, with
-    /// Cancel. It appears <see cref="ImportOverlayDelay"/> into the import (<paramref name="reveal"/> is that moment)
-    /// and goes when the import ends.
+    /// Shows the running long task on the loading overlay: what it is, the item in hand, the share done and the count
+    /// when it has them, and Cancel when it can stop. It appears <see cref="WorkOverlayDelay"/> into the task
+    /// (<paramref name="reveal"/> is that moment) and goes when the task ends.
     /// </summary>
-    private void RefreshImportOverlay(bool reveal)
+    private void RefreshWorkOverlay(bool reveal)
     {
-        ImageImportProgress? import = viewModel.ImageImport;
-        if (import is null)
+        WorkProgress? work = viewModel.Work;
+        if (work is null)
         {
-            importReveal.Stop();
-            ImportOverlay.IsVisible = false;
-            ImportOverlay.IsRunning = false;
-            ImportOverlay.CanCancel = false;
+            workReveal.Stop();
+            WorkOverlay.IsVisible = false;
+            WorkOverlay.IsRunning = false;
+            WorkOverlay.CanCancel = false;
             return;
         }
-        ImportOverlay.Detail = import.Current;
-        ImportOverlay.Progress = import.Fraction;
-        ImportOverlay.ProgressText = $"{Math.Min(import.Done + 1, import.Total)}/{import.Total}";
-        if (ImportOverlay.IsVisible)
+        WorkOverlay.Title = work.Title;
+        WorkOverlay.Detail = work.Current;
+        WorkOverlay.Progress = work.Fraction;
+        WorkOverlay.ProgressText = work.Count;
+        if (WorkOverlay.IsVisible)
             return;
-        if (reveal || ImportOverlayDelay <= TimeSpan.Zero)
+        if (reveal || WorkOverlayDelay <= TimeSpan.Zero)
         {
-            ImportOverlay.CanCancel = true;
-            ImportOverlay.IsVisible = true;
-            ImportOverlay.IsRunning = true;
+            WorkOverlay.CanCancel = work.Cancellable;
+            WorkOverlay.IsVisible = true;
+            WorkOverlay.IsRunning = true;
         }
-        else if (!importReveal.IsEnabled)
+        else if (!workReveal.IsEnabled)
         {
-            importReveal.Interval = ImportOverlayDelay;
-            importReveal.Start();
+            workReveal.Interval = WorkOverlayDelay;
+            workReveal.Start();
         }
     }
 
