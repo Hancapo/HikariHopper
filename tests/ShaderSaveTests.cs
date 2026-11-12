@@ -160,6 +160,37 @@ public sealed class ShaderSaveTests
             saved.Close();
         }
     }
+
+    [Fact]
+    public void Edits_to_one_rpf_wait_for_each_other()
+    {
+        using var folder = new TempFolder();
+        string archivePath = folder.File("props.rpf");
+        var archive = new RpfArchive("props.rpf");
+        ArchiveWriter.AddStandalone(archive, "tri.ydr", ShaderValuesTests.Triangle());
+        archive.Save(archivePath);
+        byte[] model = ShaderValuesTests.Triangle("default");
+        Task? save = null;
+        // A model save asked for while an explorer change is being made waits for it, and keeps it.
+        ArchiveWriter.Mutate(archivePath, null, "", edited =>
+        {
+            save = Task.Run(() => ArchiveWriter.ReplaceEntry(archivePath, null, "tri.ydr", model));
+            Assert.False(save.Wait(300));
+            ArchiveWriter.AddStandalone(edited, "added.txt", "added"u8.ToArray());
+        });
+        Assert.True(save!.Wait(10_000));
+        ArchiveNode saved = ArchiveNode.OpenRoot(archivePath, null);
+        try
+        {
+            Assert.Equal("added"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("added.txt")!).ReadStandalone());
+            byte[] written = ((RpfResourceFileEntry)saved.Archive.Find("tri.ydr")!).ReadStandalone();
+            Assert.Equal(FiveFury.Ydr.Ydr.Read(model).Drawable.Materials[0].ShaderHash, FiveFury.Ydr.Ydr.Read(written).Drawable.Materials[0].ShaderHash);
+        }
+        finally
+        {
+            saved.Close();
+        }
+    }
 }
 
 [Collection(ExplorerCollection.Name)]
