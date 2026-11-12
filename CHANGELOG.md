@@ -46,6 +46,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - A 3D model's embedded textures open again with T after a save into its RPF, where they failed with "Cannot access a disposed object". ([#194](https://github.com/Hancapo/HikariHopper/pull/194))
 - A vehicle whose game tables finished just as it appeared in the 3D viewer is painted and has its paint well, where it stayed grey. ([#197](https://github.com/Hancapo/HikariHopper/pull/197))
 - Clicking a number on the shader values card and leaving it without typing no longer rounds it to the four decimals shown. ([#198](https://github.com/Hancapo/HikariHopper/pull/198))
+- Save as in the 3D viewer and the texture editor keeps a name typed with another extension, adding the file's after it, and never replaces a file that wasn't picked. ([#199](https://github.com/Hancapo/HikariHopper/pull/199))
 - A vehicle opened while the game's texture tables were still being worked out (after the game or the app changed) took several seconds to appear, waiting for its paint; it now appears at once in the game's grey and takes its colours when the tables are ready. ([#184](https://github.com/Hancapo/HikariHopper/pull/184))
 - Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - Clicking HikariHopper's taskbar button minimizes it, as it does for other apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
