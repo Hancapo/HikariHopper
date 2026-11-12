@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommonFury.Textures;
 using FiveFury;
 using FiveFury.Textures;
 using HikariHopper.Core;

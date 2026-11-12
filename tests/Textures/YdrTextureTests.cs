@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using CommonFury.Textures;
 using FiveFury;
 using FiveFury.Cryptography;
 using FiveFury.Resources;
