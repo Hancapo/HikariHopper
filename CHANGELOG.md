@@ -23,6 +23,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The vehicle paint's colours are bigger chips, with a ring around the picked one, and the vehicle shows a colour while the pointer is over it. ([#189](https://github.com/Hancapo/HikariHopper/pull/189))
 - A vehicle's paint in the 3D viewer shines as its colour does in the game: each slot takes its colour's finish from carcols, so metallics are glossy and reflect sharply, mattes are dull and chrome is a mirror. ([#174](https://github.com/Hancapo/HikariHopper/pull/174))
 - Paint, chrome and glass in the 3D viewer reflect the floor the view shows, its colour and grid, below the horizon, instead of a plain grey ground. ([#175](https://github.com/Hancapo/HikariHopper/pull/175))
 - The 3D viewer's shader values card opens from the parts panel's right-click menu, with Shader values…, or with M, instead of with every geometry picked; open, it follows the pick. ([#172](https://github.com/Hancapo/HikariHopper/pull/172))
