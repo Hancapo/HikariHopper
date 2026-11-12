@@ -34,6 +34,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The vehicle paint's colours stay open after a colour is picked, and keep one size from one finish to another. ([#188](https://github.com/Hancapo/HikariHopper/pull/188))
 - A vehicle opened while the game's texture tables were still being worked out (after the game or the app changed) took several seconds to appear, waiting for its paint; it now appears at once in the game's grey and takes its colours when the tables are ready. ([#184](https://github.com/Hancapo/HikariHopper/pull/184))
 - Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 
