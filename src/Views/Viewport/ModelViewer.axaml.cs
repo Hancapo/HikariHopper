@@ -348,21 +348,38 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Done once the drawable is shown with the textures last saved in the texture viewer.</summary>
     internal Task TexturesSaved { get; private set; } = Task.CompletedTask;
 
+    // The textures were saved after the drawable shown was read, and it couldn't be read again with them: written, it
+    // would put the old ones back, so it isn't saved until it is read again.
+    private bool texturesStale;
+
     /// <summary>
     /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
     /// the file it was saved as; a fragment's or dictionary's textures over its own.
     /// </summary>
     private async Task ShowSaved(SavedDocument saved)
     {
-        if (closed || surfaces is null || shaderEdits.HasUnsavedSplits)
+        if (closed || surfaces is null)
             return;
         if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
             data = saved.Data;
         else
             savedTextures = saved.Textures;
+        // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then;
+        // the drawable shown has the textures as they were, and isn't saved over them.
+        if (shaderEdits.HasUnsavedSplits)
+        {
+            texturesStale = true;
+            return;
+        }
         (ModelContent? again, string? failure) = await Task.Run(() => Read(file, data, gameDictionaries, savedTextures));
         if (closed)
             return;
+        // Nor when one was given while it was read.
+        if (shaderEdits.HasUnsavedSplits)
+        {
+            texturesStale = true;
+            return;
+        }
         if (again?.Surfaces is { } after)
         {
             ShowAgain(after);
@@ -508,6 +525,8 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     private void ShowCard()
     {
+        // A number being typed goes to the geometry it was typed for, before the card shows another.
+        card.FinishTyping();
         FiveFury.Drawables.DrawableMaterial? material = PickedMaterial();
         // Not asked for, or nothing to show for what's picked now: no card, and it stays closed until asked for again.
         if (!cardOpen || material is null)
@@ -528,6 +547,8 @@ public partial class ModelViewer : UserControl, IModalContent
             card.SetShared(geometries);
         else
             card.Show(owner, material, geometries);
+        (cardScene, cardPart) = material is not null && Parts.Selection is [{ Parts: [int first, ..] }]
+            ? (surfaces, first) : ((DrawableScene?)null, (int?)null);
         card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
         shaderCard.IsWanted = material is not null;
         PlaceCard();
@@ -639,17 +660,25 @@ public partial class ModelViewer : UserControl, IModalContent
     /// Gives the picked geometry a copy of the entry it shares, as This one asks at its first change: the card takes the
     /// copy, and the drawables are drawn again with it.
     /// </summary>
-    private void SplitPicked()
+    private FiveFury.Drawables.DrawableMaterial? SplitPicked()
     {
-        if (surfaces is not { } scene || Parts.Selection is not [{ Kind: PartKind.Geometry, Parts: [int part, ..] }] || card.Material is not { } shared)
-            return;
+        // The geometry the card shows, which a change typed before another was picked still belongs to.
+        if (surfaces is not { } scene || scene != cardScene || cardPart is not int part || part >= scene.Parts.Count
+            || card.Material is not { } shared)
+            return null;
         int index = scene.Parts[part].Material;
         if (index >= scene.Sources.Count || scene.Sources[index] != shared)
-            return;
+            return null;
+        FiveFury.Drawables.DrawableMaterial copy = shaderEdits.Split(scene.Geometries[part], scene.SourceLists[index], shared);
         // Taken before the scene is built again, so the card keeps its rows.
-        card.Adopt(shaderEdits.Split(scene.Geometries[part], scene.SourceLists[index], shared));
+        card.Adopt(copy);
         Rebuild();
+        return copy;
     }
+
+    // The scene and the part whose geometry's entry the card shows.
+    private DrawableScene? cardScene;
+    private int? cardPart;
 
     /// <summary>
     /// The drawables drawn again as they are now, after a geometry was given an entry of its own or moved back: as they
@@ -797,6 +826,11 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (surfaces?.Writer is not { } write)
             return false;
+        if (texturesStale)
+        {
+            ShowSaveFailure(name, "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values");
+            return false;
+        }
         // What is written is what the values are now; a change made while it is put in place stays a change.
         ShaderSnapshot saved = shaderEdits.Snapshot();
         byte[] bytes;
@@ -834,6 +868,11 @@ public partial class ModelViewer : UserControl, IModalContent
                 data = bytes;
                 afterwards?.Invoke();
                 shaderEdits.MarkSaved(saved);
+                if (gameTexturesWaiting && !closed && !shaderEdits.HasUnsavedSplits)
+                {
+                    gameTexturesWaiting = false;
+                    GameTexturesAdded = AddGameTextures(file, Task.FromResult(gameDictionaries));
+                }
             }
             target.Finished?.Invoke(failure is null);
             if (failure is not null)
@@ -912,8 +951,11 @@ public partial class ModelViewer : UserControl, IModalContent
             new("Reset every shader value", "", shaderEdits.ResetEverything, () => shaderEdits.AnyChanged),
         ]));
 
-    // Whether the viewer may close with its changes unsaved: they were saved, or the dialog was told not to.
+    // Whether the viewer may close with its changes unsaved: the dialog was told not to save them.
     private bool closeApproved;
+    // Counts the closes asked for and the dialogs cancelled: a save from the dialog closes the viewer only while its
+    // close is still the last one asked for.
+    private int closeRequest;
     private TextureUnsavedChangesDialog? unsavedDialog;
 
     /// <summary>The dialog asking whether to save before the viewer closes, while it is open.</summary>
@@ -928,14 +970,17 @@ public partial class ModelViewer : UserControl, IModalContent
         if (UnsavedDialog is not null)
             return;
         Viewport.IsVisible = false;
+        int request = closeRequest;
         var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
         dialog.SaveRequested += async (_, _) =>
         {
-            if (Save() && await Saving)
-            {
-                closeApproved = true;
+            bool saved = Save() && await Saving;
+            // Closes as asked, unless a later close or cancel came meanwhile: asking again if a change made while it
+            // was written is unsaved.
+            if (request != closeRequest)
+                return;
+            if (saved)
                 Close();
-            }
             else
                 ShowViewportAgain();
         };
@@ -944,7 +989,11 @@ public partial class ModelViewer : UserControl, IModalContent
             closeApproved = true;
             Close();
         };
-        dialog.Rejected += (_, _) => ShowViewportAgain();
+        dialog.Rejected += (_, _) =>
+        {
+            closeRequest++;
+            ShowViewportAgain();
+        };
         unsavedDialog = dialog;
         dialog.Open(DialogLayer);
     }
@@ -1381,7 +1430,9 @@ public partial class ModelViewer : UserControl, IModalContent
         // Shown at once with the textures at hand (its own, the ones beside it, and the game's if its texture tables are
         // ready); while the tables are still being worked out, the game's are added when they come.
         Task<IReadOnlyList<NearbyDictionary>>? pending = file.GameDictionaries;
-        IReadOnlyList<NearbyDictionary> game = pending is { IsCompletedSuccessfully: true } ? pending.Result : [];
+        // Whether the read has the game's: the tables may be done by the time it is, and it still wouldn't.
+        bool gameIncluded = pending is { IsCompletedSuccessfully: true };
+        IReadOnlyList<NearbyDictionary> game = gameIncluded ? pending!.Result : [];
         data = file.Data;
         gameDictionaries = game;
         (ModelContent? content, string? failure) = await Task.Run(() => Read(file, file.Data, game, null));
@@ -1397,14 +1448,20 @@ public partial class ModelViewer : UserControl, IModalContent
         ShowPaint();
         if (started)
             StatusText.Text = Location;
-        if (content?.Surfaces is { } first && pending is { IsCompleted: false } && Missing(first) > 0)
+        if (content?.Surfaces is { } first && pending is not null && !gameIncluded && Missing(first) > 0)
             GameTexturesAdded = AddGameTextures(file, pending);
     }
 
     /// <summary>Done once the game's textures have been added to the drawable shown, or there were none to add.</summary>
     internal Task GameTexturesAdded { get; private set; } = Task.CompletedTask;
 
+    // The game's dictionaries came while a geometry's entry of its own was unsaved: they are added once it is saved.
+    private bool gameTexturesWaiting;
+
     private bool closed;
+
+    /// <summary>Whether it has closed, or begun to.</summary>
+    internal bool Closing => closed;
 
     /// <summary>
     /// Waits for the game's dictionaries for the drawable shown, then reads it again with them and shows that in its
@@ -1423,16 +1480,22 @@ public partial class ModelViewer : UserControl, IModalContent
             or NotSupportedException or UnauthorizedAccessException)
         {
         }
-        // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then.
-        if (game.Count > 0 && !closed && surfaces is { } before && !shaderEdits.HasUnsavedSplits)
+        // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then
+        // (nor when one was given while it was read): the game's textures are added once it is saved.
+        if (game.Count > 0 && !closed && surfaces is { } before)
         {
-            byte[] current = data;
-            IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
-            (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
-            if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+            gameDictionaries = game;
+            if (shaderEdits.HasUnsavedSplits)
+                gameTexturesWaiting = true;
+            else
             {
-                gameDictionaries = game;
-                ShowAgain(after);
+                byte[] current = data;
+                IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
+                (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
+                if (!closed && shaderEdits.HasUnsavedSplits)
+                    gameTexturesWaiting = true;
+                else if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+                    ShowAgain(after);
             }
         }
         if (!closed && started)
@@ -1447,6 +1510,9 @@ public partial class ModelViewer : UserControl, IModalContent
     private void ShowAgain(DrawableScene after, bool carry = true)
     {
         PartVisibility? before = visibility;
+        // Read again, it has the textures as saved.
+        if (carry)
+            texturesStale = false;
         // The shader values changed so far go into the drawables read again, which are drawn with them.
         if (carry && surfaces is { } shown)
             foreach (int index in shaderEdits.Carry(shown.Sources, after.Sources))
@@ -1624,10 +1690,23 @@ public partial class ModelViewer : UserControl, IModalContent
 
     public void Close()
     {
-        if (!closeApproved && !closed && shaderEdits.Dirty && CanSave)
+        if (!closeApproved && !closed)
         {
-            AskToSave();
-            return;
+            // Already asked: the dialog answers.
+            if (UnsavedDialog is not null)
+                return;
+            int request = ++closeRequest;
+            // What is unsaved is known once a save under way is written: it waits for that first.
+            if (saving)
+            {
+                _ = CloseOnceSaved(request);
+                return;
+            }
+            if (shaderEdits.Dirty && CanSave)
+            {
+                AskToSave();
+                return;
+            }
         }
         closed = true;
         timeDropdown?.Close();
@@ -1636,6 +1715,13 @@ public partial class ModelViewer : UserControl, IModalContent
         // Nor the closing one: it goes first, so the sheet leaves as a whole.
         Viewport.IsVisible = false;
         overlay?.Close();
+    }
+
+    private async Task CloseOnceSaved(int request)
+    {
+        await Saving;
+        if (request == closeRequest)
+            Close();
     }
 
     void IModalContent.RequestClose() => Escape();

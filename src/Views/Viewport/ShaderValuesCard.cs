@@ -486,9 +486,10 @@ internal sealed class ShaderValuesCard : Border
 
     /// <summary>
     /// Asked, at the first change in This one, to give the picked geometry an entry of its own: the viewer copies the
-    /// entry, hands it over with <see cref="Adopt"/>, and the change goes to the copy.
+    /// entry, hands it over with <see cref="Adopt"/> and returns it, and the change goes to the copy; none when it
+    /// can't, and then the change isn't made.
     /// </summary>
-    public Action? SplitRequested { get; set; }
+    public Func<DrawableMaterial?>? SplitRequested { get; set; }
 
     /// <summary>How many geometries are drawn with the entry shown: Apply to is offered when more than one.</summary>
     internal int Shared => shared;
@@ -559,12 +560,10 @@ internal sealed class ShaderValuesCard : Border
     /// </summary>
     public void Show(string name, DrawableMaterial? material, int geometries = 1)
     {
+        // A field being typed in keeps what was typed, for the entry it was and as Apply to was then.
+        FinishTyping();
         applyTo.SelectedIndex = 0;
         SetShared(geometries);
-        // A field being typed in keeps what was typed, for the entry it was.
-        foreach (Row row in rows)
-            foreach (ScrubField field in row.Fields)
-                field.FinishTyping(true);
         Material = material;
         rows.Clear();
         sections.Clear();
@@ -593,6 +592,14 @@ internal sealed class ShaderValuesCard : Border
                 Margin = new Thickness(10, 8),
             });
         Refresh();
+    }
+
+    /// <summary>Closes a field being typed in, keeping what was typed.</summary>
+    public void FinishTyping()
+    {
+        foreach (Row row in rows.ToArray())
+            foreach (ScrubField field in row.Fields)
+                field.FinishTyping(true);
     }
 
     // A group's heading: a chevron and its name; a click opens or folds it.
@@ -663,9 +670,13 @@ internal sealed class ShaderValuesCard : Border
             field.Edited += (number, continuing) =>
             {
                 // In This one, the first change gives the geometry its own copy of the entry, which it then goes to.
-                if (!continuing && ApplyToOne)
-                    SplitRequested?.Invoke();
                 DrawableMaterial target = Material ?? material;
+                if (!continuing && ApplyToOne)
+                {
+                    if (SplitRequested?.Invoke() is not { } copy)
+                        return;
+                    target = copy;
+                }
                 float[] values = ShaderEdits.Current(target, value.Name);
                 if (component < values.Length)
                 {
@@ -833,14 +844,23 @@ internal sealed class ShaderValuesCard : Border
     /// <summary>Makes a vehicle paint's colour a paint slot (1 to 7), or a colour of its own (white) for none, as one change.</summary>
     internal void PickSlot(ShaderValue value, int? slot)
     {
-        if (ApplyToOne)
-            SplitRequested?.Invoke();
         if (Material is not { } material)
             return;
         float[] values = ShaderEdits.Current(material, value.Name);
         if (values.Length < 3)
             return;
-        (values[0], values[1], values[2]) = slot is int at ? (2f, at, at) : (1f, 1f, 1f);
+        (float, float, float) picked = slot is int at ? (2f, at, at) : (1f, 1f, 1f);
+        // The slot it has already: no change, and no entry of its own.
+        if ((values[0], values[1], values[2]) == picked)
+            return;
+        if (ApplyToOne)
+        {
+            if (SplitRequested?.Invoke() is not { } copy)
+                return;
+            material = copy;
+            values = ShaderEdits.Current(material, value.Name);
+        }
+        (values[0], values[1], values[2]) = picked;
         edits.Set(material, value.Name, values);
         edits.Close();
     }
