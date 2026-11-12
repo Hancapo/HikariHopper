@@ -132,6 +132,22 @@ public sealed class ShaderValuesTests
     }
 
     [Fact]
+    public void A_save_marks_its_values_saved_on_drawables_read_again_while_it_ran()
+    {
+        DrawableMaterial before = Material(), after = Material();
+        var edits = new ShaderEdits();
+        edits.Set(before, "bumpiness", [2, 0, 0, 0]);
+        var saved = edits.Snapshot();
+        edits.Carry([before], [after]);
+        edits.MarkSaved(saved);
+        // The saved value is the file's on the entry read again: nothing to save, and a reset keeps it.
+        Assert.False(edits.Dirty);
+        Assert.Equal(2, edits.Original(after, "bumpiness")[0]);
+        edits.Reset(after, "bumpiness");
+        Assert.Equal(2, ShaderEdits.Current(after, "bumpiness")[0]);
+    }
+
+    [Fact]
     public void A_fields_drag_steps_by_a_hundredth_and_typing_keeps_a_number()
     {
         Assert.Equal(.01f, Views.ScrubField.Step(1, fine: false), 5);

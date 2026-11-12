@@ -344,6 +344,8 @@ internal sealed class ShaderValuesCard : Border
             if (material == Material)
                 Refresh();
         };
+        // Saved, its values are the file's: no resets.
+        edits.Saved += Refresh;
     }
 
     /// <summary>The card's header, under the title: where what applies to the whole entry goes.</summary>

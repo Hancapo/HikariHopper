@@ -467,6 +467,42 @@ public sealed partial class ExplorerViewModel
         ArchiveWriteRequested?.Invoke(this, rootPath);
     }
 
+    /// <summary>Where the 3D viewer saves an entry it changed: into its RPF, or over the loose file; none when neither can be had.</summary>
+    private ModelSaveTarget? ModelSaveTargetOf(EntryRecord entry)
+    {
+        try
+        {
+            return ModelSaveTargetOf(Provider.EntrySourcePath(entry), Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null, entry.Name);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Where the 3D viewer saves a file: into its root RPF through <paramref name="target"/>, as the texture editor does,
+    /// or over the loose file at <paramref name="source"/>; then what lists it is read again.
+    /// </summary>
+    private ModelSaveTarget ModelSaveTargetOf(string source, ArchiveEntryTarget? target, string name)
+    {
+        if (target is not null)
+            return new ModelSaveTarget(target.Save, () => PrepareTextureWrite(target), success => ModelSaved(new EntryCreationTarget(ArchivePath: target.RootPath), success, name));
+        return new ModelSaveTarget(bytes => CommonFury.IO.AtomicFile.Write(source, bytes),
+            Finished: success => ModelSaved(new EntryCreationTarget(Directory: Path.GetDirectoryName(source)), success, name));
+    }
+
+    // A file the 3D viewer saved: what lists it, here and in the other tabs, is read again.
+    private void ModelSaved(EntryCreationTarget target, bool success, string name)
+    {
+        RefreshExternalContent(target);
+        ContentChanged?.Invoke(this, target);
+        if (SearchShowsLocation && searchIndex is not null)
+            searchIndexTask = searchIndex.Refresh();
+        if (success)
+            SetStatus($"Saved {name}");
+    }
+
     private void PrepareTextureWrite(ArchiveEntryTarget target)
     {
         target.Prepare();

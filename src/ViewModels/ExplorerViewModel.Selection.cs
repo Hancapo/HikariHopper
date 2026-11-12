@@ -408,6 +408,7 @@ public sealed partial class ExplorerViewModel
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
             Nearby = NearbyDictionaries(entry),
+            SaveTarget = ModelSaveTargetOf(entry),
         });
         SetStatus($"Opened {entry.Name}");
     }
