@@ -51,12 +51,11 @@ public sealed class OperationProgress
     /// <summary>Stops here, with <see cref="OperationCanceledException"/>, once it has been asked to.</summary>
     public void Check() => token.ThrowIfCancellationRequested();
 
-    /// <summary>Sets how many items it will count, and counts from none.</summary>
-    public void Expect(int items)
-    {
-        Total = Math.Max(0, items);
-        Done = 0;
-    }
+    /// <summary>
+    /// Adds <paramref name="items"/> to how many it will count. An operation that works through several groups (a
+    /// search's results in several archives) expects each in turn, and counts them all together.
+    /// </summary>
+    public void Expect(int items) => Total += Math.Max(0, items);
 
     /// <summary>Counts the item in hand as having come out as meant.</summary>
     public void Succeed() => Succeeded++;
