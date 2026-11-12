@@ -12,6 +12,9 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Clicking HikariHopper's taskbar button minimizes it, as it does for other apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
+- HikariHopper animates minimizing, restoring and maximizing as other Windows 11 apps do. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
+
 ### Removed
 
 ## [0.1.0] - 2026-11-09

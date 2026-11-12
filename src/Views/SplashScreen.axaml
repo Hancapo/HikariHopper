@@ -7,6 +7,8 @@
         x:DataType="v:SplashScreen"
         Width="{x:Static ui:Theme.SplashWidth}" Height="{x:Static ui:Theme.SplashHeight}"
         CanResize="False" Topmost="True" ShowInTaskbar="False" ShowActivated="True"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaTitleBarHeightHint="0"
+        WindowDecorations="Full" WindowDecorationsTheme="{StaticResource NoDrawnDecorations}"
         WindowStartupLocation="Manual"
         Background="{x:Static ui:Theme.AppBg}"
         Title="HikariHopper">

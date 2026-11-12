@@ -22,7 +22,6 @@ public partial class SplashScreen : Window
 
     public SplashScreen()
     {
-        QtFramelessWindow.Apply(this);
         AvaloniaXamlLoader.Load(this);
         DataContext = this;
     }
