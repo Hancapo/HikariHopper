@@ -342,11 +342,18 @@ public sealed class ShaderValuesTests
         Assert.False(viewer.CardOverlay.IsWanted);
         Assert.True(viewer.OpenShaderValues());
 
-        // Off the model: no card, and none on the next pick until it's asked for again.
+        // Off the model: the card is out of the way, but still open, and back with the next geometry picked.
         Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
         Assert.False(viewer.CardOverlay.IsWanted);
-        Assert.False(viewer.ShaderValuesOpen);
+        Assert.True(viewer.ShaderValuesOpen);
         Assert.False(viewer.OpenShaderValues());
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.True(viewer.CardOverlay.IsWanted);
+
+        // Closed, it stays closed through any pick until it's asked for again.
+        Assert.True(viewer.Shortcut('M'));
+        Assert.False(viewer.ShaderValuesOpen);
+        Assert.False(viewer.PickAt(new Vector3(9, 9, 3), -Vector3.UnitZ));
         Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
         Assert.False(viewer.CardOverlay.IsWanted);
         viewer.Close();
@@ -383,6 +390,41 @@ public sealed class ShaderValuesTests
     }
 
     [AvaloniaFact]
+    public void The_card_shows_first_where_it_goes_not_where_it_was_last()
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", Triangle()));
+        var window = new Avalonia.Controls.Window { Width = 1000, Height = 700, Content = viewer };
+        window.Show();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!viewer.Reading.IsCompleted && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        viewer.SetPartsShown(true);
+        TestWait.Pump(300);
+        viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        // First out of the picked row, then closed; with the panel gone its place is the view's top left.
+        Assert.True(viewer.OpenShaderValues());
+        TestWait.Pump(100);
+        PixelPoint atRow = viewer.CardOverlay.Window!.Position;
+        viewer.CloseShaderValues();
+        viewer.SetPartsShown(false);
+        TestWait.Pump(300);
+
+        // Opened again: the position it shows at is already the top left one, not the row's it had.
+        PixelPoint? shownAt = null;
+        viewer.CardOverlay.Window.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.IsVisibleProperty && viewer.CardOverlay.Window.IsVisible && shownAt is null)
+                shownAt = viewer.CardOverlay.Window.Position;
+        };
+        Assert.True(viewer.OpenShaderValues());
+        TestWait.Pump(100);
+        Assert.Equal((Ui.Theme.ShaderCardLeft, Ui.Theme.ToolStripInset, (double?)null), viewer.CardPlace);
+        Assert.NotEqual(atRow, viewer.CardOverlay.Window.Position);
+        Assert.Equal(viewer.CardOverlay.Window.Position, shownAt);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void The_parts_menu_opens_the_picked_geometrys_shader_values_first()
     {
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", Triangle()));
@@ -401,7 +443,7 @@ public sealed class ShaderValuesTests
         // A geometry picked: the menu's first item, in a group of its own, opens its shader values.
         Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
         Views.PartsPanel.MenuRowItem[] items = Items();
-        Assert.Equal(["Shader values…", "Show only", "Hide", "Show all", "Frame", "Copy name"], items.Select(item => item.Text));
+        Assert.Equal(["Shader parameters…", "Show only", "Hide", "Show all", "Frame", "Copy name"], items.Select(item => item.Text));
         Assert.True(items[0].IsEnabled);
         // Its groups are parted as the app's other menus are.
         Assert.Equal(2, Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(viewer.Parts.Menu!).OfType<Views.Controls.RetroMenuSeparator>().Count());
@@ -410,15 +452,18 @@ public sealed class ShaderValuesTests
         Assert.True(viewer.ShaderValuesOpen);
         Assert.True(viewer.CardOverlay.IsWanted);
 
-        // The drawable's row picked, which has no one shader: the card closes, and the item is there but off.
+        // The drawable's row picked, which has no one shader: the card is out of the way, and the item is there but off.
+        PartNode geometry = Assert.Single(viewer.Parts.Selection);
         viewer.Parts.Select(viewer.Parts.Rows[0].Node);
         Assert.False(viewer.CardOverlay.IsWanted);
         items = Items();
-        Assert.Equal("Shader values…", items[0].Text);
+        Assert.Equal("Shader parameters…", items[0].Text);
         Assert.False(items[0].IsEnabled);
-        items[0].Trigger();
-        Assert.False(viewer.ShaderValuesOpen);
         viewer.Parts.Menu?.Close();
+        // Still open: the geometry picked again, the card is back without asking.
+        Assert.True(viewer.ShaderValuesOpen);
+        viewer.Parts.Reveal(node => node.Key == geometry.Key);
+        Assert.True(viewer.CardOverlay.IsWanted);
         window.Close();
     }
 

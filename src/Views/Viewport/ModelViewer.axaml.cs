@@ -54,7 +54,7 @@ public partial class ModelViewer : UserControl, IModalContent
         WindowToolTip.SetIsEnabled(card, true);
         shaderCard = new ViewportOverlay(Viewport, card, left: Ui.Theme.ShaderCardLeft, top: Ui.Theme.ToolStripInset);
         // It points at the row it shows, and follows it as the rows scroll and the card grows.
-        Parts.RowsMoved += PlaceCard;
+        Parts.RowsMoved += () => PlaceCard();
         card.PropertyChanged += (_, e) =>
         {
             if (e.Property == BoundsProperty)
@@ -530,18 +530,17 @@ public partial class ModelViewer : UserControl, IModalContent
     internal ShaderEdits ShaderEdits => shaderEdits;
 
     /// <summary>
-    /// Shows the shader values of the geometry picked, one geometry at the level shown, in the card, under the name of
-    /// what it belongs to; with anything else picked, or nothing, there is no card.
+    /// Shows the shader parameters of the geometry picked, one geometry at the level shown, in the card, under the name
+    /// of what it belongs to. With anything else picked, or nothing, the card is out of the way, and it comes back with
+    /// the next geometry picked: it stays open until it's closed.
     /// </summary>
     private void ShowCard()
     {
         // A number being typed goes to the geometry it was typed for, before the card shows another.
         card.FinishTyping();
         FiveFury.Drawables.DrawableMaterial? material = PickedMaterial();
-        // Not asked for, or nothing to show for what's picked now: no card, and it stays closed until asked for again.
         if (!cardOpen || material is null)
         {
-            cardOpen = false;
             shaderCard.IsWanted = false;
             return;
         }
@@ -560,15 +559,19 @@ public partial class ModelViewer : UserControl, IModalContent
         (cardScene, cardPart) = material is not null && Parts.Selection is [{ Parts: [int first, ..] }]
             ? (surfaces, first) : ((DrawableScene?)null, (int?)null);
         card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
-        shaderCard.IsWanted = material is not null;
-        PlaceCard();
+        // Where it goes first, measured with what it shows now, and only then shown: it doesn't appear where it was
+        // last and jump.
+        card.Measure(Size.Infinity);
+        PlaceCard(force: true);
+        shaderCard.IsWanted = true;
     }
 
     private bool cardOpen;
 
     /// <summary>
-    /// Whether the shader values card is open: opened from the parts panel's menu or with M, for the one geometry
-    /// picked; while open it follows the pick, and it closes when the pick has no one geometry's values to show.
+    /// Whether the shader parameters card is open: opened from the parts panel's menu or with M, for the one geometry
+    /// picked, and open until it's closed (M, Escape or its close mark). While open it follows the pick, out of the way
+    /// while the pick has no one geometry's parameters to show.
     /// </summary>
     internal bool ShaderValuesOpen => cardOpen;
 
@@ -625,12 +628,13 @@ public partial class ModelViewer : UserControl, IModalContent
     /// whole of it in the view, below the parts arrow; with the panel closed, or the row scrolled away, at the view's
     /// top left without a notch.
     /// </summary>
-    private void PlaceCard()
+    private void PlaceCard(bool force = false)
     {
-        if (!shaderCard.IsWanted)
+        if (!shaderCard.IsWanted && !force)
             return;
         double inset = Ui.Theme.ToolStripInset, height = Viewport.Bounds.Height;
-        double cardHeight = card.Bounds.Height > 0 ? card.Bounds.Height : card.DesiredSize.Height;
+        // Its height as measured for what it shows now; laid out, it may still hold the last geometry's.
+        double cardHeight = card.DesiredSize.Height > 0 ? card.DesiredSize.Height : card.Bounds.Height;
         if (partsShown && Parts.SelectedRow is { IsEffectivelyVisible: true } row
             && row.TranslatePoint(new Point(0, row.Bounds.Height / 2), Viewport) is { } middle && middle.Y >= 0 && middle.Y <= height)
         {
@@ -870,7 +874,7 @@ public partial class ModelViewer : UserControl, IModalContent
         if (shownGeneration != generation)
         {
             ShowSaveFailure(name, TexturesSaved.IsCompleted
-                ? "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values"
+                ? "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader parameters"
                 : "it is still being read again with the textures just saved. Save it once they show");
             return false;
         }

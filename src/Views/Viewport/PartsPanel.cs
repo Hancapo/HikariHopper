@@ -1059,7 +1059,7 @@ internal sealed class PartsPanel : UserControl
         // First, the shader values of the one geometry picked; there but off for anything else picked.
         if (ShaderValues?.Invoke() is { } canShow)
         {
-            Item("palette", "Shader values…", "M", () => ShaderValuesRequested?.Invoke(), enabled: canShow);
+            Item("palette", "Shader parameters…", "M", () => ShaderValuesRequested?.Invoke(), enabled: canShow);
             items.Children.Add(new RetroMenuSeparator());
         }
         Item("eye", "Show only", "Alt+click", () => ShowOnly(nodes));
