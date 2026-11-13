@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
+
 ### Removed
 
 ## [0.2.0] - 2026-11-12
