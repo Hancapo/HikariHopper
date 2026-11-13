@@ -255,6 +255,17 @@ public sealed class GameTexturesTests : IDisposable
             ArchiveWriter.ReplaceEntry(rpf, null, "textures.ytd", [2, 2]);
             await GameTextures.Rewritten(rpf);
             Assert.Equal(2, await BuildsOnTheNextRun(rpf));
+
+            // The RPF replaced by another of the same size and time, which the cache's stamp can't tell from it: the
+            // cache goes, so the tables are made again all the same.
+            string other = Path.Combine(Directory.CreateDirectory(Path.Combine(scratch, "other")).FullName, "x64a.rpf");
+            byte[] bytes = File.ReadAllBytes(rpf);
+            bytes[^1] ^= 0xFF;
+            File.WriteAllBytes(other, bytes);
+            File.SetLastWriteTimeUtc(other, File.GetLastWriteTimeUtc(rpf));
+            EntryOperations.ImportAt(new EntryCreationTarget(Directory: Path.GetDirectoryName(rpf)), [other], ImportConflict.Replace);
+            Assert.Equal(bytes, File.ReadAllBytes(rpf));
+            Assert.Equal(3, await BuildsOnTheNextRun(rpf));
         }
         finally
         {

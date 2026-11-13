@@ -99,14 +99,23 @@ public sealed class GameTextures
     /// HikariHopper changed <paramref name="path"/>, an RPF on disk (or a folder holding some), other than by saving new
     /// contents over a texture dictionary or a model in it (<see cref="KeepsTables"/>): entries added, removed or
     /// renamed, or another file saved, such as a meta or a ytyp the tables are made from. The tables may no longer hold,
-    /// so no later save keeps the cache of a game holding it (<see cref="Rewritten"/>), and they are made again the next
-    /// time the game loads.
+    /// so the cache of a game holding it goes, and no later save keeps one (<see cref="Rewritten"/>): they are made again
+    /// the next time the game loads, even when the RPF written has the size and time it had.
     /// </summary>
     public static void Changed(string path)
     {
         foreach (GameTextures textures in Holding(path))
             lock (textures.writing)
+            {
                 textures.stale = true;
+                try
+                {
+                    File.Delete(textures.CachePath);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
     }
 
     /// <summary>Whether saving new contents over the file <paramref name="entryPath"/> in an RPF leaves the tables as
