@@ -561,8 +561,9 @@ public sealed partial class ExplorerViewModel
             searchIndexTask = searchIndex.Refresh();
         if (success)
         {
-            // Only a file's contents changed: the game's texture tables still hold, and are kept for next time.
-            if (target.ArchivePath is { } archive)
+            // A model's contents changed: the game's texture tables still hold, and are kept for next time. Any other
+            // file saved (a meta, a ytyp) may be what they are made from: they're made again then.
+            if (target.ArchivePath is { } archive && GameTextures.KeepsTables(name))
                 _ = GameTextures.Rewritten(archive);
             SetStatus($"Saved {name}");
         }

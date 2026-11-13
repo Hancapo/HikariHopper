@@ -1579,6 +1579,38 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void AnExtractOfTexturesNamedAlikeButForCaseWritesNothing()
+    {
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened();
+        // A file can't carry these two (one lookup hash), but a dictionary in the editor can.
+        harness.ViewModel.DictionaryLoaded(harness.ViewModel.Generation,
+            new TextureSet([Solid("Foo", 4, 4), Solid("bar", 4, 4), Solid("foo", 4, 4)], GameTarget.Legacy));
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        _ = harness.ViewModel.ExtractAll();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.StartsWith("Could not extract textures: ", harness.ViewModel.Status);
+        Assert.Contains("unique", harness.ViewModel.Status);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(folder.Path));
+    }
+
+    [AvaloniaFact]
+    public void AnExtractOfSelectedTexturesWhoseFileNamesCollideWritesNothing()
+    {
+        // Lookup hashes fold only ASCII case, so these two differ there yet are one file name on Windows.
+        using var folder = new TempFolder();
+        TextureWindowHarness harness = Opened(Solid("Éclat", 4, 4), Solid("bar", 4, 4), Solid("éclat", 4, 4));
+        harness.ViewModel.Dialogs = new FakeDialogs { Folder = folder.Path };
+        harness.ViewModel.SelectAllTextures();
+        _ = harness.ViewModel.ExtractSelected();
+        harness.Settle();
+        Assert.False(harness.ViewModel.OperationBusy);
+        Assert.Equal("Could not extract textures: Texture filenames collide at 'éclat.dds'.", harness.ViewModel.Status);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(folder.Path));
+    }
+
+    [AvaloniaFact]
     public void ASaveShowsTheTrainWithNothingToCountOrCancel()
     {
         using var folder = new TempFolder();
