@@ -1571,6 +1571,17 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.False(strip.ListClips);
         TestWait.Until(() => Offset(before[3]) == 0, "the tabs to glide into place");
         TestWait.Until(() => strip.ListClips, "the list to clip again once the tabs are in place");
+
+        // Given tabs as they glide, until they overflow the list, it clips again at once, the glide not done.
+        first = Drawn(before[1]);
+        Click(ui.Window, first.TranslatePoint(new Point(first.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump(20);
+        Assert.False(strip.ListClips);
+        for (int index = 0; index < 4; index++)
+            ui.Tabs.NewTab();
+        Pump(20);
+        Assert.True(strip.ListClips);
+        Assert.NotEqual(0, Offset(before[3]));
     }
 
     [AvaloniaFact]

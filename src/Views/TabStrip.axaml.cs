@@ -28,7 +28,16 @@ public partial class TabStrip : UserControl
     {
         InitializeComponent();
         TabList.SizeChanged += (_, _) => PositionActiveTab();
+        // A list that comes to overflow while tabs glide unclipped, narrowed or given more tabs, clips again at once.
+        TabList.PropertyChanged += (_, e) =>
+        {
+            if (unclipped > 0 && (e.Property == ScrollViewer.ExtentProperty || e.Property == ScrollViewer.ViewportProperty) && Overflows)
+                SetListClip(true);
+        };
     }
+
+    // Whether the tabs are wider than the list, which then scrolls.
+    private bool Overflows => TabList.Extent.Width > TabList.Viewport.Width + 0.5;
 
     private ExplorerTabsViewModel? Tabs => DataContext as ExplorerTabsViewModel;
 
@@ -121,7 +130,7 @@ public partial class TabStrip : UserControl
     /// </summary>
     private void UnclipWhileSliding()
     {
-        if (TabList.Extent.Width > TabList.Viewport.Width + 0.5)
+        if (Overflows)
             return;
         unclipped++;
         SetListClip(false);
