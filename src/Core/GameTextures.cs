@@ -83,6 +83,8 @@ public sealed class GameTextures
     /// </summary>
     public static void WaitForArchiveReaders(string path)
     {
+        // The game's texture directory reads them too.
+        GameTextureDirectory.WaitForArchiveReaders(path);
         foreach (GameTextures textures in Holding(path))
         {
             Task? running;
@@ -104,6 +106,7 @@ public sealed class GameTextures
     /// </summary>
     public static void Changed(string path)
     {
+        GameTextureDirectory.Changed(path);
         foreach (GameTextures textures in Holding(path))
             lock (textures.writing)
             {
@@ -243,6 +246,8 @@ public sealed class GameTextures
     public static Task Rewritten(string archivePath)
     {
         string written = Path.GetFullPath(archivePath);
+        // The dictionaries in it may hold other textures now.
+        GameTextureDirectory.Changed(written);
         GameTextures[] games = [.. Shared.Values.Where(game => written.StartsWith(game.root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))];
         return games.Length == 0 ? Task.CompletedTask : Task.Run(() =>
         {
