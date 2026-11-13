@@ -162,6 +162,31 @@ public sealed class ModalOverlay : Panel
         return overlay;
     }
 
+    /// <summary>
+    /// Puts the overlay showing <paramref name="dialog"/> on top of the others over its window, and gives it the keys:
+    /// an editor brought forward to show why its file couldn't be saved. The ones above it move under it rather than
+    /// it moving over them, so a dialog with a native view of its own (the 3D viewer's) is never taken out and put back.
+    /// </summary>
+    public static void BringToFront(Control dialog)
+    {
+        if (dialog.Parent is not ModalOverlay { IsShown: true, layer: { } layer } overlay
+            || !OpenOverlays.TryGetValue(overlay.host, out var open) || open.IndexOf(overlay) is var at && at < 0)
+            return;
+        List<ModalOverlay> above = open.GetRange(at + 1, open.Count - at - 1);
+        if (above.Count > 0)
+        {
+            open.RemoveRange(at + 1, above.Count);
+            open.InsertRange(at, above);
+            foreach (ModalOverlay other in above)
+            {
+                layer.Children.Remove(other);
+                layer.Children.Insert(layer.Children.IndexOf(overlay), other);
+            }
+            StackChanged?.Invoke(null, overlay.host);
+        }
+        overlay.Focus();
+    }
+
     public void Close()
     {
         if (!IsShown)

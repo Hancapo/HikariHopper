@@ -42,6 +42,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - The Type column shows only what a file is, without "(Compressed)" after the files an RPF keeps compressed. ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
 ### Fixed
 
+- Closing HikariHopper, or a tab, with files unsaved in the text editor, the 3D viewer or a texture editor asks first, listing them all: Save all saves them where their editors would and then closes, Don't save closes, Cancel keeps everything open; before, the changes were lost without a word. ([#195](https://github.com/Hancapo/HikariHopper/pull/195))
 - With animations turned off in Windows, each open tab kept the CPU waking 60 times a second for a loading train it never showed. ([#196](https://github.com/Hancapo/HikariHopper/pull/196))
 - Changes made in the explorer inside a game's RPF, or a meta or ytyp saved into one, could be missed by the game's texture tables (which dictionaries a model looks in, and vehicle paints) for good once a texture dictionary or model was saved into the same RPF; they are now picked up the next time the game loads. ([#193](https://github.com/Hancapo/HikariHopper/pull/193))
 - Extracting textures whose names differ only in case wrote one file over another while saying all were extracted; it now refuses and writes nothing, as it did before. ([#191](https://github.com/Hancapo/HikariHopper/pull/191))

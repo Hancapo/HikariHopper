@@ -25,6 +25,26 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Asked whenever the window is about to close (the close button, Alt+F4, File › Exit): false keeps it open, as
+    /// while unsaved files are asked about. Unset, it simply closes.
+    /// </summary>
+    public Func<bool>? AskBeforeClosing { get; set; }
+
+    /// <summary>Closes the window without asking: what was unsaved was saved or let go.</summary>
+    public void CloseWithoutAsking()
+    {
+        AskBeforeClosing = null;
+        Close();
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!e.Cancel && AskBeforeClosing?.Invoke() == false)
+            e.Cancel = true;
+        base.OnClosing(e);
+    }
+
+    /// <summary>
     /// While a modal is up the title bar stays usable (move, minimise, close), but its menus are
     /// switched off so nothing opens over the dialog.
     /// </summary>

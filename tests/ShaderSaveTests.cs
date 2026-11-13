@@ -88,6 +88,36 @@ public sealed class ShaderSaveTests
     }
 
     [AvaloniaFact]
+    public void A_value_changed_while_saving_before_the_app_closes_is_not_counted_saved()
+    {
+        byte[]? written = null;
+        using var gate = new ManualResetEventSlim();
+        Views.ModelViewer viewer = Open(ShaderValuesTests.Triangle(), new SaveTarget(bytes =>
+        {
+            Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+            written = bytes;
+        }));
+        Bump(viewer, "2");
+        Task<bool> saved = viewer.SaveBeforeClosing();
+        // Changed again while the first value is written: the file has the first, and the second is still unsaved.
+        Bump(viewer, "4");
+        gate.Set();
+        Wait(saved);
+        Assert.False(saved.Result);
+        Assert.Equal(2f, BumpinessOf(written!));
+        Assert.True(viewer.ShaderEdits.Dirty);
+        Assert.True(viewer.HasUnsavedChanges);
+
+        // Saved with nothing changed meanwhile, it is.
+        written = null;
+        Task<bool> again = viewer.SaveBeforeClosing();
+        Wait(again);
+        Assert.True(again.Result);
+        Assert.Equal(4f, BumpinessOf(written!));
+        Assert.False(viewer.ShaderEdits.Dirty);
+    }
+
+    [AvaloniaFact]
     public void Closing_with_unsaved_values_asks_first()
     {
         byte[]? written = null;

@@ -34,7 +34,11 @@ internal static class TestWindows
             Open.Remove(window);
             try
             {
-                window.Close();
+                // A window left with files unsaved would ask about them and stay: it goes without asking.
+                if (window is Views.MainWindow main)
+                    main.CloseWithoutAsking();
+                else
+                    window.Close();
             }
             catch (InvalidOperationException)
             {

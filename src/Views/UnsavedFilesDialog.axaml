@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.UnsavedFilesDialog"
+             Width="470">
+  <!-- Asked before the app or a tab closes with files unsaved: a header that counts them, the question, the files in
+       a sunken list with where each is open, and Cancel / Don't save / Save all. -->
+  <Border Background="{x:Static ui:Theme.AppBg}" BorderBrush="{x:Static ui:Theme.Border}" BorderThickness="1"
+          CornerRadius="{x:Static ui:Theme.SheetCorner}" BoxShadow="{x:Static ui:Theme.SheetShadow}">
+  <c:RoundedClip Radius="{x:Static ui:Theme.SheetInnerRadius}">
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.SheetHeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Name="HeadingText" Margin="16,0,44,0" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextRow}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1.2" TextTrimming="CharacterEllipsis" />
+        <c:ChromeToolButton Name="CloseMark" Width="26" Height="26" Margin="0,0,8,0" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                            IconKind="close" IconSize="12" IconThickness="1.4" IsTabStop="False" AutomationProperties.Name="Cancel" />
+      </Panel>
+      <Panel DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.DialogFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
+        <StackPanel Margin="0,0,12,0" Orientation="Horizontal" Spacing="6"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Name="CancelButton" Width="88" Height="28" Raised="True" Text="Cancel" />
+          <c:ChromeToolButton Name="DiscardButton" Width="106" Height="28" Raised="True" Text="Don't save" />
+          <c:ChromeToolButton Name="SaveButton" Width="88" Height="28" Primary="True" Text="Save all" />
+        </StackPanel>
+      </Panel>
+      <StackPanel>
+        <TextBlock Name="QuestionText" Margin="16,16,16,10" TextWrapping="Wrap" Foreground="{x:Static ui:Theme.Text}"
+                   FontWeight="Bold" FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.FontSize}" />
+        <Border Margin="16,0,16,16" Padding="4" Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+          <ScrollViewer Name="ListScroller" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Name="FileRows" />
+          </ScrollViewer>
+        </Border>
+      </StackPanel>
+    </DockPanel>
+  </c:RoundedClip>
+  </Border>
+</UserControl>
