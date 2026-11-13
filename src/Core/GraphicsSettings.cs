@@ -84,7 +84,7 @@ public static class GraphicsSettings
     }
 
     // A value saved by hand or by an older version is read as the nearest choice.
-    private static int Nearest(IReadOnlyList<int> choices, int value) => choices.MinBy(choice => Math.Abs(choice - value));
+    private static int Nearest(IReadOnlyList<int> choices, int value) => choices.MinBy(choice => Math.Abs((long)choice - value));
 
     // Saved and told only when it changes: showing the settings writes nothing.
     private static void SetFlag(string key, bool was, bool value)

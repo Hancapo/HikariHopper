@@ -94,11 +94,13 @@ internal sealed partial class ViewportHost : NativeControlHost
         GraphicsChanged?.Invoke();
     }
 
-    // The settings are followed while the viewer is on screen, so a closed one isn't kept alive by them.
+    // The settings are followed while the viewer is on screen, so a closed one isn't kept alive by them; attached, it
+    // catches up with any change made while it wasn't.
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         Core.GraphicsSettings.Changed += OnGraphicsChanged;
+        OnGraphicsChanged();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
