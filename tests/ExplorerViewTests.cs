@@ -1408,6 +1408,37 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheStartPagesRailPatternStandsStillWhileAGameLoads()
+    {
+        Ui.Motion.ReducedOverride = false;
+        try
+        {
+            Explorer ui = OpenExplorer(openGame: false);
+            RailPattern pattern = ui.Find<RailPattern>();
+            Assert.True(pattern.Animating);
+            using var release = new ManualResetEventSlim();
+            ExplorerViewModel.GameLoader = path =>
+            {
+                release.Wait(TimeSpan.FromSeconds(10));
+                return FakeLoadedGame(path);
+            };
+            ui.Bridge.OpenGameAsync(Work);
+            TestWait.Until(() => ui.Bridge.GameLoading, "the game to start loading");
+            Assert.False(pattern.Animating);
+            release.Set();
+            Settle(ui.Bridge);
+            Pump();
+            // The game is open: the start page, and its pattern, are gone.
+            Assert.Empty(ui.Window.GetVisualDescendants().OfType<RailPattern>());
+            Assert.False(pattern.Animating);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
     public void TabStripActivatesAndClosesTabs()
     {
         Explorer ui = OpenExplorer();
