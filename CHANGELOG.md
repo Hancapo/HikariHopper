@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The 3D viewer keeps the game's texture dictionaries it has read, so models sharing them read up to 6.8× faster: 6.8× for a map piece after another from its area, 3.4× for a map piece opened again, 1.5× for a vehicle opened again. ([#217](https://github.com/Hancapo/HikariHopper/pull/217))
+
 ### Fixed
 
 ### Removed

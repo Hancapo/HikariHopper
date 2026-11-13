@@ -4,8 +4,40 @@ using FiveFury.Ytd;
 
 namespace HikariHopper.Rendering;
 
-/// <summary>A texture dictionary near a model, read only if a texture is still missing after the ones named for it.</summary>
-internal sealed record NearbyDictionary(string Name, long Size, Func<byte[]> Read);
+/// <summary>
+/// A texture dictionary near a model, read only if a texture is still missing after the ones named for it. With a
+/// <paramref name="Key"/> naming what it holds (see <see cref="KeyFor"/>), it is parsed once and kept
+/// (<see cref="ParsedDictionaries"/>) for every model that reads it after.
+/// </summary>
+internal sealed record NearbyDictionary(string Name, long Size, Func<byte[]> Read, string? Key = null)
+{
+    /// <summary>
+    /// What names a dictionary's contents: the file it lives in (a root RPF, or the dictionary itself when loose) with
+    /// that file's size and write time, and its path inside it; none when the file isn't there.
+    /// </summary>
+    public static string? KeyFor(string file, string inside)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            return info.Exists ? $"{info.FullName}|{inside}|{info.Length}|{info.LastWriteTimeUtc.Ticks}" : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The key of a game's file by its path from the game folder, RPFs as folders (<see cref="KeyFor"/>).</summary>
+    public static string? KeyForGameFile(string gameRoot, string path)
+    {
+        string[] parts = path.Split('/');
+        int first = Array.FindIndex(parts, part => part.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase));
+        return first < 0 || first == parts.Length - 1
+            ? KeyFor(Path.Combine([gameRoot, .. parts]), "")
+            : KeyFor(Path.Combine([gameRoot, .. parts[..(first + 1)]]), string.Join('/', parts[(first + 1)..]));
+    }
+}
 
 /// <summary>
 /// Where a model's textures come from when it doesn't embed them (after RedFury's ArchiveTextureLookup): the
@@ -67,7 +99,9 @@ internal sealed class TextureLookup
             searched += dictionary.Size;
             try
             {
-                Add(Ytd.Read(dictionary.Read()).Dictionary);
+                // Parsed once for every model that reads it, when it says what it holds.
+                Add(dictionary.Key is { } key ? ParsedDictionaries.Get(key, () => Ytd.Read(dictionary.Read()).Dictionary)
+                    : Ytd.Read(dictionary.Read()).Dictionary);
             }
             catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
                 or IOException or UnauthorizedAccessException)
