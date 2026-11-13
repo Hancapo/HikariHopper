@@ -36,6 +36,9 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     internal uint ReflectionHeight => reflectionWidth / 2;
+
+    /// <summary>The sky map, with every mip; for tests.</summary>
+    internal Texture? SkyReflectionMap => skyMap?.Texture;
     private const int SkyBytes = 10 * 16, ReflectionViewBytes = 32, FloorBytes = 5 * 16;
 
     /// <summary>A reflection map, its mips one by one, and each mip's view for drawing the next from.</summary>

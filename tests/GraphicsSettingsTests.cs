@@ -239,6 +239,53 @@ public sealed class GraphicsSettingsTests : ExplorerTestBase
     }
 
     [Fact]
+    public void The_sky_is_drawn_whole_into_the_reflection_map_at_every_size()
+    {
+        GpuDevice gpu;
+        try
+        {
+            gpu = TestGpu.Device();
+        }
+        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
+            or WebGpuSharp.WebGPUException)
+        {
+            Assert.Skip($"No GPU to test on: {error.Message}");
+            return;
+        }
+        // The map's last mip is its mean: the same sky, the same mean, whatever its size.
+        var means = new List<System.Numerics.Vector3>();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            foreach (int width in GraphicsSettings.ReflectionWidths)
+            {
+                renderer.ReflectionWidth = (uint)width;
+                WebGpuSharp.Texture map = renderer.SkyReflectionMap!;
+                WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+                {
+                    Size = 256,
+                    Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                });
+                WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+                encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = map, MipLevel = renderer.ReflectionMips - 1 },
+                    new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = 256, RowsPerImage = 1 } },
+                    new WebGpuSharp.Extent3D(1, 1, 1));
+                gpu.Queue.Submit(encoder.Finish());
+                readback.MapSync(WebGpuSharp.MapMode.Read);
+                byte[] texel = readback.GetConstMappedRange<byte[], byte>(0, 8, span => span.ToArray());
+                readback.Unmap();
+                readback.Destroy();
+                float Half(int at) => (float)BitConverter.ToHalf(texel, at);
+                means.Add(new(Half(0), Half(2), Half(4)));
+            }
+            renderer.Dispose();
+        }
+        Assert.All(means, mean => Assert.True(mean.X + mean.Y + mean.Z > 0, $"{mean}"));
+        foreach (System.Numerics.Vector3 mean in means)
+            Assert.True((mean - means[1]).Length() < means[1].Length() * .05f, $"{mean} against {means[1]}");
+    }
+
+    [Fact]
     public void The_renderer_draws_with_each_of_them_changed_with_a_model_shown()
     {
         GpuDevice gpu;
