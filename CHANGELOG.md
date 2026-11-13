@@ -8,6 +8,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Fur grass (grass_fur, grass_fur_mask, grass_fur_tnt) and cables are drawn with GTA V's own shaders in the 3D viewer: fur as its eight shells, cables widened to face the camera. ([#210](https://github.com/Hancapo/HikariHopper/pull/210))
+
 ### Changed
 
 ### Fixed
