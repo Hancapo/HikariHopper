@@ -1546,6 +1546,52 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ClosingTheFirstOfSeveralTabsLetsTheLastGlideInWhole()
+    {
+        Explorer ui = OpenExplorer();
+        for (int index = 0; index < 3; index++)
+        {
+            ui.Tabs.NewTab();
+            ui.Tabs.ActiveBridge.OpenGame(Work);
+        }
+        Pump();
+        TabStrip strip = ui.Find<TabStrip>();
+        ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
+        TabStripTab Drawn(ExplorerViewModel tab) =>
+            ui.Window.GetVisualDescendants().OfType<TabStripTab>().Single(candidate => candidate.Tab == tab);
+        double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
+        Assert.True(strip.ListClips);
+        using IDisposable slow = SlowSlides();
+
+        // The list is already as narrow as three tabs; the last of them glides in from past its edge, drawn whole.
+        TabStripTab first = Drawn(before[0]);
+        Click(ui.Window, first.TranslatePoint(new Point(first.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump(20);
+        Assert.InRange(Offset(before[3]), 0.1, 219.9);
+        Assert.False(strip.ListClips);
+        TestWait.Until(() => Offset(before[3]) == 0, "the tabs to glide into place");
+        TestWait.Until(() => strip.ListClips, "the list to clip again once the tabs are in place");
+    }
+
+    [AvaloniaFact]
+    public void TabsThatOverflowTheStripStayClippedAsOneCloses()
+    {
+        Explorer ui = OpenExplorer(width: 900);
+        for (int index = 0; index < 6; index++)
+        {
+            ui.Tabs.NewTab();
+            ui.Tabs.ActiveBridge.OpenGame(Work);
+        }
+        Pump();
+        TabStrip strip = ui.Find<TabStrip>();
+        using IDisposable slow = SlowSlides();
+        ui.Tabs.CloseTab(0);
+        Pump(20);
+        // They scroll in the list, so what lies past its edge stays hidden while they glide.
+        Assert.True(strip.ListClips);
+    }
+
+    [AvaloniaFact]
     public void GameTabsShowTheirEditionAndTellTheirPath()
     {
         Explorer ui = OpenExplorer();

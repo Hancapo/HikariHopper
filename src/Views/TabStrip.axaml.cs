@@ -106,9 +106,43 @@ public partial class TabStrip : UserControl
                 Slide(control, from - now.X, animate: false);
                 Slide(control, 0, animate: true);
             }
+            UnclipWhileSliding();
         }
         TabItems.LayoutUpdated += OnLayoutUpdated;
     }
+
+    // Glides that still let the list draw past its edge; the last to end clips it again.
+    private int unclipped;
+
+    /// <summary>
+    /// The list is already as narrow as the tabs left, so the last of them, gliding in from where the closed one
+    /// pushed it, would be cut off at the list's edge until it got there. While the tabs glide, the list draws past
+    /// its edge, unless they overflow it and it scrolls: then what lies past it stays hidden.
+    /// </summary>
+    private void UnclipWhileSliding()
+    {
+        if (TabList.Extent.Width > TabList.Viewport.Width + 0.5)
+            return;
+        unclipped++;
+        SetListClip(false);
+        DispatcherTimer.RunOnce(() =>
+        {
+            if (--unclipped == 0)
+                SetListClip(true);
+        }, SlideDuration + TimeSpan.FromMilliseconds(50));
+    }
+
+    // The scroll viewer, its presenter and the items control in it each clip on their own.
+    private void SetListClip(bool clip)
+    {
+        TabList.ClipToBounds = clip;
+        if (TabList.Presenter is Control presenter)
+            presenter.ClipToBounds = clip;
+        TabItems.ClipToBounds = clip;
+    }
+
+    /// <summary>Whether the tab list cuts off what lies past its edge; for tests.</summary>
+    internal bool ListClips => TabList.ClipToBounds || TabList.Presenter is Control { ClipToBounds: true } || TabItems.ClipToBounds;
 
     private void PositionActiveTab()
     {
