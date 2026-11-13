@@ -308,4 +308,38 @@ public sealed class SaveTargetTests : ExplorerTestBase
         Assert.Equal("tri.ydr", bridge.TextureViewer.SourceName);
         Assert.Equal("8 × 8", Assert.Single(bridge.TextureViewer.TexturesModel).Dimensions);
     }
+
+    [AvaloniaFact]
+    public void A_drawable_replaced_in_its_rpf_by_one_too_large_to_view_doesnt_open_its_textures()
+    {
+        static byte[] Textured(int size) => TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", size, size,
+            CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+        MakeGame();
+        string archivePath = Path.Combine(Work, "props.rpf");
+        var archive = new RpfArchive("props.rpf");
+        ArchiveWriter.AddStandalone(archive, "tri.ydr", Textured(4));
+        archive.Save(archivePath);
+        // The limit sits between the drawable as opened and the one it is replaced by.
+        var bridge = new ExplorerViewModel { ModelSizeLimit = 64 * 1024 };
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.ActivateEntry(RowFor(bridge, "props.rpf"));
+        Settle(bridge);
+        ModelFile? opened = null;
+        bridge.ModelFileOpened += (_, file) => opened = file;
+        bridge.ActivateEntry(RowFor(bridge, "tri.ydr"));
+        Assert.NotNull(opened);
+
+        SaveTarget target = opened.SaveTarget!;
+        target.Prepare?.Invoke();
+        target.Write(Textured(512));
+        target.Finished?.Invoke(true);
+        Settle(bridge);
+
+        // T says so, as opening it would, and reads nothing into the texture editor.
+        opened.OpenTextures!(_ => { });
+        TestWait.Pump(50);
+        Assert.StartsWith("tri.ydr is too large to view", bridge.Status);
+        Assert.Equal("", bridge.TextureViewer.SourceName);
+    }
 }
