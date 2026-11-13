@@ -8,99 +8,87 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- Edit text files in the text viewer and save them with Ctrl+S, into their RPF or over the loose file, in their own encoding and line endings, or as another file with Save as; undo and redo, cut and paste. The title marks unsaved changes, and closing asks whether to save them. ([#180](https://github.com/Hancapo/HikariHopper/pull/180))
-- Importing, pasting, copying out of an RPF, extracting, deleting and any change inside an RPF show the loading train over the tab once they take a moment, with the file in hand and a bar counting the files, or the share of an RPF written. Cancel stops them: an import or any change inside an RPF leaves things as they were, an extract keeps the files it wrote and a delete keeps in the Recycle Bin what it moved there; the status says which. ([#179](https://github.com/Hancapo/HikariHopper/pull/179))
-- Resizing textures, recalculating their mipmaps, changing their format or compression, extracting several to DDS files and saving the dictionary show the loading train over the texture editor once they take a moment, with a bar counting the textures and Cancel where it can stop: a cancelled change keeps nothing, a cancelled extract keeps the files it wrote. Extracting no longer freezes the window. ([#178](https://github.com/Hancapo/HikariHopper/pull/178))
-- Importing images into a texture dictionary shows the loading train over the editor once it takes a moment, with the file being read, a progress bar counting the files, and Cancel, which stops the import without adding anything. ([#177](https://github.com/Hancapo/HikariHopper/pull/177))
-- Vehicles opened from a game are painted in the 3D viewer as the game paints them: in the first of their colour combinations, with Paint in the footer to pick another combination or any of the game's colours for each of the six paint slots. ([#173](https://github.com/Hancapo/HikariHopper/pull/173))
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.2.0] - 2026-11-12
+
+### Added
+
+- Edit and save text files in the text viewer, loose or inside RPFs. ([#180](https://github.com/Hancapo/HikariHopper/pull/180))
+- Vehicles opened from a game are painted in the 3D viewer as the game paints them. ([#173](https://github.com/Hancapo/HikariHopper/pull/173), [#184](https://github.com/Hancapo/HikariHopper/pull/184), [#197](https://github.com/Hancapo/HikariHopper/pull/197))
+- Pick a vehicle's colour combination, or any of the game's colours for each paint slot, in the 3D viewer. ([#173](https://github.com/Hancapo/HikariHopper/pull/173), [#188](https://github.com/Hancapo/HikariHopper/pull/188), [#189](https://github.com/Hancapo/HikariHopper/pull/189))
+- Pick a geometry on the model in the 3D viewer and see it outlined. ([#156](https://github.com/Hancapo/HikariHopper/pull/156))
+- Edit a picked geometry's shader values in the 3D viewer, with undo and redo. ([#157](https://github.com/Hancapo/HikariHopper/pull/157), [#161](https://github.com/Hancapo/HikariHopper/pull/161), [#198](https://github.com/Hancapo/HikariHopper/pull/198))
+- Save shader value changes from the 3D viewer, into the RPF or over the loose file. ([#158](https://github.com/Hancapo/HikariHopper/pull/158), [#192](https://github.com/Hancapo/HikariHopper/pull/192))
+- Change a shader entry shared by several geometries for all of them or for the picked one alone. ([#159](https://github.com/Hancapo/HikariHopper/pull/159))
+- Save a drawable, fragment or drawable dictionary as another file from the 3D viewer. ([#161](https://github.com/Hancapo/HikariHopper/pull/161), [#199](https://github.com/Hancapo/HikariHopper/pull/199))
+- Extract the embedded textures of a 3D model to DDS files. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- File and Edit menus in the 3D viewer and the text viewer. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- An axes gizmo in the 3D viewer, to look along an axis or orbit the view. ([#155](https://github.com/Hancapo/HikariHopper/pull/155))
+- Pick the level of detail in the 3D viewer from a list that shows each level's triangle count. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
 - Fly the camera and frame the view in the 3D viewer for collisions and navmeshes too. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
-- Pick a model's level of detail from a list that shows each level's triangles, and turn the mesh counts on or off; the viewer remembers which. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
-- An axes gizmo in the 3D viewer's top right corner: click an axis to look from it, again for the other side, or drag it to orbit. ([#155](https://github.com/Hancapo/HikariHopper/pull/155))
-- Click a model in the 3D viewer to pick a geometry: its row is selected in the parts panel and it is outlined; what is selected in the panel is outlined too. ([#156](https://github.com/Hancapo/HikariHopper/pull/156))
-- Edit a picked geometry's shader values in the 3D viewer, on a card beside its row in the parts panel: drag or type a number to see it at once, reset one value or all of them, and undo with Ctrl+Z. ([#157](https://github.com/Hancapo/HikariHopper/pull/157), [#159](https://github.com/Hancapo/HikariHopper/pull/159))
-- Save the shader values changed in the 3D viewer with Ctrl+S, into the file's RPF or over the loose file; the title marks unsaved changes, and closing asks whether to save them. ([#158](https://github.com/Hancapo/HikariHopper/pull/158))
-- A shader entry shared by several geometries can be changed for all of them or for the picked one alone, which then gets an entry of its own; the card says what else the geometry is drawn on. ([#159](https://github.com/Hancapo/HikariHopper/pull/159))
-- The 3D viewer and the text viewer have File and Edit menus, as the texture editor has. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
-- Save a drawable, fragment or drawable dictionary as another file from the 3D viewer, with its shader values as changed; one in an RPF can be saved out this way. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
-- Redo a change to the 3D viewer's shader values with Ctrl+Y or Ctrl+Shift+Z. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
-- Extract a 3D model's embedded textures to DDS files from the 3D viewer. ([#161](https://github.com/Hancapo/HikariHopper/pull/161))
+- Resize textures by percentage, or straight to a quarter, half or double their size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Remove a texture's mipmaps without changing its size. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Long operations in the explorer and the texture editor show their progress and can be cancelled. ([#177](https://github.com/Hancapo/HikariHopper/pull/177), [#178](https://github.com/Hancapo/HikariHopper/pull/178), [#179](https://github.com/Hancapo/HikariHopper/pull/179), [#191](https://github.com/Hancapo/HikariHopper/pull/191))
+- Hints for zooming, panning and fitting in the image viewer's status bar. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- Licences in About, with the notices for the code HikariHopper includes. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
 
 ### Changed
 
-- Importing images into a texture dictionary is much faster: several are read and compressed at once, and the compressor runs at a quality whose difference from its best is too small to see, so twelve 2048² images take about 2 seconds instead of over a minute. ([#182](https://github.com/Hancapo/HikariHopper/pull/182))
-- While a game loads, a steam train runs along a short track over the caption, its wheels and rods turning and its stack puffing smoke, in place of a sliding bar; it stands still when Windows turns animations off. ([#176](https://github.com/Hancapo/HikariHopper/pull/176))
-- A vehicle's paint in the 3D viewer shines as its colour does in the game: each slot takes its colour's finish from carcols, so metallics are glossy and reflect sharply, mattes are dull and chrome is a mirror. ([#174](https://github.com/Hancapo/HikariHopper/pull/174))
-- Paint, chrome and glass in the 3D viewer reflect the floor the view shows, its colour and grid, below the horizon, instead of a plain grey ground. ([#175](https://github.com/Hancapo/HikariHopper/pull/175))
-- The 3D viewer's shader values card opens from the parts panel's right-click menu, with Shader values…, or with M, instead of with every geometry picked; open, it follows the pick. ([#172](https://github.com/Hancapo/HikariHopper/pull/172))
-- A ped's parts in the 3D viewer are listed head to toe, with each kind's variants in number order. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
-- A collision's materials, and what a navmesh's colours mean, are listed in the 3D viewer's parts panel, where each can be hidden or found, instead of in a bar under the view. ([#148](https://github.com/Hancapo/HikariHopper/pull/148))
-- A fragment's intact and damaged states are rows in the 3D viewer's parts panel, each with its parts, picked as a ped's variants are; its embedded textures are a row at the panel's foot. Both were toolbar buttons. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
-- The 3D viewer has no toolbar: what is drawn over the model (shadows, skeleton, collision, lights) is a row at the top of the view, and the level of detail, the mesh counts, Orbit | Fly and the time of day are in the footer. The parts panel opens when asked for. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
-- The 3D viewer's time of day is a dial of the day, with noon at the top and the sun or moon to drag round it, in place of a slider; the time button shows it small. ([#154](https://github.com/Hancapo/HikariHopper/pull/154))
-
-- Shadows in the 3D viewer are sharper close up: the sun's shadow is split into four cascades by distance from the camera, as GTA V's is, instead of one map over the whole model. ([#163](https://github.com/Hancapo/HikariHopper/pull/163))
-- The Type column shows only what a file is, without "(Compressed)" after the files an RPF keeps compressed. ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
-### Fixed
-
-- Saving a 3D model's shader values right after saving its embedded textures no longer puts the old textures back, and a save no longer loses a geometry's own shader entry when the game's textures arrive at the same time; once a model is saved as another file, T and the parts panel no longer open the original's textures. ([#192](https://github.com/Hancapo/HikariHopper/pull/192))
-- A 3D model's embedded textures open again with T after a save into its RPF, where they failed with "Cannot access a disposed object". ([#194](https://github.com/Hancapo/HikariHopper/pull/194))
-- A vehicle whose game tables finished just as it appeared in the 3D viewer is painted and has its paint well, where it stayed grey. ([#197](https://github.com/Hancapo/HikariHopper/pull/197))
-- Clicking a number on the shader values card and leaving it without typing no longer rounds it to the four decimals shown. ([#198](https://github.com/Hancapo/HikariHopper/pull/198))
-- Save as in the 3D viewer and the texture editor keeps a name typed with another extension, adding the file's after it, and never replaces a file that wasn't picked. ([#199](https://github.com/Hancapo/HikariHopper/pull/199))
-- Closing HikariHopper, or a tab, with files unsaved in the text editor, the 3D viewer or a texture editor asks first, listing them all: Save all saves them where their editors would and then closes, Don't save closes, Cancel keeps everything open; before, the changes were lost without a word. ([#195](https://github.com/Hancapo/HikariHopper/pull/195))
-- With animations turned off in Windows, each open tab kept the CPU waking 60 times a second for a loading train it never showed. ([#196](https://github.com/Hancapo/HikariHopper/pull/196))
-- Changes made in the explorer inside a game's RPF, or a meta or ytyp saved into one, could be missed by the game's texture tables (which dictionaries a model looks in, and vehicle paints) for good once a texture dictionary or model was saved into the same RPF; they are now picked up the next time the game loads. ([#193](https://github.com/Hancapo/HikariHopper/pull/193))
-- Extracting textures whose names differ only in case wrote one file over another while saying all were extracted; it now refuses and writes nothing, as it did before. ([#191](https://github.com/Hancapo/HikariHopper/pull/191))
-- A vehicle opened while the game's texture tables were still being worked out (after the game or the app changed) took several seconds to appear, waiting for its paint; it now appears at once in the game's grey and takes its colours when the tables are ready. ([#184](https://github.com/Hancapo/HikariHopper/pull/184))
-- Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
-- Clicking HikariHopper's taskbar button minimizes it, as it does for other apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
-- HikariHopper animates minimizing, restoring and maximizing as other Windows 11 apps do. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
-- Navmeshes from the DLC packs open in the 3D viewer, in Legacy and Enhanced, not only the main archives' ones. ([#144](https://github.com/Hancapo/HikariHopper/pull/144))
-- The image viewer's status bar says how to zoom, pan and fit the image, as the texture editor's does. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-- A Licences button in About, which opens the notices of the code HikariHopper includes. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-
-
-- The keyboard shortcuts list covers the 3D viewer, the texture editor and the text and image viewers too, in columns. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-- The Properties sheet is as tall as what it shows, where a file's few rows left it mostly empty. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-- The address bar names the game or RPF at its root, where it was empty. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-
-
-- The keyboard shortcuts list was missing Rename, Properties, Paste and typing an address. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-- The start page said Settings twice when no game was set up. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
-- Resize a texture by percentage, or with one press to a quarter, half or double its size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
-- Resizing several textures by percentage scales each from its own size. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
-- Mipmaps can drop a texture's mip chain, leaving its full size alone. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
-
-
-- Removing a texture in the texture editor asks with a red Remove button, like deleting a file. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
-- With the aspect ratio locked, the other dimension follows as you type in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
-- The Resize dialog shows the texture now and after side by side, with the memory each takes, and says when the new size is not a power of two. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
-- Resizing to a power of two is a button in the Resize dialog. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
-- Change format says what each format costs and keeps, and when the one picked loses the alpha or colour a texture has. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
-- Change format and Mipmaps show the texture now and after side by side, with the memory each takes. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
-- Change format has no resampling choice: it uses the filter last applied in Resize or Mipmaps. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
-- Renaming a texture says what is wrong with a name as you type it. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
-- Removing textures names them and shows what the dictionary holds now and after. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
-- Pasting an image shows its size, and a switch between replacing the selected texture and adding a new one. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
-- Importing images whose names clash lists which are new and which replace a texture. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
-
-
-- Text fields in the texture editor's dialogs are as tall as the dropdowns beside them, and line up from one dialog to the next. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
-- The texture editor says "1 mip", not "1 mips", and shows no mip slider for a texture with only one. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
-- A bright model's glow in the 3D viewer fades smoothly into the sky instead of in visible rings. ([#160](https://github.com/Hancapo/HikariHopper/pull/160))
-
-- The 3D viewer's exposure no longer changes as the camera comes closer or goes further: it is set by the time of day, as the world would be lit then, not by how much of the view the model fills. ([#162](https://github.com/Hancapo/HikariHopper/pull/162))
-- Models open in the 3D viewer with the game's textures straight away: the game's textures are indexed while the game loads, and saving a model or texture dictionary into an RPF no longer makes the next launch index them again, and an update that changes how textures are found indexes them again, so no model is left missing textures it now finds. ([#164](https://github.com/Hancapo/HikariHopper/pull/164))
-- The 3D viewer's parts panel header reaches the panel's edge, where it stopped a few pixels short. ([#170](https://github.com/Hancapo/HikariHopper/pull/170))
-- A right-click on a part in the 3D viewer's parts panel opens its menu at once, where it took a second right-click. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
-- The parts panel's menu shows the lines between its groups, as the app's other menus do. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
-- After a game's archives change, its textures are indexed again in about half the time, as only the archives that changed are read. ([#187](https://github.com/Hancapo/HikariHopper/pull/187))
+- Controls in the 3D viewer sit over the view and in its footer, in place of the toolbar. ([#153](https://github.com/Hancapo/HikariHopper/pull/153))
+- Pick the time of day in the 3D viewer on a dial, in place of the slider. ([#154](https://github.com/Hancapo/HikariHopper/pull/154))
+- Intact and damaged states and embedded textures are rows in the parts panel, in place of toolbar buttons. ([#152](https://github.com/Hancapo/HikariHopper/pull/152))
+- Collision materials and navmesh colours are listed in the parts panel, where each can be hidden. ([#148](https://github.com/Hancapo/HikariHopper/pull/148))
+- Ped parts are listed head to toe in the parts panel. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
+- The shader values card opens only when asked for, not with every pick. ([#172](https://github.com/Hancapo/HikariHopper/pull/172))
+- Metallic, matte and chrome paints look as they do in the game in the 3D viewer. ([#174](https://github.com/Hancapo/HikariHopper/pull/174))
+- Reflections in the 3D viewer show the floor below the horizon. ([#175](https://github.com/Hancapo/HikariHopper/pull/175))
+- Shadows in the 3D viewer are sharper close up. ([#163](https://github.com/Hancapo/HikariHopper/pull/163))
+- Models open in the 3D viewer with the game's textures straight away. ([#164](https://github.com/Hancapo/HikariHopper/pull/164), [#193](https://github.com/Hancapo/HikariHopper/pull/193))
+- Indexing a game's textures again after its archives change is 2× faster (2.4× on Legacy). ([#187](https://github.com/Hancapo/HikariHopper/pull/187))
+- A steam train runs while a game loads, in place of the sliding bar. ([#176](https://github.com/Hancapo/HikariHopper/pull/176), [#196](https://github.com/Hancapo/HikariHopper/pull/196))
+- Importing images into a texture dictionary is up to 20× faster: 20× for a batch of images, 8× for a single one. ([#182](https://github.com/Hancapo/HikariHopper/pull/182), [#186](https://github.com/Hancapo/HikariHopper/pull/186))
+- The keyboard shortcuts list covers the 3D viewer, the texture editor and the text and image viewers too. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The Properties sheet fits what it shows. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The address bar names the game or RPF at its root. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The Type column no longer says "(Compressed)". ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
+- Resize, Change format and Mipmaps show the texture before and after, with the memory each takes. ([#149](https://github.com/Hancapo/HikariHopper/pull/149), [#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Change format says what each format costs and keeps. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Change format warns when a format would lose a texture's alpha or colour. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- Change format no longer asks for a resampling filter. ([#150](https://github.com/Hancapo/HikariHopper/pull/150))
+- With the aspect ratio locked, the other side follows as you type in Resize. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Resize has a button for the nearest power of two. ([#149](https://github.com/Hancapo/HikariHopper/pull/149))
+- Renaming a texture says what's wrong with a name as you type it. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Removing textures lists them and shows the dictionary before and after. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Removing a texture asks with a red Remove button, as deleting a file does. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- Pasting an image shows its size. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Choose whether a pasted image replaces the selected texture or adds a new one. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
+- Importing images with clashing names lists which are new and which replace a texture. ([#151](https://github.com/Hancapo/HikariHopper/pull/151))
 
 ### Fixed
 
-- Saving into, renaming or deleting an RPF in the game folder no longer fails with "Access to the path is denied" while the game's textures are being indexed after it opens. ([#185](https://github.com/Hancapo/HikariHopper/pull/185))
-
-### Removed
+- Closing HikariHopper or a tab no longer loses unsaved changes: it asks first. ([#195](https://github.com/Hancapo/HikariHopper/pull/195))
+- Changing an RPF in the game folder no longer fails right after the game opens. ([#185](https://github.com/Hancapo/HikariHopper/pull/185))
+- Embedded textures open again after saving a model into its RPF. ([#194](https://github.com/Hancapo/HikariHopper/pull/194))
+- Save as in the texture editor keeps the name you type, even with another extension. ([#199](https://github.com/Hancapo/HikariHopper/pull/199))
+- Clicking the taskbar button minimizes HikariHopper. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
+- Minimizing, restoring and maximizing animate as in other Windows 11 apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
+- Navmeshes from the DLC packs open in the 3D viewer. ([#144](https://github.com/Hancapo/HikariHopper/pull/144))
+- Exposure in the 3D viewer no longer changes as the camera moves in or out. ([#162](https://github.com/Hancapo/HikariHopper/pull/162))
+- Glow in the 3D viewer fades smoothly instead of in rings. ([#160](https://github.com/Hancapo/HikariHopper/pull/160))
+- Buttons that can't be used are clearly faded. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
+- The parts panel menu opens on the first right-click. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
+- The parts panel menu shows the lines between its groups. ([#171](https://github.com/Hancapo/HikariHopper/pull/171))
+- The parts panel header reaches the panel's edge. ([#170](https://github.com/Hancapo/HikariHopper/pull/170))
+- Text fields in texture editor dialogs match the height of the dropdowns beside them. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- The texture editor says "1 mip" instead of "1 mips". ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- No mip slider for a texture with a single mip. ([#145](https://github.com/Hancapo/HikariHopper/pull/145))
+- The keyboard shortcuts list includes Rename, Properties, Paste and typing an address. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
+- The start page no longer says Settings twice when no game is set up. ([#147](https://github.com/Hancapo/HikariHopper/pull/147))
 
 ## [0.1.0] - 2026-11-09
 
@@ -260,7 +248,8 @@ All notable changes to HikariHopper are documented here. The format follows
 - Explorer for GTA V Legacy and Enhanced game files, with nested RPF archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Hancapo/HikariHopper/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Hancapo/HikariHopper/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/Hancapo/HikariHopper/compare/v0.0.3...v0.0.4
