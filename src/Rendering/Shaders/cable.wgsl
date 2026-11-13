@@ -1,9 +1,10 @@
 // GTA V's cables (the cable shader: power lines, telephone wires, tram wires), as VS_Cable and PS_Cable draw them.
 // A cable is stored as a ribbon of no width: each point of its centre line twice, the normal along the wire, the first
 // UV's x the radius signed by the side. The vertex shader pushes the two apart, square to the wire and the view, so it
-// always faces the camera; a wire thinner than a unit (about a pixel) is drawn a unit wide and faded by how thin it
-// is, so far wires thin out rather than flicker. It is forward, blended over what is behind it: lit by the ambient
-// alone, with no sun, shadow or specular. The game sways it in the wind; the viewer shows it at rest.
+// always faces the camera. Every wire is widened by up to half a unit (a unit is about a pixel), so one thinner than
+// a unit is drawn half as wide again as it is, and faded by how thin it is: far wires fade out as they thin, as in
+// the game, which has no minimum width. It is forward, blended over what is behind it: lit by the ambient alone, with
+// no sun, shadow or specular. The game sways it in the wind; the viewer shows it at rest.
 // Scene comes from scene.wgsl, the light from light.wgsl.
 
 struct Cable {
