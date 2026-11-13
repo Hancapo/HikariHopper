@@ -237,6 +237,51 @@ public sealed class ClosePromptTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void AnExplorerWriteUnderWayIsWaitedForBeforeTheWindowCloses()
+    {
+        Explorer explorer = Open();
+        ExplorerViewModel bridge = explorer.Session.Tabs.ActiveBridge;
+        string drop = Write(Path.Combine(Work, "..", "drops", "carcols.meta"), "<CVehicleModelInfoVarGlobal />");
+        using var gate = new SemaphoreSlim(0);
+        bridge.WorkStarting = _ => Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(bridge.ImportDroppedFiles([drop]));
+        Assert.True(bridge.EntryOperationBusy);
+
+        explorer.Window.Close();
+        Pump(200);
+        // Nothing is asked, and the window waits for the import, which isn't cut off.
+        Assert.False(explorer.Closed);
+        Assert.Null(explorer.Session.UnsavedPrompt);
+        gate.Release(5);
+        TestWait.Until(() => explorer.Closed, "the window to close once the import is done");
+        Assert.True(File.Exists(Path.Combine(Work, "carcols.meta")));
+    }
+
+    [AvaloniaFact]
+    public void AnExplorerWriteUnderWayIsWaitedForBeforeATabCloses()
+    {
+        Explorer explorer = Open();
+        ExplorerTabsViewModel tabs = explorer.Session.Tabs;
+        tabs.NewTab();
+        ExplorerViewModel second = tabs.ActiveBridge;
+        second.OpenGame(Work);
+        Settle(second);
+        string drop = Write(Path.Combine(Work, "..", "drops", "carcols.meta"), "<CVehicleModelInfoVarGlobal />");
+        using var gate = new SemaphoreSlim(0);
+        second.WorkStarting = _ => Assert.True(gate.Wait(TimeSpan.FromSeconds(10)));
+        Assert.True(second.ImportDroppedFiles([drop]));
+
+        tabs.CloseTab(1);
+        Pump(200);
+        Assert.Equal(2, tabs.Tabs.Count);
+        Assert.Null(explorer.Session.UnsavedPrompt);
+        gate.Release(5);
+        TestWait.Until(() => tabs.Tabs.Count == 1, "the tab to close once the import is done");
+        Assert.True(File.Exists(Path.Combine(Work, "carcols.meta")));
+        Assert.False(explorer.Closed);
+    }
+
+    [AvaloniaFact]
     public void ClosingATabWithFilesUnsavedAsksAboutThatTabsFiles()
     {
         Explorer explorer = Open();

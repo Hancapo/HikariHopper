@@ -49,11 +49,15 @@ internal sealed class UnsavedWork
         return files;
     }
 
-    /// <summary>Whether a save is being written (or a texture operation runs) in <paramref name="tab"/>, or anywhere.</summary>
+    /// <summary>
+    /// Whether a save is being written (or a texture operation runs) in <paramref name="tab"/>, or anywhere; or an
+    /// explorer write (an import, a delete, an RPF rewritten), running or queued, in any tab: a tab's write can touch
+    /// the files another shows, and a tab doesn't close while one runs.
+    /// </summary>
     public bool Busy(ExplorerViewModel? tab = null) =>
         session.TextViewer is { IsSaving: true } && Of(session.TextViewerTab, tab)
         || session.ModelViewer is { IsSaving: true } && Of(session.ModelViewerTab, tab)
-        || session.Tabs.Tabs.Any(each => Of(each, tab) && each.TextureViewer.OperationBusy);
+        || session.Tabs.Tabs.Any(each => Of(each, tab) && each.TextureViewer.OperationBusy || each.LocalEntryOperationBusy);
 
     /// <summary>Done once nothing is being saved, there or anywhere: at once when nothing is.</summary>
     public async Task WhenIdle(ExplorerViewModel? tab = null)

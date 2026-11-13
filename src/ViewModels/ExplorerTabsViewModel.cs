@@ -164,12 +164,15 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         if (row < 0 || row >= tabs.Count)
             return;
         ExplorerViewModel bridge = tabs[row];
+        // The view waits for a write under way before it closes the tab.
+        if (ConfirmClose is { } confirm)
+        {
+            confirm(bridge, () => CloseTabCore(bridge));
+            return;
+        }
         if (bridge.EntryOperationBusy && !bridge.TextureViewer.Saving)
             return;
-        if (ConfirmClose is { } confirm)
-            confirm(bridge, () => CloseTabCore(bridge));
-        else
-            bridge.TextureViewer.RequestDocumentChange(() => CloseTabCore(bridge));
+        bridge.TextureViewer.RequestDocumentChange(() => CloseTabCore(bridge));
     }
 
     private void CloseTabCore(ExplorerViewModel bridge)
