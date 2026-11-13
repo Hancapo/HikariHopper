@@ -181,6 +181,17 @@ public sealed class SearchIndexTests : ExplorerTestBase
         await index.Refresh();
         Assert.Equal(2, index.ArchivesRead);
         Assert.NotEmpty(Directory.EnumerateFiles(cache, "*.index"));
+
+        // A write that fails is tried again by the next refresh, once it can be: here the folder is a file meanwhile.
+        Assert.True(SearchIndex.DeleteCache());
+        Directory.Delete(cache, recursive: true);
+        File.WriteAllBytes(cache, []);
+        await index.Refresh();
+        File.Delete(cache);
+        Assert.False(Directory.Exists(cache));
+        await index.Refresh();
+        Assert.Equal(2, index.ArchivesRead);
+        Assert.NotEmpty(Directory.EnumerateFiles(cache, "*.index"));
     }
 }
 /// <summary>Reading a search's text: plain, wildcards (on by themselves with * or ?), or a regular expression.</summary>

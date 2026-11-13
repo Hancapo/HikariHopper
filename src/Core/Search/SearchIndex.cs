@@ -87,7 +87,7 @@ public sealed class SearchIndex
     private bool cacheRead;
     // Set by a rebuild: the next refresh forgets what it knows and reads every RPF again.
     private bool startOver;
-    // Set once its file on disk is deleted: the next refresh writes it again, changed or not.
+    // Set once its file on disk is deleted, or when writing it failed: the next refresh writes it again, changed or not.
     private volatile bool cacheGone;
     private volatile SearchIndexState state = SearchIndexState.Empty;
 
@@ -290,7 +290,9 @@ public sealed class SearchIndex
         {
             cacheGone = false;
             Publish(new SearchIndexState([.. groups], archives.Count, archives.Count, true));
-            WriteCache(groups.Where(group => group.ArchivePath != LooseGroup));
+            // Cleared first, so a deletion while it is written still counts.
+            if (!WriteCache(groups.Where(group => group.ArchivePath != LooseGroup)))
+                cacheGone = true;
         }
     }
 
@@ -419,7 +421,8 @@ public sealed class SearchIndex
         return groups;
     }
 
-    private void WriteCache(IEnumerable<IndexedGroup> groups)
+    // Whether the file was written.
+    private bool WriteCache(IEnumerable<IndexedGroup> groups)
     {
         string target = CachePath;
         string temporary = target + ".tmp";
@@ -452,11 +455,13 @@ public sealed class SearchIndex
                 }
             }
             File.Move(temporary, target, overwrite: true);
+            return true;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            // Only a cache: the next refresh reads the archives again.
+            // Only a cache: the next refresh tries again, and the next session reads the archives again meanwhile.
             try { File.Delete(temporary); } catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+            return false;
         }
     }
 }
