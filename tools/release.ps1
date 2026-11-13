@@ -56,6 +56,9 @@ function Assert-NoPrivatePaths([string]$folder) {
     if ($leaks) { $leaks | Write-Host; throw 'The build contains private paths' }
 }
 Assert-NoPrivatePaths $build
+# No Markdown ships with a release.
+$markdown = Get-ChildItem $build -Recurse -File -Filter *.md
+if ($markdown) { $markdown | ForEach-Object { Write-Host $_.FullName }; throw 'The build contains Markdown files' }
 
 $exe = Join-Path $build 'HikariHopper.exe'
 Write-Host 'Running the self-test on the native build...'
