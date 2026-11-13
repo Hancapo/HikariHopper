@@ -14,6 +14,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The 3D viewer finds a model's textures wherever the game holds them, such as a vehicle mod part's shared vehicle textures: of 400 sampled models, 12 are left with a texture missing, down from 141, and they read 3.5× faster. ([#218](https://github.com/Hancapo/HikariHopper/pull/218))
+
 ### Removed
 
 ## [0.2.0] - 2026-11-12
