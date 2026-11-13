@@ -13,14 +13,21 @@ namespace HikariHopper;
 public sealed class ExplorerSession : IStartupSession
 {
     private readonly Dictionary<ExplorerViewModel, TextureEditor> textureEditors = [];
+    private readonly UnsavedWork unsaved;
     private MainWindow? window;
     private ExplorerViewModel? titleBridge;
+    // Whether a close is being asked about: waiting for a save under way, the prompt up, or its files being saved.
+    private bool askingToClose;
 
     public ExplorerSession() : this(new ExplorerTabsViewModel())
     {
     }
 
-    public ExplorerSession(ExplorerTabsViewModel tabs) => Tabs = tabs;
+    public ExplorerSession(ExplorerTabsViewModel tabs)
+    {
+        Tabs = tabs;
+        unsaved = new UnsavedWork(this);
+    }
 
     public ExplorerTabsViewModel Tabs { get; }
 
@@ -40,6 +47,18 @@ public sealed class ExplorerSession : IStartupSession
     /// <summary>The 3D viewer, while it is open.</summary>
     public ModelViewer? ModelViewer { get; private set; }
 
+    /// <summary>The tab the text viewer was opened from.</summary>
+    public ExplorerViewModel? TextViewerTab { get; private set; }
+
+    /// <summary>The tab the 3D viewer was opened from.</summary>
+    public ExplorerViewModel? ModelViewerTab { get; private set; }
+
+    /// <summary>The prompt asking about unsaved files before the app or a tab closes, while it is up.</summary>
+    public UnsavedFilesDialog? UnsavedPrompt { get; private set; }
+
+    /// <summary>The last close asked about, done once it closed or was called off; for tests.</summary>
+    internal Task Closing { get; private set; } = Task.CompletedTask;
+
     public void RestoreLastGame() => Tabs.RestoreLastGame();
 
     public void Attach(MainWindow mainWindow)
@@ -50,6 +69,10 @@ public sealed class ExplorerSession : IStartupSession
         // A new version is offered once the window is up.
         mainWindow.Opened += (_, _) => _ = screen.Menu.Updates.CheckAtStartup();
         mainWindow.TitleBar.LeadingContent = screen.Menu;
+        // Unsaved files are asked about before the window or a tab closes, and hold an update's restart back.
+        mainWindow.AskBeforeClosing = AskBeforeClosing;
+        Tabs.ConfirmClose = ConfirmTabClose;
+        screen.Menu.Updates.Unsaved = unsaved;
         Tabs.PropertyChanged += OnTabsPropertyChanged;
         Tabs.Tabs.CollectionChanged += OnTabsChanged;
         foreach (ExplorerViewModel tab in Tabs.Tabs)
@@ -113,10 +136,14 @@ public sealed class ExplorerSession : IStartupSession
         ModelViewer?.Close();
         var viewer = new ModelViewer(file) { Anchor = window?.ExplorerScreenHost };
         ModelViewer = viewer;
+        ModelViewerTab = sender as ExplorerViewModel;
         viewer.Closed += (_, _) =>
         {
             if (ReferenceEquals(ModelViewer, viewer))
+            {
                 ModelViewer = null;
+                ModelViewerTab = null;
+            }
         };
         viewer.Present();
     }
@@ -138,22 +165,102 @@ public sealed class ExplorerSession : IStartupSession
     private void OnTextFileOpened(object? sender, TextFile file)
     {
         // The one open goes first; with changes unsaved it asks, and if that is cancelled it stays and this one doesn't open.
+        var tab = sender as ExplorerViewModel;
         if (TextViewer is { } open)
-            open.CloseThen(() => ShowTextViewer(file));
+            open.CloseThen(() => ShowTextViewer(file, tab));
         else
-            ShowTextViewer(file);
+            ShowTextViewer(file, tab);
     }
 
-    private void ShowTextViewer(TextFile file)
+    private void ShowTextViewer(TextFile file, ExplorerViewModel? tab)
     {
         var viewer = new TextViewer(file) { Anchor = window?.ExplorerScreenHost };
         TextViewer = viewer;
+        TextViewerTab = tab;
         // Let go of it once closed: it holds the whole file.
         viewer.Closed += (_, _) =>
         {
             if (ReferenceEquals(TextViewer, viewer))
+            {
                 TextViewer = null;
+                TextViewerTab = null;
+            }
         };
         viewer.Present();
+    }
+
+    // ---------------- Closing with files unsaved ----------------
+
+    /// <summary>
+    /// The window is about to close: it does, at once, with nothing unsaved; otherwise it stays, the files are asked
+    /// about (once a save under way is written), and it closes once they are saved or let go.
+    /// </summary>
+    private bool AskBeforeClosing()
+    {
+        if (askingToClose)
+            return false;
+        if (!unsaved.Busy() && unsaved.Files().Count == 0)
+            return true;
+        Closing = AskThenClose(null, () => window?.CloseWithoutAsking());
+        return false;
+    }
+
+    /// <summary>A tab is about to close: as the window, for the files it has unsaved and the viewers it opened.</summary>
+    private void ConfirmTabClose(ExplorerViewModel tab, Action close)
+    {
+        if (askingToClose)
+            return;
+        Closing = AskThenClose(tab, () =>
+        {
+            // What the tab opened goes with it, its changes saved or let go by now.
+            if (ReferenceEquals(TextViewerTab, tab))
+                TextViewer?.CloseWithoutAsking();
+            if (ReferenceEquals(ModelViewerTab, tab))
+                ModelViewer?.CloseWithoutAsking();
+            close();
+        });
+    }
+
+    /// <summary>
+    /// Waits for the saves under way in <paramref name="tab"/> (or anywhere), then asks about what is still unsaved
+    /// and runs <paramref name="close"/> once it is saved or let go: at once with nothing unsaved. A save that fails
+    /// stops the closing, and its editor is brought forward, where it says why; nothing is let go.
+    /// </summary>
+    private async Task AskThenClose(ExplorerViewModel? tab, Action close)
+    {
+        askingToClose = true;
+        try
+        {
+            await unsaved.WhenIdle(tab);
+            IReadOnlyList<UnsavedFile> files = unsaved.Files(tab);
+            if (files.Count == 0)
+            {
+                close();
+                return;
+            }
+            if (window?.ExplorerScreenHost is not { } anchor)
+                return;
+            var prompt = new UnsavedFilesDialog(files, tab is null ? "HikariHopper closes" : "the tab closes");
+            UnsavedPrompt = prompt;
+            UnsavedChoice choice = await prompt.Ask(anchor);
+            if (choice == UnsavedChoice.Cancel)
+                return;
+            if (choice == UnsavedChoice.Save)
+            {
+                UnsavedFile? failed = await UnsavedWork.SaveAll(files);
+                prompt.Close();
+                if (failed is not null)
+                {
+                    failed.BringForward();
+                    return;
+                }
+            }
+            close();
+        }
+        finally
+        {
+            UnsavedPrompt = null;
+            askingToClose = false;
+        }
     }
 }

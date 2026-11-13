@@ -219,9 +219,7 @@ public partial class TextViewer : UserControl, IModalContent
         var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
         dialog.SaveRequested += async (_, _) =>
         {
-            bool saved = saveTarget is not null ? Save() && await Saving : await SaveAs();
-            // An edit that landed while it was written (a paste coming in late, say) isn't in the file: it stays open.
-            if (saved && !Lines.IsModified)
+            if (await SaveBeforeClosing())
             {
                 closeApproved = true;
                 Close();
@@ -237,6 +235,26 @@ public partial class TextViewer : UserControl, IModalContent
         dialog.Rejected += (_, _) => StayOpen();
         unsavedDialog = dialog;
         dialog.Open(DialogLayer);
+    }
+
+    /// <summary>
+    /// Saves the changes as Save in the prompt before closing does: where the text lives, or into a file picked for a
+    /// text with nowhere of its own. True once all of it is in the file; an edit that landed while it was written (a
+    /// paste coming in late, say) isn't, and it stays unsaved.
+    /// </summary>
+    internal async Task<bool> SaveBeforeClosing()
+    {
+        bool saved = saveTarget is not null ? Save() && await Saving : await SaveAs();
+        return saved && !Lines.IsModified;
+    }
+
+    /// <summary>Closes the viewer without asking, its changes let go: its tab closes, and was told not to save them.</summary>
+    internal void CloseWithoutAsking()
+    {
+        closeApproved = true;
+        afterClose = null;
+        UnsavedDialog?.Close();
+        Close();
     }
 
     // The closing was called off: nothing waits on it, and the text has the keyboard again.
@@ -475,6 +493,12 @@ public partial class TextViewer : UserControl, IModalContent
 
     /// <summary>The last save, done once it is written (true) or failed (false).</summary>
     internal Task<bool> Saving { get; private set; } = Task.FromResult(false);
+
+    /// <summary>Whether a save is being written.</summary>
+    internal bool IsSaving => saving;
+
+    /// <summary>The file's name as shown: as opened, or as it was last saved as.</summary>
+    internal string DocumentName => documentName;
 
     /// <summary>Whether the text can be saved where it lives: it was opened from there, or saved as a file since.</summary>
     internal bool CanSave => saveTarget is not null;

@@ -13,7 +13,7 @@ public static class ArchiveWriter
     /// <param name="rootPath">The root RPF on disk.</param>
     /// <param name="archivePrefix">Full path of the nested archive to edit; empty for the root.</param>
     public static void Mutate(string rootPath, GameCrypto? crypto, string archivePrefix, Action<RpfArchive> mutation) =>
-        Edit(rootPath, crypto, root =>
+        Edit(rootPath, crypto, keepsTables: false, root =>
         {
             ArchiveNode target = NestedArchive(root, archivePrefix);
             mutation(target.Archive);
@@ -22,7 +22,7 @@ public static class ArchiveWriter
 
     /// <summary>Replaces the file at <paramref name="entryPath"/> (a full path from the root) with standalone bytes.</summary>
     public static void ReplaceEntry(string rootPath, GameCrypto? crypto, string entryPath, byte[] data) =>
-        Edit(rootPath, crypto, root =>
+        Edit(rootPath, crypto, GameTextures.KeepsTables(entryPath), root =>
         {
             var (node, entry) = root.FindEntry(entryPath)
                 ?? throw new ArgumentException($"Could not find archive entry: {entryPath}");
@@ -76,13 +76,15 @@ public static class ArchiveWriter
     // explorer change, a texture save and a model save each wait for the one before to be written.
     private static readonly Lock EditGate = new();
 
-    private static void Edit(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
+    // With keepsTables, the edit only gives a texture dictionary or a model new contents, which leaves the game's texture
+    // tables as they are; any other edit marks them as to be made again (GameTextures.Changed).
+    private static void Edit(string rootPath, GameCrypto? crypto, bool keepsTables, Func<ArchiveNode, ArchiveNode> edit)
     {
         lock (EditGate)
-            EditAlone(rootPath, crypto, edit);
+            EditAlone(rootPath, crypto, keepsTables, edit);
     }
 
-    private static void EditAlone(string rootPath, GameCrypto? crypto, Func<ArchiveNode, ArchiveNode> edit)
+    private static void EditAlone(string rootPath, GameCrypto? crypto, bool keepsTables, Func<ArchiveNode, ArchiveNode> edit)
     {
         string path = Path.GetFullPath(rootPath);
         string staging = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
@@ -103,6 +105,9 @@ public static class ArchiveWriter
             GameTextures.WaitForArchiveReaders(path);
             // The last moment to stop: after this the archive is the new one.
             OperationProgress.Current.Check();
+            // Before the archive is replaced, so no save that ends meanwhile keeps the tables for it.
+            if (!keepsTables)
+                GameTextures.Changed(path);
             File.Move(staging, path, overwrite: true);
         }
         finally

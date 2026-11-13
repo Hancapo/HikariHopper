@@ -116,7 +116,8 @@ public sealed partial class TextureViewerViewModel
 
     /// <summary>
     /// Writes each texture to a DDS file in <paramref name="folder"/> on the work pool, a bar counting them; Cancel stops
-    /// it between textures, and those already written stay.
+    /// it between textures, and those already written stay. The whole set is checked first, so names that would collide
+    /// refuse the extract before any file is written.
     /// </summary>
     private void ExtractTo(TextureSet textures, string folder)
     {
@@ -137,6 +138,16 @@ public sealed partial class TextureViewerViewModel
         int token = generation;
         pool.Start(() =>
         {
+            try
+            {
+                CheckExtract(items, target);
+            }
+            catch (Exception exception)
+            {
+                string message = exception.Message;
+                Post(() => ExtractFinished(token, 0, items.Length, message, cancelled: false));
+                return;
+            }
             for (int index = 0; index < items.Length; index++)
             {
                 int done = index;
@@ -161,6 +172,22 @@ public sealed partial class TextureViewerViewModel
             }
             Post(() => ExtractFinished(token, items.Length, items.Length, null, cancelled: false));
         }, PriorityTransform);
+    }
+
+    /// <summary>
+    /// The checks the library's export makes across a whole dictionary, which one texture at a time never meets: names
+    /// whose lookup hashes repeat, and file names that are the same but for case.
+    /// </summary>
+    private static void CheckExtract(Texture[] items, GameTarget target)
+    {
+        new TextureSet(items, target).ToDictionary().Validate().ThrowIfInvalid();
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Texture texture in items)
+        {
+            string file = texture.Name + ".dds";
+            if (!files.Add(file))
+                throw new ArgumentException($"Texture filenames collide at '{file}'.");
+        }
     }
 
     private void ExtractFinished(int token, int written, int total, string? error, bool cancelled)

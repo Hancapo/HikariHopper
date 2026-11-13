@@ -195,7 +195,13 @@ internal sealed class UpdateFlow
         Quit();
     }
 
-    /// <summary>Why the app can't quit for the update yet: an unsaved texture edit, or a write under way.</summary>
+    /// <summary>What the session has unsaved, in its viewers as well as its tabs; set once the session is attached.</summary>
+    internal UnsavedWork? Unsaved { get; set; }
+
+    /// <summary>
+    /// Why the app can't quit for the update yet: an unsaved texture edit, text edit or shader value, or a write under
+    /// way.
+    /// </summary>
     internal string? Blocker()
     {
         if (tabs() is not { } open)
@@ -207,6 +213,10 @@ internal sealed class UpdateFlow
             if (tab.TextureViewer.Modified)
                 return "Save or discard your texture edits first";
         }
+        if (Unsaved?.Busy() == true)
+            return "Wait for the changes being saved to finish";
+        if (Unsaved?.Files().Count > 0)
+            return "Save or discard your changes first";
         return null;
     }
 }

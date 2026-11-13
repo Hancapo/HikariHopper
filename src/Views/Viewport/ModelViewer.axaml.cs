@@ -784,6 +784,29 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Whether the file can be saved where it lives: it was opened from one, and can be written again.</summary>
     internal bool CanSave => saveTarget is not null && surfaces?.Writer is not null;
 
+    /// <summary>Whether shader values are changed and not saved, in a file that can be saved: what closing asks about.</summary>
+    internal bool HasUnsavedChanges => shaderEdits.Dirty && CanSave;
+
+    /// <summary>The file's name as shown: as opened, or as it was last saved as.</summary>
+    internal string DocumentName => documentName;
+
+    /// <summary>Whether a save is being written.</summary>
+    internal bool IsSaving => saving;
+
+    /// <summary>
+    /// Saves the changed shader values before the app or a tab closes; true once all of them are in the file. A value
+    /// changed while it was written isn't, and stays unsaved: then it is false, and the closing stops.
+    /// </summary>
+    internal async Task<bool> SaveBeforeClosing() => Save() && await Saving && !shaderEdits.Dirty;
+
+    /// <summary>Closes the viewer without asking, its changes let go: its tab closes, and was told not to save them.</summary>
+    internal void CloseWithoutAsking()
+    {
+        closeApproved = true;
+        UnsavedDialog?.Close();
+        Close();
+    }
+
     private bool saving;
 
     /// <summary>The last save, done once it is written (true) or failed (false).</summary>
