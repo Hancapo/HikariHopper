@@ -12,7 +12,7 @@ public partial class AboutDialog : ModalSheet
     /// <summary>The notices of the code HikariHopper includes, as the repository has them.</summary>
     public static readonly Uri NoticesPage = new("https://github.com/Hancapo/HikariHopper/blob/master/THIRD-PARTY-NOTICES.md");
 
-    /// <summary>The notices' file, which ships beside the app.</summary>
+    /// <summary>The notices' file, looked for beside the app; releases don't ship it, so they open the repository's.</summary>
     public const string NoticesFile = "THIRD-PARTY-NOTICES.md";
 
     public AboutDialog()

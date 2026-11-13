@@ -22,7 +22,6 @@
     <AvaloniaResource Include="../CHANGELOG.md" Link="Assets/CHANGELOG.md" />
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
-    <None Include="../THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
     <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
   </ItemGroup>
