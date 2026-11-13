@@ -296,4 +296,47 @@ public sealed class GameTexturesTests : IDisposable
             GameTextures.ForgetAll();
         }
     }
+
+    [Fact]
+    public void Deleting_the_cache_takes_the_tables_and_the_archive_index_and_nothing_else()
+    {
+        Directory.CreateDirectory(Path.Combine(GameTextures.IndexFolder, "deep"));
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "0123456789ABCDEF.bin"), "t");
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "0123456789ABCDEF.bin.tmp"), "t");
+        File.WriteAllText(Path.Combine(GameTextures.IndexFolder, "deep", "x64a.ffic"), "i");
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "notes.txt"), "kept");
+        Assert.True(GameTextures.DeleteCache());
+        Assert.Equal(["notes.txt"], Directory.EnumerateFiles(GameTextures.CacheFolder).Select(Path.GetFileName));
+        Assert.False(Directory.Exists(GameTextures.IndexFolder));
+        // Nothing there is nothing to do.
+        Assert.True(GameTextures.DeleteCache());
+    }
+
+    [Fact]
+    public async Task Rebuilding_the_cache_makes_each_loaded_games_tables_again_from_its_archives()
+    {
+        Directory.CreateDirectory(Path.Combine(scratch, "game"));
+        File.WriteAllBytes(Path.Combine(scratch, "game", "x64a.rpf"), [1, 2, 3]);
+        int builds = 0;
+        GameTextures.ForgetAll();
+        try
+        {
+            GameTextures loaded = GameTextures.Share(Path.Combine(scratch, "game"), () =>
+            {
+                Interlocked.Increment(ref builds);
+                return new GameTextures.Tables();
+            });
+            await loaded.Load();
+            Assert.Equal(1, builds);
+            // Its cache holds them now: loaded again, they'd be read from it. A rebuild deletes it and makes them anew.
+            Assert.NotEmpty(Directory.EnumerateFiles(GameTextures.CacheFolder, "*.bin"));
+            await GameTextures.RebuildCache();
+            Assert.Equal(2, builds);
+            Assert.NotEmpty(Directory.EnumerateFiles(GameTextures.CacheFolder, "*.bin"));
+        }
+        finally
+        {
+            GameTextures.ForgetAll();
+        }
+    }
 }

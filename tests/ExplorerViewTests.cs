@@ -579,7 +579,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
         // Each group in the rail shows its page in place of the others'.
-        Assert.Equal(["Games", "Startup", "Updates"], settings.Groups.Select(group => group.Label));
+        Assert.Equal(["Games", "Startup", "Updates", "Cache"], settings.Groups.Select(group => group.Label));
         Assert.Equal("Games", settings.Group);
         Assert.True(settings.GamesPage.IsVisible);
         Assert.False(settings.StartupPage.IsVisible);
@@ -1405,6 +1405,61 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Settle(ui.Bridge);
         Pump();
         Assert.False(loading.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void TheCachePageRebuildsAndDeletesEachIndexAndOpensTheirFolder()
+    {
+        Explorer ui = OpenExplorer();
+        var settings = new SettingsDialog(ui.Tabs);
+        settings.Present(ui.Find<MenuRow>());
+        Pump();
+        settings.CacheGroup.Choose();
+        Pump();
+        Assert.True(settings.CachePage.IsVisible);
+        Assert.Equal(SettingsDialog.CacheRoot, settings.CacheFolderText.Text);
+        TimeSpan shown = SettingsDialog.CacheResultShown;
+        SettingsDialog.CacheResultShown = TimeSpan.FromMilliseconds(50);
+        Func<TopLevel?, DirectoryInfo, Task> open = SettingsDialog.OpenFolder;
+        var opened = new List<string>();
+        SettingsDialog.OpenFolder = (_, folder) => { opened.Add(folder.FullName); return Task.CompletedTask; };
+        try
+        {
+            // Delete: both of the row's buttons are off while it runs, the one pressed says so, then Done, then back.
+            Directory.CreateDirectory(HikariHopper.Core.GameTextures.CacheFolder);
+            string tables = Path.Combine(HikariHopper.Core.GameTextures.CacheFolder, "0123456789ABCDEF.bin");
+            File.WriteAllText(tables, "t");
+            settings.DeleteTextures.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.False(settings.DeleteTextures.IsEnabled);
+            Assert.False(settings.RebuildTextures.IsEnabled);
+            TestWait.Until(() => settings.DeleteTextures.Text == "Done", "the delete to be done");
+            Assert.False(File.Exists(tables));
+            TestWait.Until(() => settings.CacheWork.IsCompleted, "the button to come back");
+            Assert.Equal("Delete", settings.DeleteTextures.Text);
+            Assert.True(settings.DeleteTextures.IsEnabled && settings.RebuildTextures.IsEnabled);
+
+            // Rebuild: the game searched in this session is read again from scratch.
+            Core.Search.SearchIndex index = Core.Search.SearchIndex.ForGame(Work, null);
+            Task made = index.Refresh();
+            TestWait.Until(() => made.IsCompleted, "the index to be made");
+            int read = index.ArchivesRead;
+            settings.RebuildSearch.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("Rebuilding…", settings.RebuildSearch.Text);
+            Assert.False(settings.DeleteSearch.IsEnabled);
+            TestWait.Until(() => settings.CacheWork.IsCompleted, "the rebuild to be done");
+            Assert.True(index.ArchivesRead >= read);
+            Assert.Equal("Rebuild", settings.RebuildSearch.Text);
+
+            // Open folder shows the folder both caches live in.
+            settings.OpenCacheFolder.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Pump();
+            Assert.Equal([SettingsDialog.CacheRoot], opened);
+        }
+        finally
+        {
+            SettingsDialog.CacheResultShown = shown;
+            SettingsDialog.OpenFolder = open;
+        }
     }
 
     [AvaloniaFact]

@@ -85,6 +85,8 @@ public sealed class SearchIndex
     private bool refreshing;
     private bool again;
     private bool cacheRead;
+    // Set by a rebuild: the next refresh forgets what it knows and reads every RPF again.
+    private bool startOver;
     private volatile SearchIndexState state = SearchIndexState.Empty;
 
     private SearchIndex(string root, bool standaloneArchive, GameCrypto? crypto)
@@ -122,6 +124,30 @@ public sealed class SearchIndex
 
     /// <summary>Forgets every shared index; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
+
+    /// <summary>
+    /// Deletes every index on disk. Those in use keep what they hold, and write theirs again on their next refresh;
+    /// the others are read from their game or RPF the next time it's searched. False when a file couldn't go.
+    /// </summary>
+    public static bool DeleteCache() =>
+        CacheFiles.Delete(CacheFolder, "*.index") & CacheFiles.Delete(CacheFolder, "*.tmp");
+
+    /// <summary>
+    /// Deletes every index on disk and reads again, from scratch, each game and RPF searched since the app started.
+    /// Done once they are complete.
+    /// </summary>
+    public static Task RebuildAll()
+    {
+        DeleteCache();
+        return Task.WhenAll(Shared.Values.Select(index => index.StartOver()));
+    }
+
+    private Task StartOver()
+    {
+        lock (gate)
+            startOver = true;
+        return Refresh();
+    }
 
     /// <summary>
     /// Brings the index up to date: starts a refresh, or, while one runs, has it run once more when it ends so
@@ -193,7 +219,18 @@ public sealed class SearchIndex
 
     private void RefreshOnce()
     {
-        Dictionary<string, IndexedGroup> known = state.Groups.ToDictionary(group => group.ArchivePath, StringComparer.OrdinalIgnoreCase);
+        bool fresh;
+        lock (gate)
+        {
+            fresh = startOver;
+            startOver = false;
+        }
+        // Rebuilt, it knows nothing and reads no cache: every RPF is read again.
+        Dictionary<string, IndexedGroup> known = fresh
+            ? new(StringComparer.OrdinalIgnoreCase)
+            : state.Groups.ToDictionary(group => group.ArchivePath, StringComparer.OrdinalIgnoreCase);
+        if (fresh)
+            cacheRead = true;
         if (!cacheRead)
         {
             cacheRead = true;

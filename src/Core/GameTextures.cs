@@ -71,6 +71,34 @@ public sealed class GameTextures
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
+    /// <summary>
+    /// Deletes every game's cached tables and FiveFury's index of their archives. The tables in use stay as they are
+    /// until the app starts again; a game made again then reads all its archives. False when a file couldn't go (in
+    /// use by a build under way, say).
+    /// </summary>
+    public static bool DeleteCache()
+    {
+        bool all = CacheFiles.Delete(CacheFolder, "*.bin") & CacheFiles.Delete(CacheFolder, "*.tmp");
+        return CacheFiles.DeleteFolder(IndexFolder) && all;
+    }
+
+    /// <summary>
+    /// Deletes the cache (see <see cref="DeleteCache"/>) and makes again, from every archive, the tables of each game
+    /// loaded since the app started; models opened from then on use them. Done once they are made.
+    /// </summary>
+    public static Task RebuildCache()
+    {
+        DeleteCache();
+        var loads = new List<Task>();
+        foreach ((string key, GameTextures old) in Shared.ToArray())
+        {
+            var fresh = new GameTextures(old.root, old.target, old.build);
+            Shared[key] = fresh;
+            loads.Add(fresh.Load());
+        }
+        return Task.WhenAll(loads);
+    }
+
     /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
     internal static GameTextures Share(string gameRoot, Func<Tables> make) =>
         Shared[Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot))] = new GameTextures(Path.GetFullPath(gameRoot), GameTarget.Legacy, make);

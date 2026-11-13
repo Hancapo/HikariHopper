@@ -142,7 +142,34 @@ public sealed class SearchIndexTests : ExplorerTestBase
         Assert.Equal(["broken.rpf"], Paths(index, "broken"));
         Assert.Single(Paths(index, "handling"));
     }
+
+    [AvaloniaFact]
+    public async Task RebuildingReadsEveryRpfAgainAndDeletingLeavesNoIndexOnDisk()
+    {
+        Game();
+        SearchIndex index = Index();
+        await index.Refresh();
+        Assert.Equal(2, index.ArchivesRead);
+        // A refresh with nothing changed reads nothing; a rebuild reads every RPF again, and writes its cache anew.
+        await index.Refresh();
+        Assert.Equal(2, index.ArchivesRead);
+        await SearchIndex.RebuildAll();
+        Assert.Equal(4, index.ArchivesRead);
+        Assert.Equal(["x64i.rpf/levels/gta5/readme.txt"], Paths(index, "readme", "x64i.rpf"));
+        Assert.NotEmpty(Directory.EnumerateFiles(cache, "*.index"));
+
+        File.WriteAllText(Path.Combine(cache, "notes.txt"), "kept");
+        Assert.True(SearchIndex.DeleteCache());
+        Assert.Equal(["notes.txt"], Directory.EnumerateFiles(cache).Select(Path.GetFileName));
+        // What it holds stays for now; a new session reads every RPF.
+        Assert.NotEmpty(Paths(index, "readme"));
+        SearchIndex.ForgetAll();
+        SearchIndex again = SearchIndex.ForGame(Work, null);
+        await again.Refresh();
+        Assert.Equal(2, again.ArchivesRead);
+    }
 }
+
 
 /// <summary>Reading a search's text: plain, wildcards (on by themselves with * or ?), or a regular expression.</summary>
 public sealed class SearchPatternTests

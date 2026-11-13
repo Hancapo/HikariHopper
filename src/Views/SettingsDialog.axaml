@@ -28,6 +28,7 @@
         <v:SettingsGroupRow Name="GamesGroup" Label="Games" Icon="box" Selected="True" />
         <v:SettingsGroupRow Name="StartupGroup" Label="Startup" Icon="zap" />
         <v:SettingsGroupRow Name="UpdatesGroup" Label="Updates" Icon="download" />
+        <v:SettingsGroupRow Name="CacheGroup" Label="Cache" Icon="database" />
       </StackPanel>
     </Border>
 
@@ -58,6 +59,29 @@
               <c:OnOffSwitch Name="CheckForUpdates" />
             </v:SettingsRow>
           </v:SettingsCard>
+        </StackPanel>
+
+        <StackPanel Name="CachePage" IsVisible="False">
+          <v:SettingsCard>
+            <v:SettingsRow Title="Texture index">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <c:ChromeToolButton Name="RebuildTextures" Width="96" Height="28" Raised="True" Text="Rebuild" />
+                <c:ChromeToolButton Name="DeleteTextures" Width="96" Height="28" Raised="True" Text="Delete" />
+              </StackPanel>
+            </v:SettingsRow>
+            <v:SettingsRow Title="Search index">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <c:ChromeToolButton Name="RebuildSearch" Width="96" Height="28" Raised="True" Text="Rebuild" />
+                <c:ChromeToolButton Name="DeleteSearch" Width="96" Height="28" Raised="True" Text="Delete" />
+              </StackPanel>
+            </v:SettingsRow>
+          </v:SettingsCard>
+          <DockPanel Margin="2,8,0,0">
+            <c:ChromeToolButton Name="OpenCacheFolder" DockPanel.Dock="Right" Width="96" Height="28" Bordered="False" Text="Open folder" />
+            <TextBlock Name="CacheFolderText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextFaint}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                       TextTrimming="LeadingCharacterEllipsis" />
+          </DockPanel>
         </StackPanel>
       </Panel>
     </ScrollViewer>
