@@ -98,7 +98,7 @@ public partial class SettingsDialog : ModalSheet
             GameRows.Children.Add(new TextBlock
             {
                 Text = game.Title.ToUpperInvariant(),
-                Margin = new Avalonia.Thickness(0, GameRows.Children.Count == 0 ? 2 : 22, 0, 8),
+                Margin = new Avalonia.Thickness(2, GameRows.Children.Count == 0 ? 2 : 22, 0, 10),
                 Classes = { "section" },
             });
             var card = new SettingsCard();
