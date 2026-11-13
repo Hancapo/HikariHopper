@@ -783,8 +783,11 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>Whether a save is being written.</summary>
     internal bool IsSaving => saving;
 
-    /// <summary>Saves the changed shader values as Save in the prompt before closing does; true once they are written.</summary>
-    internal async Task<bool> SaveBeforeClosing() => Save() && await Saving;
+    /// <summary>
+    /// Saves the changed shader values before the app or a tab closes; true once all of them are in the file. A value
+    /// changed while it was written isn't, and stays unsaved: then it is false, and the closing stops.
+    /// </summary>
+    internal async Task<bool> SaveBeforeClosing() => Save() && await Saving && !shaderEdits.Dirty;
 
     /// <summary>Closes the viewer without asking, its changes let go: its tab closes, and was told not to save them.</summary>
     internal void CloseWithoutAsking()
@@ -994,7 +997,7 @@ public partial class ModelViewer : UserControl, IModalContent
         var dialog = new TextureUnsavedChangesDialog { DocumentName = documentName };
         dialog.SaveRequested += async (_, _) =>
         {
-            bool saved = await SaveBeforeClosing();
+            bool saved = Save() && await Saving;
             // Closes as asked, unless a later close or cancel came meanwhile: asking again if a change made while it
             // was written is unsaved.
             if (request != closeRequest)
