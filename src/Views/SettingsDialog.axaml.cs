@@ -100,7 +100,7 @@ public partial class SettingsDialog : ModalSheet
     private void WireCache()
     {
         RebuildTextures.Click += (_, _) => CacheWork = RunCache(RebuildTextures, DeleteTextures, "Rebuilding…",
-            async () => { await GameTextures.RebuildCache(); return true; });
+            GameTextures.RebuildCache);
         DeleteTextures.Click += (_, _) => CacheWork = RunCache(DeleteTextures, RebuildTextures, "Deleting…",
             () => Task.FromResult(GameTextures.DeleteCache()));
         RebuildSearch.Click += (_, _) => CacheWork = RunCache(RebuildSearch, DeleteSearch, "Rebuilding…",
@@ -120,26 +120,37 @@ public partial class SettingsDialog : ModalSheet
 
     /// <summary>
     /// Runs a cache job off the UI thread. Its row's buttons are off meanwhile, the one pressed saying what it does;
-    /// then it says Done, or In use when a file couldn't go, for a moment.
+    /// then it says Done, In use when a file couldn't go, or Failed, for a moment; and its row is back, whatever
+    /// happened.
     /// </summary>
     private async Task RunCache(Controls.ChromeToolButton pressed, Controls.ChromeToolButton other, string doing, Func<Task<bool>> job)
     {
         string label = pressed.Text;
         pressed.IsEnabled = other.IsEnabled = false;
         pressed.Text = doing;
-        bool done;
         try
         {
-            done = await Task.Run(job);
+            string outcome;
+            try
+            {
+                outcome = await Task.Run(job) ? "Done" : "In use";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                outcome = "In use";
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                outcome = "Failed";
+            }
+            pressed.Text = outcome;
+            await Task.Delay(CacheResultShown);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        finally
         {
-            done = false;
+            pressed.Text = label;
+            pressed.IsEnabled = other.IsEnabled = true;
         }
-        pressed.Text = done ? "Done" : "In use";
-        await Task.Delay(CacheResultShown);
-        pressed.Text = label;
-        pressed.IsEnabled = other.IsEnabled = true;
     }
 
     /// <summary>The installation rows, in catalogue order.</summary>

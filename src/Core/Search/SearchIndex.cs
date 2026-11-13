@@ -87,6 +87,8 @@ public sealed class SearchIndex
     private bool cacheRead;
     // Set by a rebuild: the next refresh forgets what it knows and reads every RPF again.
     private bool startOver;
+    // Set once its file on disk is deleted: the next refresh writes it again, changed or not.
+    private volatile bool cacheGone;
     private volatile SearchIndexState state = SearchIndexState.Empty;
 
     private SearchIndex(string root, bool standaloneArchive, GameCrypto? crypto)
@@ -129,8 +131,13 @@ public sealed class SearchIndex
     /// Deletes every index on disk. Those in use keep what they hold, and write theirs again on their next refresh;
     /// the others are read from their game or RPF the next time it's searched. False when a file couldn't go.
     /// </summary>
-    public static bool DeleteCache() =>
-        CacheFiles.Delete(CacheFolder, "*.index") & CacheFiles.Delete(CacheFolder, "*.tmp");
+    public static bool DeleteCache()
+    {
+        bool all = CacheFiles.Delete(CacheFolder, "*.index") & CacheFiles.Delete(CacheFolder, "*.tmp");
+        foreach (SearchIndex index in Shared.Values)
+            index.cacheGone = true;
+        return all;
+    }
 
     /// <summary>
     /// Deletes every index on disk and reads again, from scratch, each game and RPF searched since the app started.
@@ -279,8 +286,9 @@ public sealed class SearchIndex
                 lastPublish = Environment.TickCount64;
             }
         }
-        if (stale.Count > 0 || !state.Complete)
+        if (stale.Count > 0 || !state.Complete || cacheGone)
         {
+            cacheGone = false;
             Publish(new SearchIndexState([.. groups], archives.Count, archives.Count, true));
             WriteCache(groups.Where(group => group.ArchivePath != LooseGroup));
         }

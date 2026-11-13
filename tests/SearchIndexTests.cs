@@ -168,9 +168,21 @@ public sealed class SearchIndexTests : ExplorerTestBase
         await again.Refresh();
         Assert.Equal(2, again.ArchivesRead);
     }
+
+    [AvaloniaFact]
+    public async Task AnIndexDeletedFromDiskIsWrittenAgainByItsNextRefreshEvenWithNothingChanged()
+    {
+        Game();
+        SearchIndex index = Index();
+        await index.Refresh();
+        Assert.NotEmpty(Directory.EnumerateFiles(cache, "*.index"));
+        Assert.True(SearchIndex.DeleteCache());
+        Assert.Empty(Directory.EnumerateFiles(cache, "*.index"));
+        await index.Refresh();
+        Assert.Equal(2, index.ArchivesRead);
+        Assert.NotEmpty(Directory.EnumerateFiles(cache, "*.index"));
+    }
 }
-
-
 /// <summary>Reading a search's text: plain, wildcards (on by themselves with * or ?), or a regular expression.</summary>
 public sealed class SearchPatternTests
 {

@@ -84,19 +84,36 @@ public sealed class GameTextures
 
     /// <summary>
     /// Deletes the cache (see <see cref="DeleteCache"/>) and makes again, from every archive, the tables of each game
-    /// loaded since the app started; models opened from then on use them. Done once they are made.
+    /// loaded since the app started; models opened from then on use them. Done once they are made; false when a file
+    /// of the cache couldn't go, though the tables are made again all the same.
     /// </summary>
-    public static Task RebuildCache()
+    public static async Task<bool> RebuildCache()
     {
-        DeleteCache();
+        // Tables being made now hold their game's archives open, and a write to one waits for them (see
+        // WaitForArchiveReaders): they finish first, so none is replaced while it still reads.
+        KeyValuePair<string, GameTextures>[] games = Shared.ToArray();
+        await Task.WhenAll(games.Select(game => game.Value.Running() is { } running ? Task.WhenAny(running) : Task.CompletedTask));
+        bool deleted = DeleteCache();
         var loads = new List<Task>();
-        foreach ((string key, GameTextures old) in Shared.ToArray())
+        foreach ((string key, GameTextures old) in games)
         {
-            var fresh = new GameTextures(old.root, old.target, old.build);
+            // Made from the archives, even if a cache file stayed.
+            var fresh = new GameTextures(old.root, old.target, old.build) { fromArchives = true };
             Shared[key] = fresh;
             loads.Add(fresh.Load());
         }
-        return Task.WhenAll(loads);
+        await Task.WhenAll(loads);
+        return deleted;
+    }
+
+    // Set on tables rebuilt by hand: they are made from the archives, never read from the cache.
+    private bool fromArchives;
+
+    // The tables being read or made, while they are.
+    private Task? Running()
+    {
+        lock (gate)
+            return loading is { IsCompleted: false } running ? running : null;
     }
 
     /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
@@ -233,7 +250,8 @@ public sealed class GameTextures
         Tables? tables = null;
         try
         {
-            tables = Tables.Read(CachePath, stamp);
+            if (!fromArchives)
+                tables = Tables.Read(CachePath, stamp);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or EndOfStreamException)
         {
