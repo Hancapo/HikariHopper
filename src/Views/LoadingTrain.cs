@@ -107,8 +107,12 @@ public sealed class LoadingTrain : Control
     {
         Width = FrameWidth;
         Height = FrameHeight;
-        ticker = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => InvalidateVisual());
-        watcher = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => WatchMotion());
+        // Made stopped (the constructor that takes a callback starts its timer), and started only while the train is
+        // shown and running: a train never shown asks for nothing, and isn't kept alive by them.
+        ticker = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        ticker.Tick += (_, _) => InvalidateVisual();
+        watcher = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(500) };
+        watcher.Tick += (_, _) => WatchMotion();
     }
 
     /// <summary>Set by tests to draw the train at a moment of their choosing, in seconds.</summary>
