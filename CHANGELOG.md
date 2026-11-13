@@ -13,6 +13,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - The last tab no longer gets cut off as the tabs glide into place after one closes. ([#202](https://github.com/Hancapo/HikariHopper/pull/202))
+
 ### Removed
 
 ## [0.2.0] - 2026-11-12
