@@ -20,6 +20,17 @@ public static class Theme
     // Surfaces, darkest to lightest.
     public static IImmutableSolidColorBrush WindowBg { get; } = Hex("#121322");      // the base the panels float on, a step below them
     public static IImmutableSolidColorBrush RailPatternInk { get; } = Hex("#202235"); // the start page's railway pattern, just above the base
+
+    /// <summary>A soft clearing in the railway pattern, so none of it runs under what stands over it.</summary>
+    public static IImmutableBrush RailPatternClearing { get; } = new RadialGradientBrush
+    {
+        GradientStops =
+        {
+            new GradientStop(Color.Parse("#F2121322"), 0),
+            new GradientStop(Color.Parse("#80121322"), .65),
+            new GradientStop(Color.Parse("#00121322"), 1),
+        },
+    }.ToImmutable();
     public static IImmutableSolidColorBrush WindowChrome { get; } = Hex("#1B1C2C");  // hard seams and sunken wells
     public static IImmutableSolidColorBrush AppBg { get; } = Hex("#1E1F30");         // the list canvas
     public static IImmutableSolidColorBrush PanelBg { get; } = Hex("#1E1F30");
