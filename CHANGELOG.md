@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Reading a model for the 3D viewer is up to 2.7× faster: 2.7× for a vehicle (the Adder), whose scene is built 3.5× faster, 1.8× the first time in a session. ([#216](https://github.com/Hancapo/HikariHopper/pull/216))
+
 ### Fixed
 
 ### Removed
