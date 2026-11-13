@@ -10,7 +10,12 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Shader values are called shader parameters. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+
 ### Fixed
+
+- The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The shader parameters card shows where it belongs, no longer at its last place for a moment. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 
 ### Removed
 
