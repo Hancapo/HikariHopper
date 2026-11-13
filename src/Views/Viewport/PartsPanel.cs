@@ -272,6 +272,9 @@ internal sealed class PartsPanel : UserControl
     /// <summary>The menu's Shader values… was picked.</summary>
     internal event Action? ShaderValuesRequested;
 
+    /// <summary>Closes the shader parameters card if it is open, and says whether it was: Escape closes it first.</summary>
+    internal Func<bool>? CloseShaderValues { get; set; }
+
     // The selection last told, to tell only when it changes.
     private string[] toldSelection = [];
 
@@ -1158,6 +1161,9 @@ internal sealed class PartsPanel : UserControl
                 return true;
             case Avalonia.Input.Key.C when modifiers.HasFlag(KeyModifiers.Control):
                 _ = CopyNames();
+                return true;
+            // Escape closes the shader parameters card first, then lets go of the selection.
+            case Avalonia.Input.Key.Escape when CloseShaderValues?.Invoke() == true:
                 return true;
             case Avalonia.Input.Key.Escape when selected.Count > 0:
                 selected.Clear();

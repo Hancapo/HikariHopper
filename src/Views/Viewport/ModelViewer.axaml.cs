@@ -70,6 +70,13 @@ public partial class ModelViewer : UserControl, IModalContent
         // The parts panel's menu offers the picked geometry's shader values, for a drawable.
         Parts.ShaderValues = () => surfaces is null ? null : PickedMaterial() is not null;
         Parts.ShaderValuesRequested += () => OpenShaderValues();
+        Parts.CloseShaderValues = () =>
+        {
+            if (!cardOpen)
+                return false;
+            CloseShaderValues();
+            return true;
+        };
         shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += (key, shift) => Command(key, shift);
         Viewport.PropertyChanged += (_, e) =>

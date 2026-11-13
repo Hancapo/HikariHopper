@@ -350,6 +350,16 @@ public sealed class ShaderValuesTests
         Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
         Assert.True(viewer.CardOverlay.IsWanted);
 
+        // Escape in the parts panel closes the card, keeping the pick; again, it lets go of the pick.
+        Assert.True(viewer.Parts.HandleKey(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None));
+        Assert.False(viewer.ShaderValuesOpen);
+        Assert.Single(viewer.Parts.Selection);
+        Assert.True(viewer.Parts.HandleKey(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None));
+        Assert.Empty(viewer.Parts.Selection);
+        Assert.True(viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ));
+        Assert.False(viewer.CardOverlay.IsWanted);
+        Assert.True(viewer.OpenShaderValues());
+
         // Closed, it stays closed through any pick until it's asked for again.
         Assert.True(viewer.Shortcut('M'));
         Assert.False(viewer.ShaderValuesOpen);
