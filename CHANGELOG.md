@@ -43,6 +43,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - Changes made in the explorer inside a game's RPF, or a meta or ytyp saved into one, could be missed by the game's texture tables (which dictionaries a model looks in, and vehicle paints) for good once a texture dictionary or model was saved into the same RPF; they are now picked up the next time the game loads. ([#193](https://github.com/Hancapo/HikariHopper/pull/193))
+- Extracting textures whose names differ only in case wrote one file over another while saying all were extracted; it now refuses and writes nothing, as it did before. ([#191](https://github.com/Hancapo/HikariHopper/pull/191))
 - A vehicle opened while the game's texture tables were still being worked out (after the game or the app changed) took several seconds to appear, waiting for its paint; it now appears at once in the game's grey and takes its colours when the tables are ready. ([#184](https://github.com/Hancapo/HikariHopper/pull/184))
 - Buttons that can't be used are clearly faded, such as Back with no history or the 3D viewer's textures button on a model without any. ([#146](https://github.com/Hancapo/HikariHopper/pull/146))
 - Clicking HikariHopper's taskbar button minimizes it, as it does for other apps. ([#143](https://github.com/Hancapo/HikariHopper/pull/143))
