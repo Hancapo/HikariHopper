@@ -49,6 +49,9 @@ public sealed class GraphicsSettingsTests : ExplorerTestBase
         AppSettings.SetInt(GraphicsSettings.AnisotropyKey, 2);
         Assert.Equal(2048, GraphicsSettings.ShadowResolution);
         Assert.Equal(1, GraphicsSettings.Anisotropy);
+        // Even one as far off as a number goes.
+        AppSettings.SetInt(GraphicsSettings.ShadowResolutionKey, int.MinValue + 1024);
+        Assert.Equal(1024, GraphicsSettings.ShadowResolution);
     }
 
     [AvaloniaFact]
@@ -123,6 +126,18 @@ public sealed class GraphicsSettingsTests : ExplorerTestBase
         // From Settings too.
         GraphicsSettings.Shadows = true;
         Assert.True(first.ShadowsButton.Sunken && second.ShadowsButton.Sunken);
+
+        // A viewer read before it is shown, while shadows were turned off, shows them off once it is.
+        var later = new ModelViewer(new ModelFile("c.ydr", ydr));
+        TestWait.Until(() => later.Reading.IsCompleted, "the model to be read");
+        TestWait.Pump(50);
+        Assert.True(later.ShadowsButton.Sunken);
+        GraphicsSettings.Shadows = false;
+        var other = new Window { Width = 400, Height = 300, Content = later };
+        other.Show();
+        TestWait.Pump(50);
+        Assert.False(later.ShadowsButton.Sunken);
+        other.Close();
         window.Close();
     }
 
