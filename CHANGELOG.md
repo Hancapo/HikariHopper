@@ -8,7 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- Rebuild or delete the texture and search indexes from a new Cache page in Settings. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
+- Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
 
 ### Changed
 

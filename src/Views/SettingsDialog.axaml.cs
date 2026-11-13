@@ -115,6 +115,15 @@ public partial class SettingsDialog : ModalSheet
         };
     }
 
+    /// <summary>Each cache's size on disk, under its name: what its Delete would free.</summary>
+    internal void RefreshCacheSizes()
+    {
+        TexturesRow.Detail = SizeText(GameTextures.CacheSize);
+        SearchRow.Detail = SizeText(Core.Search.SearchIndex.CacheSize);
+
+        static string SizeText(long bytes) => bytes == 0 ? "Empty" : Formatting.FormatSize(bytes);
+    }
+
     /// <summary>How long a cache button says how it went before it's back.</summary>
     internal static TimeSpan CacheResultShown { get; set; } = TimeSpan.FromSeconds(1.5);
 
@@ -144,6 +153,7 @@ public partial class SettingsDialog : ModalSheet
                 outcome = "Failed";
             }
             pressed.Text = outcome;
+            RefreshCacheSizes();
             await Task.Delay(CacheResultShown);
         }
         finally
@@ -202,6 +212,7 @@ public partial class SettingsDialog : ModalSheet
         OpenLastGame.IsOn = GameSettings.OpenLastGameOnStartup;
         RefreshRecents();
         RefreshUpdates();
+        RefreshCacheSizes();
     }
 
     private void RefreshUpdates()

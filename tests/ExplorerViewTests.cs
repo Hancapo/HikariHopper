@@ -1429,11 +1429,16 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             Directory.CreateDirectory(HikariHopper.Core.GameTextures.CacheFolder);
             string tables = Path.Combine(HikariHopper.Core.GameTextures.CacheFolder, "0123456789ABCDEF.bin");
             File.WriteAllText(tables, "t");
+            // Under each cache's name, its size: what its Delete frees.
+            settings.RefreshCacheSizes();
+            Assert.True(HikariHopper.Core.GameTextures.CacheSize >= 1);
+            Assert.Equal(Core.Formatting.FormatSize(HikariHopper.Core.GameTextures.CacheSize), settings.TexturesRow.Detail);
             settings.DeleteTextures.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Assert.False(settings.DeleteTextures.IsEnabled);
             Assert.False(settings.RebuildTextures.IsEnabled);
             TestWait.Until(() => settings.DeleteTextures.Text == "Done", "the delete to be done");
             Assert.False(File.Exists(tables));
+            Assert.Equal("Empty", settings.TexturesRow.Detail);
             TestWait.Until(() => settings.CacheWork.IsCompleted, "the button to come back");
             Assert.Equal("Delete", settings.DeleteTextures.Text);
             Assert.True(settings.DeleteTextures.IsEnabled && settings.RebuildTextures.IsEnabled);
@@ -1449,6 +1454,8 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             TestWait.Until(() => settings.CacheWork.IsCompleted, "the rebuild to be done");
             Assert.True(index.ArchivesRead >= read);
             Assert.Equal("Rebuild", settings.RebuildSearch.Text);
+            long searchBytes = Core.Search.SearchIndex.CacheSize;
+            Assert.Equal(searchBytes == 0 ? "Empty" : Core.Formatting.FormatSize(searchBytes), settings.SearchRow.Detail);
 
             // Open folder shows the folder both caches live in.
             settings.OpenCacheFolder.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));

@@ -63,13 +63,13 @@
 
         <StackPanel Name="CachePage" IsVisible="False">
           <v:SettingsCard>
-            <v:SettingsRow Title="Texture index">
+            <v:SettingsRow Name="TexturesRow" Title="Texture index">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <c:ChromeToolButton Name="RebuildTextures" Width="96" Height="28" Raised="True" Text="Rebuild" />
                 <c:ChromeToolButton Name="DeleteTextures" Width="96" Height="28" Raised="True" Text="Delete" />
               </StackPanel>
             </v:SettingsRow>
-            <v:SettingsRow Title="Search index">
+            <v:SettingsRow Name="SearchRow" Title="Search index">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <c:ChromeToolButton Name="RebuildSearch" Width="96" Height="28" Raised="True" Text="Rebuild" />
                 <c:ChromeToolButton Name="DeleteSearch" Width="96" Height="28" Raised="True" Text="Delete" />

@@ -127,6 +127,9 @@ public sealed class SearchIndex
     /// <summary>Forgets every shared index; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
+    /// <summary>The bytes of every index on disk, what <see cref="DeleteCache"/> deletes.</summary>
+    public static long CacheSize => CacheFiles.Size(CacheFolder, "*.index");
+
     /// <summary>
     /// Deletes every index on disk. Those in use keep what they hold, and write theirs again on their next refresh;
     /// the others are read from their game or RPF the next time it's searched. False when a file couldn't go.
