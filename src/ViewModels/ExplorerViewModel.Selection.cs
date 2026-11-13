@@ -383,10 +383,13 @@ public sealed partial class ExplorerViewModel
         SetStatus($"Opened {entry.Name}");
     }
 
+    /// <summary>The largest 3D file the explorer opens, and its embedded textures read again; lowered by tests.</summary>
+    internal long ModelSizeLimit { get; set; } = ModelFile.MaxSize;
+
     /// <summary>Reads a collision, navmesh or drawable file and hands it to the 3D viewer; unless it is too big.</summary>
     private void OpenModelFile(EntryRecord entry)
     {
-        if (entry.Size > ModelFile.MaxSize)
+        if (entry.Size > ModelSizeLimit)
         {
             SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(entry.Size)})");
             return;
@@ -518,7 +521,14 @@ public sealed partial class ExplorerViewModel
         {
             try
             {
-                OpenHitDictionary(entry.Name, ReadArchived(where, source), saved);
+                // Replaced since by a bigger file, it is held to the limit it was opened under.
+                (byte[]? read, long size) = ReadArchived(where, ModelSizeLimit);
+                if (read is null)
+                {
+                    SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(size)})");
+                    return;
+                }
+                OpenHitDictionary(entry.Name, (read, source, where), saved);
             }
             catch (Exception error) when (OperationErrors.IsExpected(error))
             {
@@ -527,15 +537,20 @@ public sealed partial class ExplorerViewModel
         };
     }
 
-    /// <summary>An archived file read where it lives, with an archive of its own that is closed after, and its save target.</summary>
-    private static (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadArchived(ArchiveEntryTarget where, string source)
+    /// <summary>
+    /// An archived file read where it lives, with an archive of its own that is closed after, and its size; not read
+    /// (null) when it is bigger than <paramref name="limit"/>.
+    /// </summary>
+    private static (byte[]? Data, long Size) ReadArchived(ArchiveEntryTarget where, long limit)
     {
         ArchiveNode root = ArchiveNode.OpenRoot(where.RootPath, where.Crypto);
         try
         {
             if (root.FindEntry(where.EntryPath) is not { Entry: FiveFury.Rpf.RpfFileEntry file })
                 throw new FileNotFoundException($"{Path.GetFileName(where.EntryPath)} is no longer in {Path.GetFileName(where.RootPath)}");
-            return (file.ReadStandalone(), source, where);
+            // Its size as the explorer lists it.
+            long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
+            return (size > limit ? null : file.ReadStandalone(), size);
         }
         finally
         {
