@@ -301,4 +301,75 @@ public sealed class SaveTargetTests : ExplorerTestBase
         Assert.Equal([(byte)1, 2, 3, 4], File.ReadAllBytes(path));
         Assert.Equal("Saved tri.ydr", bridge.Status);
     }
+
+    [AvaloniaFact]
+    public void A_drawables_embedded_textures_still_open_after_it_is_saved_into_its_rpf()
+    {
+        static byte[] Textured(int size) => TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", size, size,
+            CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+        MakeGame();
+        string archivePath = Path.Combine(Work, "props.rpf");
+        var archive = new RpfArchive("props.rpf");
+        ArchiveWriter.AddStandalone(archive, "tri.ydr", Textured(4));
+        archive.Save(archivePath);
+        var bridge = new ExplorerViewModel();
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.ActivateEntry(RowFor(bridge, "props.rpf"));
+        Settle(bridge);
+        Assert.True(bridge.InArchive);
+        ModelFile? opened = null;
+        bridge.ModelFileOpened += (_, file) => opened = file;
+        bridge.ActivateEntry(RowFor(bridge, "tri.ydr"));
+
+        // Saved into the RPF from the viewer, which closes the archive the explorer read it from and opens it again.
+        SaveTarget target = opened!.SaveTarget!;
+        target.Prepare?.Invoke();
+        target.Write(Textured(8));
+        target.Finished?.Invoke(true);
+        Settle(bridge);
+
+        // T opens the textures as saved.
+        opened.OpenTextures!(_ => { });
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while ((bridge.TextureViewer.Loading || bridge.TextureViewer.TextureCount == 0) && clock.ElapsedMilliseconds < 10_000)
+            TestWait.Pump(10);
+        Assert.DoesNotContain("Could not open", bridge.Status);
+        Assert.Equal("tri.ydr", bridge.TextureViewer.SourceName);
+        Assert.Equal("8 × 8", Assert.Single(bridge.TextureViewer.TexturesModel).Dimensions);
+    }
+
+    [AvaloniaFact]
+    public void A_drawable_replaced_in_its_rpf_by_one_too_large_to_view_doesnt_open_its_textures()
+    {
+        static byte[] Textured(int size) => TestDrawables.Triangle(diffuse: new FiveFury.Textures.Texture("tri_d", size, size,
+            CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[size * size / 2]));
+        MakeGame();
+        string archivePath = Path.Combine(Work, "props.rpf");
+        var archive = new RpfArchive("props.rpf");
+        ArchiveWriter.AddStandalone(archive, "tri.ydr", Textured(4));
+        archive.Save(archivePath);
+        // The limit sits between the drawable as opened and the one it is replaced by.
+        var bridge = new ExplorerViewModel { ModelSizeLimit = 64 * 1024 };
+        bridge.OpenGame(Work);
+        Settle(bridge);
+        bridge.ActivateEntry(RowFor(bridge, "props.rpf"));
+        Settle(bridge);
+        ModelFile? opened = null;
+        bridge.ModelFileOpened += (_, file) => opened = file;
+        bridge.ActivateEntry(RowFor(bridge, "tri.ydr"));
+        Assert.NotNull(opened);
+
+        SaveTarget target = opened.SaveTarget!;
+        target.Prepare?.Invoke();
+        target.Write(Textured(512));
+        target.Finished?.Invoke(true);
+        Settle(bridge);
+
+        // T says so, as opening it would, and reads nothing into the texture editor.
+        opened.OpenTextures!(_ => { });
+        TestWait.Pump(50);
+        Assert.StartsWith("tri.ydr is too large to view", bridge.Status);
+        Assert.Equal("", bridge.TextureViewer.SourceName);
+    }
 }

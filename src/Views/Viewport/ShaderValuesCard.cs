@@ -25,6 +25,9 @@ internal sealed class ScrubField : Border
     private readonly Grid body;
     private readonly Border fill;
     private TextBox? editor;
+    // What the field opened with for typing, and whether anything was typed in it since.
+    private string shownText = "";
+    private bool retyped;
     private Point? pressedAt;
     private float pressedValue;
     private bool dragging;
@@ -198,9 +201,10 @@ internal sealed class ScrubField : Border
     {
         if (editor is not null)
             return;
+        shownText = Format(value);
         editor = new TextBox
         {
-            Text = Format(value),
+            Text = shownText,
             FontFamily = Ui.Theme.MonoFont,
             FontSize = Ui.Theme.SmallFontSize,
             Foreground = Ui.Theme.Text,
@@ -221,6 +225,12 @@ internal sealed class ScrubField : Border
             }
         };
         editor.LostFocus += (_, _) => FinishTyping(true);
+        // Typed over, even with the same text, it is what was asked for: a number shown as 0 typed as 0 is 0.
+        retyped = false;
+        editor.AddHandler(TextInputEvent, (_, _) => retyped = true, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        editor.AddHandler(KeyDownEvent, (_, e) => retyped |= e.Key is Key.Back or Key.Delete
+            || e.Key is Key.V or Key.X && (e.KeyModifiers & KeyModifiers.Control) != 0, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        editor.PropertyChanged += (_, e) => retyped |= e.Property == TextBox.TextProperty;
         Child = editor;
         Cursor = null;
         Paint();
@@ -239,7 +249,9 @@ internal sealed class ScrubField : Border
         Child = body;
         Cursor = new Cursor(StandardCursorType.SizeWestEast);
         Paint();
-        if (keep && float.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) && float.IsFinite(parsed)
+        // Left as it opened, it isn't typed: the number shown is rounded, and kept it would change the value.
+        if (keep && (retyped || typed != shownText)
+            && float.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) && float.IsFinite(parsed)
             && parsed != value)
         {
             Value = parsed;

@@ -383,10 +383,13 @@ public sealed partial class ExplorerViewModel
         SetStatus($"Opened {entry.Name}");
     }
 
+    /// <summary>The largest 3D file the explorer opens, and its embedded textures read again; lowered by tests.</summary>
+    internal long ModelSizeLimit { get; set; } = ModelFile.MaxSize;
+
     /// <summary>Reads a collision, navmesh or drawable file and hands it to the 3D viewer; unless it is too big.</summary>
     private void OpenModelFile(EntryRecord entry)
     {
-        if (entry.Size > ModelFile.MaxSize)
+        if (entry.Size > ModelSizeLimit)
         {
             SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(entry.Size)})");
             return;
@@ -407,7 +410,7 @@ public sealed partial class ExplorerViewModel
             GameDictionaries = GameDictionaries(entry.Name),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
-            OpenTextures = saved => OpenEmbeddedTextures(entry, data, saved),
+            OpenTextures = OpensTexturesOf(entry, data),
             Nearby = NearbyDictionaries(entry),
             SaveTarget = SaveTargetOf(entry),
         });
@@ -489,6 +492,70 @@ public sealed partial class ExplorerViewModel
             return;
         }
         OpenEmbeddedDictionary(entry.Name, data, closedAfterSave);
+    }
+
+    /// <summary>
+    /// What opens a drawable's embedded textures from the 3D viewer. A .ydr in an RPF is read again where it lives each
+    /// time, with a reader of its own, as a search result is: a save into the RPF, from the texture editor or the
+    /// viewer, closes the archive the explorer read it from.
+    /// </summary>
+    private Action<Action<SavedDocument>> OpensTexturesOf(EntryRecord entry, byte[] data)
+    {
+        ArchiveEntryTarget? where = null;
+        string source = "";
+        if (Provider.InArchive && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                where = Provider.GetArchiveEntryTarget(entry);
+                source = Provider.EntrySourcePath(entry);
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                where = null;
+            }
+        }
+        if (where is null)
+            return saved => OpenEmbeddedTextures(entry, data, saved);
+        return saved =>
+        {
+            try
+            {
+                // Replaced since by a bigger file, it is held to the limit it was opened under.
+                (byte[]? read, long size) = ReadArchived(where, ModelSizeLimit);
+                if (read is null)
+                {
+                    SetStatus($"{entry.Name} is too large to view ({Formatting.FormatSize(size)})");
+                    return;
+                }
+                OpenHitDictionary(entry.Name, (read, source, where), saved);
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                SetStatus($"Could not open texture dictionary: {error.Message}");
+            }
+        };
+    }
+
+    /// <summary>
+    /// An archived file read where it lives, with an archive of its own that is closed after, and its size; not read
+    /// (null) when it is bigger than <paramref name="limit"/>.
+    /// </summary>
+    private static (byte[]? Data, long Size) ReadArchived(ArchiveEntryTarget where, long limit)
+    {
+        ArchiveNode root = ArchiveNode.OpenRoot(where.RootPath, where.Crypto);
+        try
+        {
+            if (root.FindEntry(where.EntryPath) is not { Entry: FiveFury.Rpf.RpfFileEntry file })
+                throw new FileNotFoundException($"{Path.GetFileName(where.EntryPath)} is no longer in {Path.GetFileName(where.RootPath)}");
+            // Its size as the explorer lists it.
+            long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
+            return (size > limit ? null : file.ReadStandalone(), size);
+        }
+        finally
+        {
+            root.Close();
+        }
     }
 
     /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>

@@ -339,18 +339,24 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal bool OpenTextures()
     {
-        if (!texturesAvailable || file.OpenTextures is not { } open)
+        // Nor while a save is being written, which the editor's would race.
+        if (!TexturesOpenable || saving || file.OpenTextures is not { } open)
             return false;
         open(saved => TexturesSaved = ShowSaved(saved));
         return true;
     }
 
+    // Saved as another file, the texture editor would still open the original's textures, so they can't be opened.
+    private bool TexturesOpenable => texturesAvailable && !savedElsewhere;
+
     /// <summary>Done once the drawable is shown with the textures last saved in the texture viewer.</summary>
     internal Task TexturesSaved { get; private set; } = Task.CompletedTask;
 
-    // The textures were saved after the drawable shown was read, and it couldn't be read again with them: written, it
-    // would put the old ones back, so it isn't saved until it is read again.
-    private bool texturesStale;
+    // Counts the changes to what the drawable is read from (textures saved in the texture editor, the file saved here),
+    // and which of them the drawable shown has. Behind, the drawable shown is older than what is saved, and written it
+    // would put the old textures back, so it isn't saved until it is read again; a read begun before a change isn't
+    // shown after it.
+    private int generation, shownGeneration;
 
     /// <summary>
     /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
@@ -364,22 +370,26 @@ public partial class ModelViewer : UserControl, IModalContent
             data = saved.Data;
         else
             savedTextures = saved.Textures;
+        int read = ++generation;
         // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then;
         // the drawable shown has the textures as they were, and isn't saved over them.
         if (shaderEdits.HasUnsavedSplits)
+            return;
+        ModelContent? again;
+        string? failure;
+        IReadOnlyList<NearbyDictionary> game;
+        do
         {
-            texturesStale = true;
-            return;
+            byte[] current = data;
+            IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
+            game = gameDictionaries;
+            (again, failure) = await Task.Run(() => Read(file, current, game, edited));
+            // Nor when one was given while it was read, or the textures were saved again meanwhile: that read shows them.
+            if (closed || shaderEdits.HasUnsavedSplits || read != generation)
+                return;
         }
-        (ModelContent? again, string? failure) = await Task.Run(() => Read(file, data, gameDictionaries, savedTextures));
-        if (closed)
-            return;
-        // Nor when one was given while it was read.
-        if (shaderEdits.HasUnsavedSplits)
-        {
-            texturesStale = true;
-            return;
-        }
+        // The game's dictionaries came meanwhile, and may be shown already: it is read again with them.
+        while (!ReferenceEquals(game, gameDictionaries));
         if (again?.Surfaces is { } after)
         {
             ShowAgain(after);
@@ -413,7 +423,7 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         int count = scene.EmbeddedTextureCount;
         texturesAvailable = count > 0 && file.OpenTextures is not null;
-        Parts.ShowTextures(texturesAvailable ? count : 0);
+        Parts.ShowTextures(TexturesOpenable ? count : 0);
     }
 
     /// <summary>The drawable's parts and what of them is shown, once read.</summary>
@@ -829,15 +839,23 @@ public partial class ModelViewer : UserControl, IModalContent
             [new FileFilter(kind, [$"*{extension}"])]);
         if (string.IsNullOrEmpty(path) || closed)
             return false;
-        string destination = string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase) ? path : Path.ChangeExtension(path, extension);
-        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
+        // Another extension is kept, with the file's added after it.
+        string destination = SaveNames.WithExtension(path, extension);
         string name = Path.GetFileName(destination);
+        if (SaveNames.ReplacesUnpicked(path, destination))
+        {
+            ShowSaveFailure(name, "a file of that name is already there. Pick it in Save as to replace it");
+            return false;
+        }
+        var target = new SaveTarget(bytes => CommonFury.IO.AtomicFile.Write(destination, bytes));
         if (!SaveTo(target, name, () =>
             {
                 // From now on it is that file: Save saves there, and the title says so.
                 saveTarget = target;
                 documentName = name;
                 savedElsewhere = true;
+                if (surfaces is not null)
+                    ShowTextures(surfaces);
                 RefreshTitle();
             }))
             return false;
@@ -849,9 +867,11 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         if (surfaces?.Writer is not { } write)
             return false;
-        if (texturesStale)
+        if (shownGeneration != generation)
         {
-            ShowSaveFailure(name, "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values");
+            ShowSaveFailure(name, TexturesSaved.IsCompleted
+                ? "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values"
+                : "it is still being read again with the textures just saved. Save it once they show");
             return false;
         }
         // What is written is what the values are now; a change made while it is put in place stays a change.
@@ -887,8 +907,13 @@ public partial class ModelViewer : UserControl, IModalContent
             saving = false;
             if (failure is null)
             {
-                // Read again from what was saved, from now on.
+                // Read again from what was saved, from now on: the drawable shown is what was written, and a read begun
+                // before it was isn't shown.
                 data = bytes;
+                bool current = shownGeneration == generation;
+                generation++;
+                if (current)
+                    shownGeneration = generation;
                 afterwards?.Invoke();
                 shaderEdits.MarkSaved(saved);
                 if (gameTexturesWaiting && !closed && !shaderEdits.HasUnsavedSplits)
@@ -959,7 +984,7 @@ public partial class ModelViewer : UserControl, IModalContent
             new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
             new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => surfaces?.Writer is not null && !saving),
             null,
-            new("Embedded textures…", "T", () => OpenTextures(), () => texturesAvailable && !savedElsewhere),
+            new("Embedded textures…", "T", () => OpenTextures(), () => TexturesOpenable && !saving),
             new("Extract embedded textures…", "", () => _ = ExtractTextures(), () => HasEmbeddedTextures),
             null,
             new("Close", "Ctrl+W", Close),
@@ -1485,11 +1510,16 @@ public partial class ModelViewer : UserControl, IModalContent
         // frame on when the game's texture tables are ready, otherwise once they are. It doesn't wait for them, which
         // can take seconds while they are worked out afresh.
         Task<CarPaints?>? asked = content?.Surfaces is { Paintable: true } ? file.GamePaints : null;
+        // Decided once: the tables can be done while it is shown, and then it is painted as if they had come later.
+        bool paintedNow = false;
         if (asked is { IsCompletedSuccessfully: true, Result: { } paints } && content?.Surfaces is { } painted)
+        {
             ChoosePaint(paints, painted);
+            paintedNow = true;
+        }
         Location = content is not null ? Locate(content) : failure!;
         ShowPaint();
-        if (asked is { IsCompleted: false })
+        if (asked is not null && !paintedNow)
             PaintsAdded = PaintWhenReady(asked);
         if (started)
             StatusText.Text = Location;
@@ -1564,20 +1594,29 @@ public partial class ModelViewer : UserControl, IModalContent
         }
         // A geometry given an entry of its own isn't in the file until it's saved, so it isn't read again until then
         // (nor when one was given while it was read): the game's textures are added once it is saved.
-        if (game.Count > 0 && !closed && surfaces is { } before)
+        if (game.Count > 0 && !closed && surfaces is not null)
         {
             gameDictionaries = game;
-            if (shaderEdits.HasUnsavedSplits)
-                gameTexturesWaiting = true;
-            else
+            while (!closed)
             {
+                if (shaderEdits.HasUnsavedSplits)
+                {
+                    gameTexturesWaiting = true;
+                    break;
+                }
+                int read = generation;
                 byte[] current = data;
                 IReadOnlyList<FiveFury.Textures.Texture>? edited = savedTextures;
                 (ModelContent? again, _) = await Task.Run(() => Read(file, current, game, edited));
-                if (!closed && shaderEdits.HasUnsavedSplits)
+                // Saved meanwhile, here or in the texture editor: what was read is older than the file now, so it is
+                // read again from what was saved.
+                if (read != generation)
+                    continue;
+                if (shaderEdits.HasUnsavedSplits)
                     gameTexturesWaiting = true;
-                else if (!closed && again?.Surfaces is { } after && Missing(after) < Missing(before))
+                else if (!closed && again?.Surfaces is { } after && surfaces is { } before && Missing(after) < Missing(before))
                     ShowAgain(after);
+                break;
             }
         }
         if (!closed && started)
@@ -1592,9 +1631,9 @@ public partial class ModelViewer : UserControl, IModalContent
     private void ShowAgain(DrawableScene after, bool carry = true)
     {
         PartVisibility? before = visibility;
-        // Read again, it has the textures as saved.
+        // Read again, it has what is saved: those that read it again show it only when nothing was saved since.
         if (carry)
-            texturesStale = false;
+            shownGeneration = generation;
         // The shader values changed so far go into the drawables read again, which are drawn with them.
         if (carry && surfaces is { } shown)
             foreach (int index in shaderEdits.Carry(shown.Sources, after.Sources))

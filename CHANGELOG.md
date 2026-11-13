@@ -42,6 +42,11 @@ All notable changes to HikariHopper are documented here. The format follows
 - The Type column shows only what a file is, without "(Compressed)" after the files an RPF keeps compressed. ([#183](https://github.com/Hancapo/HikariHopper/pull/183))
 ### Fixed
 
+- Saving a 3D model's shader values right after saving its embedded textures no longer puts the old textures back, and a save no longer loses a geometry's own shader entry when the game's textures arrive at the same time; once a model is saved as another file, T and the parts panel no longer open the original's textures. ([#192](https://github.com/Hancapo/HikariHopper/pull/192))
+- A 3D model's embedded textures open again with T after a save into its RPF, where they failed with "Cannot access a disposed object". ([#194](https://github.com/Hancapo/HikariHopper/pull/194))
+- A vehicle whose game tables finished just as it appeared in the 3D viewer is painted and has its paint well, where it stayed grey. ([#197](https://github.com/Hancapo/HikariHopper/pull/197))
+- Clicking a number on the shader values card and leaving it without typing no longer rounds it to the four decimals shown. ([#198](https://github.com/Hancapo/HikariHopper/pull/198))
+- Save as in the 3D viewer and the texture editor keeps a name typed with another extension, adding the file's after it, and never replaces a file that wasn't picked. ([#199](https://github.com/Hancapo/HikariHopper/pull/199))
 - Closing HikariHopper, or a tab, with files unsaved in the text editor, the 3D viewer or a texture editor asks first, listing them all: Save all saves them where their editors would and then closes, Don't save closes, Cancel keeps everything open; before, the changes were lost without a word. ([#195](https://github.com/Hancapo/HikariHopper/pull/195))
 - With animations turned off in Windows, each open tab kept the CPU waking 60 times a second for a loading train it never showed. ([#196](https://github.com/Hancapo/HikariHopper/pull/196))
 - Changes made in the explorer inside a game's RPF, or a meta or ytyp saved into one, could be missed by the game's texture tables (which dictionaries a model looks in, and vehicle paints) for good once a texture dictionary or model was saved into the same RPF; they are now picked up the next time the game loads. ([#193](https://github.com/Hancapo/HikariHopper/pull/193))

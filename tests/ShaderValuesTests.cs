@@ -236,6 +236,53 @@ public sealed class ShaderValuesTests
         Assert.False(field.Typing);
     }
 
+    [AvaloniaFact]
+    public void A_field_opened_and_left_as_shown_keeps_its_value_exactly()
+    {
+        // Shown to four decimals, these would change from a click.
+        foreach (float exact in new[] { 1 / 3f, .03125f, .00001f })
+        {
+            var field = new Views.ScrubField { Value = exact };
+            var told = new List<float>();
+            field.Edited += (value, _) => told.Add(value);
+            field.StartTyping();
+            field.FinishTyping(keep: true);
+            Assert.Empty(told);
+            Assert.Equal(exact, field.Value);
+        }
+
+        // Typed over with the text it shows, it takes what was typed: 0.00001, shown as 0, typed as 0.
+        var typed = new Views.ScrubField { Value = .00001f };
+        var window = new Avalonia.Controls.Window { Width = 200, Height = 60, Content = typed };
+        window.Show();
+        var kept = new List<float>();
+        typed.Edited += (value, _) => kept.Add(value);
+        typed.StartTyping();
+        TestWait.Pump(20);
+        Assert.Equal("0", typed.Editor!.Text);
+        Avalonia.Headless.HeadlessWindowExtensions.KeyTextInput(window, "0");
+        Assert.Equal("0", typed.Editor!.Text);
+        typed.FinishTyping(keep: true);
+        Assert.Equal([0f], kept);
+        window.Close();
+
+        // On the card: a value saved with more decimals than it shows isn't changed by a click on it.
+        Views.ModelViewer viewer = Open(Triangle());
+        viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
+        Assert.True(viewer.OpenShaderValues());
+        Views.ScrubField bump = viewer.Card.Field("bumpiness")!;
+        bump.StartTyping();
+        bump.Editor!.Text = "0.33333334";
+        bump.FinishTyping(keep: true);
+        viewer.ShaderEdits.MarkSaved();
+        bump.StartTyping();
+        Assert.Equal("0.3333", bump.Editor!.Text);
+        bump.FinishTyping(keep: true);
+        Assert.False(viewer.ShaderEdits.Dirty);
+        Assert.Equal(1 / 3f, ShaderEdits.Current(viewer.Card.Material!, "bumpiness")[0]);
+        viewer.Close();
+    }
+
     private static Views.ModelViewer Open(byte[] ydr)
     {
         var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr));
