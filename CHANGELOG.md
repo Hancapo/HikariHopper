@@ -8,6 +8,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- A faint railway pattern drifts slowly behind the start page. ([#203](https://github.com/Hancapo/HikariHopper/pull/203))
+
 ### Changed
 
 ### Fixed
