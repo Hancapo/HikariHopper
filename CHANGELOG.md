@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- GTA V Legacy's V mark is sand instead of grey, so it no longer looks disabled next to Enhanced's green. ([#209](https://github.com/Hancapo/HikariHopper/pull/209))
+
 ### Fixed
 
 ### Removed

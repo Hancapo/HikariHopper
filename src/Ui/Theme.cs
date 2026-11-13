@@ -60,6 +60,9 @@ public static class Theme
     public static IImmutableSolidColorBrush Selection { get; } = Hex("#D1F0AA");
     public static IImmutableSolidColorBrush SelectionText { get; } = Hex("#1B1C2C");
     public static IImmutableSolidColorBrush SelectionInk { get; } = Rgba(0.106, 0.110, 0.173, 0.74);
+
+    // Sand: GTA V Legacy's mark, as light as Enhanced's green, so neither reads as off; paler than the warning amber.
+    public static IImmutableSolidColorBrush LegacyMark { get; } = Hex("#E3CC9F");
     public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.66);
     public static IImmutableSolidColorBrush SelectionWash { get; } = Rgba(0.819, 0.941, 0.667, 0.13);  // unfocused pane
     public static IImmutableSolidColorBrush SelectionRing { get; } = Rgba(0.819, 0.941, 0.667, 0.55);

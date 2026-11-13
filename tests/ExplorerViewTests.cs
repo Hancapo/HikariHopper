@@ -199,7 +199,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         // With every game set up, Settings is the button.
         Assert.True(start.SettingsButton.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
-        Assert.Equal(HikariHopper.Ui.Theme.TextDim, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
+        Assert.Equal(HikariHopper.Ui.Theme.LegacyMark, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
         Assert.Equal(enhanced, rows[0].Detail.Text);
 
         // Clicking a row opens it, and the explorer and its tab strip come back.
@@ -1557,10 +1557,10 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.Equal(3, tabs.Length);
 
-        // A grey V for Legacy, a green one for Enhanced, in place of the folder glyph.
+        // A sand V for Legacy, a green one for Enhanced, in place of the folder glyph.
         Assert.True(tabs[0].EditionMark.IsVisible);
         Assert.False(tabs[0].Glyph.IsVisible);
-        Assert.Equal(HikariHopper.Ui.Theme.TextDim, tabs[0].EditionMark.Fill);
+        Assert.Equal(HikariHopper.Ui.Theme.LegacyMark, tabs[0].EditionMark.Fill);
         Assert.True(tabs[1].EditionMark.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, tabs[1].EditionMark.Fill);
         // The tooltip is just the path.
