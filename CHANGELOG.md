@@ -8,7 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- Show an item, or the folder you're in, in Windows Explorer, from the explorer's right-click menu or with Ctrl+Shift+E. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
+- Show an item, or the folder you're in, in Windows Explorer. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
 
 ### Changed
 
