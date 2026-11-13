@@ -151,6 +151,7 @@ public sealed class RailPattern : Control
         {
             // From where it stopped, so starting again doesn't jump.
             clock.Restart();
+            motionCheckedAt = 0;
             startedAt = offset;
             ticker.Start();
         }
@@ -164,8 +165,21 @@ public sealed class RailPattern : Control
 
     private double startedAt;
 
+    private long motionCheckedAt;
+
     private void Drift()
     {
+        // Animations turned off in Windows while it drifts: it stops where it is, and waits for them to come back. Looked
+        // at twice a second, as the watcher does, not every frame.
+        if (clock.ElapsedMilliseconds - motionCheckedAt >= 500)
+        {
+            motionCheckedAt = clock.ElapsedMilliseconds;
+            if (Motion.Reduced)
+            {
+                Restart();
+                return;
+            }
+        }
         offset = (startedAt + clock.Elapsed.TotalSeconds * Speed) % Repeat;
         Place();
     }

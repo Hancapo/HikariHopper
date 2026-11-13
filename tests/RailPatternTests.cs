@@ -80,12 +80,13 @@ public sealed class RailPatternTests
             TestWait.Pump(100);
             Assert.True(pattern.Offset > stopped && pattern.Offset < stopped + RailPattern.Speed);
 
-            // With motion reduced it stands still, and waits for it to come back on.
+            // Animations turned off while it drifts: within half a second it stands still where it is, and waits for them.
             Ui.Motion.ReducedOverride = true;
-            pattern.IsRunning = false;
-            pattern.IsRunning = true;
-            Assert.False(pattern.Animating);
+            TestWait.Until(() => !pattern.Animating, "the drift to stop with motion reduced", 2000);
             Assert.True(pattern.Watching);
+            double still = pattern.Offset;
+            TestWait.Pump(200);
+            Assert.Equal(still, pattern.Offset);
             Ui.Motion.ReducedOverride = false;
             pattern.WatchMotion();
             Assert.True(pattern.Animating);
