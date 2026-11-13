@@ -109,6 +109,8 @@ public partial class ModelViewer : UserControl, IModalContent
         TimeButton.Click += (_, _) => ToggleTime();
         ThemedToolTip.Set(TimeButton, "Time of day");
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
+        // Shadows are a graphics setting: turned in Settings, or in another viewer, this one's button follows.
+        Viewport.GraphicsChanged += RefreshToggles;
         PartsArrow.Click += (_, _) => SetPartsShown(!PartsShown);
         PartsHandle.PointerPressed += OnHandlePressed;
         PartsHandle.PointerMoved += OnHandleMoved;
@@ -199,7 +201,7 @@ public partial class ModelViewer : UserControl, IModalContent
             Viewport.Sky = sky;
     }
 
-    /// <summary>Whether the sun casts shadows on the model and the ground.</summary>
+    /// <summary>Whether the sun casts shadows on the model and the ground, in every viewer: the graphics setting.</summary>
     internal void SetShadows(bool on)
     {
         Viewport.Shadows = on;

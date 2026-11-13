@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -47,7 +48,6 @@ internal sealed partial class ViewportHost : NativeControlHost
     private DrawableScene? surfaces;
     private float hours = DayCycle.DefaultHours;
     private SkyPath sky = SkyPath.Game;
-    private bool shadows = true;
     private bool[]? partsShown;
     private ViewportSegment[] overlays = [];
     private ViewportVertex[] solid = [];
@@ -64,16 +64,45 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer?.Frame(box);
     }
 
-    /// <summary>Whether the sun casts shadows.</summary>
+    /// <summary>Whether the sun casts shadows: the graphics setting, which every viewer draws with.</summary>
     public bool Shadows
     {
-        get => shadows;
-        set
-        {
-            shadows = value;
-            if (renderer is not null)
-                renderer.Shadows = value;
-        }
+        get => Core.GraphicsSettings.Shadows;
+        set => Core.GraphicsSettings.Shadows = value;
+    }
+
+    /// <summary>The graphics settings changed and the renderer draws with them; a viewer shows them on its buttons.</summary>
+    public event Action? GraphicsChanged;
+
+    // The graphics settings, to the renderer: they apply from its next frame.
+    private void ApplyGraphics()
+    {
+        if (renderer is null)
+            return;
+        renderer.Antialiasing = Core.GraphicsSettings.Antialiasing;
+        renderer.Bloom = Core.GraphicsSettings.Bloom;
+        renderer.Shadows = Core.GraphicsSettings.Shadows;
+        renderer.ShadowResolution = Core.GraphicsSettings.ShadowResolution;
+        renderer.Anisotropy = Core.GraphicsSettings.Anisotropy;
+    }
+
+    private void OnGraphicsChanged()
+    {
+        ApplyGraphics();
+        GraphicsChanged?.Invoke();
+    }
+
+    // The settings are followed while the viewer is on screen, so a closed one isn't kept alive by them.
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        Core.GraphicsSettings.Changed += OnGraphicsChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        Core.GraphicsSettings.Changed -= OnGraphicsChanged;
+        base.OnDetachedFromVisualTree(e);
     }
 
     /// <summary>Whether the camera flies rather than orbits.</summary>
@@ -279,7 +308,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             renderer.Frame(framed);
             renderer.SetSky(sky);
             renderer.SetTime(hours);
-            renderer.Shadows = shadows;
+            ApplyGraphics();
             renderer.Camera.Free = free;
             if (surfaces is not null)
             {

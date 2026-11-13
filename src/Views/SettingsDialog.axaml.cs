@@ -8,7 +8,8 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// Settings, shown as a sheet over the main window, a group at a time: Games lists every installation of the
-/// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>; Startup has what
+/// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>; Graphics has how the 3D
+/// views draw (<see cref="GraphicsSettings"/>), the same in every viewer; Startup has what
 /// the app does when it starts, and the start page's recent games; Updates has the version, Check now and the
 /// check at startup.
 /// Every change is saved as it is made.
@@ -30,6 +31,7 @@ public partial class SettingsDialog : ModalSheet
         InitializeComponent();
 
         BuildGameRows();
+        BuildGraphics();
         OpenLastGame.Toggled += (_, _) => GameSettings.OpenLastGameOnStartup = OpenLastGame.IsOn;
         CheckForUpdates.Toggled += (_, _) => Infrastructure.Updates.CheckOnStartup = CheckForUpdates.IsOn;
         ClearRecents.Click += (_, _) => tabs.ClearRecentGames();
@@ -63,7 +65,7 @@ public partial class SettingsDialog : ModalSheet
     }
 
     /// <summary>The rail's groups, top to bottom.</summary>
-    internal IReadOnlyList<SettingsGroupRow> Groups => [GamesGroup, StartupGroup, UpdatesGroup];
+    internal IReadOnlyList<SettingsGroupRow> Groups => [GamesGroup, GraphicsGroup, StartupGroup, UpdatesGroup];
 
     /// <summary>The group shown, by its label.</summary>
     internal string Group => Groups.First(group => group.Selected).Label;
@@ -74,6 +76,7 @@ public partial class SettingsDialog : ModalSheet
         foreach (SettingsGroupRow each in Groups)
             each.Selected = each == group;
         GamesPage.IsVisible = group == GamesGroup;
+        GraphicsPage.IsVisible = group == GraphicsGroup;
         StartupPage.IsVisible = group == StartupGroup;
         UpdatesPage.IsVisible = group == UpdatesGroup;
     }
@@ -120,9 +123,62 @@ public partial class SettingsDialog : ModalSheet
         RefreshGameRows();
     }
 
+    // The graphics page's switches: each side of Shadows past Off a resolution, each of Texture filtering an anisotropy.
+    private void BuildGraphics()
+    {
+        AntialiasingSwitch.Toggled += (_, _) => GraphicsSettings.Antialiasing = AntialiasingSwitch.IsOn;
+        BloomSwitch.Toggled += (_, _) => GraphicsSettings.Bloom = BloomSwitch.IsOn;
+        ShadowSwitch.Sides.Add(new Controls.SwitchSide { Text = "Off", Width = 44, Label = "No shadows" });
+        foreach ((string name, int resolution) in new[] { "Medium", "High", "Ultra" }.Zip(GraphicsSettings.ShadowResolutions))
+            ShadowSwitch.Sides.Add(new Controls.SwitchSide
+            {
+                Text = name,
+                Width = name.Length * 8 + 16,
+                Label = $"{name} shadows",
+                ToolTip = $"{name}: shadow maps {resolution} texels a side",
+            });
+        ShadowSwitch.RefreshSides();
+        ShadowSwitch.SideRequested += (_, side) =>
+        {
+            if (side > 0)
+                GraphicsSettings.ShadowResolution = GraphicsSettings.ShadowResolutions[side - 1];
+            GraphicsSettings.Shadows = side > 0;
+            RefreshGraphics();
+        };
+        foreach (int anisotropy in GraphicsSettings.Anisotropies)
+            FilteringSwitch.Sides.Add(new Controls.SwitchSide
+            {
+                Text = anisotropy == 1 ? "Trilinear" : $"{anisotropy}×",
+                Width = anisotropy == 1 ? 72 : 40,
+                Label = anisotropy == 1 ? "Trilinear filtering" : $"{anisotropy}× anisotropic filtering",
+            });
+        FilteringSwitch.RefreshSides();
+        FilteringSwitch.SideRequested += (_, side) =>
+        {
+            GraphicsSettings.Anisotropy = GraphicsSettings.Anisotropies[side];
+            RefreshGraphics();
+        };
+        Avalonia.Automation.AutomationProperties.SetName(AntialiasingSwitch, "Anti-aliasing");
+        Avalonia.Automation.AutomationProperties.SetName(BloomSwitch, "Bloom");
+        Avalonia.Automation.AutomationProperties.SetName(ShadowSwitch, "Shadows");
+        Avalonia.Automation.AutomationProperties.SetName(FilteringSwitch, "Texture filtering");
+    }
+
+    private void RefreshGraphics()
+    {
+        AntialiasingSwitch.IsOn = GraphicsSettings.Antialiasing;
+        BloomSwitch.IsOn = GraphicsSettings.Bloom;
+        ShadowSwitch.SelectedIndex = GraphicsSettings.Shadows
+            ? 1 + IndexOf(GraphicsSettings.ShadowResolutions, GraphicsSettings.ShadowResolution) : 0;
+        FilteringSwitch.SelectedIndex = IndexOf(GraphicsSettings.Anisotropies, GraphicsSettings.Anisotropy);
+
+        static int IndexOf(IReadOnlyList<int> values, int value) => Math.Max(0, values.ToList().IndexOf(value));
+    }
+
     private void Refresh()
     {
         GamePaths.Refresh();
+        RefreshGraphics();
         RefreshGameRows();
         OpenLastGame.IsOn = GameSettings.OpenLastGameOnStartup;
         RefreshRecents();

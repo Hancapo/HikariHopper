@@ -579,7 +579,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
         // Each group in the rail shows its page in place of the others'.
-        Assert.Equal(["Games", "Startup", "Updates"], settings.Groups.Select(group => group.Label));
+        Assert.Equal(["Games", "Graphics", "Startup", "Updates"], settings.Groups.Select(group => group.Label));
         Assert.Equal("Games", settings.Group);
         Assert.True(settings.GamesPage.IsVisible);
         Assert.False(settings.StartupPage.IsVisible);
