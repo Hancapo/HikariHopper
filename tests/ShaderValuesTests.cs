@@ -251,6 +251,21 @@ public sealed class ShaderValuesTests
             Assert.Equal(exact, field.Value);
         }
 
+        // Typed over with the text it shows, it takes what was typed: 0.00001, shown as 0, typed as 0.
+        var typed = new Views.ScrubField { Value = .00001f };
+        var window = new Avalonia.Controls.Window { Width = 200, Height = 60, Content = typed };
+        window.Show();
+        var kept = new List<float>();
+        typed.Edited += (value, _) => kept.Add(value);
+        typed.StartTyping();
+        TestWait.Pump(20);
+        Assert.Equal("0", typed.Editor!.Text);
+        Avalonia.Headless.HeadlessWindowExtensions.KeyTextInput(window, "0");
+        Assert.Equal("0", typed.Editor!.Text);
+        typed.FinishTyping(keep: true);
+        Assert.Equal([0f], kept);
+        window.Close();
+
         // On the card: a value saved with more decimals than it shows isn't changed by a click on it.
         Views.ModelViewer viewer = Open(Triangle());
         viewer.PickAt(new Vector3(.2f, .2f, 3), -Vector3.UnitZ);
