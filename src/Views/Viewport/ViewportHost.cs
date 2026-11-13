@@ -84,6 +84,8 @@ internal sealed partial class ViewportHost : NativeControlHost
         renderer.Shadows = Core.GraphicsSettings.Shadows;
         renderer.ShadowResolution = Core.GraphicsSettings.ShadowResolution;
         renderer.Anisotropy = Core.GraphicsSettings.Anisotropy;
+        renderer.RenderScale = Core.GraphicsSettings.RenderScale / 100f;
+        renderer.ReflectionWidth = (uint)Core.GraphicsSettings.ReflectionWidth;
     }
 
     private void OnGraphicsChanged()

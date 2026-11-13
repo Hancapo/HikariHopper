@@ -62,7 +62,7 @@ internal sealed unsafe partial class ViewportRenderer
         }));
     }
 
-    private (uint X, uint Y) LuminanceTiles => (((uint)width + LuminanceTile - 1) / LuminanceTile, ((uint)height + LuminanceTile - 1) / LuminanceTile);
+    private (uint X, uint Y) LuminanceTiles => (((uint)hdrWidth + LuminanceTile - 1) / LuminanceTile, ((uint)hdrHeight + LuminanceTile - 1) / LuminanceTile);
 
     /// <summary>The measurement's view of the HDR target, with room for a sum per tile of it.</summary>
     private void CreateExposureGroup()

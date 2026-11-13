@@ -38,8 +38,6 @@ fn filmic(x: vec3f, p0: vec4f, p1: vec4f) -> vec3f {
 
 @fragment
 fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let stored = textureLoad(hdr_texture, vec2i(frag.xy), 0);
-    let coverage = stored.a;
     let stops = exposure_stops(frame_mean[0]);
     let t = filmic_blend(stops);
     let p0 = mix(light.filmic_bright0, light.filmic_dark0, t);
@@ -48,20 +46,44 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let exposure = exp2(stops);
     // PS_Composite: the bloom, which the bright pass exposed, back to the scene's light, a quarter of it times the
     // timecycle's intensity.
-    let uv = frag.xy / vec2f(textureDimensions(hdr_texture));
+    let window_size = scene.viewport.xy;
+    let uv = frag.xy / window_size;
     let bloom = textureSampleLevel(bloom_texture, bloom_sampler, uv, 0.0).rgb / exposure * 0.25 * light.bloom.y;
     // Past the drawable, its glow alone, added over the backdrop; where there is no glow either, the backdrop as is.
     let glow = saturate(filmic(bloom * exposure, p0, p1) / white);
-    if (coverage <= 0.0) {
-        if (all(glow <= vec3f(0.0))) {
-            discard;
+    // The HDR target at the window's size is read pixel for pixel. At another render scale it is read across the
+    // pixel and each read tone-mapped before they are averaged, so highlights don't blow up as they shrink: two by two
+    // reads when it is larger (supersampled; at twice the size, each of its pixels once), one bilinear read when smaller.
+    let size = vec2f(textureDimensions(hdr_texture));
+    var result = vec4f(0.0);
+    if (all(abs(size - window_size) < vec2f(0.5))) {
+        result = composite(textureLoad(hdr_texture, vec2i(frag.xy), 0), bloom, glow, exposure, p0, p1, white);
+    } else {
+        let n = select(1, 2, size.x > window_size.x + 0.5);
+        for (var y = 0; y < n; y++) {
+            for (var x = 0; x < n; x++) {
+                let at = (floor(frag.xy) + (vec2f(f32(x), f32(y)) + 0.5) / f32(n)) / window_size;
+                result += composite(textureSampleLevel(hdr_texture, bloom_sampler, at, 0.0), bloom, glow, exposure, p0, p1, white);
+            }
         }
+        result /= f32(n * n);
+    }
+    if (all(result == vec4f(0.0))) {
+        discard;
+    }
+    return result;
+}
+
+// One read of the HDR target, tone-mapped and premultiplied by its coverage over the backdrop, with the glow over the
+// part of it the drawable doesn't cover.
+fn composite(stored: vec4f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32) -> vec4f {
+    let coverage = stored.a;
+    if (coverage <= 0.0) {
         return vec4f(to_target(game_gamma(glow)), 0.0);
     }
     let hdr = max(stored.rgb / coverage, vec3f(0.0));
     // PS_Composite keeps the scene and its bloom to half-float range, then exposes it.
     let exposed = min(hdr + bloom, vec3f(65504.0)) * exposure;
     let mapped = saturate(filmic(exposed, p0, p1) / white);
-    // Premultiplied over the backdrop, with the glow over the part of the pixel the drawable doesn't cover.
     return vec4f(to_target(game_gamma(mapped)) * coverage + to_target(game_gamma(glow)) * (1.0 - coverage), coverage);
 }

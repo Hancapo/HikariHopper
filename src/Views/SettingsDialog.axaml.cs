@@ -145,6 +145,34 @@ public partial class SettingsDialog : ModalSheet
             GraphicsSettings.Shadows = side > 0;
             RefreshGraphics();
         };
+        foreach (int scale in GraphicsSettings.RenderScales)
+            ScaleSwitch.Sides.Add(new Controls.SwitchSide
+            {
+                Text = $"{scale}%",
+                Width = scale >= 100 ? 50 : 44,
+                Label = $"Drawn at {scale}% of the window's size",
+                ToolTip = scale > 100 ? $"{scale}%: supersampled, sharper and slower" : scale < 100 ? $"{scale}%: faster and softer" : "",
+            });
+        ScaleSwitch.RefreshSides();
+        ScaleSwitch.SideRequested += (_, side) =>
+        {
+            GraphicsSettings.RenderScale = GraphicsSettings.RenderScales[side];
+            RefreshGraphics();
+        };
+        foreach ((string name, int width) in new[] { "Low", "Medium", "High" }.Zip(GraphicsSettings.ReflectionWidths))
+            ReflectionSwitch.Sides.Add(new Controls.SwitchSide
+            {
+                Text = name,
+                Width = name.Length * 8 + 16,
+                Label = $"{name} reflections",
+                ToolTip = $"{name}: reflection maps {width} by {width / 2} texels",
+            });
+        ReflectionSwitch.RefreshSides();
+        ReflectionSwitch.SideRequested += (_, side) =>
+        {
+            GraphicsSettings.ReflectionWidth = GraphicsSettings.ReflectionWidths[side];
+            RefreshGraphics();
+        };
         foreach (int anisotropy in GraphicsSettings.Anisotropies)
             FilteringSwitch.Sides.Add(new Controls.SwitchSide
             {
@@ -161,6 +189,8 @@ public partial class SettingsDialog : ModalSheet
         Avalonia.Automation.AutomationProperties.SetName(AntialiasingSwitch, "Anti-aliasing");
         Avalonia.Automation.AutomationProperties.SetName(BloomSwitch, "Bloom");
         Avalonia.Automation.AutomationProperties.SetName(ShadowSwitch, "Shadows");
+        Avalonia.Automation.AutomationProperties.SetName(ScaleSwitch, "Render scale");
+        Avalonia.Automation.AutomationProperties.SetName(ReflectionSwitch, "Reflections");
         Avalonia.Automation.AutomationProperties.SetName(FilteringSwitch, "Texture filtering");
     }
 
@@ -171,6 +201,8 @@ public partial class SettingsDialog : ModalSheet
         ShadowSwitch.SelectedIndex = GraphicsSettings.Shadows
             ? 1 + IndexOf(GraphicsSettings.ShadowResolutions, GraphicsSettings.ShadowResolution) : 0;
         FilteringSwitch.SelectedIndex = IndexOf(GraphicsSettings.Anisotropies, GraphicsSettings.Anisotropy);
+        ScaleSwitch.SelectedIndex = IndexOf(GraphicsSettings.RenderScales, GraphicsSettings.RenderScale);
+        ReflectionSwitch.SelectedIndex = IndexOf(GraphicsSettings.ReflectionWidths, GraphicsSettings.ReflectionWidth);
 
         static int IndexOf(IReadOnlyList<int> values, int value) => Math.Max(0, values.ToList().IndexOf(value));
     }
