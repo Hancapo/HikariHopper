@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Input;
 using Avalonia.Threading;
 using HikariHopper.Core;
@@ -207,6 +208,67 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Copies full paths: <c>C:\…\file</c> for loose items, <c>archive.rpf::inner/path</c> inside RPFs.</summary>
+    /// <summary>
+    /// Where Windows Explorer goes for <see cref="ShowInExplorer"/>: the one item selected, shown selected in its folder;
+    /// with nothing selected, the folder shown, opened. Explorer can't look inside an RPF, so for anything in one it is
+    /// the RPF on disk, shown selected. None for several items, or with nothing on disk to go to.
+    /// </summary>
+    internal (string Path, bool Select)? ExplorerTarget()
+    {
+        if (!HasWorkspace)
+            return null;
+        List<EntryRecord> selection = SelectedEntries();
+        if (selection.Count > 1)
+            return null;
+        if (selection.Count == 1 && SearchShowsLocation)
+        {
+            if (SelectedHits() is not [SearchHit hit])
+                return null;
+            HitPlace place = PlaceOf(hit);
+            return (place.InArchive ? place.RootFull : place.LooseFull, true);
+        }
+        if (Provider.InArchive)
+            return Provider.ArchivePath.Length > 0 ? (Provider.ArchivePath, true) : null;
+        if (Provider.GamePath.Length == 0)
+            return null;
+        return selection.Count == 1
+            ? (Path.GetFullPath(GameChildPath(selection[0].Path)), true)
+            : (Path.TrimEndingDirectorySeparator(Path.GetFullPath(GameChildPath(CurrentPath))), false);
+    }
+
+    /// <summary>Whether <see cref="ShowInExplorer"/> has somewhere to go.</summary>
+    public bool CanShowInExplorer => ExplorerTarget() is not null;
+
+    /// <summary>Opens Windows Explorer at a path, with it selected in its folder or opened; tests replace it.</summary>
+    internal static Action<string, bool> RevealInExplorer { get; set; } = (path, select) =>
+    {
+        var start = new ProcessStartInfo("explorer.exe", select ? $"/select,\"{path}\"" : $"\"{path}\"") { UseShellExecute = false };
+        Process.Start(start)?.Dispose();
+    };
+
+    /// <summary>
+    /// Shows the selected item in Windows Explorer, or opens the folder shown when nothing is selected (see
+    /// <see cref="ExplorerTarget"/>).
+    /// </summary>
+    public void ShowInExplorer()
+    {
+        if (ExplorerTarget() is not { } target)
+            return;
+        if (!(target.Select ? File.Exists(target.Path) || Directory.Exists(target.Path) : Directory.Exists(target.Path)))
+        {
+            SetStatus($"Not found on disk: {Path.GetFileName(target.Path)}");
+            return;
+        }
+        try
+        {
+            RevealInExplorer(target.Path, target.Select);
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            SetStatus($"Could not open Explorer: {error.Message}");
+        }
+    }
+
     public void CopySelectedPath()
     {
         List<EntryRecord> selection = SelectedEntries();

@@ -12,7 +12,8 @@ public sealed class GpuDeviceTests
         // A window's usual format: the pipelines a viewport needs are ready before one opens.
         foreach (string key in new[] { "backdrop", "meshes", "lines", "shadow", "shadow-masked", "ground-shadow", "tonemap", "luminance",
             "luminance-mean", "reflection-map/fs_reflection_map", "surface/Back/False/False", "surface/None/True/True",
-            "terrain/Back/False/False", "terrain/None/False/True", "bloom/fs_bloom_bright", "bloom/fs_bloom_downsample_karis",
+            "terrain/Back/False/False", "terrain/None/False/True", "fur/None/False/False", "fur/None/False/True", "cable/None/True/False",
+            "bloom/fs_bloom_bright", "bloom/fs_bloom_downsample_karis",
             "bloom/fs_bloom_downsample", "bloom/fs_bloom_upsample", "outline-mask", "outline" })
             Assert.True(gpu.Compiled($"{key}/{ViewportRenderer.FrameFormat}"), key);
         // CMAA2 over the frame, and the frame to a window in its usual format.

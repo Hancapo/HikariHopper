@@ -61,10 +61,10 @@ public partial class ExplorerScreen : UserControl
 
     /// <summary>
     /// The tab strip, hidden while the window's only tab is the launcher: there is nothing to switch
-    /// to. It comes back with a second tab, and as soon as a game or archive starts loading, so the
-    /// loading cover already sits where the workspace will.
+    /// to. It comes back with a second tab, and with the workspace a game or archive opens; not while
+    /// it loads, which would push the launcher, and then the loading cover, down under it.
     /// </summary>
-    public bool StripVisible => tabs is null || bridge is null || tabs.Tabs.Count > 1 || bridge.HasWorkspace || bridge.GameLoading;
+    public bool StripVisible => tabs is null || bridge is null || tabs.Tabs.Count > 1 || bridge.HasWorkspace;
 
     private void RefreshStrip() => Strip.IsVisible = StripVisible;
 
@@ -83,7 +83,7 @@ public partial class ExplorerScreen : UserControl
     {
         if (e.PropertyName == nameof(ExplorerViewModel.HasWorkspace))
             RefreshPage();
-        if (e.PropertyName is nameof(ExplorerViewModel.HasWorkspace) or nameof(ExplorerViewModel.GameLoading))
+        if (e.PropertyName == nameof(ExplorerViewModel.HasWorkspace))
             RefreshStrip();
     }
 
@@ -126,5 +126,9 @@ public partial class ExplorerScreen : UserControl
                 start.Tabs = null;
         }
         PageHost.Content = page;
+        // The start page takes the whole screen, the strip over its top when there is one; a workspace starts under it.
+        bool launcher = page is StartPage;
+        Grid.SetRow(Pages, launcher ? 0 : 1);
+        Grid.SetRowSpan(Pages, launcher ? 2 : 1);
     }
 }

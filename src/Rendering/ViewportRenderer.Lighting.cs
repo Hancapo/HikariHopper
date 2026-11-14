@@ -15,7 +15,28 @@ internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
     private const int LightBytes = 560, ShadowViewBytes = 64;
-    internal const int ShadowResolution = 2048;
+    private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
+    private Sampler? shadowCompare;
+
+    /// <summary>
+    /// The side of each of the shadow's cascades in texels (Core.GraphicsSettings.ShadowResolutions); a change makes
+    /// the shadow map again at that size.
+    /// </summary>
+    public int ShadowResolution
+    {
+        get => shadowResolution;
+        set
+        {
+            if (value == shadowResolution || value <= 0)
+                return;
+            shadowResolution = value;
+            if (shadowMap is not null)
+                CreateShadowMap();
+        }
+    }
+
+    /// <summary>Whether bright light blooms, as the game's post-process makes it.</summary>
+    public bool Bloom { get; set; } = true;
 
     /// <summary>
     /// How many cascades the sun's shadow is split into by distance from the camera, as GTA V splits its own: the nearest
@@ -42,6 +63,36 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? tonemapPipeline;
     private Texture? hdr;
     private TextureView? hdrView;
+    // The drawables' own depth, at the HDR target's size.
+    private Texture? hdrDepth;
+    private TextureView? hdrDepthView;
+    private int hdrWidth, hdrHeight;
+    private float renderScale = 1;
+
+    /// <summary>
+    /// How large the drawables are drawn before they are tone-mapped to the window, as a share of its size
+    /// (Core.GraphicsSettings.RenderScales): over one is supersampled, under one cheaper and softer.
+    /// </summary>
+    public float RenderScale
+    {
+        get => renderScale;
+        set
+        {
+            value = Math.Clamp(value, .25f, 4);
+            if (value == renderScale)
+                return;
+            renderScale = value;
+            if (hdr is not null && width > 0)
+                CreateHdr();
+        }
+    }
+
+    /// <summary>The HDR target's size for a window at a scale, at least a pixel and within what a texture may be.</summary>
+    internal static (int Width, int Height) ScaledSize(int width, int height, float scale) =>
+        (Math.Clamp((int)MathF.Round(width * scale), 1, MaxTargetSide), Math.Clamp((int)MathF.Round(height * scale), 1, MaxTargetSide));
+
+    // WebGPU's least maximum texture side.
+    private const int MaxTargetSide = 8192;
     private BindGroup? tonemapGroup;
     private KeyLight key;
     private TimecycleLight cycle;
@@ -74,34 +125,7 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateLighting()
     {
         lightBuffer = device.CreateBuffer(new BufferDescriptor { Size = LightBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        shadowMap = device.CreateTexture(new TextureDescriptor
-        {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
-            Dimension = TextureDimension.D2,
-            Size = new Extent3D(ShadowResolution, ShadowResolution, ShadowCascades),
-            Format = DepthFormat,
-            MipLevelCount = 1,
-            SampleCount = 1,
-        });
-        shadowView = shadowMap.CreateView(new TextureViewDescriptor
-        {
-            Format = DepthFormat,
-            Dimension = TextureViewDimension.D2Array,
-            MipLevelCount = 1,
-            ArrayLayerCount = ShadowCascades,
-            Aspect = TextureAspect.All,
-        });
-        for (int i = 0; i < ShadowCascades; i++)
-            shadowLayers[i] = shadowMap.CreateView(new TextureViewDescriptor
-            {
-                Format = DepthFormat,
-                Dimension = TextureViewDimension.D2,
-                MipLevelCount = 1,
-                BaseArrayLayer = (uint)i,
-                ArrayLayerCount = 1,
-                Aspect = TextureAspect.All,
-            });
-        Sampler compare = device.CreateSampler(new SamplerDescriptor
+        shadowCompare = device.CreateSampler(new SamplerDescriptor
         {
             AddressModeU = AddressMode.ClampToEdge,
             AddressModeV = AddressMode.ClampToEdge,
@@ -142,21 +166,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
-        // Drawables reflect the scene map; drawn into it, they reflect the sky map.
-        BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
-        {
-            Layout = lightLayout,
-            Entries =
-            [
-                new BindGroupEntry { Binding = 0, Buffer = lightBuffer, Size = LightBytes },
-                new BindGroupEntry { Binding = 1, TextureView = shadowView },
-                new BindGroupEntry { Binding = 2, Sampler = compare },
-                new BindGroupEntry { Binding = 3, TextureView = reflections },
-                new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
-            ],
-        });
-        lightGroup = LightGroup(sceneMap!.View);
-        skyLightGroup = LightGroup(skyMap!.View);
+        CreateShadowMap();
 
         // The shadow map: depth only, from the sun, nearer is smaller.
         shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -231,7 +241,8 @@ internal sealed unsafe partial class ViewportRenderer
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
         }));
 
-        // The tone map, blended premultiplied over the backdrop.
+        // The tone map, blended premultiplied over the backdrop; it reads the HDR target filtered at a render scale other
+        // than one.
         tonemapLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -240,7 +251,7 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Binding = 0,
                     Visibility = ShaderStage.Fragment,
-                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry
                 {
@@ -303,16 +314,28 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateHdr()
     {
         hdr?.Destroy();
+        hdrDepth?.Destroy();
+        (hdrWidth, hdrHeight) = ScaledSize(width, height, renderScale);
         hdr = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,
-            Size = new Extent3D((uint)width, (uint)height, 1),
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = HdrFormat,
             MipLevelCount = 1,
             SampleCount = 1,
         });
         hdrView = hdr.CreateView();
+        hdrDepth = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.RenderAttachment,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        hdrDepthView = hdrDepth.CreateView();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
@@ -422,9 +445,64 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[30] = shadowTexels;
         vectors[31] = shadowDepths;
         vectors[32] = new Vector4(0, 0, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
-        vectors[33] = Timecycle.BloomParameters(cycle);
+        // Without bloom, the tone map adds none.
+        vectors[33] = Bloom ? Timecycle.BloomParameters(cycle) : Timecycle.BloomParameters(cycle) with { Y = 0 };
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
+    }
+
+    // The shadow map at ShadowResolution, its cascades' views, and the light groups that read it.
+    private void CreateShadowMap()
+    {
+        shadowMap?.Destroy();
+        shadowMap = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)ShadowResolution, (uint)ShadowResolution, ShadowCascades),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        shadowView = shadowMap.CreateView(new TextureViewDescriptor
+        {
+            Format = DepthFormat,
+            Dimension = TextureViewDimension.D2Array,
+            MipLevelCount = 1,
+            ArrayLayerCount = ShadowCascades,
+            Aspect = TextureAspect.All,
+        });
+        for (int i = 0; i < ShadowCascades; i++)
+            shadowLayers[i] = shadowMap.CreateView(new TextureViewDescriptor
+            {
+                Format = DepthFormat,
+                Dimension = TextureViewDimension.D2,
+                MipLevelCount = 1,
+                BaseArrayLayer = (uint)i,
+                ArrayLayerCount = 1,
+                Aspect = TextureAspect.All,
+            });
+        CreateLightGroups();
+    }
+
+    // The light groups, which read the shadow map and a reflection map: drawables reflect the scene map; drawn into it,
+    // they reflect the sky map.
+    private void CreateLightGroups()
+    {
+        BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
+        {
+            Layout = lightLayout!,
+            Entries =
+            [
+                new BindGroupEntry { Binding = 0, Buffer = lightBuffer!, Size = LightBytes },
+                new BindGroupEntry { Binding = 1, TextureView = shadowView },
+                new BindGroupEntry { Binding = 2, Sampler = shadowCompare! },
+                new BindGroupEntry { Binding = 3, TextureView = reflections },
+                new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
+            ],
+        });
+        lightGroup = LightGroup(sceneMap!.View);
+        skyLightGroup = LightGroup(skyMap!.View);
     }
 
     /// <summary>The sun's shadow of the drawables, a cascade at a time: their solid and masked parts' depth from the sun.</summary>
@@ -461,8 +539,8 @@ internal sealed unsafe partial class ViewportRenderer
             pass.End();
         }
 
-        // Terrain's material is laid out differently, and cuts nothing out.
-        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && !surfaceParts[i].Terrain;
+        // Terrain's material is laid out differently, and cuts nothing out; fur casts as its first shell, its surface.
+        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && surfaceParts[i].Kind == PartKind.Surface;
     }
 
     /// <summary>The drawable's shadow on the backdrop's ground, over the backdrop just drawn.</summary>
