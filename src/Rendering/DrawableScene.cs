@@ -246,11 +246,14 @@ internal sealed class DrawableScene
 
         Aabb3 box = Aabb3.Empty;
         foreach (var (geometry, transform, _, _, _, _, _, _) in placed.Where(p => p.Primary))
+        {
+            var reader = new VertexReader(geometry.Vertices);
             for (int i = 0; i < geometry.Vertices.Count; i++)
             {
-                Vector3 point = Vector3.Transform(geometry.Vertices.ReadElement(i, VertexSemantic.Position).AsVector3(), transform);
+                Vector3 point = Vector3.Transform(reader.Position(i), transform);
                 box = box.Merge(new Aabb3(point, point));
             }
+        }
         Vector3 origin = box.IsEmpty ? Vector3.Zero : box.Center;
 
         var vertices = new List<SurfaceVertex>();
@@ -262,8 +265,9 @@ internal sealed class DrawableScene
                 continue;
             int baseVertex = vertices.Count;
             VertexBuffer source = geometry.Vertices;
+            var reader = new VertexReader(source);
             for (int i = 0; i < source.Count; i++)
-                vertices.Add(Read(source, i, transform, origin));
+                vertices.Add(reader.Read(i, transform, origin));
             ReadOnlySpan<ushort> from = geometry.Indices.Indices;
             int start = (int)Math.Min(geometry.IndexBufferOffset, (uint)from.Length);
             int count = Math.Min(geometry.IndexCount > 0 ? geometry.IndexCount : from.Length, from.Length - start) / 3 * 3;
@@ -352,18 +356,30 @@ internal sealed class DrawableScene
         return split;
     }
 
-    /// <summary>A geometry's triangles' distinct edges; a geometry has vertices of its own, so none is shared with another.</summary>
-    private static int CountEdges(List<uint> indices, int first, int count)
+    /// <summary>
+    /// A geometry's triangles' distinct edges; a geometry has vertices of its own, so none is shared with another.
+    /// Counted by sorting them rather than in a hash set, where an edge's two corners, packed in a long, would hash to
+    /// little more than their difference and collide by the thousand.
+    /// </summary>
+    internal static int CountEdges(List<uint> indices, int first, int count)
     {
-        var edges = new HashSet<ulong>();
-        for (int i = first; i + 2 < first + count; i += 3)
+        ReadOnlySpan<uint> corners = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(indices).Slice(first, count);
+        var edges = new ulong[corners.Length / 3 * 3];
+        int n = 0;
+        for (int i = 0; i + 2 < corners.Length; i += 3)
         {
-            uint a = indices[i], b = indices[i + 1], c = indices[i + 2];
-            edges.Add(Edge(a, b));
-            edges.Add(Edge(b, c));
-            edges.Add(Edge(c, a));
+            uint a = corners[i], b = corners[i + 1], c = corners[i + 2];
+            edges[n++] = Edge(a, b);
+            edges[n++] = Edge(b, c);
+            edges[n++] = Edge(c, a);
         }
-        return edges.Count;
+        Span<ulong> sorted = edges.AsSpan(0, n);
+        sorted.Sort();
+        int distinct = 0;
+        for (int i = 0; i < sorted.Length; i++)
+            if (i == 0 || sorted[i] != sorted[i - 1])
+                distinct++;
+        return distinct;
 
         static ulong Edge(uint a, uint b) => a < b ? (ulong)a << 32 | b : (ulong)b << 32 | a;
     }
@@ -375,26 +391,58 @@ internal sealed class DrawableScene
             && skeleton.Bones[model.SkeletonBinding.BoneIndex].Name is { Length: > 0 } bone ? bone
         : $"model {index + 1}";
 
-    private static SurfaceVertex Read(VertexBuffer buffer, int i, Matrix4x4 transform, Vector3 origin)
+    /// <summary>
+    /// A vertex buffer read as surface.wgsl reads its vertices: where each of the fields it takes is in a vertex, and in
+    /// what format, looked up once for the buffer rather than once a field a vertex.
+    /// </summary>
+    private readonly ref struct VertexReader
     {
-        VertexLayout layout = buffer.Layout;
-        Vector4 Element(VertexSemantic semantic, Vector4 missing) => layout.TryFind(semantic, out _) ? buffer.ReadElement(i, semantic) : missing;
-        Vector3 position = Vector3.Transform(Element(VertexSemantic.Position, default).AsVector3(), transform) - origin;
-        // As the vertex shaders: a normal shorter than about a third (squared under 0.1) is taken as straight up.
-        Vector3 own = Element(VertexSemantic.Normal, Vector4.UnitZ).AsVector3();
-        Vector3 normal = Vector3.TransformNormal(own.LengthSquared() < .1f ? Vector3.UnitZ : own, transform);
-        Vector4 tangent = Element(VertexSemantic.Tangent, Vector4.UnitX + Vector4.UnitW);
-        var direction = Vector3.TransformNormal(tangent.AsVector3(), transform);
-        // A missing first colour reads as white: full natural and artificial ambient, emissive where the shader is. A
-        // missing second colour reads as nothing, so terrain weighted by it draws its first layer (or its lookup map).
-        return new SurfaceVertex(
-            position,
-            normal,
-            new Vector4(direction, tangent.W < 0 ? -1 : 1),
-            Element(VertexSemantic.TexCoord0, default).AsVector2(),
-            Element(VertexSemantic.TexCoord1, default).AsVector2(),
-            SurfaceVertex.Pack(Element(VertexSemantic.Color0, Vector4.One)),
-            SurfaceVertex.Pack(Element(VertexSemantic.Color1, Vector4.Zero)),
-            (layout.TryFind(VertexSemantic.TexCoord3, out _) ? Element(VertexSemantic.TexCoord3, default) : Element(VertexSemantic.TexCoord2, default)).AsVector2());
+        private readonly ReadOnlySpan<byte> data;
+        private readonly int stride;
+        private readonly VertexElement? position, normal, tangent, uv0, uv1, colour0, colour1, uv2;
+
+        public VertexReader(VertexBuffer buffer)
+        {
+            VertexLayout layout = buffer.Layout;
+            data = buffer.Data;
+            stride = layout.Stride;
+            VertexElement? Find(VertexSemantic semantic) => layout.TryFind(semantic, out VertexElement element) ? element : null;
+            position = Find(VertexSemantic.Position);
+            normal = Find(VertexSemantic.Normal);
+            tangent = Find(VertexSemantic.Tangent);
+            uv0 = Find(VertexSemantic.TexCoord0);
+            uv1 = Find(VertexSemantic.TexCoord1);
+            colour0 = Find(VertexSemantic.Color0);
+            colour1 = Find(VertexSemantic.Color1);
+            // The parallax controls: TexCoord3, or TexCoord2 without it (SurfaceVertex.Uv2).
+            uv2 = Find(VertexSemantic.TexCoord3) ?? Find(VertexSemantic.TexCoord2);
+        }
+
+        private Vector4 Element(int vertex, VertexElement? element, Vector4 missing) => element is { } found
+            ? VertexElementCodec.Read(data.Slice(vertex * stride + found.Offset, found.ByteSize), found.Format)
+            : missing;
+
+        public Vector3 Position(int vertex) => Element(vertex, position, default).AsVector3();
+
+        public SurfaceVertex Read(int vertex, Matrix4x4 transform, Vector3 origin)
+        {
+            Vector3 place = Vector3.Transform(Position(vertex), transform) - origin;
+            // As the vertex shaders: a normal shorter than about a third (squared under 0.1) is taken as straight up.
+            Vector3 own = Element(vertex, normal, Vector4.UnitZ).AsVector3();
+            Vector3 turned = Vector3.TransformNormal(own.LengthSquared() < .1f ? Vector3.UnitZ : own, transform);
+            Vector4 along = Element(vertex, tangent, Vector4.UnitX + Vector4.UnitW);
+            var direction = Vector3.TransformNormal(along.AsVector3(), transform);
+            // A missing first colour reads as white: full natural and artificial ambient, emissive where the shader is. A
+            // missing second colour reads as nothing, so terrain weighted by it draws its first layer (or its lookup map).
+            return new SurfaceVertex(
+                place,
+                turned,
+                new Vector4(direction, along.W < 0 ? -1 : 1),
+                Element(vertex, uv0, default).AsVector2(),
+                Element(vertex, uv1, default).AsVector2(),
+                SurfaceVertex.Pack(Element(vertex, colour0, Vector4.One)),
+                SurfaceVertex.Pack(Element(vertex, colour1, Vector4.Zero)),
+                Element(vertex, uv2, default).AsVector2());
+        }
     }
 }

@@ -5,14 +5,15 @@
              xmlns:ui="using:HikariHopper.Ui"
              x:Class="HikariHopper.Views.GamePathRow"
              x:DataType="v:GamePathRow">
-  <!-- One installation in Settings, a row of its game's well: the edition's mark and name, with whether the game's
-       executable is in its folder, over the folder; then a folder button that chooses it and a mark that clears it. -->
-  <!-- The clear mark's column stays when it is hidden, so every row's folder button lines up. -->
-  <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto,30">
-    <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,2,12,0" VerticalAlignment="Top" />
+  <!-- One installation in Settings, a row of its game's card: the edition's mark, centred on the row, and its name,
+       with whether the game's executable is in its folder, over the folder; then, as segments of one well, a folder
+       button that chooses it and a mark that clears it, off while there is nothing to clear, so every row's well is
+       as wide and lines up. -->
+  <Grid Margin="14,11,12,11" ColumnDefinitions="Auto,*,Auto">
+    <c:EditionMark Name="Mark" Width="18" Height="18" Margin="0,0,12,0" VerticalAlignment="Center" />
     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-      <!-- Both lines have a set height: the check's mono after the name would otherwise make the first a pixel
-           taller once a folder is set, and the card would move. -->
+      <!-- Both lines have a set height: the check after the name would otherwise make the first a pixel taller once a
+           folder is set, and the card would move. -->
       <TextBlock Name="TitleText" Foreground="{x:Static ui:Theme.Text}" LineHeight="17"
                  FontFamily="{x:Static ui:Theme.UiFont}" FontSize="13" FontWeight="SemiBold"
                  TextTrimming="CharacterEllipsis" />
@@ -20,10 +21,14 @@
       <TextBlock Name="DetailText" Margin="0,3,0,0" LineHeight="15" TextTrimming="LeadingCharacterEllipsis"
                  FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
     </StackPanel>
-    <c:ChromeToolButton Name="BrowseButton" Grid.Column="2" Width="32" Height="28" Margin="16,0,0,0" Raised="True"
-                        VerticalAlignment="Center" IconKind="folder" IconSize="15" IconThickness="1.5" />
-    <c:ChromeToolButton Name="ClearButton" Grid.Column="3" Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
-                        IconKind="close" IconSize="11" IconThickness="1.4" />
+    <Border Name="ButtonWell" Grid.Column="2" Margin="16,0,0,0" Padding="2" VerticalAlignment="Center"
+            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <c:ChromeToolButton Name="BrowseButton" Width="30" Height="24" Raised="True" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                            IconKind="folder" IconSize="14" IconThickness="1.5" />
+        <c:ChromeToolButton Name="ClearButton" Width="26" Height="24" Bordered="False" CornerRadius="{x:Static ui:Theme.InnerCorner}"
+                            IconKind="close" IconSize="11" IconThickness="1.4" />
+      </StackPanel>
+    </Border>
   </Grid>
 </UserControl>
