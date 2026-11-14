@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Vehicle glass is shaded with GTA V's own glass shaders in the 3D viewer: tinted, with its dirt, the sun's highlight and the sky's reflection, and seen from its outside only. ([#227](https://github.com/Hancapo/HikariHopper/pull/227))
+
 ### Fixed
 
 ### Removed
