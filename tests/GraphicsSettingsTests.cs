@@ -11,7 +11,8 @@ namespace HikariHopper.Tests;
 // The graphics settings, kept in a scratch registry key (ExplorerTestBase).
 public sealed class GraphicsSettingsTests : ExplorerTestBase
 {
-    [Fact]
+    // On the UI thread, where the app changes them: a viewer another test left open hears each change.
+    [AvaloniaFact]
     public void They_start_as_the_viewer_draws_and_keep_what_is_chosen()
     {
         Assert.True(GraphicsSettings.Antialiasing);
