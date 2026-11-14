@@ -144,6 +144,12 @@ internal sealed class MenuBar
                 if (Lit(open) is { } item)
                 {
                     Close(open);
+                    // Checked or cleared first, as Avalonia's own menus do before the click, so the item sees itself
+                    // toggled.
+                    if (item.ToggleType == MenuItemToggleType.CheckBox)
+                        item.IsChecked = !item.IsChecked;
+                    else if (item.ToggleType == MenuItemToggleType.Radio)
+                        item.IsChecked = true;
                     item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 }
                 break;

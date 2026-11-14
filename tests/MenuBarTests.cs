@@ -157,4 +157,43 @@ public sealed class MenuBarTests : ExplorerTestBase
             window.Close();
         }
     }
+
+    [AvaloniaFact]
+    public void Enter_and_space_toggle_a_checkable_item_as_a_click_does()
+    {
+        MakeGame();
+        var session = new ExplorerSession();
+        var window = new MainWindow { Width = 1200, Height = 700 };
+        session.Attach(window);
+        window.Show();
+        session.Tabs.ActiveBridge.OpenGame(Work);
+        TestWait.Pump(200);
+        MenuRow row = window.GetVisualDescendants().OfType<MenuRow>().Single();
+        MenuBarButton title = row.GetVisualDescendants().OfType<MenuBarButton>().Single(title => title.Text == "View");
+        RetroMenu view = row.MenuFor(title);
+        bool shown = session.Tabs.ActiveBridge.FoldersVisible;
+        void Light()
+        {
+            Click(window, title);
+            for (int step = 0; step < 8 && Lit(view.Items.OfType<RetroMenuItem>()) != "Folders pane"; step++)
+                Press(window, Key.Down, PhysicalKey.ArrowDown);
+            Assert.Equal("Folders pane", Lit(view.Items.OfType<RetroMenuItem>()));
+        }
+        try
+        {
+            // Enter turns the folders pane off, as a click on it does, and Space turns it on again.
+            Light();
+            Press(window, Key.Enter, PhysicalKey.Enter);
+            Assert.False(view.IsOpen);
+            Assert.Equal(!shown, session.Tabs.ActiveBridge.FoldersVisible);
+            Light();
+            Press(window, Key.Space, PhysicalKey.Space);
+            Assert.Equal(shown, session.Tabs.ActiveBridge.FoldersVisible);
+        }
+        finally
+        {
+            view.Close();
+            window.Close();
+        }
+    }
 }
