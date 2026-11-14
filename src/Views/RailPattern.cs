@@ -64,7 +64,10 @@ public sealed class RailPattern : Control
         watcher.Tick += (_, _) => WatchMotion();
     }
 
-    /// <summary>Whether it drifts: off while the tab loads a game, and behind the loading view, which shows it still.</summary>
+    /// <summary>
+    /// Whether it drifts: the start page's is off while its tab loads a game, when the loading view covers it, and the
+    /// loading view's is on while that shows, so one drifts at a time.
+    /// </summary>
     public bool IsRunning
     {
         get => GetValue(IsRunningProperty);
