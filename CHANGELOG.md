@@ -26,6 +26,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
 - Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
 - The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 - The shader parameters card shows where it belongs, no longer at its last place for a moment. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
