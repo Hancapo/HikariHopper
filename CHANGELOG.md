@@ -8,7 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- A faint railway pattern drifts slowly behind the start page, and stands still behind the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213))
+- A faint railway pattern drifts slowly behind the start page and the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213), [#221](https://github.com/Hancapo/HikariHopper/pull/221))
 
 ### Changed
 
