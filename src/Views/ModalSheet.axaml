@@ -31,9 +31,10 @@
               <Border DockPanel.Dock="Bottom" Height="{x:Static ui:Theme.DialogFooterHeight}" Background="{x:Static ui:Theme.ChromeBg}">
                 <Panel>
                   <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.BorderHard}" />
+                  <!-- In the UI font: at this size the mono's thin strokes came out tinted, like a link. -->
                   <TextBlock Margin="16,0,0,0" Text="{TemplateBinding FooterText}"
                              Foreground="{x:Static ui:Theme.TextFaint}"
-                             FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                             FontFamily="{x:Static ui:Theme.UiFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
                              HorizontalAlignment="Left" VerticalAlignment="Center"
                              IsVisible="{TemplateBinding Footer, Converter={x:Static ObjectConverters.IsNull}}" />
                   <c:ChromeToolButton Name="PART_CloseButton" Width="88" Height="28" Margin="0,0,12,0"
