@@ -19,6 +19,7 @@ public static class Theme
 
     // Surfaces, darkest to lightest.
     public static IImmutableSolidColorBrush WindowBg { get; } = Hex("#121322");      // the base the panels float on, a step below them
+    public static IImmutableSolidColorBrush RailPatternInk { get; } = Hex("#202235"); // the start page's railway pattern, just above the base
     public static IImmutableSolidColorBrush WindowChrome { get; } = Hex("#1B1C2C");  // hard seams and sunken wells
     public static IImmutableSolidColorBrush AppBg { get; } = Hex("#1E1F30");         // the list canvas
     public static IImmutableSolidColorBrush PanelBg { get; } = Hex("#1E1F30");

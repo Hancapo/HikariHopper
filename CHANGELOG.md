@@ -8,11 +8,20 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Show an item, or the folder you're in, in Windows Explorer. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
+- Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
+- A faint railway pattern drifts slowly behind the start page. ([#203](https://github.com/Hancapo/HikariHopper/pull/203))
+
 ### Changed
 
 - The 3D viewer's footer is taller, so its controls sit evenly from its edges and the window's corner, and its level of detail is shown with a layers icon, in the app's font. ([#207](https://github.com/Hancapo/HikariHopper/pull/207))
+- Shader values are called shader parameters. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 
 ### Fixed
+
+- The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The shader parameters card shows where it belongs, no longer at its last place for a moment. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The last tab no longer gets cut off as the tabs glide into place after one closes. ([#202](https://github.com/Hancapo/HikariHopper/pull/202))
 
 ### Removed
 
