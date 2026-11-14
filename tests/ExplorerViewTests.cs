@@ -1408,7 +1408,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void TheStartPagesRailPatternStandsStillBehindTheLoadingViewWhileAGameLoads()
+    public void TheRailPatternDriftsOnInTheLoadingViewWhileAGameLoads()
     {
         Ui.Motion.ReducedOverride = false;
         try
@@ -1430,13 +1430,18 @@ public sealed class ExplorerViewTests : ExplorerTestBase
             Assert.False(pattern.Animating);
             double stopped = pattern.Offset;
             Assert.True(stopped > 0);
-            // The loading view, once it shows, has the start page's background: the pattern, still, where the start
-            // page's stopped, with no dim over it.
+            // The loading view, once it shows, has the start page's background: the pattern, drifting on from where
+            // the start page's stopped, with no dim over it; the start page's stands still behind it.
             TestWait.Until(() => loading.Revealed, "the loading view to show");
             Assert.True(loading.IsVisible);
             Assert.Equal(Ui.Theme.WindowBg, loading.Background);
-            Assert.False(loading.Pattern.Animating);
-            Assert.Equal(stopped, loading.Pattern.Offset);
+            Assert.True(loading.Pattern.Animating);
+            Assert.False(pattern.Animating);
+            // How far on from there, as the drift wraps after a repeat.
+            double Moved() => (loading.Pattern.Offset - stopped + RailPattern.Repeat) % RailPattern.Repeat;
+            Assert.InRange(Moved(), 0, RailPattern.Speed);
+            TestWait.Pump(300);
+            Assert.True(Moved() > 0);
             Assert.Equal(Avalonia.Media.Brushes.Transparent, loading.Overlay.Background);
             release.Set();
             Settle(ui.Bridge);
