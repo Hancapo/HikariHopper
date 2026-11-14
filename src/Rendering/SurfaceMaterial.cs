@@ -18,14 +18,17 @@ internal enum AlphaMode
 }
 
 /// <summary>
-/// A GTA V material made ready for surface.wgsl, or terrain.wgsl for the terrain shaders: its textures and the
-/// constants its shader reads, from either edition.
+/// A GTA V material made ready for surface.wgsl, or terrain.wgsl for the terrain shaders, fur.wgsl for the fur grass
+/// and cable.wgsl for the cables: its textures and the constants its shader reads, from either edition.
 /// Which parameter fills which role is in materials.json, by Legacy name; Enhanced materials reach those names through
 /// FiveFury's shader catalogue, and a value a material leaves out is its shader's default from the same catalogue.
 /// </summary>
 internal sealed class SurfaceMaterial
 {
-    /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
+    /// <summary>
+    /// The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112, fur.wgsl's Fur its
+    /// first 144 and cable.wgsl's Cable its first 64.
+    /// </summary>
     public const int UniformBytes = 400;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
@@ -60,6 +63,27 @@ internal sealed class SurfaceMaterial
     /// closest of them.
     /// </summary>
     public bool Ped { get; private init; }
+
+    /// <summary>
+    /// Whether it is a fur grass shader (grass_fur, grass_fur_mask, grass_fur_tnt), drawn with fur.wgsl: the mesh again
+    /// for each of its shells, each cut out where its fur is too short.
+    /// </summary>
+    public bool Fur { get; private init; }
+
+    /// <summary>
+    /// Whether it is the cable shader, drawn with cable.wgsl: a ribbon of no width that the vertex shader widens to face
+    /// the camera, blended over what is behind it.
+    /// </summary>
+    public bool Cable { get; private init; }
+
+    /// <summary>The fur grass's combo height maps (ComboHeightTexFur01, 23, 45, 67), two shells each.</summary>
+    public Texture?[] FurHeights { get; private init; } = new Texture?[4];
+
+    /// <summary>grass_fur_mask's mask over its fur, on the second UV set.</summary>
+    public Texture? FurMask { get; private init; }
+
+    /// <summary>grass_fur_mask's colour over the diffuse map (DiffuseHfTex), on the third UV set.</summary>
+    public Texture? DiffuseHf { get; private init; }
 
     public AlphaMode AlphaMode { get; private init; }
 
@@ -133,6 +157,8 @@ internal sealed class SurfaceMaterial
     private static readonly HashSet<string> PedsDiffuse = Family("ped_diffuse");
     private static readonly HashSet<string> PedsHair = Family("ped_hair");
     private static readonly HashSet<string> ApproximatePeds = Family("ped_approximate");
+    private static readonly HashSet<string> Furs = Family("fur");
+    private static readonly HashSet<string> Cables = Family("cable");
 
     private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
         .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -194,11 +220,17 @@ internal sealed class SurfaceMaterial
         {
             Shader = shader,
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
-                || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Glasses.Contains(shader),
+                || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Furs.Contains(shader) || Cables.Contains(shader)
+                || Glasses.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
             Glass = Glasses.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
             Ped = Peds.Contains(shader) || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || ApproximatePeds.Contains(shader),
+            Fur = Furs.Contains(shader),
+            Cable = Cables.Contains(shader),
+            FurHeights = Furs.Contains(shader) ? [.. new[] { "01", "23", "45", "67" }.Select(pair => Texture($"fur_height{pair}"))] : new Texture?[4],
+            FurMask = Furs.Contains(shader) ? Texture("fur_mask") : null,
+            DiffuseHf = Furs.Contains(shader) ? Texture("diffuse_hf") : null,
             Layers = [.. new[] { "layer", "layer_bump", "layer_height" }.SelectMany(role => Enumerable.Range(0, 4).Select(i => Texture($"{role}{i}")))],
             Lookup = Texture("lookup"),
             Diffuse = Texture("diffuse"),
@@ -228,6 +260,16 @@ internal sealed class SurfaceMaterial
         if (result.Terrain)
         {
             TerrainUniforms(u);
+            return result;
+        }
+        if (result.Fur)
+        {
+            FurUniforms(u);
+            return result;
+        }
+        if (result.Cable)
+        {
+            CableUniforms(u);
             return result;
         }
 
@@ -386,6 +428,38 @@ internal sealed class SurfaceMaterial
             v[25] = 1;
         }
 
+        // fur.wgsl's Fur uniform, PS_FurDeferredTextured's constants: the specular, furLayerParams, furUvScales, which of
+        // the three shaders, the tint palette's row, and each shell's clip and shade (furAlphaClip03/47, furShadow03/47).
+        void FurUniforms(Span<float> v)
+        {
+            v[0] = Constant("fresnel", .97f)[0];
+            v[1] = Constant("specular_falloff", 100)[0];
+            v[2] = Constant("specular_intensity", .125f)[0];
+            v[3] = Constant("bumpiness", 1)[0];
+            Fill(v[4..7], Constant("specular_mask", 1, 0, 0));
+            Fill(v[8..12], Constant("fur_layer", .008f, 0, 0, 1));
+            Fill(v[12..16], Constant("fur_uv_scales", 1, 1, 1, 1));
+            v[16] = shader.Contains("_mask", StringComparison.OrdinalIgnoreCase) ? 1 : result.TintPalette is not null ? 2 : 0;
+            v[17] = Constant("tint_palette_selector", 0)[0];
+            Fill(v[20..24], Constant("fur_clip03", 0, 10 / 255f, 10 / 255f, 15 / 255f));
+            Fill(v[24..28], Constant("fur_clip47", 20 / 255f, 25 / 255f, 30 / 255f, 34 / 255f));
+            Fill(v[28..32], Constant("fur_shade03", 90 / 255f, 118 / 255f, 148 / 255f, 168 / 255f));
+            Fill(v[32..36], Constant("fur_shade47", 200 / 255f, 220 / 255f, 238 / 255f, 1));
+        }
+
+        // cable.wgsl's Cable uniform: shader_radiusScale, shader_fadeExponent, shader_cableEmissive and the game's alpha
+        // test of 0.1 (it sets it on each draw, over the material's), then the two colours and the ambient scales.
+        void CableUniforms(Span<float> v)
+        {
+            v[0] = Constant("cable_radius_scale", 1)[0];
+            v[1] = Constant("cable_fade_exponent", 1)[0];
+            v[2] = Constant("cable_emissive", 0)[0];
+            v[3] = .1f;
+            Fill(v[4..7], Constant("cable_diffuse", 0, 0, 0));
+            Fill(v[8..11], Constant("cable_diffuse2", 0, 0, 0));
+            Fill(v[12..14], Constant("cable_ambient", 0, 0));
+        }
+
         // What the shader's program writes to the G-buffer's specular (materials.json's vehicle_specular).
         void VehicleSpecular(Span<float> v)
         {
@@ -453,6 +527,13 @@ internal sealed class SurfaceMaterial
     }
 
     private const int Pearlescent = 3;
+
+    // A constant's values into its place, as many as there are room for and the material has, the rest nothing.
+    private static void Fill(Span<float> into, float[] values)
+    {
+        for (int i = 0; i < into.Length; i++)
+            into[i] = i < values.Length ? values[i] : 0;
+    }
 
     /// <summary>
     /// A vehicle material's diffuse colour. matDiffuseColor (2, n, n) isn't a colour but one of the vehicle's seven

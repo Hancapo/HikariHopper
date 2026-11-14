@@ -8,7 +8,7 @@ namespace HikariHopper.Views.Controls;
 /// <summary>
 /// Application-drawn 1px title-bar marks (the maximize and restore squares rounded like the window): minimize, maximize, restore and close
 /// (port of <c>WindowControlGlyph.qml</c>). The 18x18 mark is centred in the control and steps
-/// down by 1px while <see cref="Pressed"/>.
+/// down by 1px while <see cref="Pressed"/>. Each spans the same 10px box, x and y from 4 to 14, around the same centre.
 /// </summary>
 public class WindowControlGlyph : Control
 {
@@ -73,26 +73,18 @@ public class WindowControlGlyph : Control
                     context.DrawRectangle(null, new Pen(ink, 1), new Rect(3.5, 6.5, 8, 8), 2, 2);
                     break;
                 case "close":
-                    Bar(context, ink, 45);
-                    Bar(context, ink, -45);
+                    context.DrawGeometry(null, new Pen(ink, 1, lineCap: PenLineCap.Round), Cross);
                     break;
             }
         }
     }
 
     /// <summary>
-    /// An 11x1 rectangle centred in the box and rotated about its own centre, non-antialiased like
-    /// Qt's Rectangle. Centring snaps it to (3, 8), so it rotates about (8.5, 8.5).
+    /// The close mark: two 1px strokes with round ends, from corner to corner of the square's box, so it spans what the
+    /// other marks do and its ends echo the square's rounded corners. One figure, so where the strokes cross isn't
+    /// drawn twice, brighter than the rest.
     /// </summary>
-    private static void Bar(DrawingContext context, IBrush ink, double degrees)
-    {
-        var rotation = Matrix.CreateTranslation(-8.5, -8.5)
-            * Matrix.CreateRotation(degrees * Math.PI / 180)
-            * Matrix.CreateTranslation(8.5, 8.5);
-        using (context.PushRenderOptions(new RenderOptions { EdgeMode = EdgeMode.Aliased }))
-        using (context.PushTransform(rotation))
-            context.FillRectangle(ink, new Rect(3, 8, 11, 1));
-    }
+    private static readonly Geometry Cross = StreamGeometry.Parse("M5,5 L13,13 M13,5 L5,13");
 
     private static double QtRound(double value) => Math.Floor(value + 0.5);
 }

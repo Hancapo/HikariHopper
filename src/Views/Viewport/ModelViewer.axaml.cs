@@ -54,7 +54,7 @@ public partial class ModelViewer : UserControl, IModalContent
         WindowToolTip.SetIsEnabled(card, true);
         shaderCard = new ViewportOverlay(Viewport, card, left: Ui.Theme.ShaderCardLeft, top: Ui.Theme.ToolStripInset);
         // It points at the row it shows, and follows it as the rows scroll and the card grows.
-        Parts.RowsMoved += PlaceCard;
+        Parts.RowsMoved += () => PlaceCard();
         card.PropertyChanged += (_, e) =>
         {
             if (e.Property == BoundsProperty)
@@ -70,6 +70,13 @@ public partial class ModelViewer : UserControl, IModalContent
         // The parts panel's menu offers the picked geometry's shader values, for a drawable.
         Parts.ShaderValues = () => surfaces is null ? null : PickedMaterial() is not null;
         Parts.ShaderValuesRequested += () => OpenShaderValues();
+        Parts.CloseShaderValues = () =>
+        {
+            if (!cardOpen)
+                return false;
+            CloseShaderValues();
+            return true;
+        };
         shaderEdits.Saved += RefreshTitle;
         Viewport.CommandPressed += (key, shift) => Command(key, shift);
         Viewport.PropertyChanged += (_, e) =>
@@ -82,7 +89,8 @@ public partial class ModelViewer : UserControl, IModalContent
         documentName = file.Name;
         saveTarget = file.SaveTarget;
         TitleText.Text = file.Name;
-        Menus = BuildMenus();
+        drawable = ModelFile.IsDrawableName(file.Name);
+        Menus = BuildMenus(drawable);
         MenuHolder.Children.Add(Menus);
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
@@ -109,6 +117,8 @@ public partial class ModelViewer : UserControl, IModalContent
         TimeButton.Click += (_, _) => ToggleTime();
         ThemedToolTip.Set(TimeButton, "Time of day");
         ShadowsButton.Click += (_, _) => SetShadows(!Viewport.Shadows);
+        // Shadows are a graphics setting: turned in Settings, or in another viewer, this one's button follows.
+        Viewport.GraphicsChanged += RefreshToggles;
         PartsArrow.Click += (_, _) => SetPartsShown(!PartsShown);
         PartsHandle.PointerPressed += OnHandlePressed;
         PartsHandle.PointerMoved += OnHandleMoved;
@@ -199,7 +209,7 @@ public partial class ModelViewer : UserControl, IModalContent
             Viewport.Sky = sky;
     }
 
-    /// <summary>Whether the sun casts shadows on the model and the ground.</summary>
+    /// <summary>Whether the sun casts shadows on the model and the ground, in every viewer: the graphics setting.</summary>
     internal void SetShadows(bool on)
     {
         Viewport.Shadows = on;
@@ -530,18 +540,17 @@ public partial class ModelViewer : UserControl, IModalContent
     internal ShaderEdits ShaderEdits => shaderEdits;
 
     /// <summary>
-    /// Shows the shader values of the geometry picked, one geometry at the level shown, in the card, under the name of
-    /// what it belongs to; with anything else picked, or nothing, there is no card.
+    /// Shows the shader parameters of the geometry picked, one geometry at the level shown, in the card, under the name
+    /// of what it belongs to. With anything else picked, or nothing, the card is out of the way, and it comes back with
+    /// the next geometry picked: it stays open until it's closed.
     /// </summary>
     private void ShowCard()
     {
         // A number being typed goes to the geometry it was typed for, before the card shows another.
         card.FinishTyping();
         FiveFury.Drawables.DrawableMaterial? material = PickedMaterial();
-        // Not asked for, or nothing to show for what's picked now: no card, and it stays closed until asked for again.
         if (!cardOpen || material is null)
         {
-            cardOpen = false;
             shaderCard.IsWanted = false;
             return;
         }
@@ -560,15 +569,19 @@ public partial class ModelViewer : UserControl, IModalContent
         (cardScene, cardPart) = material is not null && Parts.Selection is [{ Parts: [int first, ..] }]
             ? (surfaces, first) : ((DrawableScene?)null, (int?)null);
         card.SetAlsoOn(material is not null && surfaces is { } drawn && Parts.Selection is [{ Parts: [int picked, ..] }] ? AlsoDrawnOn(drawn, picked) : []);
-        shaderCard.IsWanted = material is not null;
-        PlaceCard();
+        // Where it goes first, measured with what it shows now, and only then shown: it doesn't appear where it was
+        // last and jump.
+        card.Measure(Size.Infinity);
+        PlaceCard(force: true);
+        shaderCard.IsWanted = true;
     }
 
     private bool cardOpen;
 
     /// <summary>
-    /// Whether the shader values card is open: opened from the parts panel's menu or with M, for the one geometry
-    /// picked; while open it follows the pick, and it closes when the pick has no one geometry's values to show.
+    /// Whether the shader parameters card is open: opened from the parts panel's menu or with M, for the one geometry
+    /// picked, and open until it's closed (M, Escape or its close mark). While open it follows the pick, out of the way
+    /// while the pick has no one geometry's parameters to show.
     /// </summary>
     internal bool ShaderValuesOpen => cardOpen;
 
@@ -625,12 +638,13 @@ public partial class ModelViewer : UserControl, IModalContent
     /// whole of it in the view, below the parts arrow; with the panel closed, or the row scrolled away, at the view's
     /// top left without a notch.
     /// </summary>
-    private void PlaceCard()
+    private void PlaceCard(bool force = false)
     {
-        if (!shaderCard.IsWanted)
+        if (!shaderCard.IsWanted && !force)
             return;
         double inset = Ui.Theme.ToolStripInset, height = Viewport.Bounds.Height;
-        double cardHeight = card.Bounds.Height > 0 ? card.Bounds.Height : card.DesiredSize.Height;
+        // Its height as measured for what it shows now; laid out, it may still hold the last geometry's.
+        double cardHeight = card.DesiredSize.Height > 0 ? card.DesiredSize.Height : card.Bounds.Height;
         if (partsShown && Parts.SelectedRow is { IsEffectivelyVisible: true } row
             && row.TranslatePoint(new Point(0, row.Bounds.Height / 2), Viewport) is { } middle && middle.Y >= 0 && middle.Y <= height)
         {
@@ -731,13 +745,18 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The viewer's Ctrl keys: Z undoes the last change to the shader values, Y (or Shift+Z) redoes it, S saves them,
-    /// Shift+S saves them as another file, and W closes the viewer.
+    /// Shift+S saves them as another file, and W closes the viewer. A collision or a navmesh has Shift+S and W.
     /// </summary>
     internal bool Command(char key, bool shift = false)
     {
         if (char.ToUpperInvariant(key) == 'W')
         {
             Close();
+            return true;
+        }
+        if (!drawable && char.ToUpperInvariant(key) == 'S' && shift)
+        {
+            _ = SaveAs();
             return true;
         }
         if (!contentShown || surfaces is null)
@@ -831,6 +850,8 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal async Task<bool> SaveAs()
     {
+        if (!drawable)
+            return await SaveCopyAs();
         if (saving || surfaces?.Writer is null)
             return false;
         string extension = Path.GetExtension(file.Name);
@@ -862,6 +883,60 @@ public partial class ModelViewer : UserControl, IModalContent
         return await Saving;
     }
 
+    /// <summary>
+    /// Saves a collision or a navmesh as a loose file picked for it, as it was opened: nothing in it is changed in the
+    /// viewer. False when it can't be written or nothing was picked.
+    /// </summary>
+    private async Task<bool> SaveCopyAs()
+    {
+        if (saving || data.Length == 0)
+            return false;
+        string extension = Path.GetExtension(file.Name);
+        string kind = extension.Equals(".ynv", StringComparison.OrdinalIgnoreCase) ? "Navmesh" : "Collision";
+        string? path = await Dialogs.PickSaveFileAsync($"Save {documentName} as", documentName, [new FileFilter(kind, [$"*{extension}"])]);
+        if (string.IsNullOrEmpty(path) || closed)
+            return false;
+        string destination = SaveNames.WithExtension(path, extension);
+        string name = Path.GetFileName(destination);
+        if (SaveNames.ReplacesUnpicked(path, destination))
+        {
+            ShowSaveFailure(name, "a file of that name is already there. Pick it in Save as to replace it");
+            return false;
+        }
+        byte[] bytes = data;
+        saving = true;
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = $"Saving {name}…";
+        Saving = Finish();
+        return await Saving;
+
+        async Task<bool> Finish()
+        {
+            string? failure = null;
+            try
+            {
+                await Task.Run(() => CommonFury.IO.AtomicFile.Write(destination, bytes));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                failure = error.Message;
+            }
+            saving = false;
+            if (failure is not null)
+            {
+                ShowSaveFailure(name, failure);
+                return false;
+            }
+            // From now on it is that file, as a drawable saved as another is: the title says so.
+            documentName = name;
+            savedElsewhere = true;
+            RefreshTitle();
+            if (!closed)
+                StatusText.Text = $"Saved {name}";
+            return true;
+        }
+    }
+
     // Writes the file as it is now through a target, off the UI thread; then, once it is written, runs afterwards.
     private bool SaveTo(SaveTarget target, string name, Action? afterwards)
     {
@@ -870,7 +945,7 @@ public partial class ModelViewer : UserControl, IModalContent
         if (shownGeneration != generation)
         {
             ShowSaveFailure(name, TexturesSaved.IsCompleted
-                ? "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader values"
+                ? "its textures were saved since it was read, and saving it now would put the old ones back. Open it again to save its shader parameters"
                 : "it is still being read again with the textures just saved. Save it once they show");
             return false;
         }
@@ -975,10 +1050,23 @@ public partial class ModelViewer : UserControl, IModalContent
         return true;
     }
 
-    /// <summary>The menu bar under the title: File and Edit.</summary>
+    /// <summary>
+    /// The menu bar under the title: for a drawable, File and Edit; for a collision or a navmesh, which has no shader
+    /// values to edit and save, nor textures, File with Save as (a copy of it as it was opened) and Close.
+    /// </summary>
     internal ViewerMenuRow Menus { get; }
 
-    private ViewerMenuRow BuildMenus() => new(
+    // Whether the file is a drawable, a drawable dictionary or a fragment, rather than a collision or a navmesh.
+    private readonly bool drawable;
+
+    private ViewerMenuRow BuildMenus(bool drawable) => !drawable
+        ? new(("File",
+        [
+            new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => data.Length > 0 && !saving),
+            null,
+            new("Close", "Ctrl+W", Close),
+        ]))
+        : new(
         ("File",
         [
             new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
@@ -1662,7 +1750,7 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         try
         {
-            return (ModelContent.Read(file.Name, data, file.Dictionaries, [.. game, .. file.Nearby], savedTextures), null);
+            return (ModelContent.Read(file.Name, data, file.Dictionaries, game, savedTextures, file.GameHolding, file.Nearby), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)

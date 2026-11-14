@@ -460,7 +460,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 ],
                 DepthStencilAttachment = new RenderPassDepthStencilAttachment
                 {
-                    View = depthView,
+                    View = hdrDepthView!,
                     DepthLoadOp = LoadOp.Clear,
                     DepthStoreOp = StoreOp.Discard,
                     DepthClearValue = 0,
@@ -471,7 +471,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DrawSurfaces(lit);
             lit.End();
             MeasureFrame(encoder);
-            DrawBloom(encoder);
+            if (Bloom)
+                DrawBloom(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
@@ -549,7 +550,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         vectors[4] = new Vector4(aspect, OrbitCamera.TanHalf, Ground, GridSpacing(Camera.Radius));
         ViewportPalette.Linear().CopyTo(vectors[5..]);
         vectors[12] = new Vector4(origin, 0);
-        vectors[13] = new Vector4(width, height, 0, 0);
+        // The window's size, then the HDR target's, which the drawables are drawn at.
+        vectors[13] = new Vector4(width, height, hdrWidth, hdrHeight);
         queue.WriteBuffer(sceneBuffer, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -584,6 +586,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // The rest is released with its handles; the swap chain lets go of the window now.
         depth?.Destroy();
         hdr?.Destroy();
+        hdrDepth?.Destroy();
         bloom?.Destroy();
         bloomUnfiltered?.Destroy();
         shadowMap?.Destroy();

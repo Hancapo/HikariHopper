@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); and what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
+  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred); what fur.wgsl reads for the fur grass shaders (PS_FurDeferredTextured) and cable.wgsl for the cables (VS_Cable and PS_Cable). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
@@ -25,7 +25,13 @@
     "detail": ["DetailSampler"],
     "height": ["heightSampler"],
     "hair_noise": ["AnisoNoiseSpecSampler"],
-    "diffuse_mask": ["DiffuseMaskSampler"]
+    "diffuse_mask": ["DiffuseMaskSampler"],
+    "fur_height01": ["ComboHeightSamplerFur01", "ComboHeightTexFur01"],
+    "fur_height23": ["ComboHeightSamplerFur23", "ComboHeightTexFur23"],
+    "fur_height45": ["ComboHeightSamplerFur45", "ComboHeightTexFur45"],
+    "fur_height67": ["ComboHeightSamplerFur67", "ComboHeightTexFur67"],
+    "fur_mask": ["FurMaskSampler", "FurMaskTex"],
+    "diffuse_hf": ["DiffuseHfSampler", "DiffuseHfTex"]
   },
   "constants": {
     "fresnel": ["specularFresnel"],
@@ -66,7 +72,19 @@
     "aniso_exponent": ["anisotropicSpecularExponent"],
     "aniso_colour": ["anisotropicSpecularColour"],
     "aniso_alpha_bias": ["AnisotropicAlphaBias"],
-    "hair_noise_scale": ["specularNoiseMapUVScaleFactor"]
+    "hair_noise_scale": ["specularNoiseMapUVScaleFactor"],
+    "fur_layer": ["furLayerParams"],
+    "fur_uv_scales": ["furUvScales"],
+    "fur_clip03": ["furAlphaClip03"],
+    "fur_clip47": ["furAlphaClip47"],
+    "fur_shade03": ["furShadow03"],
+    "fur_shade47": ["furShadow47"],
+    "cable_radius_scale": ["shader_radiusScale", "RadiusScale"],
+    "cable_fade_exponent": ["shader_fadeExponent", "FadeExponent"],
+    "cable_diffuse": ["shader_cableDiffuse", "CableDiffuse"],
+    "cable_diffuse2": ["shader_cableDiffuse2", "CableDiffuse2"],
+    "cable_ambient": ["shader_cableAmbient", "CableAmbient"],
+    "cable_emissive": ["shader_cableEmissive", "CableEmissive"]
   },
   "patterns": [
     { "contains": "diffspec", "detail_mask": "diffuse", "specular_source": "diffuse" },
@@ -138,6 +156,12 @@
     ],
     "ped_hair": [
       "ped_hair_cutout_alpha", "ped_hair_cutout_alpha_cloth", "ped_hair_spiked", "ped_hair_spiked_enveff", "ped_hair_spiked_mask"
+    ],
+    "fur": [
+      "grass_fur", "grass_fur_mask", "grass_fur_tnt"
+    ],
+    "cable": [
+      "cable"
     ],
     "ped_approximate": [
       "ped_decal_medals", "ped_fur"

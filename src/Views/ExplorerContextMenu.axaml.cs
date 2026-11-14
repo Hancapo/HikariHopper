@@ -65,6 +65,10 @@ public partial class ExplorerContextMenu : RetroMenu
         OpenLocationItem.IsEnabled = !busy;
         OpenItem.IsEnabled = !busy && bridge?.CanOpenSelection == true;
         CopyItem.IsVisible = CopyNameItem.IsVisible = CopyPathItem.IsVisible = DeleteSeparator.IsVisible = DeleteMenuItem.IsVisible = !ForFolder;
+        // Windows Explorer at the one item selected, or at the folder shown; at the RPF on disk for anything inside one.
+        ShowInExplorerItem.IsVisible = count == 1;
+        OpenInExplorerItem.IsVisible = ForFolder;
+        ShowInExplorerItem.IsEnabled = OpenInExplorerItem.IsEnabled = bridge?.CanShowInExplorer == true;
         CopyItem.IsEnabled = !busy;
         RenameItem.IsVisible = count == 1;
         RenameItem.IsEnabled = bridge?.CanRenameSelection == true;
@@ -164,6 +168,8 @@ public partial class ExplorerContextMenu : RetroMenu
     }
 
     private void OnCopyPath(object? sender, RoutedEventArgs e) => Bridge?.CopySelectedPath();
+
+    private void OnShowInExplorer(object? sender, RoutedEventArgs e) => Bridge?.ShowInExplorer();
 
     private void OnDelete(object? sender, RoutedEventArgs e)
     {
