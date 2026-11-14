@@ -199,7 +199,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         // With every game set up, Settings is the button.
         Assert.True(start.SettingsButton.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
-        Assert.Equal(HikariHopper.Ui.Theme.TextDim, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
+        Assert.Equal(HikariHopper.Ui.Theme.LegacyMark, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
         Assert.Equal(enhanced, rows[0].Detail.Text);
 
         // Clicking a row opens it, and the explorer and its tab strip come back.
@@ -579,7 +579,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal("Not set", legacyRow.StatusMessage);
 
         // Each group in the rail shows its page in place of the others'.
-        Assert.Equal(["Games", "Startup", "Updates"], settings.Groups.Select(group => group.Label));
+        Assert.Equal(["Games", "Startup", "Updates", "Cache"], settings.Groups.Select(group => group.Label));
         Assert.Equal("Games", settings.Group);
         Assert.True(settings.GamesPage.IsVisible);
         Assert.False(settings.StartupPage.IsVisible);
@@ -930,13 +930,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // An item: what you can do with it, and nothing about making something new.
         ui.Bridge.SelectEntry(Row("folder00"));
-        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
         Assert.False(menu.ForFolder);
         ui.Bridge.SelectEntry(Row("file000.txt"));
-        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
         // A file the app can't open: Open is there but off.
         ui.Bridge.SelectEntry(Row("tool.exe"));
-        Assert.Equal(["(Open)", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["(Open)", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
 
         // Several items: no Open, and copying and deleting say how many.
         ui.Bridge.SelectEntry(Row("file000.txt"));
@@ -945,7 +945,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Empty space: the folder's own menu.
         ui.Bridge.ClearEntrySelection();
-        Assert.Equal(["New", "(Paste)", "Refresh"], Shown());
+        Assert.Equal(["New", "(Paste)", "Open in Explorer", "Refresh"], Shown());
         Assert.True(menu.ForFolder);
 
         // A right-click on empty space clears the selection and opens that one.
@@ -1408,6 +1408,141 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void CtrlShiftEShowsTheSelectedItemInExplorer()
+    {
+        Explorer ui = OpenExplorer();
+        var revealed = new List<(string Path, bool Select)>();
+        Action<string, bool> reveal = ExplorerViewModel.RevealInExplorer;
+        ExplorerViewModel.RevealInExplorer = (path, select) => revealed.Add((path, select));
+        try
+        {
+            ui.Bridge.SelectEntry(RowFor(ui.Bridge, "file000.txt"));
+            Key(ui.Window, PhysicalKey.E, RawInputModifiers.Control | RawInputModifiers.Shift);
+            ui.Bridge.ClearEntrySelection();
+            Key(ui.Window, PhysicalKey.E, RawInputModifiers.Control | RawInputModifiers.Shift);
+            Assert.Equal([(Path.Combine(Work, "file000.txt"), true), (Work, false)], revealed);
+        }
+        finally
+        {
+            ExplorerViewModel.RevealInExplorer = reveal;
+        }
+    }
+
+    [AvaloniaFact]
+    public void TheCachePageRebuildsAndDeletesEachIndexAndOpensTheirFolder()
+    {
+        Explorer ui = OpenExplorer();
+        var settings = new SettingsDialog(ui.Tabs);
+        settings.Present(ui.Find<MenuRow>());
+        Pump();
+        settings.CacheGroup.Choose();
+        Pump();
+        Assert.True(settings.CachePage.IsVisible);
+        Assert.Equal(SettingsDialog.CacheRoot, settings.CacheFolderText.Text);
+        TimeSpan shown = SettingsDialog.CacheResultShown;
+        SettingsDialog.CacheResultShown = TimeSpan.FromMilliseconds(50);
+        Func<TopLevel?, DirectoryInfo, Task> open = SettingsDialog.OpenFolder;
+        var opened = new List<string>();
+        SettingsDialog.OpenFolder = (_, folder) => { opened.Add(folder.FullName); return Task.CompletedTask; };
+        try
+        {
+            // Delete: both of the row's buttons are off while it runs, the one pressed says so, then Done, then back.
+            Directory.CreateDirectory(HikariHopper.Core.GameTextures.CacheFolder);
+            string tables = Path.Combine(HikariHopper.Core.GameTextures.CacheFolder, "0123456789ABCDEF.bin");
+            File.WriteAllText(tables, "t");
+            // Under each cache's name, its size: what its Delete frees.
+            settings.RefreshCacheSizes();
+            Assert.True(HikariHopper.Core.GameTextures.CacheSize >= 1);
+            Assert.Equal(Core.Formatting.FormatSize(HikariHopper.Core.GameTextures.CacheSize), settings.TexturesRow.Detail);
+            settings.DeleteTextures.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.False(settings.DeleteTextures.IsEnabled);
+            Assert.False(settings.RebuildTextures.IsEnabled);
+            TestWait.Until(() => settings.DeleteTextures.Text == "Done", "the delete to be done");
+            Assert.False(File.Exists(tables));
+            Assert.Equal("Empty", settings.TexturesRow.Detail);
+            TestWait.Until(() => settings.CacheWork.IsCompleted, "the button to come back");
+            Assert.Equal("Delete", settings.DeleteTextures.Text);
+            Assert.True(settings.DeleteTextures.IsEnabled && settings.RebuildTextures.IsEnabled);
+
+            // Rebuild: the game searched in this session is read again from scratch.
+            Core.Search.SearchIndex index = Core.Search.SearchIndex.ForGame(Work, null);
+            Task made = index.Refresh();
+            TestWait.Until(() => made.IsCompleted, "the index to be made");
+            int read = index.ArchivesRead;
+            settings.RebuildSearch.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("Rebuilding…", settings.RebuildSearch.Text);
+            Assert.False(settings.DeleteSearch.IsEnabled);
+            TestWait.Until(() => settings.CacheWork.IsCompleted, "the rebuild to be done");
+            Assert.True(index.ArchivesRead >= read);
+            Assert.Equal("Rebuild", settings.RebuildSearch.Text);
+            long searchBytes = Core.Search.SearchIndex.CacheSize;
+            Assert.Equal(searchBytes == 0 ? "Empty" : Core.Formatting.FormatSize(searchBytes), settings.SearchRow.Detail);
+
+            // Open folder shows the folder both caches live in.
+            settings.OpenCacheFolder.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Pump();
+            Assert.Equal([SettingsDialog.CacheRoot], opened);
+        }
+        finally
+        {
+            SettingsDialog.CacheResultShown = shown;
+            SettingsDialog.OpenFolder = open;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ACachesSizeCountsAWriteLeftUnfinishedWhichItsDeleteFrees()
+    {
+        // Each cache with nothing in it but a write a crash left unfinished.
+        foreach ((string folder, Func<long> size, Func<bool> delete) in new (string, Func<long>, Func<bool>)[]
+        {
+            (HikariHopper.Core.GameTextures.CacheFolder, () => HikariHopper.Core.GameTextures.CacheSize, HikariHopper.Core.GameTextures.DeleteCache),
+            (Core.Search.SearchIndex.CacheFolder, () => Core.Search.SearchIndex.CacheSize, Core.Search.SearchIndex.DeleteCache),
+        })
+        {
+            Directory.CreateDirectory(folder);
+            long before = size();
+            string left = Path.Combine(folder, "0123456789ABCDEF.unfinished.tmp");
+            File.WriteAllText(left, "unfinished");
+            Assert.Equal(before + 10, size());
+            Assert.True(delete());
+            Assert.False(File.Exists(left));
+            Assert.Equal(0, size());
+        }
+    }
+
+    [AvaloniaFact]
+    public void TheStartPagesRailPatternStandsStillWhileAGameLoads()
+    {
+        Ui.Motion.ReducedOverride = false;
+        try
+        {
+            Explorer ui = OpenExplorer(openGame: false);
+            RailPattern pattern = ui.Find<RailPattern>();
+            Assert.True(pattern.Animating);
+            using var release = new ManualResetEventSlim();
+            ExplorerViewModel.GameLoader = path =>
+            {
+                release.Wait(TimeSpan.FromSeconds(10));
+                return FakeLoadedGame(path);
+            };
+            ui.Bridge.OpenGameAsync(Work);
+            TestWait.Until(() => ui.Bridge.GameLoading, "the game to start loading");
+            Assert.False(pattern.Animating);
+            release.Set();
+            Settle(ui.Bridge);
+            Pump();
+            // The game is open: the start page, and its pattern, are gone.
+            Assert.Empty(ui.Window.GetVisualDescendants().OfType<RailPattern>());
+            Assert.False(pattern.Animating);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
     public void TabStripActivatesAndClosesTabs()
     {
         Explorer ui = OpenExplorer();
@@ -1546,6 +1681,63 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ClosingTheFirstOfSeveralTabsLetsTheLastGlideInWhole()
+    {
+        Explorer ui = OpenExplorer();
+        for (int index = 0; index < 3; index++)
+        {
+            ui.Tabs.NewTab();
+            ui.Tabs.ActiveBridge.OpenGame(Work);
+        }
+        Pump();
+        TabStrip strip = ui.Find<TabStrip>();
+        ExplorerViewModel[] before = [.. ui.Tabs.Tabs];
+        TabStripTab Drawn(ExplorerViewModel tab) =>
+            ui.Window.GetVisualDescendants().OfType<TabStripTab>().Single(candidate => candidate.Tab == tab);
+        double Offset(ExplorerViewModel tab) => TabStrip.SlideOffset((Control)Drawn(tab).Parent!);
+        Assert.True(strip.ListClips);
+        using IDisposable slow = SlowSlides();
+
+        // The list is already as narrow as three tabs; the last of them glides in from past its edge, drawn whole.
+        TabStripTab first = Drawn(before[0]);
+        Click(ui.Window, first.TranslatePoint(new Point(first.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump(20);
+        Assert.InRange(Offset(before[3]), 0.1, 219.9);
+        Assert.False(strip.ListClips);
+        TestWait.Until(() => Offset(before[3]) == 0, "the tabs to glide into place");
+        TestWait.Until(() => strip.ListClips, "the list to clip again once the tabs are in place");
+
+        // Given tabs as they glide, until they overflow the list, it clips again at once, the glide not done.
+        first = Drawn(before[1]);
+        Click(ui.Window, first.TranslatePoint(new Point(first.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump(20);
+        Assert.False(strip.ListClips);
+        for (int index = 0; index < 4; index++)
+            ui.Tabs.NewTab();
+        Pump(20);
+        Assert.True(strip.ListClips);
+        Assert.NotEqual(0, Offset(before[3]));
+    }
+
+    [AvaloniaFact]
+    public void TabsThatOverflowTheStripStayClippedAsOneCloses()
+    {
+        Explorer ui = OpenExplorer(width: 900);
+        for (int index = 0; index < 6; index++)
+        {
+            ui.Tabs.NewTab();
+            ui.Tabs.ActiveBridge.OpenGame(Work);
+        }
+        Pump();
+        TabStrip strip = ui.Find<TabStrip>();
+        using IDisposable slow = SlowSlides();
+        ui.Tabs.CloseTab(0);
+        Pump(20);
+        // They scroll in the list, so what lies past its edge stays hidden while they glide.
+        Assert.True(strip.ListClips);
+    }
+
+    [AvaloniaFact]
     public void GameTabsShowTheirEditionAndTellTheirPath()
     {
         Explorer ui = OpenExplorer();
@@ -1557,10 +1749,10 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         TabStripTab[] tabs = ui.Window.GetVisualDescendants().OfType<TabStripTab>().ToArray();
         Assert.Equal(3, tabs.Length);
 
-        // A grey V for Legacy, a green one for Enhanced, in place of the folder glyph.
+        // A sand V for Legacy, a green one for Enhanced, in place of the folder glyph.
         Assert.True(tabs[0].EditionMark.IsVisible);
         Assert.False(tabs[0].Glyph.IsVisible);
-        Assert.Equal(HikariHopper.Ui.Theme.TextDim, tabs[0].EditionMark.Fill);
+        Assert.Equal(HikariHopper.Ui.Theme.LegacyMark, tabs[0].EditionMark.Fill);
         Assert.True(tabs[1].EditionMark.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, tabs[1].EditionMark.Fill);
         // The tooltip is just the path.
