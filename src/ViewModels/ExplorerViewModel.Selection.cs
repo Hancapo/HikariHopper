@@ -497,7 +497,8 @@ public sealed partial class ExplorerViewModel
 
         static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
             [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
-                new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path)))];
+                new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
+                    Rendering.NearbyDictionary.KeyForGameFile(game.Root, dictionary.Path)))];
     }
 
     /// <summary>
@@ -698,6 +699,8 @@ public sealed partial class ExplorerViewModel
     /// for it hold, in name order; each is read only when the search reaches it, while the viewer reads the file in
     /// the background. The archive reader is the explorer's, so the read itself happens on the UI thread.
     /// </summary>
+    // Not kept parsed (they have no key): they are read through the explorer's own copy of the archive, which can be
+    // older than the file on disk; the game's lists of a model's dictionaries, read afresh, hold the ones models share.
     private IReadOnlyList<Rendering.NearbyDictionary> NearbyDictionaries(EntryRecord entry)
     {
         if (!ModelFile.IsDrawableName(entry.Name))

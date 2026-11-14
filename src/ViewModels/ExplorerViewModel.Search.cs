@@ -622,7 +622,8 @@ public sealed partial class ExplorerViewModel
                 // Where it lives is worked out here, on the UI thread; the read runs on the viewer's, with a reader of its own.
                 HitPlace place = PlaceOf(sibling);
                 return new Rendering.NearbyDictionary(sibling.Name, sibling.Size,
-                    () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0]);
+                    () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0],
+                    place.InArchive ? Rendering.NearbyDictionary.KeyFor(place.RootFull, place.FromRoot) : Rendering.NearbyDictionary.KeyFor(place.LooseFull, ""));
             })],
             OpenTextures = saved => OpenHitTextures(hit, saved),
             SaveTarget = SaveTargetOf(file.Source, file.Target, name),
