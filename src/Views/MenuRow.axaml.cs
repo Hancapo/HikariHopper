@@ -43,7 +43,8 @@ public partial class MenuRow : UserControl
             new WindowShortcut("Ctrl+W", () => Tabs?.CloseActiveTab()),
             new WindowShortcut("Ctrl+C", () => Bridge?.HasSelection == true, () => _ = Bridge?.CopySelection()),
             new WindowShortcut("Ctrl+V", () => Bridge?.HasWorkspace == true, () => _ = Bridge?.Paste()),
-            new WindowShortcut("Ctrl+Shift+C", () => Bridge?.HasSelection == true, () => Bridge?.CopySelectedPath()));
+            new WindowShortcut("Ctrl+Shift+C", () => Bridge?.HasSelection == true, () => Bridge?.CopySelectedPath()),
+            new WindowShortcut("Ctrl+Shift+E", () => Bridge?.CanShowInExplorer == true, () => Bridge?.ShowInExplorer()));
     }
 
     /// <summary>QML <c>searchRequested</c>: Edit › Search current location….</summary>

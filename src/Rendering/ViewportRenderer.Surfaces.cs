@@ -6,10 +6,23 @@ using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
 
-// Drawables: their surfaces drawn with surface.wgsl (terrain with terrain.wgsl) into the HDR target, solid parts
-// first, then blended ones from far to near; ViewportRenderer.Lighting.cs lights and tone-maps them.
+// Drawables: their surfaces drawn with surface.wgsl (terrain with terrain.wgsl, fur grass with fur.wgsl, cables with
+// cable.wgsl) into the HDR target, solid parts first, then blended ones from far to near; ViewportRenderer.Lighting.cs
+// lights and tone-maps them.
 internal sealed unsafe partial class ViewportRenderer
 {
+    /// <summary>Which shader draws a part.</summary>
+    private enum PartKind
+    {
+        Surface,
+        Terrain,
+        Fur,
+        Cable,
+    }
+
+    /// <summary>The fur grass's shells, drawn as instances of one draw (fur.wgsl's SHELLS).</summary>
+    internal const uint FurShells = 8;
+
     private readonly bool compressedTextures;
     private BindGroupLayout? materialLayout;
     private RenderPipeline? solidSurfaces;
@@ -18,6 +31,8 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? solidReflected, doubleSidedReflected, blendedReflected;
     private BindGroupLayout? terrainLayout;
     private RenderPipeline? terrainSurfaces, terrainReflected;
+    private BindGroupLayout? furLayout, cableLayout;
+    private RenderPipeline? furSurfaces, furReflected, cableSurfaces;
     private Sampler? surfaceSampler;
     private int anisotropy = Core.GraphicsSettings.DefaultAnisotropy;
     // The materials shown, by index, to make their groups again with another sampler.
@@ -67,7 +82,7 @@ internal sealed unsafe partial class ViewportRenderer
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.
-    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, bool Terrain, BindGroup? Fringe)[] surfaceParts = [];
+    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, PartKind Kind, BindGroup? Fringe)[] surfaceParts = [];
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
     private readonly List<Buffer> materialBuffers = [];
@@ -131,27 +146,71 @@ internal sealed unsafe partial class ViewportRenderer
                 Map(13), Map(14), Map(15), Map(16),
             ],
         });
+        // Fur: its diffuse, bump and specular maps, the four combo height maps, _mask's mask and colour maps, and _tnt's
+        // tint palette, read per vertex.
+        furLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = FurUniformBytes },
+                },
+                new BindGroupLayoutEntry { Binding = 1, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                Map(2), Map(3), Map(4), Map(5), Map(6), Map(7), Map(8), Map(9), Map(10),
+                new BindGroupLayoutEntry
+                {
+                    Binding = 11,
+                    Visibility = ShaderStage.Vertex,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 12, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+            ],
+        });
+        // Cables read no texture: their colours are the material's.
+        cableLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = CableUniformBytes },
+                },
+            ],
+        });
         PipelineLayout Layout(BindGroupLayout material, bool reflected) => device.CreatePipelineLayout(new PipelineLayoutDescriptor
         {
             BindGroupLayouts = reflected ? [sceneLayout, material, lightLayout!, reflectionViewLayout!] : [sceneLayout, material, lightLayout!],
         });
         PipelineLayout layout = Layout(materialLayout, false), reflectedLayout = Layout(materialLayout, true);
         PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
+        PipelineLayout furPipelineLayout = Layout(furLayout, false), furReflectedLayout = Layout(furLayout, true);
+        PipelineLayout cablePipelineLayout = Layout(cableLayout, false);
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
         Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("terrain.wgsl") }));
-        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false, bool terrain = false) => gpu.Pipeline($"{(terrain ? "terrain" : "surface")}/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("fur.wgsl") }));
+        Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("cable.wgsl") }));
+        RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false, PartKind kind = PartKind.Surface)
         {
-            Layout = terrain ? (reflected ? terrainReflectedLayout : terrainPipelineLayout) : reflected ? reflectedLayout : layout,
+            string name = kind.ToString().ToLowerInvariant();
+            (PipelineLayout own, PipelineLayout mirrored, Lazy<ShaderModule> module) = kind switch
+            {
+                PartKind.Terrain => (terrainPipelineLayout, terrainReflectedLayout, terrainShader),
+                PartKind.Fur => (furPipelineLayout, furReflectedLayout, furShader),
+                PartKind.Cable => (cablePipelineLayout, cablePipelineLayout, cableShader),
+                _ => (layout, reflectedLayout, shader),
+            };
+            return gpu.Pipeline($"{name}/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = reflected ? mirrored : own,
             Vertex = new VertexState
             {
-                Module = terrain ? terrainShader.Value : shader.Value,
-                EntryPoint = (terrain, reflected) switch
-                {
-                    (true, true) => "vs_terrain_paraboloid",
-                    (true, false) => "vs_terrain",
-                    (false, true) => "vs_surface_paraboloid",
-                    _ => "vs_surface",
-                },
+                Module = module.Value,
+                EntryPoint = reflected ? $"vs_{name}_paraboloid" : $"vs_{name}",
                 Buffers = new[]
                 {
                     new VertexBufferLayout
@@ -175,14 +234,8 @@ internal sealed unsafe partial class ViewportRenderer
             Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, FrontFace = FrontFace.CCW, CullMode = cull },
             Fragment = new FragmentState
             {
-                Module = terrain ? terrainShader.Value : shader.Value,
-                EntryPoint = (terrain, reflected) switch
-                {
-                    (true, true) => "fs_terrain_reflected",
-                    (true, false) => "fs_terrain",
-                    (false, true) => "fs_surface_reflected",
-                    _ => "fs_surface",
-                },
+                Module = module.Value,
+                EntryPoint = reflected ? $"fs_{name}_reflected" : $"fs_{name}",
                 Targets = new[]
                 {
                     new ColorTargetState
@@ -206,6 +259,7 @@ internal sealed unsafe partial class ViewportRenderer
                 DepthCompare = reflected ? CompareFunction.LessEqual : CompareFunction.GreaterEqual,
             },
         }));
+        }
         solidSurfaces = Pipeline(CullMode.Back, blend: false);
         doubleSidedSurfaces = Pipeline(CullMode.None, blend: false);
         blendedSurfaces = Pipeline(CullMode.None, blend: true);
@@ -214,8 +268,13 @@ internal sealed unsafe partial class ViewportRenderer
         doubleSidedReflected = solidReflected;
         blendedReflected = Pipeline(CullMode.None, blend: true, reflected: true);
         // Terrain is solid ground, its backs culled.
-        terrainSurfaces = Pipeline(CullMode.Back, blend: false, terrain: true);
-        terrainReflected = Pipeline(CullMode.None, blend: false, reflected: true, terrain: true);
+        terrainSurfaces = Pipeline(CullMode.Back, blend: false, kind: PartKind.Terrain);
+        terrainReflected = Pipeline(CullMode.None, blend: false, reflected: true, kind: PartKind.Terrain);
+        // Fur is cut out, seen from both sides as the other cut-out surfaces; cables are blended, and left out of the
+        // reflection map, as their width is the camera's.
+        furSurfaces = Pipeline(CullMode.None, blend: false, kind: PartKind.Fur);
+        furReflected = Pipeline(CullMode.None, blend: false, reflected: true, kind: PartKind.Fur);
+        cableSurfaces = Pipeline(CullMode.None, blend: true, kind: PartKind.Cable);
         surfaceSampler = SurfaceSampler();
         // A palette's texels are colours apart: each is read whole, and its edges don't wrap.
         paletteSampler = device.CreateSampler(new SamplerDescriptor
@@ -290,7 +349,8 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < groups.Length; i++)
         {
             SurfaceMaterial material = drawable.Materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material) : MaterialGroup(material, material.Uniforms);
+            groups[i] = material.Terrain ? TerrainGroup(material) : material.Fur ? FurGroup(material) : material.Cable ? CableGroup(material)
+                : MaterialGroup(material, material.Uniforms);
             materialUniforms[i] = materialBuffers[^1];
             // Hair is drawn again, blended, for what isn't solid (SurfaceMaterial.HairFringe).
             if (material.HairFringe)
@@ -299,12 +359,19 @@ internal sealed unsafe partial class ViewportRenderer
                 fringeUniforms[i] = materialBuffers[^1];
             }
         }
-        // Decals blend over what they lie on; terrain is always solid.
+        // Decals blend over what they lie on; terrain is always solid, and so is fur, which cuts its own shells out;
+        // cables blend.
         surfaceParts = [.. drawable.Parts.Select(part =>
         {
             SurfaceMaterial material = drawable.Materials[part.Material];
-            AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
-            return (part, groups[part.Material], mode, material.Terrain, fringes[part.Material]);
+            PartKind kind = material.Terrain ? PartKind.Terrain : material.Fur ? PartKind.Fur : material.Cable ? PartKind.Cable : PartKind.Surface;
+            AlphaMode mode = kind switch
+            {
+                PartKind.Terrain or PartKind.Fur => AlphaMode.Opaque,
+                PartKind.Cable => AlphaMode.Blend,
+                _ => material.Decal ? AlphaMode.Blend : material.AlphaMode,
+            };
+            return (part, groups[part.Material], mode, kind, fringes[part.Material]);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         shownMaterials = drawable.Materials;
@@ -331,11 +398,12 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < materials.Count; i++)
         {
             SurfaceMaterial material = materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material, materialUniforms[i]) : MaterialGroup(material, material.Uniforms, materialUniforms[i]);
+            groups[i] = material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
+                : material.Cable ? CableGroup(material, materialUniforms[i]) : MaterialGroup(material, material.Uniforms, materialUniforms[i]);
             if (fringeUniforms[i] is { } fringe)
                 fringes[i] = MaterialGroup(material, material.Uniforms, fringe);
         }
-        surfaceParts = [.. surfaceParts.Select(p => (p.Part, groups[p.Part.Material], p.Mode, p.Terrain, fringes[p.Part.Material]))];
+        surfaceParts = [.. surfaceParts.Select(p => (p.Part, groups[p.Part.Material], p.Mode, p.Kind, fringes[p.Part.Material]))];
     }
 
     /// <summary>
@@ -410,6 +478,46 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>The bytes of terrain.wgsl's Terrain uniform, the start of the material's.</summary>
     private const int TerrainUniformBytes = 112;
 
+    /// <summary>The bytes of fur.wgsl's Fur uniform and of cable.wgsl's Cable uniform, the start of the material's.</summary>
+    private const int FurUniformBytes = 144, CableUniformBytes = 64;
+
+    private Buffer MaterialUniforms(SurfaceMaterial material)
+    {
+        Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        materialBuffers.Add(uniforms);
+        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+        return uniforms;
+    }
+
+    // A missing combo height map has no fur, so only the first shell shows; a missing mask, no fur at all; a missing
+    // colour map changes nothing.
+    private BindGroup FurGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
+    {
+        Layout = furLayout!,
+        Entries =
+        [
+            new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes },
+            new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
+            new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
+            new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
+            new BindGroupEntry { Binding = 4, TextureView = View(material.Specular) ?? white! },
+            new BindGroupEntry { Binding = 5, TextureView = View(material.FurHeights[0]) ?? clear! },
+            new BindGroupEntry { Binding = 6, TextureView = View(material.FurHeights[1]) ?? clear! },
+            new BindGroupEntry { Binding = 7, TextureView = View(material.FurHeights[2]) ?? clear! },
+            new BindGroupEntry { Binding = 8, TextureView = View(material.FurHeights[3]) ?? clear! },
+            new BindGroupEntry { Binding = 9, TextureView = View(material.FurMask) ?? clear! },
+            new BindGroupEntry { Binding = 10, TextureView = View(material.DiffuseHf) ?? white! },
+            new BindGroupEntry { Binding = 11, TextureView = View(material.TintPalette) ?? white! },
+            new BindGroupEntry { Binding = 12, Sampler = paletteSampler! },
+        ],
+    });
+
+    private BindGroup CableGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
+    {
+        Layout = cableLayout!,
+        Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
+    });
+
     private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
@@ -448,24 +556,31 @@ internal sealed unsafe partial class ViewportRenderer
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
         for (int i = 0; i < surfaceParts.Length; i++)
         {
-            var (part, group, mode, terrain, _) = surfaceParts[i];
+            var (part, group, mode, kind, _) = surfaceParts[i];
             if (mode != AlphaMode.Blend && partsShown[i])
             {
-                pass.SetPipeline(terrain ? (reflected ? terrainReflected! : terrainSurfaces!)
-                    : reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
-                    : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!);
+                pass.SetPipeline(kind switch
+                {
+                    PartKind.Terrain => reflected ? terrainReflected! : terrainSurfaces!,
+                    PartKind.Fur => reflected ? furReflected! : furSurfaces!,
+                    _ => reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
+                        : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!,
+                });
                 pass.SetBindGroup(1, group);
-                pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
+                // Fur: one instance a shell.
+                pass.DrawIndexed(part.IndexCount, kind == PartKind.Fur ? FurShells : 1, part.FirstIndex, part.BaseVertex, 0);
             }
         }
         // Then what blends, furthest first: blended parts, and hair's second pass, which keeps the depth its first wrote
         // where it is solid and blends the rest in by its alpha, so hair covers a pixel as much as its alpha says, as the
         // game's noise-dropped hair does once its TAA has averaged it.
+        // Cables among them, but not into the reflection map.
         Vector3 eye = Camera.Eye - origin;
-        pass.SetPipeline(reflected ? blendedReflected! : blendedSurfaces!);
-        foreach (var (part, group) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i])
-            .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material)))
+        foreach (var (part, group, kind) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i]
+                && !(reflected && p.Kind == PartKind.Cable))
+            .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind)))
         {
+            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces! : reflected ? blendedReflected! : blendedSurfaces!);
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }

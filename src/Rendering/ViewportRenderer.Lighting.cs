@@ -490,8 +490,8 @@ internal sealed unsafe partial class ViewportRenderer
             pass.End();
         }
 
-        // Terrain's material is laid out differently, and cuts nothing out.
-        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && !surfaceParts[i].Terrain;
+        // Terrain's material is laid out differently, and cuts nothing out; fur casts as its first shell, its surface.
+        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && surfaceParts[i].Kind == PartKind.Surface;
     }
 
     /// <summary>The drawable's shadow on the backdrop's ground, over the backdrop just drawn.</summary>

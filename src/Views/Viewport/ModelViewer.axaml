@@ -107,17 +107,21 @@
                 </Border>
               </StackPanel>
               <StackPanel Name="ModelTools" DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" IsVisible="False">
-                <!-- The level shown, with its triangles; a list of the four above it, or the one level as plain text. -->
-                <Border Name="LodWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" MinWidth="96" Padding="9,0,8,0"
+                <!-- The level shown, led by a layers glyph as Paint is by its colours, with its triangles; a list of the four
+                     above it, or the one level as plain text. -->
+                <Border Name="LodWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" Padding="8,0,8,0"
                         VerticalAlignment="Center" Background="{x:Static ui:Theme.InsetBg}"
                         CornerRadius="{x:Static ui:Theme.ControlCorner}" Focusable="True"
                         AutomationProperties.Name="Level of detail">
-                  <DockPanel>
-                    <c:LucideIcon Name="LodCaret" DockPanel.Dock="Right" IconName="chevron-up" Width="9" Height="9" Margin="10,0,0,0"
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <c:LucideIcon Name="LodGlyph" IconName="layers" Width="14" Height="14" Weight="1.6" VerticalAlignment="Center"
+                                  Stroke="{x:Static ui:Theme.TextRow}" />
+                    <TextBlock Name="LodText" Foreground="{x:Static ui:Theme.Text}" FontFamily="{x:Static ui:Theme.UiFont}"
+                               FontSize="{x:Static ui:Theme.FontSize}" VerticalAlignment="Center" />
+                    <TextBlock Name="LodCount" Classes="unit" VerticalAlignment="Center" />
+                    <c:LucideIcon Name="LodCaret" IconName="chevron-up" Width="9" Height="9" Margin="1,0,0,0"
                                   Weight="1.6" VerticalAlignment="Center" Stroke="{x:Static ui:Theme.TextDim}" />
-                    <TextBlock Name="LodCount" DockPanel.Dock="Right" Classes="unit" Margin="8,0,0,0" />
-                    <TextBlock Name="LodText" Classes="count" Foreground="{x:Static ui:Theme.Text}" FontSize="{x:Static ui:Theme.FontSize}" />
-                  </DockPanel>
+                  </StackPanel>
                 </Border>
                 <!-- A vehicle's paint, the game's colours for it: its primary over its secondary, which opens the paint above. -->
                 <Border Name="PaintWell" Height="{x:Static ui:Theme.ModelFooterControlHeight}" Padding="8,0,8,0" IsVisible="False"

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.Versioning;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using HikariHopper.Core;
 using HikariHopper.ViewModels;
 
@@ -11,7 +12,7 @@ namespace HikariHopper.Views;
 /// games in <see cref="GameCatalog"/>, bound to the shared <see cref="Core.GamePathSettings"/>; Graphics has how the 3D
 /// views draw (<see cref="GraphicsSettings"/>), the same in every viewer; Startup has what
 /// the app does when it starts, and the start page's recent games; Updates has the version, Check now and the
-/// check at startup.
+/// check at startup; Cache rebuilds or deletes the texture and search indexes.
 /// Every change is saved as it is made.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -45,6 +46,7 @@ public partial class SettingsDialog : ModalSheet
         foreach (SettingsGroupRow group in Groups)
             group.Chosen += (_, _) => ShowGroup(group);
         GamePaths.PathsChanged += (_, _) => RefreshGameRows();
+        WireCache();
         tabs.PropertyChanged += OnTabsChanged;
         Refresh();
     }
@@ -65,7 +67,7 @@ public partial class SettingsDialog : ModalSheet
     }
 
     /// <summary>The rail's groups, top to bottom.</summary>
-    internal IReadOnlyList<SettingsGroupRow> Groups => [GamesGroup, GraphicsGroup, StartupGroup, UpdatesGroup];
+    internal IReadOnlyList<SettingsGroupRow> Groups => [GamesGroup, GraphicsGroup, StartupGroup, UpdatesGroup, CacheGroup];
 
     /// <summary>The group shown, by its label.</summary>
     internal string Group => Groups.First(group => group.Selected).Label;
@@ -79,6 +81,89 @@ public partial class SettingsDialog : ModalSheet
         GraphicsPage.IsVisible = group == GraphicsGroup;
         StartupPage.IsVisible = group == StartupGroup;
         UpdatesPage.IsVisible = group == UpdatesGroup;
+        CachePage.IsVisible = group == CacheGroup;
+    }
+
+    // ---------------- Cache ----------------
+
+    /// <summary>The folder both caches live in.</summary>
+    internal static string CacheRoot => Path.GetDirectoryName(GameTextures.CacheFolder)!;
+
+    /// <summary>Opens a folder in Explorer; tests replace it.</summary>
+    internal static Func<TopLevel?, DirectoryInfo, Task> OpenFolder { get; set; } =
+        async (top, folder) =>
+        {
+            if (top is not null)
+                await top.Launcher.LaunchDirectoryInfoAsync(folder);
+        };
+
+    /// <summary>The last cache button's work, done once its button is back; for tests.</summary>
+    internal Task CacheWork { get; private set; } = Task.CompletedTask;
+
+    private void WireCache()
+    {
+        RebuildTextures.Click += (_, _) => CacheWork = RunCache(RebuildTextures, DeleteTextures, "Rebuilding…",
+            GameTextures.RebuildCache);
+        DeleteTextures.Click += (_, _) => CacheWork = RunCache(DeleteTextures, RebuildTextures, "Deleting…",
+            () => Task.FromResult(GameTextures.DeleteCache()));
+        RebuildSearch.Click += (_, _) => CacheWork = RunCache(RebuildSearch, DeleteSearch, "Rebuilding…",
+            async () => { await Core.Search.SearchIndex.RebuildAll(); return true; });
+        DeleteSearch.Click += (_, _) => CacheWork = RunCache(DeleteSearch, RebuildSearch, "Deleting…",
+            () => Task.FromResult(Core.Search.SearchIndex.DeleteCache()));
+        CacheFolderText.Text = CacheRoot;
+        OpenCacheFolder.Click += async (_, _) =>
+        {
+            DirectoryInfo folder = Directory.CreateDirectory(CacheRoot);
+            await OpenFolder(TopLevel.GetTopLevel(this), folder);
+        };
+    }
+
+    /// <summary>Each cache's size on disk, under its name: what its Delete would free.</summary>
+    internal void RefreshCacheSizes()
+    {
+        TexturesRow.Detail = SizeText(GameTextures.CacheSize);
+        SearchRow.Detail = SizeText(Core.Search.SearchIndex.CacheSize);
+
+        static string SizeText(long bytes) => bytes == 0 ? "Empty" : Formatting.FormatSize(bytes);
+    }
+
+    /// <summary>How long a cache button says how it went before it's back.</summary>
+    internal static TimeSpan CacheResultShown { get; set; } = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// Runs a cache job off the UI thread. Its row's buttons are off meanwhile, the one pressed saying what it does;
+    /// then it says Done, In use when a file couldn't go, or Failed, for a moment; and its row is back, whatever
+    /// happened.
+    /// </summary>
+    private async Task RunCache(Controls.ChromeToolButton pressed, Controls.ChromeToolButton other, string doing, Func<Task<bool>> job)
+    {
+        string label = pressed.Text;
+        pressed.IsEnabled = other.IsEnabled = false;
+        pressed.Text = doing;
+        try
+        {
+            string outcome;
+            try
+            {
+                outcome = await Task.Run(job) ? "Done" : "In use";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                outcome = "In use";
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                outcome = "Failed";
+            }
+            pressed.Text = outcome;
+            RefreshCacheSizes();
+            await Task.Delay(CacheResultShown);
+        }
+        finally
+        {
+            pressed.Text = label;
+            pressed.IsEnabled = other.IsEnabled = true;
+        }
     }
 
     /// <summary>The installation rows, in catalogue order.</summary>
@@ -101,7 +186,7 @@ public partial class SettingsDialog : ModalSheet
             GameRows.Children.Add(new TextBlock
             {
                 Text = game.Title.ToUpperInvariant(),
-                Margin = new Avalonia.Thickness(0, GameRows.Children.Count == 0 ? 2 : 22, 0, 8),
+                Margin = new Avalonia.Thickness(2, GameRows.Children.Count == 0 ? 2 : 22, 0, 10),
                 Classes = { "section" },
             });
             var card = new SettingsCard();
@@ -183,6 +268,7 @@ public partial class SettingsDialog : ModalSheet
         OpenLastGame.IsOn = GameSettings.OpenLastGameOnStartup;
         RefreshRecents();
         RefreshUpdates();
+        RefreshCacheSizes();
     }
 
     private void RefreshUpdates()
