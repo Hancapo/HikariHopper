@@ -1470,6 +1470,27 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ACachesSizeCountsAWriteLeftUnfinishedWhichItsDeleteFrees()
+    {
+        // Each cache with nothing in it but a write a crash left unfinished.
+        foreach ((string folder, Func<long> size, Func<bool> delete) in new (string, Func<long>, Func<bool>)[]
+        {
+            (HikariHopper.Core.GameTextures.CacheFolder, () => HikariHopper.Core.GameTextures.CacheSize, HikariHopper.Core.GameTextures.DeleteCache),
+            (Core.Search.SearchIndex.CacheFolder, () => Core.Search.SearchIndex.CacheSize, Core.Search.SearchIndex.DeleteCache),
+        })
+        {
+            Directory.CreateDirectory(folder);
+            long before = size();
+            string left = Path.Combine(folder, "0123456789ABCDEF.unfinished.tmp");
+            File.WriteAllText(left, "unfinished");
+            Assert.Equal(before + 10, size());
+            Assert.True(delete());
+            Assert.False(File.Exists(left));
+            Assert.Equal(0, size());
+        }
+    }
+
+    [AvaloniaFact]
     public void TabStripActivatesAndClosesTabs()
     {
         Explorer ui = OpenExplorer();

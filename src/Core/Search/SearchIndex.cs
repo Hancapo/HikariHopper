@@ -127,8 +127,8 @@ public sealed class SearchIndex
     /// <summary>Forgets every shared index; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
-    /// <summary>The bytes of every index on disk, what <see cref="DeleteCache"/> deletes.</summary>
-    public static long CacheSize => CacheFiles.Size(CacheFolder, "*.index");
+    /// <summary>The bytes of every index on disk and of a write of one left unfinished, what <see cref="DeleteCache"/> deletes.</summary>
+    public static long CacheSize => CacheFiles.Size(CacheFolder, "*.index") + CacheFiles.Size(CacheFolder, "*.tmp");
 
     /// <summary>
     /// Deletes every index on disk. Those in use keep what they hold, and write theirs again on their next refresh;

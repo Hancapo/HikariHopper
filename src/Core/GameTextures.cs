@@ -71,8 +71,12 @@ public sealed class GameTextures
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
-    /// <summary>The bytes the cache holds: every game's tables and FiveFury's index of their archives, what <see cref="DeleteCache"/> deletes.</summary>
-    public static long CacheSize => CacheFiles.Size(CacheFolder, "*.bin") + CacheFiles.Size(IndexFolder, "*", deep: true);
+    /// <summary>
+    /// The bytes the cache holds: every game's tables, a write of them left unfinished, and FiveFury's index of their
+    /// archives, what <see cref="DeleteCache"/> deletes.
+    /// </summary>
+    public static long CacheSize =>
+        CacheFiles.Size(CacheFolder, "*.bin") + CacheFiles.Size(CacheFolder, "*.tmp") + CacheFiles.Size(IndexFolder, "*", deep: true);
 
     /// <summary>
     /// Deletes every game's cached tables and FiveFury's index of their archives. The tables in use stay as they are
