@@ -69,13 +69,15 @@ public sealed class GameTextureDirectory
     /// The dictionaries that hold a texture named <paramref name="textureName"/>, nearest to <paramref name="nearPath"/>
     /// (a model's path from the game folder, RPFs as folders) first: those in its folder, then its RPF, and so on up,
     /// then a mod's over the game's update over the game's own, as the game takes them; none when no dictionary of the
-    /// game holds one; null while the directory isn't ready, or couldn't be read.
+    /// game holds one; null while the directory isn't ready, or couldn't be read, and when none does but an RPF of the
+    /// game couldn't be read, which may hold one.
     /// </summary>
     public IReadOnlyList<GameDictionary>? Holding(string textureName, string? nearPath)
     {
         if (loading is not { IsCompletedSuccessfully: true } done)
             return null;
-        return done.Result.Holding(textureName, nearPath);
+        IReadOnlyList<GameDictionary> found = done.Result.Holding(textureName, nearPath);
+        return found.Count == 0 && !done.Result.Complete ? null : found;
     }
 
     /// <summary>
@@ -173,7 +175,8 @@ public sealed class GameTextureDirectory
             try
             {
                 Directory.CreateDirectory(cacheFolder);
-                WriteCache(cachePath, Version, all);
+                // An RPF that couldn't be read isn't kept, so the next run reads it again.
+                WriteCache(cachePath, Version, [.. all.Where(part => !part.Failed)]);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -192,6 +195,7 @@ public sealed class GameTextureDirectory
     internal static Part Scan(string file, string archive, long length, long written, GameTarget target, GameCrypto? crypto)
     {
         var dictionaries = new List<Held>();
+        bool failed = false;
         try
         {
             using RpfReadSession session = RpfReadSession.Open(file, crypto);
@@ -200,8 +204,9 @@ public sealed class GameTextureDirectory
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException
             or NotSupportedException or EndOfStreamException or ArgumentException)
         {
+            failed = true;
         }
-        return new Part(archive, length, written, [.. dictionaries]);
+        return new Part(archive, length, written, [.. dictionaries], failed);
 
         void Walk(RpfReadSession session, RpfDirectoryEntry folder, string prefix)
         {
@@ -320,7 +325,7 @@ public sealed class GameTextureDirectory
     internal sealed record Held(string Path, long Size, uint[] Names);
 
     /// <summary>What an RPF holds (<paramref name="Archive"/>, from the game folder) as it was at that size and time written.</summary>
-    internal sealed record Part(string Archive, long Length, long Written, Held[] Dictionaries);
+    internal sealed record Part(string Archive, long Length, long Written, Held[] Dictionaries, bool Failed = false);
 
     /// <summary>The game's dictionaries by the names they hold.</summary>
     internal sealed class Names
@@ -330,6 +335,7 @@ public sealed class GameTextureDirectory
 
         public Names(IReadOnlyList<Part> parts)
         {
+            Complete = parts.All(part => !part.Failed);
             var all = new List<GameDictionary>();
             var lists = new Dictionary<uint, List<int>>();
             foreach (Part part in parts)
@@ -347,6 +353,9 @@ public sealed class GameTextureDirectory
             dictionaries = [.. all];
             byName = lists.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray());
         }
+
+        /// <summary>Whether every RPF was read: one that couldn't be may hold what none of the rest does.</summary>
+        public bool Complete { get; }
 
         /// <summary>How many dictionaries there are.</summary>
         public int Count => dictionaries.Length;

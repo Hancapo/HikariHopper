@@ -130,6 +130,28 @@ public sealed class GameTextureDirectoryTests : IDisposable
         Assert.Single(next.Holding("first", null)!);
     }
 
+    [Fact]
+    public async Task An_rpf_that_cant_be_read_is_read_again_the_next_run_and_meanwhile_the_directory_cant_say_what_none_holds()
+    {
+        string root = Game();
+        Save(Archive("x64a.rpf", ("a.ytd", Ytd(0, "first"))), root, "x64a.rpf");
+        Save(Archive("x64b.rpf", ("b.ytd", Ytd(0, "second"))), root, "x64b.rpf");
+        GameTextureDirectory directory = GameTextureDirectory.ForGame(Loaded(root));
+        using (new FileStream(Path.Combine(root, "x64b.rpf"), FileMode.Open, FileAccess.Read, FileShare.None))
+            await directory.Load();
+        // What the RPF it read holds is found; what none does may be in the one it couldn't, so it can't say.
+        Assert.Single(directory.Holding("first", null)!);
+        Assert.Null(directory.Holding("second", null));
+        Assert.Null(directory.Holding("nowhere", null));
+
+        // The next run reads it, rather than take it as holding nothing.
+        GameTextureDirectory.ForgetAll();
+        GameTextureDirectory next = GameTextureDirectory.ForGame(Loaded(root));
+        await next.Load();
+        Assert.Single(next.Holding("second", null)!);
+        Assert.Empty(next.Holding("nowhere", null)!);
+    }
+
     private static NearbyDictionary Dictionary(string name, List<string> reads, params string[] textures)
     {
         byte[] ytd = Ytd(0, textures);
