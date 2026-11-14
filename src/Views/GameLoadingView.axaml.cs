@@ -46,8 +46,13 @@ public partial class GameLoadingView : UserControl
         base.OnDataContextChanged(e);
         if (bridge is not null)
             bridge.PropertyChanged -= OnBridgePropertyChanged;
-        // Another tab: what it shows replaces this one's at once.
-        StopFade();
+        // Another tab: what it shows replaces this one's at once, and a fade over the last one's game goes with it, rather
+        // than start again over this one's.
+        if (fading)
+        {
+            StopFade();
+            Hide();
+        }
         bridge = Bridge;
         if (bridge is not null)
             bridge.PropertyChanged += OnBridgePropertyChanged;
@@ -75,6 +80,12 @@ public partial class GameLoadingView : UserControl
     private void Refresh()
     {
         bool loading = Bridge?.GameLoading == true;
+        // A load begun while it fades out over the last game: it is back, opaque and taking clicks, already shown.
+        if (loading && fading)
+        {
+            StopFade();
+            revealed = true;
+        }
         // Timer { running: bridge.gameLoading && !revealed }
         if (loading && !revealed)
         {
@@ -89,7 +100,7 @@ public partial class GameLoadingView : UserControl
         if (visible)
             StopFade();
         // The load opened the game: fade out over it, rather than vanish.
-        else if (IsVisible && !fading && Bridge?.HasWorkspace == true && !Motion.Reduced && FadeDuration > TimeSpan.Zero)
+        else if (IsVisible && !fading && !loading && Bridge?.HasWorkspace == true && !Motion.Reduced && FadeDuration > TimeSpan.Zero)
             StartFade();
         // Shown, its train and pattern running, until the fade ends.
         if (fading)
@@ -102,6 +113,14 @@ public partial class GameLoadingView : UserControl
         Overlay.IsRunning = visible;
         Pattern.IsRunning = visible;
         AutomationProperties.SetName(this, $"Loading {Bridge?.GameLoadingName}");
+    }
+
+    // Gone, its train and pattern stopped.
+    private void Hide()
+    {
+        IsVisible = false;
+        Overlay.IsRunning = false;
+        Pattern.IsRunning = false;
     }
 
     private void StartFade()
