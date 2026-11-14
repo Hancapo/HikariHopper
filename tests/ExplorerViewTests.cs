@@ -1569,6 +1569,65 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void NothingMovesUnderTheLoadingViewAsItFadesOutOverTheGameAndItsStrip()
+    {
+        try
+        {
+            GameLoadingView.FadeDuration = TimeSpan.FromMilliseconds(320);
+            Ui.Motion.ReducedOverride = false;
+            Explorer ui = OpenExplorer(openGame: false);
+            GameLoadingView loading = ui.Find<GameLoadingView>();
+            TabStrip strip = ui.Find<TabStrip>();
+            Rect Where(Visual visual) => new(visual.TranslatePoint(default, ui.Window)!.Value, visual.Bounds.Size);
+            using var release = new ManualResetEventSlim();
+            ExplorerViewModel.GameLoader = path =>
+            {
+                release.Wait(TimeSpan.FromSeconds(10));
+                return FakeLoadedGame(path);
+            };
+            ui.Bridge.OpenGameAsync(Work);
+            TestWait.Until(() => loading.Revealed && loading.IsVisible, "the loading view to show");
+            // From the lone launcher, without a strip: the view covers the whole screen, as the start page did.
+            Assert.False(strip.IsVisible);
+            Rect view = Where(loading), train = Where(loading.Overlay);
+            release.Set();
+            Settle(ui.Bridge);
+            // The game open, its strip and workspace come in under the fading view, which stays where it was, over them.
+            Assert.True(loading.Fading);
+            Assert.True(strip.IsVisible);
+            Assert.True(view.Contains(Where(strip)));
+            for (int frame = 0; frame < 12 && loading.IsVisible; frame++)
+            {
+                Assert.Equal(view, Where(loading));
+                Assert.Equal(train, Where(loading.Overlay));
+                TestWait.Pump(30);
+            }
+            TestWait.Until(() => !loading.IsVisible, "the fade to end");
+
+            // Loaded again from a new tab's start page, with the strip showing: the view sits under the strip, which
+            // the other tab keeps using.
+            ui.Tabs.NewTab();
+            Pump();
+            using var again = new ManualResetEventSlim();
+            ExplorerViewModel.GameLoader = path =>
+            {
+                again.Wait(TimeSpan.FromSeconds(10));
+                return FakeLoadedGame(path);
+            };
+            ui.Tabs.ActiveBridge!.OpenGameAsync(Work);
+            TestWait.Until(() => loading.Revealed && loading.IsVisible, "the second loading view to show");
+            Assert.True(strip.IsVisible);
+            Assert.True(Where(loading).Top >= Where(strip).Bottom - 0.5);
+            again.Set();
+            Settle(ui.Tabs);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
     public void TheLoadingViewGoesAtOnceWithMotionReduced()
     {
         try

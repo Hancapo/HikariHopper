@@ -66,7 +66,26 @@ public partial class ExplorerScreen : UserControl
     /// </summary>
     public bool StripVisible => tabs is null || bridge is null || tabs.Tabs.Count > 1 || bridge.HasWorkspace;
 
-    private void RefreshStrip() => Strip.IsVisible = StripVisible;
+    private void RefreshStrip()
+    {
+        Strip.IsVisible = StripVisible;
+        PlaceLoadingView();
+    }
+
+    /// <summary>
+    /// Places the game loading view while it is hidden, so it shows where it will stay: over the strip's row when there
+    /// is no strip (a load from the lone launcher), under the strip when there is one, which other tabs keep using.
+    /// While it shows, and fades out over the opened game, it keeps its place: the strip and the workspace that come
+    /// with the game appear under it, not move it.
+    /// </summary>
+    private void PlaceLoadingView()
+    {
+        if (LoadingView.IsVisible)
+            return;
+        bool overStrip = !Strip.IsVisible;
+        Grid.SetRow(LoadingView, overStrip ? 0 : 1);
+        Grid.SetRowSpan(LoadingView, overStrip ? 2 : 1);
+    }
 
     private void TrackBridge()
     {
