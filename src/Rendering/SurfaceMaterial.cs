@@ -26,7 +26,7 @@ internal enum AlphaMode
 internal sealed class SurfaceMaterial
 {
     /// <summary>The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112.</summary>
-    public const int UniformBytes = 368;
+    public const int UniformBytes = 400;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -42,6 +42,12 @@ internal sealed class SurfaceMaterial
 
     /// <summary>Whether it is a vehicle shader (PS_DeferredVehicleTextured): paint, mesh, tyres, interiors and the rest.</summary>
     public bool Vehicle { get; private init; }
+
+    /// <summary>
+    /// Whether it is a vehicle's glass (vehicle_vehglass, _crack, _inner): a forward shader the game lights as it draws it
+    /// (PS_VehicleTextured), blended over what is behind it, its back culled.
+    /// </summary>
+    public bool Glass { get; private init; }
 
     /// <summary>
     /// Whether it is a terrain shader, drawn with terrain.wgsl: those the shader rebuilds, and the rest of the terrain
@@ -120,6 +126,7 @@ internal sealed class SurfaceMaterial
 
     private static readonly HashSet<string> Textured = Family("textured");
     private static readonly HashSet<string> Vehicles = Family("vehicle");
+    private static readonly HashSet<string> Glasses = Family("glass");
     private static readonly HashSet<string> Terrains = Family("terrain");
     private static readonly HashSet<string> ApproximateTerrains = Family("terrain_approximate");
     private static readonly HashSet<string> Peds = Family("ped");
@@ -187,8 +194,9 @@ internal sealed class SurfaceMaterial
         {
             Shader = shader,
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
-                || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader),
+                || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Glasses.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
+            Glass = Glasses.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
             Ped = Peds.Contains(shader) || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || ApproximatePeds.Contains(shader),
             Layers = [.. new[] { "layer", "layer_bump", "layer_height" }.SelectMany(role => Enumerable.Range(0, 4).Select(i => Texture($"{role}{i}")))],
@@ -205,7 +213,7 @@ internal sealed class SurfaceMaterial
             Height = Texture("height"),
             HairNoise = PedsHair.Contains(shader) ? Texture("hair_noise") : null,
             DiffuseMask = PedsHair.Contains(shader) ? Texture("diffuse_mask") : null,
-            AlphaMode = (material.RenderBucket & 7) switch
+            AlphaMode = Glasses.Contains(shader) ? AlphaMode.Blend : (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
                 3 => AlphaMode.Mask,
@@ -290,7 +298,33 @@ internal sealed class SurfaceMaterial
         }
         if (result.Ped)
             Ped(u);
+        if (result.Glass)
+            Glass(u);
         return result;
+
+        // PS_VehicleTextured, as vehicle_vehglass and its _crack and _inner compile it: matDiffuseColor, dirtLevelMod and
+        // dirtColor where the vehicle shaders keep them, clean as the viewer shows a vehicle; which of the programs (1
+        // vehicle_vehglass, 2 _crack, which faces the camera, 3 _inner, with its own specular and fresnel); and
+        // matDiffuseColorTint, which the vertex alpha blends the diffuse towards.
+        void Glass(Span<float> v)
+        {
+            float[] colour = Constant("paint_colour", 1, 1, 1);
+            for (int i = 0; i < 3; i++)
+                v[16 + i] = colour.ElementAtOrDefault(i);
+            float[] dirt = Constant("dirt_level", 0, 1, 0, 1);
+            for (int i = 0; i < 4; i++)
+                v[20 + i] = dirt.ElementAtOrDefault(i);
+            v[20] = 0;
+            float[] dirtColour = Constant("dirt_colour", .23f, .22f, .2f);
+            for (int i = 0; i < 3; i++)
+                v[24 + i] = dirtColour.ElementAtOrDefault(i);
+            v[27] = result.Dirt is not null ? 1 : 0;
+            v[92] = shader.EndsWith("_inner", StringComparison.OrdinalIgnoreCase) ? 3
+                : shader.EndsWith("_crack", StringComparison.OrdinalIgnoreCase) ? 2 : 1;
+            float[] tint = Constant("diffuse_tint", 1, 1, 1, 0);
+            for (int i = 0; i < 4; i++)
+                v[96 + i] = tint.ElementAtOrDefault(i);
+        }
 
         // PS_DeferredPedTextured at rest: which of its programs, whether it has the rim light and the bend towards the
         // view, whether the diffuse alpha is a palette index, and hair's highlights, noise and alpha bias. The ped

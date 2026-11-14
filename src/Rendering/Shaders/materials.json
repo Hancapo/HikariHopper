@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured) and the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped); and what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
+  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); and what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue.",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
@@ -36,6 +36,7 @@
     "emissive_multiplier": ["emissiveMultiplier"],
     "tint_palette_selector": ["tintPaletteSelector"],
     "paint_colour": ["matDiffuseColor"],
+    "diffuse_tint": ["matDiffuseColorTint"],
     "ramp_enabled": ["matDiffuseSpecularRampEnabled"],
     "dirt_level": ["dirtLevelMod"],
     "dirt_colour": ["dirtColor"],
@@ -107,6 +108,7 @@
       "vehicle_paint9", "vehicle_shuts", "vehicle_tire", "vehicle_tire_emissive", "vehicle_track", "vehicle_track2",
       "vehicle_track2_emissive", "vehicle_track_ammo", "vehicle_track_emissive"
     ],
+    "glass": ["vehicle_vehglass", "vehicle_vehglass_crack", "vehicle_vehglass_inner"],
     "textured": [
       "cloth_default", "cloth_normal_spec", "cloth_normal_spec_tnt", "cubemap_reflect", "cutout_hard", "decal", "decal_amb_only",
       "decal_diff_only_um", "decal_dirt", "decal_emissive_only", "decal_emissivenight_only", "decal_glue", "decal_normal_only",
