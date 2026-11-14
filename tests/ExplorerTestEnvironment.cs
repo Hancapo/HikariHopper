@@ -32,6 +32,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly Func<string, LoadedGame> previousGameLoader;
     private readonly Func<string, GameTarget, GameCrypto, GameTextures.Tables> previousTableBuilder;
     private readonly TimeSpan previousFade;
+    private readonly Func<string, string, long, long, GameTarget, GameCrypto?, GameTextureDirectory.Part> previousScanner;
     private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
@@ -64,6 +65,10 @@ public abstract class ExplorerTestBase : IDisposable
         // The loading view goes at once when a load ends, unless a test fades it.
         previousFade = Views.GameLoadingView.FadeDuration;
         Views.GameLoadingView.FadeDuration = TimeSpan.Zero;
+        // Nor the texture directory, which would hold the test's RPFs open meanwhile.
+        previousScanner = GameTextureDirectory.Scanner;
+        GameTextureDirectory.Scanner = (_, archive, length, written, _, _) => new GameTextureDirectory.Part(archive, length, written, []);
+        GameTextureDirectory.ForgetAll();
         // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
         Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
         Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(null);
@@ -102,6 +107,8 @@ public abstract class ExplorerTestBase : IDisposable
         ExplorerViewModel.GameLoader = previousGameLoader;
         GameTextures.Builder = previousTableBuilder;
         Views.GameLoadingView.FadeDuration = previousFade;
+        GameTextureDirectory.Scanner = previousScanner;
+        GameTextureDirectory.ForgetAll();
         ExplorerViewModel.SearchDelay = previousSearchDelay;
         GameKeys.CachePath = previousKeyCache;
         AppSettings.RegistryPath = previousRegistryPath;

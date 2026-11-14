@@ -103,4 +103,37 @@ public sealed class RealGameTests
             Directory.Delete(scratch, recursive: true);
         }
     }
+
+    [Fact]
+    public void ADlcsMapPiecesHaveTheirArchetypesDictionaryAndItsGtxdParents()
+    {
+        string root = LegacyRoot()!;
+        LoadedGame game = RpfProvider.LoadGame(root);
+        GameTextures.Tables tables = GameTextures.Tables.Build(root, game.Target, game.Crypto);
+        // Cayo Perico's island, which its DLC's map update adds to the game's map: its archetype names the
+        // dictionary, and the island's gtxd.meta its parents.
+        string[] found = [.. tables.For("h4_mph4_ter02_track_02.ydr").Select(dictionary => Path.GetFileName(dictionary.Path))];
+        Assert.Equal(["h4_mph4_ter02_dirttracks.ytd", "gdislxtertracks.ytd", "gdislxterrain.ytd", "mapdetail.ytd"], found);
+    }
+
+    [Fact]
+    public void AVehiclesModPartsHaveItsDictionariesAndEveryVehiclesEndsInVehshare()
+    {
+        string root = LegacyRoot()!;
+        LoadedGame game = RpfProvider.LoadGame(root);
+        GameTextures.Tables tables = GameTextures.Tables.Build(root, game.Target, game.Crypto);
+        string[] For(string model) => [.. tables.For(model).Select(dictionary => Path.GetFileName(dictionary.Path))];
+        // A part of the Dominator's kit (carcols), which carvariations gives the Dominator: its dictionary, up to vehshare.
+        Assert.Equal("dominator4.ytd", For("dom4_doorw_2r.yft")[0]);
+        Assert.Contains("vehshare.ytd", For("dom4_doorw_2r.yft"));
+        // A part no kit names: the vehicle its RPF is named for (yosemite2_mods.rpf).
+        Assert.Equal("yosemite2.ytd", For("yose2_splitter_c.yft")[0]);
+        // The Veto's dictionary, which no txdRelationships entry gives a parent, ends in vehshare all the same.
+        Assert.Equal(["veto2.ytd", "vehshare.ytd"], For("veto2_pedal_ac.yft")[..2]);
+        // The lowriders' interiors: patchday7ng's title update streaming changes give the Peyote's dictionary them.
+        Assert.Contains("vehicles_lowrider.ytd", For("pey3_int_croc.yft"));
+        // A wheel carcols lists, a DLC's or the base game's: vehshare, where the tyres' textures are.
+        Assert.Equal("vehshare.ytd", For("wheel_smod4.ydr")[0]);
+        Assert.Equal("vehshare.ytd", For("wheel_musc_06.ydr")[0]);
+    }
 }

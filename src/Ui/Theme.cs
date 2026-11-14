@@ -72,6 +72,9 @@ public static class Theme
     public static IImmutableSolidColorBrush Selection { get; } = Hex("#D1F0AA");
     public static IImmutableSolidColorBrush SelectionText { get; } = Hex("#1B1C2C");
     public static IImmutableSolidColorBrush SelectionInk { get; } = Rgba(0.106, 0.110, 0.173, 0.74);
+
+    // Sand: GTA V Legacy's mark, as light as Enhanced's green, so neither reads as off; paler than the warning amber.
+    public static IImmutableSolidColorBrush LegacyMark { get; } = Hex("#E3CC9F");
     public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.66);
     public static IImmutableSolidColorBrush SelectionWash { get; } = Rgba(0.819, 0.941, 0.667, 0.13);  // unfocused pane
     public static IImmutableSolidColorBrush SelectionRing { get; } = Rgba(0.819, 0.941, 0.667, 0.55);
@@ -197,8 +200,12 @@ public static class Theme
     public const double TextureThumbnailSize = 50;
     public const double TextureToolbarHeight = 38;
 
-    /// <summary>The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time.</summary>
-    public const double ModelFooterHeight = ExplorerStatusHeight;
+    /// <summary>
+    /// The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time. Tall enough for
+    /// its controls to have 8 px on every side, as far as they sit from the window's edge, so they sit evenly in its
+    /// rounded corner.
+    /// </summary>
+    public const double ModelFooterHeight = 40;
 
     /// <summary>The controls in it, as the explorer's view switch in a shorter bar.</summary>
     public const double ModelFooterControlHeight = 24;
