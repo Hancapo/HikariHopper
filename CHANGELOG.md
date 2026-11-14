@@ -12,6 +12,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Every menu bar behaves the same: in the 3D and text viewers, pointing at another title switches menus while one is open; a click on an open menu's title closes it; and menus take the arrow keys, Enter and Escape, with Left and Right moving to the menus beside. ([#225](https://github.com/Hancapo/HikariHopper/pull/225))
+
 ### Removed
 
 ## [0.2.0] - 2026-11-12
