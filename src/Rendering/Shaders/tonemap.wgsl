@@ -54,6 +54,7 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     // The HDR target at the window's size is read pixel for pixel. At another render scale it is read across the
     // pixel and each read tone-mapped before they are averaged, so highlights don't blow up as they shrink: two by two
     // reads when it is larger (supersampled; at twice the size, each of its pixels once), one bilinear read when smaller.
+    // A read between its pixels tone-maps the four around it and blends those, rather than blend the HDR colour first.
     let size = vec2f(textureDimensions(hdr_texture));
     var result = vec4f(0.0);
     if (all(abs(size - window_size) < vec2f(0.5))) {
@@ -63,7 +64,7 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
         for (var y = 0; y < n; y++) {
             for (var x = 0; x < n; x++) {
                 let at = (floor(frag.xy) + (vec2f(f32(x), f32(y)) + 0.5) / f32(n)) / window_size;
-                result += composite(textureSampleLevel(hdr_texture, bloom_sampler, at, 0.0), bloom, glow, exposure, p0, p1, white);
+                result += composite_between(at * size, bloom, glow, exposure, p0, p1, white);
             }
         }
         result /= f32(n * n);
@@ -72,6 +73,26 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
         discard;
     }
     return result;
+}
+
+// The HDR target at a point between its pixels (in its pixels, from its corner): the four pixels around it, each
+// tone-mapped, blended by how near the point is to each, as a bilinear read would blend them.
+fn composite_between(place: vec2f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32) -> vec4f {
+    let last = vec2i(textureDimensions(hdr_texture)) - 1;
+    let centred = place - 0.5;
+    let corner = vec2i(floor(centred));
+    let weight = centred - floor(centred);
+    var sum = vec4f(0.0);
+    for (var y = 0; y < 2; y++) {
+        for (var x = 0; x < 2; x++) {
+            let texel = clamp(corner + vec2i(x, y), vec2i(0), last);
+            let w = select(1.0 - weight.x, weight.x, x == 1) * select(1.0 - weight.y, weight.y, y == 1);
+            if (w > 0.0) {
+                sum += w * composite(textureLoad(hdr_texture, texel, 0), bloom, glow, exposure, p0, p1, white);
+            }
+        }
+    }
+    return sum;
 }
 
 // One read of the HDR target, tone-mapped and premultiplied by its coverage over the backdrop, with the glow over the
