@@ -55,6 +55,7 @@ public partial class ShortcutsDialog : ModalSheet
             new("Ctrl+C", "Copy"),
             new("Ctrl+V", "Paste"),
             new("Ctrl+Shift+C", "Copy path"),
+            new("Ctrl+Shift+E", "Show in Explorer"),
             new("F2", "Rename"),
             new("Del", "Delete the selected items"),
             new("Alt+Enter", "Properties"),

@@ -930,13 +930,13 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // An item: what you can do with it, and nothing about making something new.
         ui.Bridge.SelectEntry(Row("folder00"));
-        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
         Assert.False(menu.ForFolder);
         ui.Bridge.SelectEntry(Row("file000.txt"));
-        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["Open", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
         // A file the app can't open: Open is there but off.
         ui.Bridge.SelectEntry(Row("tool.exe"));
-        Assert.Equal(["(Open)", "Copy", "Copy name", "Copy path", "Rename…", "Extract…", "Delete", "Properties"], Shown());
+        Assert.Equal(["(Open)", "Copy", "Copy name", "Copy path", "Show in Explorer", "Rename…", "Extract…", "Delete", "Properties"], Shown());
 
         // Several items: no Open, and copying and deleting say how many.
         ui.Bridge.SelectEntry(Row("file000.txt"));
@@ -945,7 +945,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
 
         // Empty space: the folder's own menu.
         ui.Bridge.ClearEntrySelection();
-        Assert.Equal(["New", "(Paste)", "Refresh"], Shown());
+        Assert.Equal(["New", "(Paste)", "Open in Explorer", "Refresh"], Shown());
         Assert.True(menu.ForFolder);
 
         // A right-click on empty space clears the selection and opens that one.
@@ -1405,6 +1405,27 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Settle(ui.Bridge);
         Pump();
         Assert.False(loading.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void CtrlShiftEShowsTheSelectedItemInExplorer()
+    {
+        Explorer ui = OpenExplorer();
+        var revealed = new List<(string Path, bool Select)>();
+        Action<string, bool> reveal = ExplorerViewModel.RevealInExplorer;
+        ExplorerViewModel.RevealInExplorer = (path, select) => revealed.Add((path, select));
+        try
+        {
+            ui.Bridge.SelectEntry(RowFor(ui.Bridge, "file000.txt"));
+            Key(ui.Window, PhysicalKey.E, RawInputModifiers.Control | RawInputModifiers.Shift);
+            ui.Bridge.ClearEntrySelection();
+            Key(ui.Window, PhysicalKey.E, RawInputModifiers.Control | RawInputModifiers.Shift);
+            Assert.Equal([(Path.Combine(Work, "file000.txt"), true), (Work, false)], revealed);
+        }
+        finally
+        {
+            ExplorerViewModel.RevealInExplorer = reveal;
+        }
     }
 
     [AvaloniaFact]
