@@ -20,6 +20,7 @@ public partial class MenuRow : UserControl
 
 
     private readonly Dictionary<MenuBarButton, RetroMenu> menus = [];
+    private readonly MenuBar? bar;
     private SettingsDialog? settingsDialog;
     private ShortcutsDialog? shortcutsDialog;
     private AboutDialog? aboutDialog;
@@ -33,8 +34,9 @@ public partial class MenuRow : UserControl
         Bind(ViewButton, "ViewMenu");
         Bind(GoButton, "GoMenu");
         Bind(HelpButton, "HelpMenu");
-        // While a menu is open, pointing at another title opens that one instead.
-        MenuBarHover.Attach(this, [.. menus.Select(pair => (pair.Key, pair.Value, (Action)(() => Open(pair.Key))))]);
+        // A menu bar's clicks, pointing and keys, as the viewers' bars have them.
+        bar = MenuBar.Attach(this, [.. menus.Select(pair => new MenuBar.Title(pair.Key, pair.Value, () => pair.Value.IsOpen,
+            () => Open(pair.Key), pair.Value.Close))]);
 
         WindowShortcuts.Register(this,
             new WindowShortcut("Ctrl+T", () => Tabs?.NewTab()),
@@ -65,7 +67,11 @@ public partial class MenuRow : UserControl
         var menu = (RetroMenu)Resources[key]!;
         menus[button] = menu;
         menu.Opened += (_, _) => button.MenuOpen = true;
-        menu.Closed += (_, _) => button.MenuOpen = false;
+        menu.Closed += (_, _) =>
+        {
+            button.MenuOpen = false;
+            bar?.Closed(button);
+        };
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -78,7 +84,7 @@ public partial class MenuRow : UserControl
     private void OnMenuButton(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuBarButton button)
-            Open(button);
+            bar?.Toggle(button);
     }
 
     private void Open(MenuBarButton button)

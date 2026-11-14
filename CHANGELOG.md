@@ -34,6 +34,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Every menu bar behaves the same: in the 3D and text viewers, pointing at another title switches menus while one is open; a click on an open menu's title closes it; and menus take the arrow keys, Enter and Escape, with Left and Right moving to the menus beside. ([#225](https://github.com/Hancapo/HikariHopper/pull/225))
 - The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
 - Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
 - DLC map pieces, Cayo Perico's island among them, get their textures in the 3D viewer: of 300 sampled island models, 69 are left with a texture missing, down from 209. ([#219](https://github.com/Hancapo/HikariHopper/pull/219))

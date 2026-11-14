@@ -17,6 +17,7 @@ public partial class TextureViewerMenuRow : UserControl
     private readonly RetroMenu editMenu;
     private readonly RetroMenuItem undoItem, saveItem, saveAsItem;
     private TextureViewerViewModel? viewModel;
+    private readonly MenuBar bar;
 
     public TextureViewerMenuRow()
     {
@@ -35,16 +36,24 @@ public partial class TextureViewerMenuRow : UserControl
         ((RetroMenuItem)fileMenu.Items[4]!).Triggered += (_, _) => _ = viewModel?.ExtractAll();
         ((RetroMenuItem)fileMenu.Items[6]!).Triggered += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
+        // A menu bar's clicks, pointing and keys, as the explorer's and the viewers' bars have them.
+        bar = MenuBar.Attach(this,
+            new MenuBar.Title(FileButton, fileMenu, () => fileMenu.IsOpen, () => OpenPopup(fileMenu, FileButton), fileMenu.Close),
+            new MenuBar.Title(EditButton, editMenu, () => editMenu.IsOpen, () => OpenPopup(editMenu, EditButton), editMenu.Close));
         fileMenu.Opened += (_, _) => FileButton.MenuOpen = true;
-        fileMenu.Closed += (_, _) => FileButton.MenuOpen = false;
+        fileMenu.Closed += (_, _) =>
+        {
+            FileButton.MenuOpen = false;
+            bar.Closed(FileButton);
+        };
         editMenu.Opened += (_, _) => EditButton.MenuOpen = true;
-        editMenu.Closed += (_, _) => EditButton.MenuOpen = false;
-        FileButton.Click += (_, _) => OpenPopup(fileMenu, FileButton);
-        EditButton.Click += (_, _) => OpenPopup(editMenu, EditButton);
-        // While a menu is open, pointing at the other title opens that one instead.
-        MenuBarHover.Attach(this,
-            (FileButton, fileMenu, () => OpenPopup(fileMenu, FileButton)),
-            (EditButton, editMenu, () => OpenPopup(editMenu, EditButton)));
+        editMenu.Closed += (_, _) =>
+        {
+            EditButton.MenuOpen = false;
+            bar.Closed(EditButton);
+        };
+        FileButton.Click += (_, _) => bar.Toggle(FileButton);
+        EditButton.Click += (_, _) => bar.Toggle(EditButton);
         RefreshLabels();
     }
 
