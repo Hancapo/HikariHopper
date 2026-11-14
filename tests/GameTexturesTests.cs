@@ -296,4 +296,86 @@ public sealed class GameTexturesTests : IDisposable
             GameTextures.ForgetAll();
         }
     }
+
+    [Fact]
+    public void Deleting_the_cache_takes_the_tables_and_the_archive_index_and_nothing_else()
+    {
+        Directory.CreateDirectory(Path.Combine(GameTextures.IndexFolder, "deep"));
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "0123456789ABCDEF.bin"), "t");
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "0123456789ABCDEF.bin.tmp"), "t");
+        File.WriteAllText(Path.Combine(GameTextures.IndexFolder, "deep", "x64a.ffic"), "i");
+        File.WriteAllText(Path.Combine(GameTextures.CacheFolder, "notes.txt"), "kept");
+        Assert.True(GameTextures.DeleteCache());
+        Assert.Equal(["notes.txt"], Directory.EnumerateFiles(GameTextures.CacheFolder).Select(Path.GetFileName));
+        Assert.False(Directory.Exists(GameTextures.IndexFolder));
+        // Nothing there is nothing to do.
+        Assert.True(GameTextures.DeleteCache());
+    }
+
+    [Fact]
+    public async Task Rebuilding_the_cache_makes_each_loaded_games_tables_again_from_its_archives()
+    {
+        Directory.CreateDirectory(Path.Combine(scratch, "game"));
+        File.WriteAllBytes(Path.Combine(scratch, "game", "x64a.rpf"), [1, 2, 3]);
+        int builds = 0;
+        GameTextures.ForgetAll();
+        try
+        {
+            GameTextures loaded = GameTextures.Share(Path.Combine(scratch, "game"), () =>
+            {
+                Interlocked.Increment(ref builds);
+                return new GameTextures.Tables();
+            });
+            await loaded.Load();
+            Assert.Equal(1, builds);
+            // Its cache holds them now: loaded again, they'd be read from it. A rebuild deletes it and makes them anew.
+            Assert.NotEmpty(Directory.EnumerateFiles(GameTextures.CacheFolder, "*.bin"));
+            await GameTextures.RebuildCache();
+            Assert.Equal(2, builds);
+            Assert.NotEmpty(Directory.EnumerateFiles(GameTextures.CacheFolder, "*.bin"));
+        }
+        finally
+        {
+            GameTextures.ForgetAll();
+        }
+    }
+
+    [Fact]
+    public async Task Rebuilding_waits_for_tables_being_made_and_never_reads_back_a_cache_file_that_stayed()
+    {
+        Directory.CreateDirectory(Path.Combine(scratch, "game"));
+        File.WriteAllBytes(Path.Combine(scratch, "game", "x64a.rpf"), [1, 2, 3]);
+        int builds = 0;
+        using var gate = new ManualResetEventSlim();
+        GameTextures.ForgetAll();
+        try
+        {
+            GameTextures loaded = GameTextures.Share(Path.Combine(scratch, "game"), () =>
+            {
+                if (Interlocked.Increment(ref builds) == 1)
+                    gate.Wait(TimeSpan.FromSeconds(10));
+                return new GameTextures.Tables();
+            });
+            // Tables being made hold the game's archives: a rebuild waits for them, rather than replacing them meanwhile.
+            Task first = loaded.Load();
+            Task<bool> rebuild = GameTextures.RebuildCache();
+            await Task.Delay(200);
+            Assert.False(rebuild.IsCompleted);
+            Assert.Equal(1, builds);
+            gate.Set();
+            await first;
+            Assert.True(await rebuild);
+            Assert.Equal(2, builds);
+
+            // A cache file another program holds open can't go: the rebuild says so, and makes the tables all the same.
+            string cache = Directory.EnumerateFiles(GameTextures.CacheFolder, "*.bin").Single();
+            using (new FileStream(cache, FileMode.Open, FileAccess.Read, FileShare.Read))
+                Assert.False(await GameTextures.RebuildCache());
+            Assert.Equal(3, builds);
+        }
+        finally
+        {
+            GameTextures.ForgetAll();
+        }
+    }
 }

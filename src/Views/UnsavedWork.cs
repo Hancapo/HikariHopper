@@ -35,7 +35,7 @@ internal sealed class UnsavedWork
         if (session.ModelViewer is { IsOpen: true, HasUnsavedChanges: true } model && Of(session.ModelViewerTab, tab))
         {
             ExplorerViewModel? owner = session.ModelViewerTab;
-            files.Add(new UnsavedFile(model.DocumentName, Where("3D viewer · shader values", owner), owner, model.SaveBeforeClosing,
+            files.Add(new UnsavedFile(model.DocumentName, Where("3D viewer · shader parameters", owner), owner, model.SaveBeforeClosing,
                 () => BringForward(owner, model)));
         }
         foreach (ExplorerViewModel each in session.Tabs.Tabs)

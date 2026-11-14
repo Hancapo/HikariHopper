@@ -93,6 +93,31 @@ public sealed class SearchModeTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public async Task ShowInExplorerGoesToAResultsRpfOnDiskOrToTheFileItself()
+    {
+        ExplorerViewModel bridge = Game();
+        var revealed = new List<(string Path, bool Select)>();
+        Action<string, bool> reveal = ExplorerViewModel.RevealInExplorer;
+        ExplorerViewModel.RevealInExplorer = (path, select) => revealed.Add((path, select));
+        try
+        {
+            bridge.BeginSearch();
+            bridge.SetSearchText("readme");
+            await Searched(bridge);
+            // One in a nested RPF: the RPF on disk that holds it. One loose: the file itself.
+            bridge.SelectEntry(Row(bridge, "x64i.rpf/levels/gta5/props/v_street.rpf/notes/readme.txt"));
+            bridge.ShowInExplorer();
+            bridge.SelectEntry(Row(bridge, "mods/readme.txt"));
+            bridge.ShowInExplorer();
+            Assert.Equal([(inner, true), (Path.Combine(Work, "mods", "readme.txt"), true)], revealed);
+        }
+        finally
+        {
+            ExplorerViewModel.RevealInExplorer = reveal;
+        }
+    }
+
+    [AvaloniaFact]
     public async Task AScopeKeepsTheSearchToAFolderItsSubfoldersOrAnRpf()
     {
         ExplorerViewModel bridge = Game();
