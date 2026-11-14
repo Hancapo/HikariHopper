@@ -615,6 +615,8 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = named,
             GameDictionaries = GameDictionaries(name),
+            // A result of the game's index is named by its path from the game folder.
+            GameHolding = GameHolding(game, game is not null ? hit.Path : null),
             GamePaints = GamePaints(name),
             GameSky = game is not null ? SkyOf(game) : null,
             Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>

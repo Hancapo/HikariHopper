@@ -470,6 +470,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            GameHolding = GameHolding(LoadedGameOfProvider(), GamePathOf(entry)),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = OpensTexturesOf(entry, data),
@@ -495,10 +496,54 @@ public sealed partial class ExplorerViewModel
             return null;
         return Find(game, modelName);
 
-        static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
-            [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
-                new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
-                    Rendering.NearbyDictionary.KeyForGameFile(game.Root, dictionary.Path)))];
+        static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName)
+        {
+            IReadOnlyList<GameDictionary> found = await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false);
+            // And the texture directory, which says where the rest are (GameHolding): a model shown before either is
+            // ready is read again with both once they are. One that can't be read only leaves the rest to search for.
+            try
+            {
+                await GameTextureDirectory.ForGame(game).Load().ConfigureAwait(false);
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+            }
+            return [.. found.Select(dictionary => GameFileDictionary(game, dictionary))];
+        }
+    }
+
+    private static Rendering.NearbyDictionary GameFileDictionary(LoadedGame game, GameDictionary dictionary) =>
+        new(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
+            Rendering.NearbyDictionary.KeyForGameFile(game.Root, dictionary.Path));
+
+    /// <summary>How many of the dictionaries holding a texture of a name are tried for it, nearest first.</summary>
+    internal const int HoldersTried = 4;
+
+    /// <summary>
+    /// The game's dictionaries holding a texture of a name, nearest the drawable at <paramref name="modelPath"/> (from the
+    /// game folder) first, from the game's texture directory (<see cref="GameTextureDirectory"/>); null outside a game and
+    /// for a drawable outside its RPFs, which the directory doesn't cover; the lookup then searches beside it instead.
+    /// </summary>
+    internal static Func<string, IReadOnlyList<Rendering.NearbyDictionary>?>? GameHolding(LoadedGame? game, string? modelPath)
+    {
+        if (game is null || modelPath is null || !ModelFile.IsDrawableName(modelPath)
+            || !modelPath.Split('/')[..^1].Any(part => part.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)))
+            return null;
+        GameTextureDirectory directory = GameTextureDirectory.ForGame(game);
+        return name => directory.Holding(name, modelPath) is { } holding
+            ? [.. holding.Take(HoldersTried).Select(dictionary => GameFileDictionary(game, dictionary))] : null;
+    }
+
+    /// <summary>An entry's path from the game folder, RPFs as folders; null outside a game or an RPF from outside it.</summary>
+    private string? GamePathOf(EntryRecord entry)
+    {
+        if (LoadedGameOfProvider() is null)
+            return null;
+        string local = currentPath == "." ? entry.Name : $"{currentPath}/{entry.Name}";
+        if (!Provider.InArchive)
+            return local;
+        return Provider.ArchiveGamePath.Length == 0 ? null
+            : string.Join('/', new[] { Provider.ArchiveGamePath, Provider.ArchivePrefix, local }.Where(part => part.Length > 0));
     }
 
     /// <summary>

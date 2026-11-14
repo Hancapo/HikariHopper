@@ -465,6 +465,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// </summary>
     private void ReadGameTextures(LoadedGame game)
     {
+        // Which dictionaries hold which textures, read meanwhile without holding the game up: a second or two from
+        // nothing, a moment from the cache.
+        _ = GameTextureDirectory.ForGame(game).Load();
         try
         {
             GameTextures.ForGame(game).Load(() => Dispatcher.UIThread.Post(() =>
@@ -526,7 +529,10 @@ public sealed partial class ExplorerViewModel : ObservableObject
         // Where the game keeps models' textures beyond the models themselves: read while the game loaded, unless it was
         // opened without the loading screen; then in the background now, so the 3D viewer has it when a model opens.
         if (LoadedGameOfProvider() is { } game)
+        {
             _ = GameTextures.ForGame(game).Load();
+            _ = GameTextureDirectory.ForGame(game).Load();
+        }
         GameOpened?.Invoke(this, Provider.GamePath);
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();
