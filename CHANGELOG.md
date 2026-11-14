@@ -16,6 +16,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
+- Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
 
 ### Removed
 
