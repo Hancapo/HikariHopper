@@ -29,6 +29,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - DLC map pieces, Cayo Perico's island among them, get their textures in the 3D viewer: of 300 sampled island models, 69 are left with a texture missing, down from 209. ([#219](https://github.com/Hancapo/HikariHopper/pull/219))
+- Vehicle mod parts and wheels get their vehicles' textures in the 3D viewer: of 300 sampled models, 34 are left with a texture missing, down from 114. ([#220](https://github.com/Hancapo/HikariHopper/pull/220))
 - The 3D viewer finds a model's textures wherever the game holds them, such as a vehicle mod part's shared vehicle textures: of 400 sampled models, 12 are left with a texture missing, down from 141, and they read 3.5× faster. ([#218](https://github.com/Hancapo/HikariHopper/pull/218))
 - The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
 - Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))

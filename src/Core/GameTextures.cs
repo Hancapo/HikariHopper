@@ -1,12 +1,12 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using CommonFury.Dlc;
 using CommonFury.Hashing;
 using FiveFury;
 using FiveFury.Assets;
 using FiveFury.Authoring;
 using FiveFury.Cryptography;
-using CommonFury.Dlc;
 using FiveFury.Dlc;
 
 namespace HikariHopper.Core;
@@ -30,7 +30,9 @@ public sealed class GameTextures
     // game folder made stale on every run and which ranked stray copies over the game's own files).
     // 5: the game's car colours and each vehicle's combinations of them.
     // 7: the DLC packs' map updates are run, so their archetypes and gtxd parents are in the tables.
-    private const int FormatVersion = 7;
+    // 8: vehicle mod parts have their vehicle's dictionaries, and wheels vehshare.ytd; the DLC packs' title update
+    // streaming changes are run.
+    private const int FormatVersion = 8;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -449,11 +451,13 @@ public sealed class GameTextures
         private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
         /// <summary>
-        /// The DLC packs' content groups run over their startup ones when the game is mounted: their map updates
-        /// (GROUP_MAP), which the game runs as it loads its map (<see cref="MapName"/>). Every DLC's additions to the
-        /// map are in them, Cayo Perico's island among them, with their archetypes and gtxd.meta.
+        /// The DLC packs' content groups run over their startup ones when the game is mounted: their title update's
+        /// streaming changes (GROUP_UPDATE_STREAMING), which FiveFury runs for the update pack only, and the game for
+        /// every pack, such as patchday7ng's vehicle dictionaries and their parents, which the lowriders' interiors are
+        /// in; and their map updates (GROUP_MAP), which the game runs as it loads its map (<see cref="MapName"/>). Every
+        /// DLC's additions to the map are in them, Cayo Perico's island among them, with their archetypes and gtxd.meta.
         /// </summary>
-        internal static IReadOnlyList<DlcContentGroup> MountGroups { get; set; } = [DlcContentGroup.Map];
+        internal static IReadOnlyList<DlcContentGroup> MountGroups { get; set; } = [DlcContentGroup.UpdateStreaming, DlcContentGroup.Map];
 
         /// <summary>The game's map, as the DLC packs' map updates name it: the files they add are for it.</summary>
         internal const string MapName = "MO_JIM_L11";
@@ -497,6 +501,11 @@ public sealed class GameTextures
                     tables.Models[model.Value] = declared;
                     dictionaries.UnionWith(declared);
                 }
+            // A vehicle's mod parts, which no archetype names: the game streams them with the vehicle's dictionary, and
+            // wheels, which any vehicle can take, with the vehicles' shared one.
+            foreach (var (part, declared) in ModParts(files, tables.Models))
+                if (tables.Models.TryAdd(part, declared))
+                    dictionaries.UnionWith(declared);
             // Each dictionary's parent, and theirs, as far up as the chains go.
             var pending = new Queue<uint>(dictionaries);
             while (pending.TryDequeue(out uint child))
@@ -507,6 +516,18 @@ public sealed class GameTextures
                 }
             // The car colours (carcols) and each vehicle's combinations of them (carvariations), as the game has them now.
             FiveFury.VehicleMeta.VehicleAppearanceIndex vehicles = cache.GetVehicleAppearanceIndex();
+            // A vehicle's dictionary that no txdRelationships entry gives a parent, such as the Veto's, ends in vehshare
+            // all the same: every vehicles.meta names it as its residentTxd, which the game keeps loaded for them all.
+            foreach (Hash32 vehicle in vehicles.VariationModels)
+                foreach (uint start in tables.Models.GetValueOrDefault(vehicle.Value) ?? [])
+                {
+                    uint top = start;
+                    var seen = new HashSet<uint> { top };
+                    while (tables.Parents.TryGetValue(top, out uint parent) && seen.Add(parent))
+                        top = parent;
+                    if (top != VehicleShare && !tables.Parents.ContainsKey(top))
+                        tables.Parents[top] = VehicleShare;
+                }
             foreach (FiveFury.VehicleMeta.ResolvedVehicleColor colour in vehicles.Colors())
                 tables.Colours[colour.Index] = (colour.Name, colour.PackedArgb, colour.Metallic is { } metallic
                     ? new Rendering.CarMetallic(metallic.SpecularIntensity, metallic.SpecularFalloff, metallic.SpecularFresnel) : null);
@@ -514,6 +535,90 @@ public sealed class GameTextures
                 if (vehicles.FindVariation(model) is { Colors.Count: > 0 } variation)
                     tables.Combinations[model.Value] = [.. variation.Colors.Select(combination => combination.Indices.ToArray())];
             return tables;
+        }
+
+        private static readonly uint VehicleShare = new Hash32("vehshare").Value;
+
+        /// <summary>
+        /// The dictionaries of the game's vehicle mod parts (carcols' kits, their visible and linked models), by part:
+        /// those of every vehicle carvariations gives the kit to, from <paramref name="models"/>; of the wheels carcols
+        /// lists, vehshare.ytd, the dictionary every vehicle's shares; and of a part in no kit, its vehicle's, as the
+        /// RPF it ships in names it. A carcols or carvariations that can't be read is left out.
+        /// </summary>
+        internal static Dictionary<uint, uint[]> ModParts(GameFileSystem files, IReadOnlyDictionary<uint, uint[]> models)
+        {
+            var kits = new Dictionary<uint, HashSet<uint>>();
+            var users = new Dictionary<uint, HashSet<uint>>();
+            var wheels = new HashSet<uint>();
+            foreach (GameFile file in files.EnumerateFiles().Where(file => file.Type is GameFileType.CarCols or GameFileType.CarVariations))
+            {
+                FiveFury.VehicleMeta.VehicleMetaDocument? content;
+                try
+                {
+                    content = FiveFury.VehicleMeta.VehicleMeta.Read(file.ReadStandalone(), file.SourcePath).Content;
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException
+                    or NotSupportedException or ArgumentException or EndOfStreamException)
+                {
+                    continue;
+                }
+                if (content is FiveFury.VehicleMeta.VehicleCarCols carcols)
+                {
+                    foreach (FiveFury.VehicleMeta.VehicleModKit kit in carcols.Kits)
+                    {
+                        if (!kits.TryGetValue(kit.Name.Value, out HashSet<uint>? parts))
+                            kits[kit.Name.Value] = parts = [];
+                        foreach (FiveFury.VehicleMeta.VehicleMod mod in kit.VisibleMods)
+                        {
+                            parts.Add(mod.ModelName.Value);
+                            parts.UnionWith(mod.LinkedModels.Select(linked => linked.Value));
+                        }
+                        parts.UnionWith(kit.LinkedMods.Select(linked => linked.ModelName.Value));
+                    }
+                    foreach (FiveFury.VehicleMeta.VehicleWheel wheel in carcols.Wheels.SelectMany(list => list))
+                    {
+                        wheels.Add(wheel.Name.Value);
+                        wheels.Add(wheel.Variation.Value);
+                    }
+                }
+                else if (content is FiveFury.VehicleMeta.VehicleModelInfoVariation variations)
+                    foreach (FiveFury.VehicleMeta.VehicleVariation vehicle in variations.Vehicles)
+                        foreach (Hash32 kit in vehicle.Kits)
+                        {
+                            if (!users.TryGetValue(kit.Value, out HashSet<uint>? vehicles))
+                                users[kit.Value] = vehicles = [];
+                            vehicles.Add(new Hash32(vehicle.ModelName).Value);
+                        }
+            }
+            var found = new Dictionary<uint, List<uint>>();
+            foreach (var (kit, parts) in kits)
+            {
+                uint[] declared = [.. (users.GetValueOrDefault(kit) ?? []).Order().SelectMany(vehicle => models.GetValueOrDefault(vehicle) ?? [])];
+                if (declared.Length == 0)
+                    continue;
+                foreach (uint part in parts.Where(part => part != 0))
+                {
+                    if (!found.TryGetValue(part, out List<uint>? list))
+                        found[part] = list = [];
+                    list.AddRange(declared);
+                }
+            }
+            foreach (uint wheel in wheels.Where(wheel => wheel != 0))
+                if (!found.ContainsKey(wheel))
+                    found[wheel] = [VehicleShare];
+            // A part no kit names, which the game never fits: its vehicle's, as the RPF it ships in names the vehicle
+            // (<vehicle>_mods.rpf).
+            foreach (GameFile file in files.EnumerateFiles(GameFileType.Yft).Concat(files.EnumerateFiles(GameFileType.Ydr)))
+            {
+                if (found.ContainsKey(file.NameHash.Value) || models.ContainsKey(file.NameHash.Value))
+                    continue;
+                string[] parts = file.VirtualPath.Split('/');
+                if (parts.Length < 2 || !parts[^2].EndsWith("_mods.rpf", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (models.GetValueOrDefault(new Hash32(parts[^2][..^"_mods.rpf".Length]).Value) is { } vehicle)
+                    found[file.NameHash.Value] = [.. vehicle];
+            }
+            return found.ToDictionary(pair => pair.Key, pair => pair.Value.Distinct().ToArray());
         }
 
         /// <summary>
