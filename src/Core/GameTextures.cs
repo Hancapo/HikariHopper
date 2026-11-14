@@ -6,6 +6,8 @@ using FiveFury;
 using FiveFury.Assets;
 using FiveFury.Authoring;
 using FiveFury.Cryptography;
+using CommonFury.Dlc;
+using FiveFury.Dlc;
 
 namespace HikariHopper.Core;
 
@@ -27,7 +29,8 @@ public sealed class GameTextures
     // 4: RPFs the game doesn't mount itself are in the tables too (3 also had loose files, which tools' caches in the
     // game folder made stale on every run and which ranked stray copies over the game's own files).
     // 5: the game's car colours and each vehicle's combinations of them.
-    private const int FormatVersion = 6;
+    // 7: the DLC packs' map updates are run, so their archetypes and gtxd parents are in the tables.
+    private const int FormatVersion = 7;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -446,13 +449,23 @@ public sealed class GameTextures
         private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
         /// <summary>
+        /// The DLC packs' content groups run over their startup ones when the game is mounted: their map updates
+        /// (GROUP_MAP), which the game runs as it loads its map (<see cref="MapName"/>). Every DLC's additions to the
+        /// map are in them, Cayo Perico's island among them, with their archetypes and gtxd.meta.
+        /// </summary>
+        internal static IReadOnlyList<DlcContentGroup> MountGroups { get; set; } = [DlcContentGroup.Map];
+
+        /// <summary>The game's map, as the DLC packs' map updates name it: the files they add are for it.</summary>
+        internal const string MapName = "MO_JIM_L11";
+
+        /// <summary>
         /// The tables, from the whole game mounted; with <paramref name="index"/>, FiveFury takes each archive it has seen
         /// unchanged from there, which gives the same tables in under half the time.
         /// </summary>
         public static Tables Build(string root, GameTarget target, GameCrypto crypto, GameIndexCache? index = null)
         {
             var tables = new Tables();
-            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index });
+            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index, Groups = MountGroups, MapName = MapName });
             // The RPFs the game doesn't mount itself, over its own files; one that can't be read is left out.
             var mounted = new HashSet<string>(game.FileSystem.Mounts.Select(mount => mount.SourcePath), StringComparer.OrdinalIgnoreCase);
             int priority = ExtraArchivePriority;
