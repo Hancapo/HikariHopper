@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Input;
 using Avalonia.Threading;
 using HikariHopper.Core;
@@ -207,6 +208,67 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Copies full paths: <c>C:\…\file</c> for loose items, <c>archive.rpf::inner/path</c> inside RPFs.</summary>
+    /// <summary>
+    /// Where Windows Explorer goes for <see cref="ShowInExplorer"/>: the one item selected, shown selected in its folder;
+    /// with nothing selected, the folder shown, opened. Explorer can't look inside an RPF, so for anything in one it is
+    /// the RPF on disk, shown selected. None for several items, or with nothing on disk to go to.
+    /// </summary>
+    internal (string Path, bool Select)? ExplorerTarget()
+    {
+        if (!HasWorkspace)
+            return null;
+        List<EntryRecord> selection = SelectedEntries();
+        if (selection.Count > 1)
+            return null;
+        if (selection.Count == 1 && SearchShowsLocation)
+        {
+            if (SelectedHits() is not [SearchHit hit])
+                return null;
+            HitPlace place = PlaceOf(hit);
+            return (place.InArchive ? place.RootFull : place.LooseFull, true);
+        }
+        if (Provider.InArchive)
+            return Provider.ArchivePath.Length > 0 ? (Provider.ArchivePath, true) : null;
+        if (Provider.GamePath.Length == 0)
+            return null;
+        return selection.Count == 1
+            ? (Path.GetFullPath(GameChildPath(selection[0].Path)), true)
+            : (Path.TrimEndingDirectorySeparator(Path.GetFullPath(GameChildPath(CurrentPath))), false);
+    }
+
+    /// <summary>Whether <see cref="ShowInExplorer"/> has somewhere to go.</summary>
+    public bool CanShowInExplorer => ExplorerTarget() is not null;
+
+    /// <summary>Opens Windows Explorer at a path, with it selected in its folder or opened; tests replace it.</summary>
+    internal static Action<string, bool> RevealInExplorer { get; set; } = (path, select) =>
+    {
+        var start = new ProcessStartInfo("explorer.exe", select ? $"/select,\"{path}\"" : $"\"{path}\"") { UseShellExecute = false };
+        Process.Start(start)?.Dispose();
+    };
+
+    /// <summary>
+    /// Shows the selected item in Windows Explorer, or opens the folder shown when nothing is selected (see
+    /// <see cref="ExplorerTarget"/>).
+    /// </summary>
+    public void ShowInExplorer()
+    {
+        if (ExplorerTarget() is not { } target)
+            return;
+        if (!(target.Select ? File.Exists(target.Path) || Directory.Exists(target.Path) : Directory.Exists(target.Path)))
+        {
+            SetStatus($"Not found on disk: {Path.GetFileName(target.Path)}");
+            return;
+        }
+        try
+        {
+            RevealInExplorer(target.Path, target.Select);
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            SetStatus($"Could not open Explorer: {error.Message}");
+        }
+    }
+
     public void CopySelectedPath()
     {
         List<EntryRecord> selection = SelectedEntries();
@@ -408,6 +470,7 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            GameHolding = GameHolding(LoadedGameOfProvider(), GamePathOf(entry)),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
             OpenTextures = OpensTexturesOf(entry, data),
@@ -433,9 +496,54 @@ public sealed partial class ExplorerViewModel
             return null;
         return Find(game, modelName);
 
-        static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName) =>
-            [.. (await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false)).Select(dictionary =>
-                new Rendering.NearbyDictionary(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path)))];
+        static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Find(LoadedGame game, string modelName)
+        {
+            IReadOnlyList<GameDictionary> found = await GameTextures.ForGame(game).DictionariesFor(modelName).ConfigureAwait(false);
+            // And the texture directory, which says where the rest are (GameHolding): a model shown before either is
+            // ready is read again with both once they are. One that can't be read only leaves the rest to search for.
+            try
+            {
+                await GameTextureDirectory.ForGame(game).Load().ConfigureAwait(false);
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+            }
+            return [.. found.Select(dictionary => GameFileDictionary(game, dictionary))];
+        }
+    }
+
+    private static Rendering.NearbyDictionary GameFileDictionary(LoadedGame game, GameDictionary dictionary) =>
+        new(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
+            Rendering.NearbyDictionary.KeyForGameFile(game.Root, dictionary.Path));
+
+    /// <summary>How many of the dictionaries holding a texture of a name are tried for it, nearest first.</summary>
+    internal const int HoldersTried = 4;
+
+    /// <summary>
+    /// The game's dictionaries holding a texture of a name, nearest the drawable at <paramref name="modelPath"/> (from the
+    /// game folder) first, from the game's texture directory (<see cref="GameTextureDirectory"/>); null outside a game and
+    /// for a drawable outside its RPFs, which the directory doesn't cover; the lookup then searches beside it instead.
+    /// </summary>
+    internal static Func<string, IReadOnlyList<Rendering.NearbyDictionary>?>? GameHolding(LoadedGame? game, string? modelPath)
+    {
+        if (game is null || modelPath is null || !ModelFile.IsDrawableName(modelPath)
+            || !modelPath.Split('/')[..^1].Any(part => part.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)))
+            return null;
+        GameTextureDirectory directory = GameTextureDirectory.ForGame(game);
+        return name => directory.Holding(name, modelPath) is { } holding
+            ? [.. holding.Take(HoldersTried).Select(dictionary => GameFileDictionary(game, dictionary))] : null;
+    }
+
+    /// <summary>An entry's path from the game folder, RPFs as folders; null outside a game or an RPF from outside it.</summary>
+    private string? GamePathOf(EntryRecord entry)
+    {
+        if (LoadedGameOfProvider() is null)
+            return null;
+        string local = currentPath == "." ? entry.Name : $"{currentPath}/{entry.Name}";
+        if (!Provider.InArchive)
+            return local;
+        return Provider.ArchiveGamePath.Length == 0 ? null
+            : string.Join('/', new[] { Provider.ArchiveGamePath, Provider.ArchivePrefix, local }.Where(part => part.Length > 0));
     }
 
     /// <summary>
@@ -636,6 +744,8 @@ public sealed partial class ExplorerViewModel
     /// for it hold, in name order; each is read only when the search reaches it, while the viewer reads the file in
     /// the background. The archive reader is the explorer's, so the read itself happens on the UI thread.
     /// </summary>
+    // Not kept parsed (they have no key): they are read through the explorer's own copy of the archive, which can be
+    // older than the file on disk; the game's lists of a model's dictionaries, read afresh, hold the ones models share.
     private IReadOnlyList<Rendering.NearbyDictionary> NearbyDictionaries(EntryRecord entry)
     {
         if (!ModelFile.IsDrawableName(entry.Name))

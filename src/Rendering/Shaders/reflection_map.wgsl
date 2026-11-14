@@ -9,10 +9,19 @@
 @group(1) @binding(0) var source: texture_2d<f32>;
 @group(1) @binding(1) var source_sampler: sampler;
 
+// The whole map, with where each texel is across it: the map is as large as the reflection setting makes it.
+struct MapVarying {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+
 @vertex
-fn vs_reflection_map(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
+fn vs_reflection_map(@builtin(vertex_index) index: u32) -> MapVarying {
     let corner = vec2f(f32((index << 1u) & 2u), f32(index & 2u));
-    return vec4f(corner * 2.0 - 1.0, 0.0, 1.0);
+    var out: MapVarying;
+    out.position = vec4f(corner * 2.0 - 1.0, 0.0, 1.0);
+    out.uv = vec2f(corner.x, 1.0 - corner.y);
+    return out;
 }
 
 // The direction a texel of the map holds: the inverse of light.wgsl's paraboloid_uv. Texels outside a hemisphere's
@@ -29,12 +38,9 @@ fn paraboloid_direction(uv: vec2f) -> vec3f {
     return normalize(vec3f(2.0 * p / (1.0 + q), select(-z, z, upper)));
 }
 
-// The map's top mip, as ViewportRenderer.Reflections.cs makes it: each hemisphere 256 by 256.
-const REFLECTION_MAP_SIZE: vec2f = vec2f(512.0, 256.0);
-
 @fragment
-fn fs_reflection_map(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let d = paraboloid_direction(frag.xy / REFLECTION_MAP_SIZE);
+fn fs_reflection_map(in: MapVarying) -> @location(0) vec4f {
+    let d = paraboloid_direction(in.uv);
     // Below the horizon the game reflects its world; the viewer fades to its ground there.
     let ground = smoothstep(0.0, -0.04, d.z);
     return vec4f(mix(sky_system(sky, d), sky.ground.rgb, ground), 1.0);
@@ -64,8 +70,8 @@ fn floor_line(coordinate: vec2f, derivative: vec2f) -> f32 {
 // The floor below the horizon, blended over the sky the scene map starts as: the backdrop's colours taken as albedos
 // under the scene's light, so what the view shows under a model is what its paint and glass mirror.
 @fragment
-fn fs_reflection_floor(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let d = paraboloid_direction(frag.xy / REFLECTION_MAP_SIZE);
+fn fs_reflection_floor(in: MapVarying) -> @location(0) vec4f {
+    let d = paraboloid_direction(in.uv);
     let f = reflection_floor;
     // Where the direction meets the floor; derivatives need uniform control flow, so this runs for every texel.
     let toward = select(d.z, -1e-6, abs(d.z) < 1e-6);
