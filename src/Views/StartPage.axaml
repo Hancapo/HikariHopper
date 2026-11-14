@@ -10,25 +10,39 @@
   <!-- The launcher of a tab with nothing open. None of the explorer's chrome: no path bar, no
        search, no column header, no status line, only the games to open, grouped by game, and a
        standalone RPF. -->
-  <v:StartPickerHost Name="PickerHost">
-    <StackPanel Name="Launcher" Spacing="14">
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Bottom"
-                   FontFamily="{x:Static ui:Theme.UiFont}" FontSize="17" FontWeight="SemiBold" />
-        <TextBlock Name="VersionText" Margin="0,0,0,2" Foreground="{x:Static ui:Theme.TextFaint}" VerticalAlignment="Bottom"
-                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
-      </StackPanel>
+  <Panel>
+    <!-- Behind it, the railway pattern, drifting up its rows; still while the tab loads a game. -->
+    <v:RailPattern Name="Pattern" IsRunning="{Binding !GameLoading}" />
+    <!-- A soft clearing behind the launcher, so no icon runs under its text. -->
+    <Border Name="PatternClearing" Width="880" Height="400" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+      <Border.Background>
+        <RadialGradientBrush>
+          <GradientStop Offset="0" Color="#F2121322" />
+          <GradientStop Offset="0.65" Color="#80121322" />
+          <GradientStop Offset="1" Color="#00121322" />
+        </RadialGradientBrush>
+      </Border.Background>
+    </Border>
+    <v:StartPickerHost Name="PickerHost">
+      <StackPanel Name="Launcher" Spacing="14">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="HikariHopper" Foreground="{x:Static ui:Theme.Text}" VerticalAlignment="Bottom"
+                     FontFamily="{x:Static ui:Theme.UiFont}" FontSize="17" FontWeight="SemiBold" />
+          <TextBlock Name="VersionText" Margin="0,0,0,2" Foreground="{x:Static ui:Theme.TextFaint}" VerticalAlignment="Bottom"
+                     FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" />
+        </StackPanel>
 
-      <Border Background="{x:Static ui:Theme.PanelBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,4">
-        <StackPanel Name="Groups" />
-      </Border>
+        <Border Background="{x:Static ui:Theme.PanelBg}" CornerRadius="{x:Static ui:Theme.PanelCorner}" Padding="4,2,4,4">
+          <StackPanel Name="Groups" />
+        </Border>
 
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <c:ChromeToolButton Name="StandaloneButton" Width="168" Height="28" Raised="True"
-                            Text="Open RPF archive…" Click="OnOpenStandalone" />
-        <c:ChromeToolButton Name="SettingsButton" Width="84" Height="28" Bordered="False"
-                            Text="Settings…" Click="OnSettings" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <c:ChromeToolButton Name="StandaloneButton" Width="168" Height="28" Raised="True"
+                              Text="Open RPF archive…" Click="OnOpenStandalone" />
+          <c:ChromeToolButton Name="SettingsButton" Width="84" Height="28" Bordered="False"
+                              Text="Settings…" Click="OnSettings" />
+        </StackPanel>
       </StackPanel>
-    </StackPanel>
-  </v:StartPickerHost>
+    </v:StartPickerHost>
+  </Panel>
 </UserControl>

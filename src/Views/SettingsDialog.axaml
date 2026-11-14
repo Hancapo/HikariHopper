@@ -9,9 +9,10 @@
               Heading="SETTINGS"
               BodyMargin="0"
               FooterText="Saved automatically">
-  <!-- The groups in a rail, each a raised segment in its well when chosen, and the chosen group's page: its
-       settings as rows on cards, a control at the right of each. The rail says which group it is, so the page
-       has no title; a row's second line is only for what it holds now (a folder, a count). -->
+  <!-- The groups in a sunken sidebar from the header to the footer, the chosen one raised, and the chosen group's
+       page: its settings as rows on cards, a control at the right of each. The sidebar says which group it is, so
+       the page has no title; a row's second line is only for what it holds now (a folder, a count). The page and the
+       sidebar both start 16 px down, the page 16 px in from it and from the sheet's side. -->
   <v:ModalSheet.Styles>
     <Style Selector="TextBlock.section">
       <Setter Property="Foreground" Value="{x:Static ui:Theme.TextFaint}" />
@@ -22,19 +23,20 @@
     </Style>
   </v:ModalSheet.Styles>
   <Grid ColumnDefinitions="Auto,*">
-    <Border Width="176" Margin="12,14,0,14" Padding="4" VerticalAlignment="Top"
-            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+    <Border Name="Sidebar" Width="192" Padding="12,16" Background="{x:Static ui:Theme.InsetBg}"
+            BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,1,0">
       <StackPanel Spacing="2">
         <v:SettingsGroupRow Name="GamesGroup" Label="Games" Icon="box" Selected="True" />
         <v:SettingsGroupRow Name="GraphicsGroup" Label="Graphics" Icon="monitor" />
         <v:SettingsGroupRow Name="StartupGroup" Label="Startup" Icon="zap" />
         <v:SettingsGroupRow Name="UpdatesGroup" Label="Updates" Icon="download" />
+        <v:SettingsGroupRow Name="CacheGroup" Label="Cache" Icon="database" />
       </StackPanel>
     </Border>
 
     <ScrollViewer Grid.Column="1" Theme="{StaticResource BareScrollViewer}"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <Panel Margin="20,16,22,18">
+      <Panel Margin="16">
         <StackPanel Name="GamesPage">
           <StackPanel Name="GameRows" />
         </StackPanel>
@@ -90,6 +92,29 @@
               <c:OnOffSwitch Name="CheckForUpdates" />
             </v:SettingsRow>
           </v:SettingsCard>
+        </StackPanel>
+
+        <StackPanel Name="CachePage" IsVisible="False">
+          <v:SettingsCard>
+            <v:SettingsRow Name="TexturesRow" Title="Texture index">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <c:ChromeToolButton Name="RebuildTextures" Width="96" Height="28" Raised="True" Text="Rebuild" />
+                <c:ChromeToolButton Name="DeleteTextures" Width="96" Height="28" Raised="True" Text="Delete" />
+              </StackPanel>
+            </v:SettingsRow>
+            <v:SettingsRow Name="SearchRow" Title="Search index">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <c:ChromeToolButton Name="RebuildSearch" Width="96" Height="28" Raised="True" Text="Rebuild" />
+                <c:ChromeToolButton Name="DeleteSearch" Width="96" Height="28" Raised="True" Text="Delete" />
+              </StackPanel>
+            </v:SettingsRow>
+          </v:SettingsCard>
+          <DockPanel Margin="2,8,0,0">
+            <c:ChromeToolButton Name="OpenCacheFolder" DockPanel.Dock="Right" Width="96" Height="28" Bordered="False" Text="Open folder" />
+            <TextBlock Name="CacheFolderText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.TextFaint}"
+                       FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                       TextTrimming="LeadingCharacterEllipsis" />
+          </DockPanel>
         </StackPanel>
       </Panel>
     </ScrollViewer>
