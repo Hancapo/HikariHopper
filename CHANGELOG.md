@@ -8,9 +8,13 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Save a collision or a navmesh as another file from the 3D viewer. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
+
 ### Changed
 
 ### Fixed
+
+- A collision's or navmesh's 3D viewer no longer shows the drawable's menu items, such as embedded textures and shader resets, greyed out. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
 
 ### Removed
 
