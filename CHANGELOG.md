@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Fur grass (grass_fur, grass_fur_mask, grass_fur_tnt) and cables are drawn with GTA V's own shaders in the 3D viewer: fur as its eight shells, cables widened to face the camera. ([#210](https://github.com/Hancapo/HikariHopper/pull/210))
 - Show an item, or the folder you're in, in Windows Explorer. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
 - Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
 - A faint railway pattern drifts slowly behind the start page. ([#203](https://github.com/Hancapo/HikariHopper/pull/203))
