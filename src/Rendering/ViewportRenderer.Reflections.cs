@@ -12,7 +12,33 @@ namespace HikariHopper.Rendering;
 // over it, which reflect only the sky map themselves.
 internal sealed unsafe partial class ViewportRenderer
 {
-    internal const uint ReflectionWidth = 512, ReflectionHeight = 256;
+    private uint reflectionWidth = Core.GraphicsSettings.DefaultReflectionWidth;
+    private BindGroupLayout? reflectionSourceLayout;
+
+    /// <summary>
+    /// The reflection maps' width (Core.GraphicsSettings.ReflectionWidths), each hemisphere half of it, the height half
+    /// of it; a change makes the maps again at that size and draws the sky into them again.
+    /// </summary>
+    public uint ReflectionWidth
+    {
+        get => reflectionWidth;
+        set
+        {
+            if (value == reflectionWidth || value < 4 || !BitOperations.IsPow2(value))
+                return;
+            reflectionWidth = value;
+            if (skyMap is null)
+                return;
+            CreateReflectionMaps();
+            CreateLightGroups();
+            DrawReflections(Hours);
+        }
+    }
+
+    internal uint ReflectionHeight => reflectionWidth / 2;
+
+    /// <summary>The sky map, with every mip; for tests.</summary>
+    internal Texture? SkyReflectionMap => skyMap?.Texture;
     private const int SkyBytes = 10 * 16, ReflectionViewBytes = 32, FloorBytes = 5 * 16;
 
     /// <summary>A reflection map, its mips one by one, and each mip's view for drawing the next from.</summary>
@@ -32,7 +58,10 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? reflectionPipeline, downsamplePipeline, floorPipeline;
 
     /// <summary>The reflection map's mip count, which the surfaces' mip curve is in terms of, as the game's is.</summary>
-    internal static uint ReflectionMips => (uint)BitOperations.Log2(ReflectionWidth) + 1;
+    internal uint ReflectionMips => MipsFor(reflectionWidth);
+
+    /// <summary>A reflection map's mip count at this width: down to a texel.</summary>
+    internal static uint MipsFor(uint width) => (uint)BitOperations.Log2(width) + 1;
 
     private void CreateReflections()
     {
@@ -45,10 +74,10 @@ internal sealed unsafe partial class ViewportRenderer
             MinFilter = FilterMode.Linear,
             MipmapFilter = MipmapFilterMode.Linear,
             LodMinClamp = 0,
-            LodMaxClamp = ReflectionMips,
+            LodMaxClamp = 32,
             MaxAnisotropy = 1,
         })!;
-        BindGroupLayout sourceLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        BindGroupLayout sourceLayout = reflectionSourceLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
             [
@@ -61,51 +90,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupLayoutEntry { Binding = 1, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
             ],
         });
-        ReflectionMap Map(TextureUsage usage)
-        {
-            Texture texture = device.CreateTexture(new TextureDescriptor
-            {
-                Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | usage,
-                Dimension = TextureDimension.D2,
-                Size = new Extent3D(ReflectionWidth, ReflectionHeight, 1),
-                Format = HdrFormat,
-                MipLevelCount = ReflectionMips,
-                SampleCount = 1,
-            });
-            TextureView[] mips = [.. Enumerable.Range(0, (int)ReflectionMips).Select(level => texture.CreateView(new TextureViewDescriptor
-            {
-                Format = HdrFormat,
-                Dimension = TextureViewDimension.D2,
-                BaseMipLevel = (uint)level,
-                MipLevelCount = 1,
-                BaseArrayLayer = 0,
-                ArrayLayerCount = 1,
-                Aspect = TextureAspect.All,
-            }))];
-            // Mip n is drawn from mip n - 1.
-            BindGroup[] sources = [.. mips.Take(mips.Length - 1).Select(view => device.CreateBindGroup(new BindGroupDescriptor
-            {
-                Layout = sourceLayout,
-                Entries =
-                [
-                    new BindGroupEntry { Binding = 0, TextureView = view },
-                    new BindGroupEntry { Binding = 1, Sampler = reflectionSampler },
-                ],
-            }))];
-            return new(texture, texture.CreateView(), mips, sources);
-        }
-        skyMap = Map(TextureUsage.CopySrc);
-        sceneMap = Map(TextureUsage.CopyDst);
-        reflectionDepth = device.CreateTexture(new TextureDescriptor
-        {
-            Usage = TextureUsage.RenderAttachment,
-            Dimension = TextureDimension.D2,
-            Size = new Extent3D(ReflectionWidth, ReflectionHeight, 1),
-            Format = DepthFormat,
-            MipLevelCount = 1,
-            SampleCount = 1,
-        });
-        reflectionDepthView = reflectionDepth.CreateView();
+        CreateReflectionMaps();
 
         // The hemisphere being drawn into the scene map, upper then lower.
         reflectionViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -207,6 +192,61 @@ internal sealed unsafe partial class ViewportRenderer
             },
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
         }));
+    }
+
+    // The sky and scene maps at ReflectionWidth, each with every mip and what draws each mip from the one above, and the
+    // depth the scene map's drawables are drawn with.
+    private void CreateReflectionMaps()
+    {
+        skyMap?.Texture.Destroy();
+        sceneMap?.Texture.Destroy();
+        reflectionDepth?.Destroy();
+        uint mips = ReflectionMips;
+        ReflectionMap Map(TextureUsage usage)
+        {
+            Texture texture = device.CreateTexture(new TextureDescriptor
+            {
+                Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | usage,
+                Dimension = TextureDimension.D2,
+                Size = new Extent3D(reflectionWidth, ReflectionHeight, 1),
+                Format = HdrFormat,
+                MipLevelCount = mips,
+                SampleCount = 1,
+            });
+            TextureView[] levels = [.. Enumerable.Range(0, (int)mips).Select(level => texture.CreateView(new TextureViewDescriptor
+            {
+                Format = HdrFormat,
+                Dimension = TextureViewDimension.D2,
+                BaseMipLevel = (uint)level,
+                MipLevelCount = 1,
+                BaseArrayLayer = 0,
+                ArrayLayerCount = 1,
+                Aspect = TextureAspect.All,
+            }))];
+            // Mip n is drawn from mip n - 1.
+            BindGroup[] sources = [.. levels.Take(levels.Length - 1).Select(view => device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = reflectionSourceLayout!,
+                Entries =
+                [
+                    new BindGroupEntry { Binding = 0, TextureView = view },
+                    new BindGroupEntry { Binding = 1, Sampler = reflectionSampler! },
+                ],
+            }))];
+            return new(texture, texture.CreateView(), levels, sources);
+        }
+        skyMap = Map(TextureUsage.CopySrc);
+        sceneMap = Map(TextureUsage.CopyDst);
+        reflectionDepth = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.RenderAttachment,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D(reflectionWidth, ReflectionHeight, 1),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        reflectionDepthView = reflectionDepth.CreateView();
     }
 
     /// <summary>

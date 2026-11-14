@@ -493,6 +493,23 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
+    public void SettingsKeepsItsGroupsInASidebarAndItsPageSixteenPixelsIn()
+    {
+        var settings = new SettingsDialog();
+        Window window = Show(settings, 880, 640);
+        Point At(Visual part) => part.TranslatePoint(default, settings)!.Value;
+        // The sidebar runs from under the header to the footer, its groups 16 px down.
+        Assert.Equal(T.SheetHeaderHeight + 1, At(settings.Sidebar).Y, 0.5);
+        Assert.Equal(settings.Bounds.Height - T.DialogFooterHeight - 1, At(settings.Sidebar).Y + settings.Sidebar.Bounds.Height, 0.5);
+        Assert.Equal(16, At(settings.GamesGroup).Y - At(settings.Sidebar).Y, 0.5);
+        // The page's cards, 16 px from the sidebar and from the sheet's side.
+        Control card = settings.GameRows.Children.OfType<SettingsCard>().First();
+        Assert.Equal(16, At(card).X - (At(settings.Sidebar).X + settings.Sidebar.Bounds.Width), 0.5);
+        Assert.Equal(16, settings.Bounds.Width - 1 - (At(card).X + card.Bounds.Width), 0.5);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TheKeyboardReferenceListsEveryAreaInColumnsThatStartWhereOneDoes()
     {
         var shortcuts = new ShortcutsDialog();
@@ -566,13 +583,14 @@ public sealed class ControlMetricsTests
         Assert.Equal("Not set", row.StatusMessage);
         Assert.Equal("folder", row.BrowseButton.IconKind);
         Assert.Equal("Choose folder…", ToolTip.GetTip(row.BrowseButton));
-        Assert.False(row.ClearButton.IsVisible);
+        Assert.False(row.ClearButton.IsEnabled);
+        Assert.True(row.ClearButton.IsVisible);
         Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);
         Assert.Equal("Change folder…", ToolTip.GetTip(row.BrowseButton));
-        Assert.True(row.ClearButton.IsVisible);
+        Assert.True(row.ClearButton.IsEnabled);
         row.PathValid = true;
         Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);
         Assert.Equal(T.Ok, row.StatusText.Foreground);

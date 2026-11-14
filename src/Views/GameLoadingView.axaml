@@ -6,8 +6,14 @@
              x:Class="HikariHopper.Views.GameLoadingView"
              x:DataType="vm:ExplorerViewModel"
              IsVisible="False" ZIndex="10"
-             Background="{x:Static ui:Theme.AppBg}">
-  <!-- Shown 200ms into a game load: the common loading overlay, its train running while it shows, on the list
-       canvas, as the start page behind has nothing to show during a load. -->
-  <v:LoadingOverlay Name="Overlay" Title="{Binding GameLoadingStage}" Detail="{Binding GameLoadingName}" />
+             Background="{x:Static ui:Theme.WindowBg}">
+  <!-- Shown 200ms into a game load: the common loading overlay, its train running while it shows, over the start
+       page's background: its railway pattern, drifting on from where the start page's stopped while it shows, and a
+       clearing behind the train and its caption, without the overlay's dim. -->
+  <Panel>
+    <v:RailPattern Name="Pattern" IsRunning="False" />
+    <Border Name="PatternClearing" Width="640" Height="320" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+            Background="{x:Static ui:Theme.RailPatternClearing}" />
+    <v:LoadingOverlay Name="Overlay" Background="Transparent" Title="{Binding GameLoadingStage}" Detail="{Binding GameLoadingName}" />
+  </Panel>
 </UserControl>
