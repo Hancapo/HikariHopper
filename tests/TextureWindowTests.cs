@@ -1286,6 +1286,40 @@ public sealed class TextureWindowTests
     }
 
     [AvaloniaFact]
+    public void AMenusTitleClosesItAndTheKeysMoveThroughTheMenus()
+    {
+        TextureWindowHarness harness = Opened();
+        var row = harness.Window.MenuRow;
+        int opened = 0;
+        row.FileMenu.Opened += (_, _) => opened++;
+        // A click on the open menu's title closes it, rather than closing and opening it again.
+        harness.Click(22, 42);
+        Assert.True(row.FileMenu.IsOpen);
+        harness.Click(22, 42);
+        Assert.False(row.FileMenu.IsOpen);
+        Assert.Equal(1, opened);
+        // Opened with the pointer, Down lights its first item that can be used, Right opens Edit beside it, and Left
+        // goes round from File to Edit too; Escape closes it.
+        harness.Click(22, 42);
+        harness.Key(Key.Down);
+        harness.Settle();
+        Assert.Single(row.FileMenu.Items.OfType<RetroMenuItem>(), item => item.Highlighted);
+        harness.Key(Key.Right);
+        harness.Settle();
+        Assert.True(row.EditMenu.IsOpen);
+        Assert.False(row.FileMenu.IsOpen);
+        harness.Key(Key.Right);
+        harness.Settle();
+        Assert.True(row.FileMenu.IsOpen);
+        harness.Key(Key.Left);
+        harness.Settle();
+        Assert.True(row.EditMenu.IsOpen);
+        harness.Key(Key.Escape);
+        harness.Settle();
+        Assert.False(row.MenuOpen);
+    }
+
+    [AvaloniaFact]
     public void MenusOpenUnderTheirTitlesAndStayInsideTheWindow()
     {
         TextureWindowHarness harness = Opened();
