@@ -70,6 +70,9 @@ public partial class GameLoadingView : UserControl
             revealTimer.Stop();
         }
         bool visible = revealed && loading;
+        // The pattern where the start page's stopped as the load began, so the page doesn't jump.
+        if (visible && !IsVisible)
+            Pattern.Sync();
         IsVisible = visible;
         Overlay.IsRunning = visible;
         AutomationProperties.SetName(this, $"Loading {Bridge?.GameLoadingName}");
