@@ -51,11 +51,17 @@
             <v:SettingsRow Title="Bloom">
               <c:OnOffSwitch Name="BloomSwitch" />
             </v:SettingsRow>
+            <v:SettingsRow Title="Render scale">
+              <c:SegmentedSwitch Name="ScaleSwitch" Height="26" />
+            </v:SettingsRow>
           </v:SettingsCard>
           <TextBlock Classes="section" Text="LIGHTING" Margin="0,22,0,8" />
           <v:SettingsCard>
             <v:SettingsRow Title="Shadows">
               <c:SegmentedSwitch Name="ShadowSwitch" Height="26" />
+            </v:SettingsRow>
+            <v:SettingsRow Title="Reflections">
+              <c:SegmentedSwitch Name="ReflectionSwitch" Height="26" />
             </v:SettingsRow>
           </v:SettingsCard>
           <TextBlock Classes="section" Text="DETAIL" Margin="0,22,0,8" />

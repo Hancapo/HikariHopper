@@ -63,6 +63,36 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? tonemapPipeline;
     private Texture? hdr;
     private TextureView? hdrView;
+    // The drawables' own depth, at the HDR target's size.
+    private Texture? hdrDepth;
+    private TextureView? hdrDepthView;
+    private int hdrWidth, hdrHeight;
+    private float renderScale = 1;
+
+    /// <summary>
+    /// How large the drawables are drawn before they are tone-mapped to the window, as a share of its size
+    /// (Core.GraphicsSettings.RenderScales): over one is supersampled, under one cheaper and softer.
+    /// </summary>
+    public float RenderScale
+    {
+        get => renderScale;
+        set
+        {
+            value = Math.Clamp(value, .25f, 4);
+            if (value == renderScale)
+                return;
+            renderScale = value;
+            if (hdr is not null && width > 0)
+                CreateHdr();
+        }
+    }
+
+    /// <summary>The HDR target's size for a window at a scale, at least a pixel and within what a texture may be.</summary>
+    internal static (int Width, int Height) ScaledSize(int width, int height, float scale) =>
+        (Math.Clamp((int)MathF.Round(width * scale), 1, MaxTargetSide), Math.Clamp((int)MathF.Round(height * scale), 1, MaxTargetSide));
+
+    // WebGPU's least maximum texture side.
+    private const int MaxTargetSide = 8192;
     private BindGroup? tonemapGroup;
     private KeyLight key;
     private TimecycleLight cycle;
@@ -211,7 +241,8 @@ internal sealed unsafe partial class ViewportRenderer
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
         }));
 
-        // The tone map, blended premultiplied over the backdrop.
+        // The tone map, blended premultiplied over the backdrop; it reads the HDR target filtered at a render scale other
+        // than one.
         tonemapLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -220,7 +251,7 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Binding = 0,
                     Visibility = ShaderStage.Fragment,
-                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry
                 {
@@ -283,16 +314,28 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateHdr()
     {
         hdr?.Destroy();
+        hdrDepth?.Destroy();
+        (hdrWidth, hdrHeight) = ScaledSize(width, height, renderScale);
         hdr = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,
-            Size = new Extent3D((uint)width, (uint)height, 1),
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = HdrFormat,
             MipLevelCount = 1,
             SampleCount = 1,
         });
         hdrView = hdr.CreateView();
+        hdrDepth = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.RenderAttachment,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        hdrDepthView = hdrDepth.CreateView();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
@@ -408,8 +451,7 @@ internal sealed unsafe partial class ViewportRenderer
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
-    // The shadow map at ShadowResolution, its cascades' views, and the light groups that read it: drawables reflect the
-    // scene map; drawn into it, they reflect the sky map.
+    // The shadow map at ShadowResolution, its cascades' views, and the light groups that read it.
     private void CreateShadowMap()
     {
         shadowMap?.Destroy();
@@ -440,6 +482,13 @@ internal sealed unsafe partial class ViewportRenderer
                 ArrayLayerCount = 1,
                 Aspect = TextureAspect.All,
             });
+        CreateLightGroups();
+    }
+
+    // The light groups, which read the shadow map and a reflection map: drawables reflect the scene map; drawn into it,
+    // they reflect the sky map.
+    private void CreateLightGroups()
+    {
         BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = lightLayout!,
