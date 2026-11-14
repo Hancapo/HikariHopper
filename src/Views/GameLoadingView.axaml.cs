@@ -8,7 +8,8 @@ namespace HikariHopper.Views;
 
 /// <summary>
 /// Covers the tab while a game loads with the common loading overlay (port of <c>GameLoadingView.qml</c>'s timing):
-/// it appears only once the load has run for 200ms, and its train runs only while it shows.
+/// it appears only once the load has run for 200ms, and its train and the railway pattern behind it run only while it
+/// shows.
 /// </summary>
 public partial class GameLoadingView : UserControl
 {
@@ -70,11 +71,13 @@ public partial class GameLoadingView : UserControl
             revealTimer.Stop();
         }
         bool visible = revealed && loading;
-        // The pattern where the start page's stopped as the load began, so the page doesn't jump.
+        // The pattern where the start page's stopped as the load began, so the page doesn't jump, drifting on from
+        // there while the view shows; the start page's stands still meanwhile, behind it.
         if (visible && !IsVisible)
             Pattern.Sync();
         IsVisible = visible;
         Overlay.IsRunning = visible;
+        Pattern.IsRunning = visible;
         AutomationProperties.SetName(this, $"Loading {Bridge?.GameLoadingName}");
     }
 }

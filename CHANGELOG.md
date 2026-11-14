@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- A faint railway pattern drifts slowly behind the start page and the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213), [#221](https://github.com/Hancapo/HikariHopper/pull/221))
 - A faint railway pattern drifts slowly behind the start page, and stands still behind the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213))
 - A Graphics page in Settings: turn anti-aliasing (CMAA 2) and bloom on or off, set the shadows to Off, Medium, High or Ultra, and choose the texture filtering, for every viewer at once. ([#211](https://github.com/Hancapo/HikariHopper/pull/211))
 - Render scale (75% to 200%, supersampled above 100%) and reflection quality (Low, Medium or High) on the Graphics page. ([#212](https://github.com/Hancapo/HikariHopper/pull/212))
