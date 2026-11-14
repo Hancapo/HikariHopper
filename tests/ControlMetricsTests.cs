@@ -286,6 +286,64 @@ public sealed class ControlMetricsTests
         fits.Close();
     }
 
+    // A caption mark drawn alone at 100%: how much ink covers each of its 18x18 pixels, 0 to 255.
+    private static byte[,] Ink(string kind)
+    {
+        var glyph = new WindowControlGlyph { Kind = kind, Ink = Brushes.White, Width = 18, Height = 18 };
+        glyph.Measure(new Size(18, 18));
+        glyph.Arrange(new Rect(0, 0, 18, 18));
+        using var bitmap = new RenderTargetBitmap(new PixelSize(18, 18), new Vector(96, 96));
+        bitmap.Render(glyph);
+        byte[] pixels = new byte[18 * 18 * 4];
+        nint buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(pixels.Length);
+        try
+        {
+            bitmap.CopyPixels(new PixelRect(0, 0, 18, 18), buffer, pixels.Length, 18 * 4);
+            System.Runtime.InteropServices.Marshal.Copy(buffer, pixels, 0, pixels.Length);
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer);
+        }
+        var ink = new byte[18, 18];
+        for (int y = 0; y < 18; y++)
+            for (int x = 0; x < 18; x++)
+                ink[x, y] = pixels[(y * 18 + x) * 4 + 3];
+        return ink;
+    }
+
+    private static PixelRect Inked(byte[,] ink)
+    {
+        int left = 18, top = 18, right = -1, bottom = -1;
+        for (int y = 0; y < 18; y++)
+            for (int x = 0; x < 18; x++)
+                if (ink[x, y] > 24)
+                    (left, top, right, bottom) = (Math.Min(left, x), Math.Min(top, y), Math.Max(right, x), Math.Max(bottom, y));
+        return new PixelRect(left, top, right - left + 1, bottom - top + 1);
+    }
+
+    [AvaloniaFact]
+    public void TheCloseMarkSpansTheMaximizeSquaresBoxWithOneEvenStroke()
+    {
+        byte[,] close = Ink("close"), square = Ink("maximize"), line = Ink("minimize");
+        // The same 10px box as the square, the minimize line across the same width.
+        Assert.Equal(new PixelRect(4, 4, 10, 10), Inked(square));
+        Assert.Equal(Inked(square), Inked(close));
+        Assert.Equal(Inked(square).X, Inked(line).X);
+        Assert.Equal(Inked(square).Width, Inked(line).Width);
+        // Antialiased, not stair-stepped: some pixels only partly covered.
+        Assert.Contains(Enumerable.Range(0, 18 * 18), i => close[i % 18, i / 18] is > 24 and < 200);
+        // Even about its centre, the square's: the same each way across, to within the antialiasing's rounding.
+        for (int y = 0; y < 18; y++)
+            for (int x = 0; x < 18; x++)
+            {
+                Assert.InRange(close[x, y] - close[17 - x, y], -8, 8);
+                Assert.InRange(close[x, y] - close[x, 17 - y], -8, 8);
+            }
+        // Where the strokes cross is no brighter than along them: drawn once.
+        Assert.True(Math.Max(close[8, 8], close[9, 9]) <= close[6, 6] + 2, $"crossing {close[8, 8]}/{close[9, 9]}, stroke {close[6, 6]}");
+    }
+
     [AvaloniaFact]
     public void TitleRowButtonsShowFocusOnlyFromTheKeyboard()
     {
@@ -435,6 +493,23 @@ public sealed class ControlMetricsTests
     }
 
     [AvaloniaFact]
+    public void SettingsKeepsItsGroupsInASidebarAndItsPageSixteenPixelsIn()
+    {
+        var settings = new SettingsDialog();
+        Window window = Show(settings, 880, 640);
+        Point At(Visual part) => part.TranslatePoint(default, settings)!.Value;
+        // The sidebar runs from under the header to the footer, its groups 16 px down.
+        Assert.Equal(T.SheetHeaderHeight + 1, At(settings.Sidebar).Y, 0.5);
+        Assert.Equal(settings.Bounds.Height - T.DialogFooterHeight - 1, At(settings.Sidebar).Y + settings.Sidebar.Bounds.Height, 0.5);
+        Assert.Equal(16, At(settings.GamesGroup).Y - At(settings.Sidebar).Y, 0.5);
+        // The page's cards, 16 px from the sidebar and from the sheet's side.
+        Control card = settings.GameRows.Children.OfType<SettingsCard>().First();
+        Assert.Equal(16, At(card).X - (At(settings.Sidebar).X + settings.Sidebar.Bounds.Width), 0.5);
+        Assert.Equal(16, settings.Bounds.Width - 1 - (At(card).X + card.Bounds.Width), 0.5);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TheKeyboardReferenceListsEveryAreaInColumnsThatStartWhereOneDoes()
     {
         var shortcuts = new ShortcutsDialog();
@@ -508,13 +583,14 @@ public sealed class ControlMetricsTests
         Assert.Equal("Not set", row.StatusMessage);
         Assert.Equal("folder", row.BrowseButton.IconKind);
         Assert.Equal("Choose folder…", ToolTip.GetTip(row.BrowseButton));
-        Assert.False(row.ClearButton.IsVisible);
+        Assert.False(row.ClearButton.IsEnabled);
+        Assert.True(row.ClearButton.IsVisible);
         Assert.True(row.Mark.Enhanced);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);
         Assert.Equal("Change folder…", ToolTip.GetTip(row.BrowseButton));
-        Assert.True(row.ClearButton.IsVisible);
+        Assert.True(row.ClearButton.IsEnabled);
         row.PathValid = true;
         Assert.Equal("\u2713 GTA5_Enhanced.exe found", row.StatusMessage);
         Assert.Equal(T.Ok, row.StatusText.Foreground);

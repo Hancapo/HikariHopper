@@ -8,14 +8,18 @@
              Background="{x:Static ui:Theme.WindowBg}">
   <!-- Port of ExplorerScreen.qml: tab strip, then the active tab's workspace or start page with
        the long-operation and game-loading covers on top. Its DataContext is the tabs. The menu row lives in the
-       window's title row (see Menu). The strip is hidden while the only tab is the launcher. -->
-  <DockPanel>
-    <v:TabStrip Name="Strip" DockPanel.Dock="Top" />
-    <Panel>
+       window's title row (see Menu). The strip is hidden while the only tab is the launcher. A workspace sits
+       under the strip; the start page reaches up behind it, so the strip coming and going never moves the start
+       page (ExplorerScreen.RefreshPage). The game loading view is placed on its own, before it shows: over the
+       strip's row when there is no strip, and under the strip when there is one; it keeps its place while it shows,
+       so as it fades out over the opened game nothing moves under it (ExplorerScreen.PlaceLoadingView). -->
+  <Grid RowDefinitions="Auto,*">
+    <Panel Name="Pages" Grid.Row="1">
       <ContentControl Name="PageHost" />
       <!-- A long operation in the tab: the loading overlay over its page. -->
       <v:ExplorerWorkView Name="WorkView" DataContext="{Binding ActiveBridge}" />
-      <v:GameLoadingView Name="LoadingView" DataContext="{Binding ActiveBridge}" />
     </Panel>
-  </DockPanel>
+    <v:TabStrip Name="Strip" Grid.Row="0" />
+    <v:GameLoadingView Name="LoadingView" Grid.Row="1" DataContext="{Binding ActiveBridge}" />
+  </Grid>
 </UserControl>

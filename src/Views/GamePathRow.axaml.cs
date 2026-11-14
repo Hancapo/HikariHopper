@@ -36,9 +36,9 @@ public partial class GamePathRow : UserControl
     public GamePathRow()
     {
         InitializeComponent();
-        // The check sits after the name, on its baseline, in the small mono of the details.
-        StatusText.FontFamily = Ui.Theme.MonoFont;
-        StatusText.FontSize = Ui.Theme.SmallFontSize;
+        // The check sits after the name, on its baseline, smaller and in the same font.
+        StatusText.FontFamily = Ui.Theme.UiFont;
+        StatusText.FontSize = Ui.Theme.SmallFontSize + 1;
         StatusText.FontWeight = Avalonia.Media.FontWeight.Normal;
         TitleText.Inlines!.Add(titleRun);
         TitleText.Inlines.Add(gap);
@@ -116,7 +116,7 @@ public partial class GamePathRow : UserControl
         DetailText.Text = set ? GamePath : StatusMessage;
         DetailText.Foreground = set ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
         ToolTip.SetTip(BrowseButton, BrowseLabel);
-        ClearButton.IsVisible = set;
+        ClearButton.IsEnabled = set;
         ToolTip.SetTip(DetailText, set ? GamePath : null);
         AutomationProperties.SetName(BrowseButton, set ? $"Change the {Title} folder" : $"Choose the {Title} folder");
         ToolTip.SetTip(ClearButton, "Clear");

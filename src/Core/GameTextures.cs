@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using CommonFury.Dlc;
 using CommonFury.Hashing;
 using FiveFury;
 using FiveFury.Assets;
 using FiveFury.Authoring;
 using FiveFury.Cryptography;
+using FiveFury.Dlc;
 
 namespace HikariHopper.Core;
 
@@ -27,7 +29,10 @@ public sealed class GameTextures
     // 4: RPFs the game doesn't mount itself are in the tables too (3 also had loose files, which tools' caches in the
     // game folder made stale on every run and which ranked stray copies over the game's own files).
     // 5: the game's car colours and each vehicle's combinations of them.
-    private const int FormatVersion = 6;
+    // 7: the DLC packs' map updates are run, so their archetypes and gtxd parents are in the tables.
+    // 8: vehicle mod parts have their vehicle's dictionaries, and wheels vehshare.ytd; the DLC packs' title update
+    // streaming changes are run.
+    private const int FormatVersion = 8;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -71,6 +76,58 @@ public sealed class GameTextures
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
+    /// <summary>
+    /// The bytes the cache holds: every game's tables, a write of them left unfinished, and FiveFury's index of their
+    /// archives, what <see cref="DeleteCache"/> deletes.
+    /// </summary>
+    public static long CacheSize =>
+        CacheFiles.Size(CacheFolder, "*.bin") + CacheFiles.Size(CacheFolder, "*.tmp") + CacheFiles.Size(IndexFolder, "*", deep: true);
+
+    /// <summary>
+    /// Deletes every game's cached tables and FiveFury's index of their archives. The tables in use stay as they are
+    /// until the app starts again; a game made again then reads all its archives. False when a file couldn't go (in
+    /// use by a build under way, say).
+    /// </summary>
+    public static bool DeleteCache()
+    {
+        bool all = CacheFiles.Delete(CacheFolder, "*.bin") & CacheFiles.Delete(CacheFolder, "*.tmp");
+        return CacheFiles.DeleteFolder(IndexFolder) && all;
+    }
+
+    /// <summary>
+    /// Deletes the cache (see <see cref="DeleteCache"/>) and makes again, from every archive, the tables of each game
+    /// loaded since the app started; models opened from then on use them. Done once they are made; false when a file
+    /// of the cache couldn't go, though the tables are made again all the same.
+    /// </summary>
+    public static async Task<bool> RebuildCache()
+    {
+        // Tables being made now hold their game's archives open, and a write to one waits for them (see
+        // WaitForArchiveReaders): they finish first, so none is replaced while it still reads.
+        KeyValuePair<string, GameTextures>[] games = Shared.ToArray();
+        await Task.WhenAll(games.Select(game => game.Value.Running() is { } running ? Task.WhenAny(running) : Task.CompletedTask));
+        bool deleted = DeleteCache();
+        var loads = new List<Task>();
+        foreach ((string key, GameTextures old) in games)
+        {
+            // Made from the archives, even if a cache file stayed.
+            var fresh = new GameTextures(old.root, old.target, old.build) { fromArchives = true };
+            Shared[key] = fresh;
+            loads.Add(fresh.Load());
+        }
+        await Task.WhenAll(loads);
+        return deleted;
+    }
+
+    // Set on tables rebuilt by hand: they are made from the archives, never read from the cache.
+    private bool fromArchives;
+
+    // The tables being read or made, while they are.
+    private Task? Running()
+    {
+        lock (gate)
+            return loading is { IsCompleted: false } running ? running : null;
+    }
+
     /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
     internal static GameTextures Share(string gameRoot, Func<Tables> make) =>
         Shared[Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot))] = new GameTextures(Path.GetFullPath(gameRoot), GameTarget.Legacy, make);
@@ -83,6 +140,8 @@ public sealed class GameTextures
     /// </summary>
     public static void WaitForArchiveReaders(string path)
     {
+        // The game's texture directory reads them too.
+        GameTextureDirectory.WaitForArchiveReaders(path);
         foreach (GameTextures textures in Holding(path))
         {
             Task? running;
@@ -104,6 +163,7 @@ public sealed class GameTextures
     /// </summary>
     public static void Changed(string path)
     {
+        GameTextureDirectory.Changed(path);
         foreach (GameTextures textures in Holding(path))
             lock (textures.writing)
             {
@@ -205,7 +265,8 @@ public sealed class GameTextures
         Tables? tables = null;
         try
         {
-            tables = Tables.Read(CachePath, stamp);
+            if (!fromArchives)
+                tables = Tables.Read(CachePath, stamp);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or EndOfStreamException)
         {
@@ -243,6 +304,8 @@ public sealed class GameTextures
     public static Task Rewritten(string archivePath)
     {
         string written = Path.GetFullPath(archivePath);
+        // The dictionaries in it may hold other textures now.
+        GameTextureDirectory.Changed(written);
         GameTextures[] games = [.. Shared.Values.Where(game => written.StartsWith(game.root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))];
         return games.Length == 0 ? Task.CompletedTask : Task.Run(() =>
         {
@@ -388,13 +451,25 @@ public sealed class GameTextures
         private static readonly uint PedResident = new Hash32("comp_peds_generic").Value;
 
         /// <summary>
+        /// The DLC packs' content groups run over their startup ones when the game is mounted: their title update's
+        /// streaming changes (GROUP_UPDATE_STREAMING), which FiveFury runs for the update pack only, and the game for
+        /// every pack, such as patchday7ng's vehicle dictionaries and their parents, which the lowriders' interiors are
+        /// in; and their map updates (GROUP_MAP), which the game runs as it loads its map (<see cref="MapName"/>). Every
+        /// DLC's additions to the map are in them, Cayo Perico's island among them, with their archetypes and gtxd.meta.
+        /// </summary>
+        internal static IReadOnlyList<DlcContentGroup> MountGroups { get; set; } = [DlcContentGroup.UpdateStreaming, DlcContentGroup.Map];
+
+        /// <summary>The game's map, as the DLC packs' map updates name it: the files they add are for it.</summary>
+        internal const string MapName = "MO_JIM_L11";
+
+        /// <summary>
         /// The tables, from the whole game mounted; with <paramref name="index"/>, FiveFury takes each archive it has seen
         /// unchanged from there, which gives the same tables in under half the time.
         /// </summary>
         public static Tables Build(string root, GameTarget target, GameCrypto crypto, GameIndexCache? index = null)
         {
             var tables = new Tables();
-            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index });
+            using GameInstallation game = GameInstallation.Open(root, target, crypto, new GameInstallationOptions { IndexCache = index, Groups = MountGroups, MapName = MapName });
             // The RPFs the game doesn't mount itself, over its own files; one that can't be read is left out.
             var mounted = new HashSet<string>(game.FileSystem.Mounts.Select(mount => mount.SourcePath), StringComparer.OrdinalIgnoreCase);
             int priority = ExtraArchivePriority;
@@ -426,6 +501,11 @@ public sealed class GameTextures
                     tables.Models[model.Value] = declared;
                     dictionaries.UnionWith(declared);
                 }
+            // A vehicle's mod parts, which no archetype names: the game streams them with the vehicle's dictionary, and
+            // wheels, which any vehicle can take, with the vehicles' shared one.
+            foreach (var (part, declared) in ModParts(files, tables.Models))
+                if (tables.Models.TryAdd(part, declared))
+                    dictionaries.UnionWith(declared);
             // Each dictionary's parent, and theirs, as far up as the chains go.
             var pending = new Queue<uint>(dictionaries);
             while (pending.TryDequeue(out uint child))
@@ -436,6 +516,18 @@ public sealed class GameTextures
                 }
             // The car colours (carcols) and each vehicle's combinations of them (carvariations), as the game has them now.
             FiveFury.VehicleMeta.VehicleAppearanceIndex vehicles = cache.GetVehicleAppearanceIndex();
+            // A vehicle's dictionary that no txdRelationships entry gives a parent, such as the Veto's, ends in vehshare
+            // all the same: every vehicles.meta names it as its residentTxd, which the game keeps loaded for them all.
+            foreach (Hash32 vehicle in vehicles.VariationModels)
+                foreach (uint start in tables.Models.GetValueOrDefault(vehicle.Value) ?? [])
+                {
+                    uint top = start;
+                    var seen = new HashSet<uint> { top };
+                    while (tables.Parents.TryGetValue(top, out uint parent) && seen.Add(parent))
+                        top = parent;
+                    if (top != VehicleShare && !tables.Parents.ContainsKey(top))
+                        tables.Parents[top] = VehicleShare;
+                }
             foreach (FiveFury.VehicleMeta.ResolvedVehicleColor colour in vehicles.Colors())
                 tables.Colours[colour.Index] = (colour.Name, colour.PackedArgb, colour.Metallic is { } metallic
                     ? new Rendering.CarMetallic(metallic.SpecularIntensity, metallic.SpecularFalloff, metallic.SpecularFresnel) : null);
@@ -443,6 +535,90 @@ public sealed class GameTextures
                 if (vehicles.FindVariation(model) is { Colors.Count: > 0 } variation)
                     tables.Combinations[model.Value] = [.. variation.Colors.Select(combination => combination.Indices.ToArray())];
             return tables;
+        }
+
+        private static readonly uint VehicleShare = new Hash32("vehshare").Value;
+
+        /// <summary>
+        /// The dictionaries of the game's vehicle mod parts (carcols' kits, their visible and linked models), by part:
+        /// those of every vehicle carvariations gives the kit to, from <paramref name="models"/>; of the wheels carcols
+        /// lists, vehshare.ytd, the dictionary every vehicle's shares; and of a part in no kit, its vehicle's, as the
+        /// RPF it ships in names it. A carcols or carvariations that can't be read is left out.
+        /// </summary>
+        internal static Dictionary<uint, uint[]> ModParts(GameFileSystem files, IReadOnlyDictionary<uint, uint[]> models)
+        {
+            var kits = new Dictionary<uint, HashSet<uint>>();
+            var users = new Dictionary<uint, HashSet<uint>>();
+            var wheels = new HashSet<uint>();
+            foreach (GameFile file in files.EnumerateFiles().Where(file => file.Type is GameFileType.CarCols or GameFileType.CarVariations))
+            {
+                FiveFury.VehicleMeta.VehicleMetaDocument? content;
+                try
+                {
+                    content = FiveFury.VehicleMeta.VehicleMeta.Read(file.ReadStandalone(), file.SourcePath).Content;
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException
+                    or NotSupportedException or ArgumentException or EndOfStreamException)
+                {
+                    continue;
+                }
+                if (content is FiveFury.VehicleMeta.VehicleCarCols carcols)
+                {
+                    foreach (FiveFury.VehicleMeta.VehicleModKit kit in carcols.Kits)
+                    {
+                        if (!kits.TryGetValue(kit.Name.Value, out HashSet<uint>? parts))
+                            kits[kit.Name.Value] = parts = [];
+                        foreach (FiveFury.VehicleMeta.VehicleMod mod in kit.VisibleMods)
+                        {
+                            parts.Add(mod.ModelName.Value);
+                            parts.UnionWith(mod.LinkedModels.Select(linked => linked.Value));
+                        }
+                        parts.UnionWith(kit.LinkedMods.Select(linked => linked.ModelName.Value));
+                    }
+                    foreach (FiveFury.VehicleMeta.VehicleWheel wheel in carcols.Wheels.SelectMany(list => list))
+                    {
+                        wheels.Add(wheel.Name.Value);
+                        wheels.Add(wheel.Variation.Value);
+                    }
+                }
+                else if (content is FiveFury.VehicleMeta.VehicleModelInfoVariation variations)
+                    foreach (FiveFury.VehicleMeta.VehicleVariation vehicle in variations.Vehicles)
+                        foreach (Hash32 kit in vehicle.Kits)
+                        {
+                            if (!users.TryGetValue(kit.Value, out HashSet<uint>? vehicles))
+                                users[kit.Value] = vehicles = [];
+                            vehicles.Add(new Hash32(vehicle.ModelName).Value);
+                        }
+            }
+            var found = new Dictionary<uint, List<uint>>();
+            foreach (var (kit, parts) in kits)
+            {
+                uint[] declared = [.. (users.GetValueOrDefault(kit) ?? []).Order().SelectMany(vehicle => models.GetValueOrDefault(vehicle) ?? [])];
+                if (declared.Length == 0)
+                    continue;
+                foreach (uint part in parts.Where(part => part != 0))
+                {
+                    if (!found.TryGetValue(part, out List<uint>? list))
+                        found[part] = list = [];
+                    list.AddRange(declared);
+                }
+            }
+            foreach (uint wheel in wheels.Where(wheel => wheel != 0))
+                if (!found.ContainsKey(wheel))
+                    found[wheel] = [VehicleShare];
+            // A part no kit names, which the game never fits: its vehicle's, as the RPF it ships in names the vehicle
+            // (<vehicle>_mods.rpf).
+            foreach (GameFile file in files.EnumerateFiles(GameFileType.Yft).Concat(files.EnumerateFiles(GameFileType.Ydr)))
+            {
+                if (found.ContainsKey(file.NameHash.Value) || models.ContainsKey(file.NameHash.Value))
+                    continue;
+                string[] parts = file.VirtualPath.Split('/');
+                if (parts.Length < 2 || !parts[^2].EndsWith("_mods.rpf", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (models.GetValueOrDefault(new Hash32(parts[^2][..^"_mods.rpf".Length]).Value) is { } vehicle)
+                    found[file.NameHash.Value] = [.. vehicle];
+            }
+            return found.ToDictionary(pair => pair.Key, pair => pair.Value.Distinct().ToArray());
         }
 
         /// <summary>
