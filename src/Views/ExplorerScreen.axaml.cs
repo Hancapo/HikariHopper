@@ -1,5 +1,8 @@
 using System.ComponentModel;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using HikariHopper.ViewModels;
 
 namespace HikariHopper.Views;
@@ -13,6 +16,7 @@ public partial class ExplorerScreen : UserControl
 {
     private ExplorerTabsViewModel? tabs;
     private ExplorerViewModel? bridge;
+    private IDisposable? leavingEnd;
 
     public ExplorerScreen()
     {
@@ -97,25 +101,34 @@ public partial class ExplorerScreen : UserControl
 
     private void TrackBridge()
     {
-        if (bridge is not null)
-            bridge.PropertyChanged -= OnBridgePropertyChanged;
-        bridge = Bridge;
-        if (bridge is not null)
-            bridge.PropertyChanged += OnBridgePropertyChanged;
-        RefreshPage();
+        // The tabs say the active tab changed when its title does too, as a game or archive opens in it: the same tab
+        // then opened something in place, which may fade its start page out.
+        bool same = Bridge == bridge;
+        if (!same)
+        {
+            // Another tab: what it shows replaces a start page still fading at once.
+            EndFadeOut();
+            if (bridge is not null)
+                bridge.PropertyChanged -= OnBridgePropertyChanged;
+            bridge = Bridge;
+            if (bridge is not null)
+                bridge.PropertyChanged += OnBridgePropertyChanged;
+        }
+        RefreshPage(opened: same);
         RefreshStrip();
     }
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ExplorerViewModel.HasWorkspace))
-            RefreshPage();
-        if (e.PropertyName == nameof(ExplorerViewModel.HasWorkspace))
+        {
+            RefreshPage(opened: true);
             RefreshStrip();
+        }
     }
 
     /// <summary>The Loader: the same component keeps its instance and only rebinds to the new tab.</summary>
-    private void RefreshPage()
+    private void RefreshPage(bool opened = false)
     {
         if (bridge is null)
         {
@@ -125,11 +138,22 @@ public partial class ExplorerScreen : UserControl
         if (bridge.HasWorkspace)
         {
             if (PageHost.Content is not WorkspaceView workspace)
+            {
+                // Opened from the start page too quickly for the loading view to show, which would have faded out over
+                // the workspace: the start page fades out over it instead, rather than vanish.
+                if (opened && PageHost.Content is StartPage start && !LoadingView.IsVisible && !Ui.Motion.Reduced
+                    && GameLoadingView.FadeDuration > TimeSpan.Zero && TopLevel.GetTopLevel(this) is { } top)
+                {
+                    PageHost.Content = null;
+                    FadeOut(start, top);
+                }
                 Show(workspace = new WorkspaceView());
+            }
             workspace.DataContext = bridge;
         }
         else
         {
+            EndFadeOut();
             if (PageHost.Content is not StartPage start)
             {
                 Show(start = new StartPage());
@@ -139,6 +163,46 @@ public partial class ExplorerScreen : UserControl
             start.Tabs = tabs;
         }
     }
+
+    /// <summary>
+    /// Fades <paramref name="start"/> out over what replaces it, as the loading view fades out over an opened game: it
+    /// keeps what it showed, takes no clicks, and lets go of its view models once it's gone.
+    /// </summary>
+    private void FadeOut(StartPage start, TopLevel top)
+    {
+        EndFadeOut();
+        LeavingHost.Content = start;
+        LeavingHost.Opacity = 1;
+        LeavingHost.IsVisible = true;
+        // From the next frame, once the workspace under it has been laid out and drawn, so what shows through is never
+        // empty.
+        top.RequestAnimationFrame(_ =>
+        {
+            if (LeavingHost.Content != start)
+                return;
+            LeavingHost.Transitions = [new DoubleTransition { Property = OpacityProperty, Duration = GameLoadingView.FadeDuration, Easing = new SineEaseInOut() }];
+            LeavingHost.Opacity = 0;
+            leavingEnd = DispatcherTimer.RunOnce(EndFadeOut, GameLoadingView.FadeDuration);
+        });
+    }
+
+    /// <summary>The start page fading out, if any, gone at once.</summary>
+    private void EndFadeOut()
+    {
+        leavingEnd?.Dispose();
+        leavingEnd = null;
+        if (LeavingHost.Content is not StartPage start)
+            return;
+        LeavingHost.IsVisible = false;
+        LeavingHost.Content = null;
+        LeavingHost.Transitions = null;
+        LeavingHost.Opacity = 1;
+        start.DataContext = null;
+        start.Tabs = null;
+    }
+
+    /// <summary>The start page fading out over the page that replaced it; null once it's gone. For tests.</summary>
+    internal StartPage? Leaving => LeavingHost.Content as StartPage;
 
     /// <summary>
     /// Replaces the page. The old one lets go of its view models, so its views drop their

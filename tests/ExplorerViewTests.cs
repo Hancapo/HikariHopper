@@ -1805,6 +1805,92 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         }
     }
 
+    // Opens a game in a new explorer's start page at once, too quickly for the loading view to show, with motion as
+    // given and the fade as long as given.
+    private (Explorer Ui, ExplorerScreen Screen) LoadQuickly(bool motion, int fade = 1500, bool besideAGame = false)
+    {
+        GameLoadingView.FadeDuration = TimeSpan.FromMilliseconds(fade);
+        Ui.Motion.ReducedOverride = !motion;
+        ExplorerViewModel.GameLoader = FakeLoadedGame;
+        Explorer ui = OpenExplorer(openGame: besideAGame);
+        if (besideAGame)
+        {
+            ui.Tabs.NewTab();
+            Pump();
+        }
+        ExplorerScreen screen = ui.Find<ExplorerScreen>();
+        Assert.IsType<StartPage>(screen.Page);
+        ExplorerViewModel tab = ui.Tabs.ActiveBridge!;
+        tab.OpenGameAsync(Work);
+        Settle(tab);
+        Assert.True(tab.HasWorkspace);
+        Assert.False(ui.Find<GameLoadingView>().Revealed);
+        return (ui, screen);
+    }
+
+    [AvaloniaFact]
+    public void AGameOpenedTooQuicklyForTheLoadingViewFadesTheStartPageOutOverIt()
+    {
+        try
+        {
+            // The workspace is in place at once, the start page over it, letting clicks through, fading out.
+            (Explorer ui, ExplorerScreen screen) = LoadQuickly(motion: true);
+            Assert.IsType<WorkspaceView>(screen.Page);
+            StartPage leaving = Assert.IsType<StartPage>(screen.Leaving);
+            Assert.True(leaving.IsEffectivelyVisible);
+            Assert.False(leaving.IsHitTestVisible && ((Control)leaving.Parent!).IsHitTestVisible);
+            TestWait.Until(() => ((Control)leaving.Parent!).Opacity is > 0.05 and < 0.95, "the start page to be fading");
+            // Then it's gone, and lets go of the tab.
+            TestWait.Until(() => screen.Leaving is null, "the fade to end");
+            Assert.Null(leaving.DataContext);
+            Assert.IsType<WorkspaceView>(screen.Page);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void TheStartPageGoesAtOnceWithMotionReducedOrAnotherTab()
+    {
+        try
+        {
+            // Motion reduced: no fade.
+            (Explorer ui, ExplorerScreen screen) = LoadQuickly(motion: false);
+            Assert.IsType<WorkspaceView>(screen.Page);
+            Assert.Null(screen.Leaving);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+        try
+        {
+            // Another tab picked while it fades: gone at once.
+            (Explorer ui, ExplorerScreen screen) = LoadQuickly(motion: true, besideAGame: true);
+            Assert.NotNull(screen.Leaving);
+            ui.Tabs.ActivateTab(0);
+            Pump();
+            Assert.Null(screen.Leaving);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+        try
+        {
+            // A load slow enough for the loading view: it fades out, the start page doesn't.
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: true, fade: 1500);
+            Assert.True(loading.Fading);
+            Assert.Null(ui.Find<ExplorerScreen>().Leaving);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
     [AvaloniaFact]
     public void TheLoadingViewGoesAtOnceWithMotionReduced()
     {

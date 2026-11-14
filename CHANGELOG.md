@@ -13,6 +13,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A game or archive that opens quickly fades in from the start page too, instead of appearing at once. ([#231](https://github.com/Hancapo/HikariHopper/pull/231))
+
 ### Removed
 
 ## [0.2.1] - 2026-11-14
