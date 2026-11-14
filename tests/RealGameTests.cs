@@ -103,4 +103,16 @@ public sealed class RealGameTests
             Directory.Delete(scratch, recursive: true);
         }
     }
+
+    [Fact]
+    public void ADlcsMapPiecesHaveTheirArchetypesDictionaryAndItsGtxdParents()
+    {
+        string root = LegacyRoot()!;
+        LoadedGame game = RpfProvider.LoadGame(root);
+        GameTextures.Tables tables = GameTextures.Tables.Build(root, game.Target, game.Crypto);
+        // Cayo Perico's island, which its DLC's map update adds to the game's map: its archetype names the
+        // dictionary, and the island's gtxd.meta its parents.
+        string[] found = [.. tables.For("h4_mph4_ter02_track_02.ydr").Select(dictionary => Path.GetFileName(dictionary.Path))];
+        Assert.Equal(["h4_mph4_ter02_dirttracks.ytd", "gdislxtertracks.ytd", "gdislxterrain.ytd", "mapdetail.ytd"], found);
+    }
 }
