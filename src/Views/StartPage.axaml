@@ -14,15 +14,8 @@
     <!-- Behind it, the railway pattern, drifting up its rows; still while the tab loads a game. -->
     <v:RailPattern Name="Pattern" IsRunning="{Binding !GameLoading}" />
     <!-- A soft clearing behind the launcher, so no icon runs under its text. -->
-    <Border Name="PatternClearing" Width="880" Height="400" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
-      <Border.Background>
-        <RadialGradientBrush>
-          <GradientStop Offset="0" Color="#F2121322" />
-          <GradientStop Offset="0.65" Color="#80121322" />
-          <GradientStop Offset="1" Color="#00121322" />
-        </RadialGradientBrush>
-      </Border.Background>
-    </Border>
+    <Border Name="PatternClearing" Width="880" Height="400" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+            Background="{x:Static ui:Theme.RailPatternClearing}" />
     <v:StartPickerHost Name="PickerHost">
       <StackPanel Name="Launcher" Spacing="14">
         <StackPanel Orientation="Horizontal" Spacing="8">

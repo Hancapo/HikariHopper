@@ -10,7 +10,7 @@ using T = HikariHopper.Ui.Theme;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// The start page's background: a piece of track, the loading train's 4-4-0 and a semaphore signal, small and faint,
+/// The start page's background, and the game loading view's: a piece of track, the loading train's 4-4-0 and a semaphore signal, small and faint,
 /// repeated in rows that rise 45° from left to right, each row a step on from the one below. While
 /// <see cref="IsRunning"/> the whole field drifts slowly up its rows; with motion reduced it stands still.
 /// </summary>
@@ -47,7 +47,9 @@ public sealed class RailPattern : Control
     // While it should drift with motion reduced, a slow look at the Windows setting, so turning animations back on
     // sets it going again.
     private readonly DispatcherTimer watcher;
-    private double offset;
+    // How far up its rows the field has drifted, shared by every pattern, so one taking over from another (the loading
+    // view's from the start page's) is where it was.
+    private static double offset;
 
     public RailPattern()
     {
@@ -62,7 +64,7 @@ public sealed class RailPattern : Control
         watcher.Tick += (_, _) => WatchMotion();
     }
 
-    /// <summary>Whether it drifts: off while the tab loads a game, under the loading overlay.</summary>
+    /// <summary>Whether it drifts: off while the tab loads a game, and behind the loading view, which shows it still.</summary>
     public bool IsRunning
     {
         get => GetValue(IsRunningProperty);
@@ -80,6 +82,9 @@ public sealed class RailPattern : Control
 
     /// <summary>How far up its rows the field is now, within one repeat.</summary>
     internal double Offset => offset;
+
+    /// <summary>Puts a pattern that isn't drifting where the drifting ones have got to.</summary>
+    internal void Sync() => Place();
 
     /// <summary>The watcher's look: once motion is back on, the field drifts again.</summary>
     internal void WatchMotion()
