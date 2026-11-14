@@ -8,6 +8,9 @@ using Icon = HikariHopper.Views.RailPattern.Icon;
 
 namespace HikariHopper.Tests;
 
+// The drift is shared by every pattern (RailPattern's static offset), as the explorer's tests drift it too: they run
+// apart.
+[Collection(ExplorerCollection.Name)]
 public sealed class RailPatternTests
 {
     private static readonly Vector AlongRow = new(Math.Sqrt(.5), -Math.Sqrt(.5));
@@ -58,13 +61,16 @@ public sealed class RailPatternTests
         {
             var pattern = new RailPattern();
             Assert.False(pattern.Animating);
+            // How far it has drifted from an offset, round the repeat: the drift is shared, so it starts where another left it.
+            double From(double start) => (pattern.Offset - start + RailPattern.Repeat) % RailPattern.Repeat;
+            double started = pattern.Offset;
             var window = new Window { Width = 640, Height = 360, Content = pattern };
             window.Show();
             TestWait.Settle();
             Assert.True(pattern.Animating);
             TestWait.Pump(300);
             // Up and to the right, at its slow pace.
-            Assert.InRange(pattern.Offset, 0.5, RailPattern.Speed * 1.5);
+            Assert.InRange(From(started), 0.5, RailPattern.Speed * 1.5);
             var shift = (TranslateTransform)((Control)pattern.GetVisualChildren().Single()).RenderTransform!;
             Assert.True(shift.X > 0 && shift.Y < 0);
             Assert.Equal(shift.X, -shift.Y, 6);
@@ -78,7 +84,7 @@ public sealed class RailPatternTests
             Assert.Equal(stopped, pattern.Offset);
             pattern.IsRunning = true;
             TestWait.Pump(100);
-            Assert.True(pattern.Offset > stopped && pattern.Offset < stopped + RailPattern.Speed);
+            Assert.InRange(From(stopped), double.Epsilon, RailPattern.Speed);
 
             // Animations turned off while it drifts: within half a second it stands still where it is, and waits for them.
             Ui.Motion.ReducedOverride = true;

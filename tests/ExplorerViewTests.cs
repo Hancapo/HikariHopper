@@ -1512,29 +1512,44 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void TheStartPagesRailPatternStandsStillWhileAGameLoads()
+    public void TheStartPagesRailPatternStandsStillBehindTheLoadingViewWhileAGameLoads()
     {
         Ui.Motion.ReducedOverride = false;
         try
         {
             Explorer ui = OpenExplorer(openGame: false);
-            RailPattern pattern = ui.Find<RailPattern>();
+            RailPattern pattern = ui.Find<StartPage>().Pattern;
+            GameLoadingView loading = ui.Find<GameLoadingView>();
             Assert.True(pattern.Animating);
+            Assert.False(loading.Pattern.Animating);
             using var release = new ManualResetEventSlim();
             ExplorerViewModel.GameLoader = path =>
             {
                 release.Wait(TimeSpan.FromSeconds(10));
                 return FakeLoadedGame(path);
             };
+            TestWait.Pump(100);
             ui.Bridge.OpenGameAsync(Work);
             TestWait.Until(() => ui.Bridge.GameLoading, "the game to start loading");
             Assert.False(pattern.Animating);
+            double stopped = pattern.Offset;
+            Assert.True(stopped > 0);
+            // The loading view, once it shows, has the start page's background: the pattern, still, where the start
+            // page's stopped, with no dim over it.
+            TestWait.Until(() => loading.Revealed, "the loading view to show");
+            Assert.True(loading.IsVisible);
+            Assert.Equal(Ui.Theme.WindowBg, loading.Background);
+            Assert.False(loading.Pattern.Animating);
+            Assert.Equal(stopped, loading.Pattern.Offset);
+            Assert.Equal(Avalonia.Media.Brushes.Transparent, loading.Overlay.Background);
             release.Set();
             Settle(ui.Bridge);
             Pump();
-            // The game is open: the start page, and its pattern, are gone.
-            Assert.Empty(ui.Window.GetVisualDescendants().OfType<RailPattern>());
+            // The game is open: the start page, and its pattern, are gone, and the loading view with its own.
+            Assert.Empty(ui.Window.GetVisualDescendants().OfType<StartPage>());
+            Assert.False(loading.IsVisible);
             Assert.False(pattern.Animating);
+            Assert.False(loading.Pattern.Animating);
         }
         finally
         {
