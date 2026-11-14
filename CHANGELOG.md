@@ -9,10 +9,26 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Added
 
 - A faint railway pattern drifts slowly behind the start page, and stands still behind the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213))
+- A Graphics page in Settings: turn anti-aliasing (CMAA 2) and bloom on or off, set the shadows to Off, Medium, High or Ultra, and choose the texture filtering, for every viewer at once. ([#211](https://github.com/Hancapo/HikariHopper/pull/211))
+- Render scale (75% to 200%, supersampled above 100%) and reflection quality (Low, Medium or High) on the Graphics page. ([#212](https://github.com/Hancapo/HikariHopper/pull/212))
+- Fur grass (grass_fur, grass_fur_mask, grass_fur_tnt) and cables are drawn with GTA V's own shaders in the 3D viewer: fur as its eight shells, cables widened to face the camera. ([#210](https://github.com/Hancapo/HikariHopper/pull/210))
+- Show an item, or the folder you're in, in Windows Explorer. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
+- Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
+- A faint railway pattern drifts slowly behind the start page. ([#203](https://github.com/Hancapo/HikariHopper/pull/203))
 
 ### Changed
 
+- GTA V Legacy's V mark is sand instead of grey, so it no longer looks disabled next to Enhanced's green. ([#209](https://github.com/Hancapo/HikariHopper/pull/209))
+- Settings lists its groups in a sidebar running the height of the dialog, with even 16 px spacing around the page, each game's folder and clear buttons in one well, and the folder check in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
+- The footer text of Settings and About is in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
+- The 3D viewer's footer is taller, so its controls sit evenly from its edges and the window's corner, and its level of detail is shown with a layers icon, in the app's font. ([#207](https://github.com/Hancapo/HikariHopper/pull/207))
+- Shader values are called shader parameters. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+
 ### Fixed
+
+- The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The shader parameters card shows where it belongs, no longer at its last place for a moment. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The last tab no longer gets cut off as the tabs glide into place after one closes. ([#202](https://github.com/Hancapo/HikariHopper/pull/202))
 
 ### Removed
 
