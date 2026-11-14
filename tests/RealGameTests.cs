@@ -132,7 +132,8 @@ public sealed class RealGameTests
         Assert.Equal(["veto2.ytd", "vehshare.ytd"], For("veto2_pedal_ac.yft")[..2]);
         // The lowriders' interiors: patchday7ng's title update streaming changes give the Peyote's dictionary them.
         Assert.Contains("vehicles_lowrider.ytd", For("pey3_int_croc.yft"));
-        // A wheel a DLC's carcols lists: vehshare, where the tyres' textures are.
-        Assert.Equal("vehshare.ytd", For("wheel_smod4.yft").Concat(For("wheel_smod4.ydr")).First());
+        // A wheel carcols lists, a DLC's or the base game's: vehshare, where the tyres' textures are.
+        Assert.Equal("vehshare.ytd", For("wheel_smod4.ydr")[0]);
+        Assert.Equal("vehshare.ytd", For("wheel_musc_06.ydr")[0]);
     }
 }
