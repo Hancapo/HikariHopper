@@ -18,6 +18,12 @@ public partial class ExplorerScreen : UserControl
     {
         InitializeComponent();
         Menu.SearchRequested += (_, _) => Bridge?.RequestSearchFocus();
+        // Gone: placed again for the next load, and the strip it kept, if any, let go.
+        LoadingView.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && !LoadingView.IsVisible)
+                RefreshStrip();
+        };
     }
 
     /// <summary>
@@ -68,7 +74,9 @@ public partial class ExplorerScreen : UserControl
 
     private void RefreshStrip()
     {
-        Strip.IsVisible = StripVisible;
+        // While the loading view shows under the strip, the strip stays, though the tabs beside this one close, so the
+        // view keeps its place until it goes.
+        Strip.IsVisible = StripVisible || (LoadingView.IsVisible && Grid.GetRow(LoadingView) == 1);
         PlaceLoadingView();
     }
 
