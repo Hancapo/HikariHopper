@@ -13,7 +13,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Fixed
 
 - DLC map pieces, Cayo Perico's island among them, get their textures in the 3D viewer: of 300 sampled island models, 69 are left with a texture missing, down from 209. ([#219](https://github.com/Hancapo/HikariHopper/pull/219))
-- Vehicle mod parts and wheels get their vehicles' textures in the 3D viewer: of 300 sampled models, 36 are left with a texture missing, down from 114. ([#220](https://github.com/Hancapo/HikariHopper/pull/220))
+- Vehicle mod parts and wheels get their vehicles' textures in the 3D viewer: of 300 sampled models, 34 are left with a texture missing, down from 114. ([#220](https://github.com/Hancapo/HikariHopper/pull/220))
 
 ### Removed
 
