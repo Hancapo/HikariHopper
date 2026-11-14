@@ -471,7 +471,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DrawSurfaces(lit);
             lit.End();
             MeasureFrame(encoder);
-            DrawBloom(encoder);
+            if (Bloom)
+                DrawBloom(encoder);
             RenderPassEncoder mapped = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
