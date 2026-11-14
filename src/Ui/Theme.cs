@@ -186,8 +186,12 @@ public static class Theme
     public const double TextureThumbnailSize = 50;
     public const double TextureToolbarHeight = 38;
 
-    /// <summary>The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time.</summary>
-    public const double ModelFooterHeight = ExplorerStatusHeight;
+    /// <summary>
+    /// The 3D viewer's footer: the level of detail, the counts, the status line, the camera and the time. Tall enough for
+    /// its controls to have 8 px on every side, as far as they sit from the window's edge, so they sit evenly in its
+    /// rounded corner.
+    /// </summary>
+    public const double ModelFooterHeight = 40;
 
     /// <summary>The controls in it, as the explorer's view switch in a shorter bar.</summary>
     public const double ModelFooterControlHeight = 24;
