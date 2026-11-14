@@ -207,6 +207,22 @@ public sealed class ViewerMenuTests
     }
 
     [AvaloniaFact]
+    public void A_collision_or_a_navmesh_has_only_what_applies_to_it_in_the_menus()
+    {
+        // No shader values to edit, undo or save, and no textures: File, with Close.
+        byte[] box = new FiveFury.Ybn.Ybn(new FiveFury.Bounds.BoundBox(new CommonFury.Numerics.Aabb3(new Vector3(-1), new Vector3(1)))).Write();
+        foreach (var file in new[] { new ModelFile("box.ybn", box), new ModelFile("navmesh[0][0].ynv", []) })
+        {
+            var viewer = new Views.ModelViewer(file);
+            Assert.Equal(["File"], viewer.Menus.Titles);
+            Assert.Equal([("Close", "Ctrl+W", true)], viewer.Menus.ItemsOf("File"));
+        }
+        // A drawable keeps both, whatever it has to offer now.
+        var drawable = new Views.ModelViewer(new ModelFile("tri.ydr", Textured()));
+        Assert.Equal(["File", "Edit"], drawable.Menus.Titles);
+    }
+
+    [AvaloniaFact]
     public void The_text_viewer_has_file_and_edit_menus()
     {
         var viewer = new Views.TextViewer(HikariHopper.Core.TextDocument.Load("notes.txt", "one\ntwo\n"u8.ToArray()));

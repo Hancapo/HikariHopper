@@ -82,7 +82,7 @@ public partial class ModelViewer : UserControl, IModalContent
         documentName = file.Name;
         saveTarget = file.SaveTarget;
         TitleText.Text = file.Name;
-        Menus = BuildMenus();
+        Menus = BuildMenus(ModelFile.IsDrawableName(file.Name));
         MenuHolder.Children.Add(Menus);
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
@@ -975,10 +975,13 @@ public partial class ModelViewer : UserControl, IModalContent
         return true;
     }
 
-    /// <summary>The menu bar under the title: File and Edit.</summary>
+    /// <summary>
+    /// The menu bar under the title: for a drawable, File and Edit; for a collision or a navmesh, which has no shader
+    /// values to edit and save, nor textures, File with Close alone.
+    /// </summary>
     internal ViewerMenuRow Menus { get; }
 
-    private ViewerMenuRow BuildMenus() => new(
+    private ViewerMenuRow BuildMenus(bool drawable) => !drawable ? new(("File", [new("Close", "Ctrl+W", Close)])) : new(
         ("File",
         [
             new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
