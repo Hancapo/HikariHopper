@@ -8,6 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Save a collision or a navmesh as another file from the 3D viewer. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
 - The game loading screen fades out over the opened game. ([#222](https://github.com/Hancapo/HikariHopper/pull/222), [#223](https://github.com/Hancapo/HikariHopper/pull/223))
 - A faint railway pattern drifts slowly behind the start page and the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213), [#221](https://github.com/Hancapo/HikariHopper/pull/221))
 - The game loading screen fades out over the opened game. ([#222](https://github.com/Hancapo/HikariHopper/pull/222))
@@ -34,6 +35,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A collision's or navmesh's 3D viewer no longer shows the drawable's menu items, such as embedded textures and shader resets, greyed out. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
 - Every menu bar behaves the same: in the 3D and text viewers, pointing at another title switches menus while one is open; a click on an open menu's title closes it; and menus take the arrow keys, Enter and Escape, with Left and Right moving to the menus beside. ([#225](https://github.com/Hancapo/HikariHopper/pull/225))
 - The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
 - Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))

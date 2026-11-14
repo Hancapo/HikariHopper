@@ -89,7 +89,8 @@ public partial class ModelViewer : UserControl, IModalContent
         documentName = file.Name;
         saveTarget = file.SaveTarget;
         TitleText.Text = file.Name;
-        Menus = BuildMenus();
+        drawable = ModelFile.IsDrawableName(file.Name);
+        Menus = BuildMenus(drawable);
         MenuHolder.Children.Add(Menus);
         TitleGlyph.FileKind = RpfProvider.FileKind(file.Name);
         CloseMark.Click += (_, _) => Close();
@@ -744,13 +745,18 @@ public partial class ModelViewer : UserControl, IModalContent
 
     /// <summary>
     /// The viewer's Ctrl keys: Z undoes the last change to the shader values, Y (or Shift+Z) redoes it, S saves them,
-    /// Shift+S saves them as another file, and W closes the viewer.
+    /// Shift+S saves them as another file, and W closes the viewer. A collision or a navmesh has Shift+S and W.
     /// </summary>
     internal bool Command(char key, bool shift = false)
     {
         if (char.ToUpperInvariant(key) == 'W')
         {
             Close();
+            return true;
+        }
+        if (!drawable && char.ToUpperInvariant(key) == 'S' && shift)
+        {
+            _ = SaveAs();
             return true;
         }
         if (!contentShown || surfaces is null)
@@ -844,6 +850,8 @@ public partial class ModelViewer : UserControl, IModalContent
     /// </summary>
     internal async Task<bool> SaveAs()
     {
+        if (!drawable)
+            return await SaveCopyAs();
         if (saving || surfaces?.Writer is null)
             return false;
         string extension = Path.GetExtension(file.Name);
@@ -873,6 +881,60 @@ public partial class ModelViewer : UserControl, IModalContent
             }))
             return false;
         return await Saving;
+    }
+
+    /// <summary>
+    /// Saves a collision or a navmesh as a loose file picked for it, as it was opened: nothing in it is changed in the
+    /// viewer. False when it can't be written or nothing was picked.
+    /// </summary>
+    private async Task<bool> SaveCopyAs()
+    {
+        if (saving || data.Length == 0)
+            return false;
+        string extension = Path.GetExtension(file.Name);
+        string kind = extension.Equals(".ynv", StringComparison.OrdinalIgnoreCase) ? "Navmesh" : "Collision";
+        string? path = await Dialogs.PickSaveFileAsync($"Save {documentName} as", documentName, [new FileFilter(kind, [$"*{extension}"])]);
+        if (string.IsNullOrEmpty(path) || closed)
+            return false;
+        string destination = SaveNames.WithExtension(path, extension);
+        string name = Path.GetFileName(destination);
+        if (SaveNames.ReplacesUnpicked(path, destination))
+        {
+            ShowSaveFailure(name, "a file of that name is already there. Pick it in Save as to replace it");
+            return false;
+        }
+        byte[] bytes = data;
+        saving = true;
+        StatusText.Foreground = Ui.Theme.TextFaint;
+        StatusText.Text = $"Saving {name}…";
+        Saving = Finish();
+        return await Saving;
+
+        async Task<bool> Finish()
+        {
+            string? failure = null;
+            try
+            {
+                await Task.Run(() => CommonFury.IO.AtomicFile.Write(destination, bytes));
+            }
+            catch (Exception error) when (OperationErrors.IsExpected(error))
+            {
+                failure = error.Message;
+            }
+            saving = false;
+            if (failure is not null)
+            {
+                ShowSaveFailure(name, failure);
+                return false;
+            }
+            // From now on it is that file, as a drawable saved as another is: the title says so.
+            documentName = name;
+            savedElsewhere = true;
+            RefreshTitle();
+            if (!closed)
+                StatusText.Text = $"Saved {name}";
+            return true;
+        }
     }
 
     // Writes the file as it is now through a target, off the UI thread; then, once it is written, runs afterwards.
@@ -988,10 +1050,23 @@ public partial class ModelViewer : UserControl, IModalContent
         return true;
     }
 
-    /// <summary>The menu bar under the title: File and Edit.</summary>
+    /// <summary>
+    /// The menu bar under the title: for a drawable, File and Edit; for a collision or a navmesh, which has no shader
+    /// values to edit and save, nor textures, File with Save as (a copy of it as it was opened) and Close.
+    /// </summary>
     internal ViewerMenuRow Menus { get; }
 
-    private ViewerMenuRow BuildMenus() => new(
+    // Whether the file is a drawable, a drawable dictionary or a fragment, rather than a collision or a navmesh.
+    private readonly bool drawable;
+
+    private ViewerMenuRow BuildMenus(bool drawable) => !drawable
+        ? new(("File",
+        [
+            new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => data.Length > 0 && !saving),
+            null,
+            new("Close", "Ctrl+W", Close),
+        ]))
+        : new(
         ("File",
         [
             new("Save", "Ctrl+S", () => Save(), () => CanSave && shaderEdits.Dirty && !saving),
