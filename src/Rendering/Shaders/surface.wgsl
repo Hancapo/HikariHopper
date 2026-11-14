@@ -350,7 +350,8 @@ fn glass(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec
     }
     let kept = 1.0 - intensity * reflected;
     let highlight = (exponent + 2.0) / 8.0 * pow(saturate(dot(normal, half_vector)), exponent) * highlight_fresnel * intensity;
-    let shadow = sun_shadow(input.place, normal);
+    // Shadowed as a face turned to the sun, so light let through from behind isn't cut off at the terminator.
+    let shadow = sun_shadow(input.place, select(-normal, normal, n_dot_l >= 0.0));
     let sun = light.sun_colour.rgb * shadow * facing * (albedo * kept + vec3f(highlight));
 
     let ambient_scale = ao * ao;
