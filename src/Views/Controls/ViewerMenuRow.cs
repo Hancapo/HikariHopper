@@ -8,7 +8,8 @@ namespace HikariHopper.Views.Controls;
 /// A viewer's menu bar, as the texture editor's: titles (File, Edit) on the chrome under the viewer's title, each
 /// opening its menu hanging from it. The menus open as windows of their own (<see cref="DropdownWindow.OpenMenu"/>), so
 /// they are drawn over a native child window such as the 3D viewport. Each item says when it can be used, asked as its
-/// menu opens; the keys shown are the viewer's own, handled by the viewer.
+/// menu opens; the keys shown are the viewer's own, handled by the viewer. Its clicks, pointing and keys are a menu bar's,
+/// as the explorer's and the texture editor's (<see cref="MenuBar"/>).
 /// </summary>
 internal sealed class ViewerMenuRow : Panel
 {
@@ -16,10 +17,9 @@ internal sealed class ViewerMenuRow : Panel
     internal sealed record Item(string Text, string Shortcut, Action Run, Func<bool>? Enabled = null);
 
     private readonly List<(MenuBarButton Title, RetroMenu Menu, Dictionary<RetroMenuItem, Item> Items)> menus = [];
+    private readonly MenuBar bar;
     private DropdownWindow? open;
     private RetroMenu? openMenu;
-    private long closedAt;
-    private RetroMenu? closedMenu;
 
     /// <param name="titles">Each menu's title and items, in order; a null item is a separator.</param>
     public ViewerMenuRow(params (string Title, Item?[] Items)[] titles)
@@ -51,10 +51,13 @@ internal sealed class ViewerMenuRow : Panel
                 known[entry] = item;
                 menu.Items.Add(entry);
             }
-            button.Click += (_, _) => Toggle(menu);
             menus.Add((button, menu, known));
             row.Children.Add(button);
         }
+        bar = MenuBar.Attach(this, [.. menus.Select(entry => new MenuBar.Title(entry.Title, entry.Menu, () => openMenu == entry.Menu,
+            () => Open(entry.Menu), Close))]);
+        foreach (var (title, _, _) in menus)
+            title.Click += (_, _) => bar.Toggle(title);
     }
 
     /// <summary>The menus' titles, in order.</summary>
@@ -85,19 +88,11 @@ internal sealed class ViewerMenuRow : Panel
     /// <summary>The menu open, by its title; none when none is.</summary>
     internal string? OpenTitle => openMenu is null ? null : menus.Single(entry => entry.Menu == openMenu).Title.Text;
 
-    /// <summary>Opens a menu, or closes it when it's the one open.</summary>
-    internal void Toggle(string title) => Toggle(menus.Single(entry => entry.Title.Text == title).Menu);
+    /// <summary>Opens a menu, or closes it when it's the one open, as a click on its title does.</summary>
+    internal void Toggle(string title) => bar.Toggle(menus.Single(entry => entry.Title.Text == title).Title);
 
-    private void Toggle(RetroMenu menu)
+    private void Open(RetroMenu menu)
     {
-        if (openMenu == menu)
-        {
-            Close();
-            return;
-        }
-        // The click on its title that just closed it, by taking the keyboard from it, doesn't open it again.
-        if (closedMenu == menu && Environment.TickCount64 - closedAt < 400)
-            return;
         Close();
         var (title, _, items) = menus.Single(entry => entry.Menu == menu);
         Refresh(menu, items);
@@ -107,15 +102,17 @@ internal sealed class ViewerMenuRow : Panel
         openMenu = menu;
         title.MenuOpen = true;
         DropdownWindow shown = open;
+        // Its window takes the keyboard: its keys go to the bar first, as the window's do for an in-window menu.
+        shown.AddHandler(KeyDownEvent, bar.OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         shown.Closed += (_, _) =>
         {
             if (open != shown)
                 return;
             title.MenuOpen = false;
-            closedMenu = openMenu;
-            closedAt = Environment.TickCount64;
             open = null;
             openMenu = null;
+            // Taken from it, by a click on its title among others: that click doesn't open it again.
+            bar.Closed(title);
         };
     }
 

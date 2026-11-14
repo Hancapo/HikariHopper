@@ -394,7 +394,7 @@ internal sealed class ShaderValuesCard : Border
         };
         close.Click += (_, _) => RequestClose();
         ThemedToolTip.Set(close, "Close");
-        Avalonia.Automation.AutomationProperties.SetName(close, "Close the shader values");
+        Avalonia.Automation.AutomationProperties.SetName(close, "Close the shader parameters");
         var face = new Border
         {
             Background = Ui.Theme.ChromeBg,
@@ -417,7 +417,7 @@ internal sealed class ShaderValuesCard : Border
             IsVisible = false,
         };
         Child = new Panel { Children = { face, notch } };
-        Avalonia.Automation.AutomationProperties.SetName(this, "Shader values");
+        Avalonia.Automation.AutomationProperties.SetName(this, "Shader parameters");
         edits.Changed += material =>
         {
             if (material == Material)

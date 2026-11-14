@@ -6,7 +6,7 @@ using Avalonia.Media;
 namespace HikariHopper.Views.Controls;
 
 /// <summary>
-/// The mark of a game tab: a flat slab-serif V, grey for GTA V Legacy and green for Enhanced.
+/// The mark of a game tab: a flat slab-serif V, sand for GTA V Legacy and green for Enhanced.
 /// </summary>
 public sealed class EditionMark : Control
 {
@@ -33,7 +33,7 @@ public sealed class EditionMark : Control
         set => SetValue(EnhancedProperty, value);
     }
 
-    public IBrush Fill => Enhanced ? Ui.Theme.Selection : Ui.Theme.TextDim;
+    public IBrush Fill => Enhanced ? Ui.Theme.Selection : Ui.Theme.LegacyMark;
 
     protected override Size MeasureOverride(Size availableSize) => new(16, 16);
 
