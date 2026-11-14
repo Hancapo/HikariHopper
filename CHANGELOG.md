@@ -18,6 +18,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Reading a model for the 3D viewer is up to 2.7× faster: 2.7× for a vehicle (the Adder), whose scene is built 3.5× faster, 1.8× the first time in a session. ([#216](https://github.com/Hancapo/HikariHopper/pull/216))
 - GTA V Legacy's V mark is sand instead of grey, so it no longer looks disabled next to Enhanced's green. ([#209](https://github.com/Hancapo/HikariHopper/pull/209))
 - Settings lists its groups in a sidebar running the height of the dialog, with even 16 px spacing around the page, each game's folder and clear buttons in one well, and the folder check in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
 - The footer text of Settings and About is in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
