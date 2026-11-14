@@ -141,6 +141,35 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void TheStartPageStaysPutAsTheStripComesAndGoes()
+    {
+        // A game's tab and a new tab's start page: the strip shows, over the start page's top.
+        Explorer ui = OpenExplorer();
+        TabStrip strip = ui.Find<TabStrip>();
+        WorkspaceView workspace = ui.Find<WorkspaceView>();
+        // A workspace starts under the strip.
+        Assert.Equal(strip.TranslatePoint(new Point(0, strip.Bounds.Height), ui.Window)!.Value.Y,
+            workspace.TranslatePoint(default, ui.Window)!.Value.Y, 0.5);
+        ui.Tabs.NewTab();
+        Pump();
+        StartPage start = ui.Find<StartPage>();
+        Assert.True(strip.IsVisible);
+        Point Where(Visual visual) => visual.TranslatePoint(default, ui.Window)!.Value;
+        Point page = Where(start), launcher = Where(start.Launcher);
+        Assert.Equal(Where(strip).Y, page.Y, 0.5);
+
+        // The game's tab closed, the start page is the window's only tab and the strip goes: nothing on it moves.
+        TabStripTab game = ui.Window.GetVisualDescendants().OfType<TabStripTab>().First();
+        Click(ui.Window, game.TranslatePoint(new Point(game.Bounds.Width - 14, 16), ui.Window)!.Value);
+        Pump();
+        Assert.Single(ui.Tabs.Tabs);
+        Assert.False(strip.IsVisible);
+        Assert.Same(start, ui.Find<StartPage>());
+        Assert.Equal(page, Where(start));
+        Assert.Equal(launcher, Where(start.Launcher));
+    }
+
+    [AvaloniaFact]
     public void TheLauncherHasNoExplorerChromeAndListsTheGamesToOpen()
     {
         Explorer ui = OpenExplorer(openGame: false);
