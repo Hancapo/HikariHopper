@@ -458,8 +458,8 @@ public sealed class GameTextures
                 }
             // The car colours (carcols) and each vehicle's combinations of them (carvariations), as the game has them now.
             FiveFury.VehicleMeta.VehicleAppearanceIndex vehicles = cache.GetVehicleAppearanceIndex();
-            // A vehicle's dictionary that no txdRelationships entry gives a parent, such as the Veto's, has the vehicles'
-            // shared one, as every vehicle's chain ends there.
+            // A vehicle's dictionary that no txdRelationships entry gives a parent, such as the Veto's, ends in vehshare
+            // all the same: every vehicles.meta names it as its residentTxd, which the game keeps loaded for them all.
             foreach (Hash32 vehicle in vehicles.VariationModels)
                 foreach (uint start in tables.Models.GetValueOrDefault(vehicle.Value) ?? [])
                 {
