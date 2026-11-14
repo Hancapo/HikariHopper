@@ -1,5 +1,6 @@
 using HikariHopper.Core;
 using Velopack;
+using Velopack.Locators;
 using Velopack.Sources;
 
 namespace HikariHopper.Infrastructure;
@@ -22,6 +23,12 @@ internal interface IUpdateSource
 
     /// <summary>Installs a downloaded <paramref name="update"/> once the app has quit, then starts it again.</summary>
     void ApplyOnExit(AvailableUpdate update);
+
+    /// <summary>
+    /// Deletes what downloading and installing updates left behind (see <see cref="Updates.RemoveLeftovers"/>); nothing
+    /// while another copy of the app is updating. Any thread.
+    /// </summary>
+    void CleanUp();
 }
 
 /// <summary>The app's updates and their two settings: whether to check at startup, and the version to skip.</summary>
@@ -45,6 +52,59 @@ internal static class Updates
     {
         get => AppSettings.GetString(SkippedVersionKey);
         set => AppSettings.SetString(SkippedVersionKey, value);
+    }
+
+    /// <summary>
+    /// Deletes what updating left in <paramref name="packages"/>, the folder updates are downloaded to: the updater's
+    /// <paramref name="work"/> folder (only when it's inside <paramref name="packages"/>), downloads it didn't finish (<c>.partial</c>), and every package but
+    /// <paramref name="keep"/>, the newest full one, which the next update is built from so it downloads only what
+    /// changed. Nothing while the folder's lock file is open, as it is while a copy of the app downloads or installs an
+    /// update. A file that can't go stays for the next time. False when it left everything for the lock.
+    /// </summary>
+    public static bool RemoveLeftovers(string packages, string? work, string? keep)
+    {
+        if (!Directory.Exists(packages))
+            return true;
+        FileStream gate;
+        try
+        {
+            // Opened by no one else, or this fails: Velopack holds it open while it works.
+            gate = new FileStream(Path.Combine(packages, ".velopack_lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+        using (gate)
+        {
+            // Only a folder inside the packages folder, as Velopack's is (VelopackTemp): never one a wrong path names.
+            if (work is not null && Directory.Exists(work) && Inside(work, packages))
+                Try(() => Directory.Delete(work, recursive: true));
+            foreach (string file in Directory.EnumerateFiles(packages, "*.partial"))
+                Try(() => File.Delete(file));
+            foreach (string file in Directory.EnumerateFiles(packages, "*.nupkg"))
+                if (!string.Equals(Path.GetFileName(file), keep, StringComparison.OrdinalIgnoreCase))
+                    Try(() => File.Delete(file));
+        }
+        return true;
+
+        static bool Inside(string folder, string parent)
+        {
+            string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+            string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(parent));
+            return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static void Try(Action delete)
+        {
+            try
+            {
+                delete();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
     }
 
     /// <summary>
@@ -90,4 +150,21 @@ internal sealed class GitHubUpdateSource : IUpdateSource
     // Silent: Velopack's own windows are never shown; a failed install leaves the old version, which starts again.
     public void ApplyOnExit(AvailableUpdate update) =>
         Manager.WaitExitThenApplyUpdates(((UpdateInfo)update.Native!).TargetFullRelease, silent: true, restart: true);
+
+    // Only a copy that updates itself has the folders; a dev build, or one run from elsewhere, has none of its own.
+    public void CleanUp()
+    {
+        if (!CanUpdate)
+            return;
+        IVelopackLocator locator = VelopackLocator.Current;
+        if (locator.PackagesDir is not { } packages)
+            return;
+        try
+        {
+            Updates.RemoveLeftovers(packages, locator.AppTempDir, locator.GetLatestLocalFullPackage()?.FileName);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
 }
