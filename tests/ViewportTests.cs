@@ -422,6 +422,27 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void The_footer_spaces_its_controls_evenly_and_leads_the_level_with_its_glyph()
+    {
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", TestDrawables.Triangle()));
+        var window = new Avalonia.Controls.Window { Width = 900, Height = 600, Content = viewer };
+        window.Show();
+        Settle(viewer);
+        TestWait.Pump(100);
+        // As far from the footer's top line and its bottom as from the window's side: 8 px, give or take the line.
+        var well = new Avalonia.Rect(Avalonia.VisualExtensions.TranslatePoint(viewer.LodWell, default, viewer.Footer)!.Value, viewer.LodWell.Bounds.Size);
+        Assert.Equal(8, well.Left);
+        Assert.InRange(well.Top - 1, 7, 8);
+        Assert.InRange(viewer.Footer.Bounds.Height - well.Bottom, 7, 8);
+        // The glyph, the level in the app's font, and its triangles after it; with one level, no arrow.
+        double X(Avalonia.Controls.Control part) => Avalonia.VisualExtensions.TranslatePoint(part, default, viewer.LodWell)!.Value.X;
+        Assert.True(X(viewer.LodGlyph) < X(viewer.LodText) && X(viewer.LodText) < X(viewer.LodCount));
+        Assert.Equal(Ui.Theme.UiFont, viewer.LodText.FontFamily);
+        Assert.False(viewer.LodCaret.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_drawable_is_lit_at_the_time_of_day_its_slider_sets()
     {
         byte[] ydr = TestDrawables.Triangle();
