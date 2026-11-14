@@ -13,6 +13,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Updates no longer leave temporary files in the app's folder. ([#232](https://github.com/Hancapo/HikariHopper/pull/232))
+
 ### Removed
 
 ## [0.2.1] - 2026-11-14

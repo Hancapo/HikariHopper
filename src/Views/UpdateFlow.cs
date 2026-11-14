@@ -45,9 +45,17 @@ internal sealed class UpdateFlow
 
     /// <summary>
     /// The startup check: when it is on and this copy can update, a version newer than this one, and not the one
-    /// skipped, is offered. Nothing shows otherwise, not even a failed check.
+    /// skipped, is offered. Nothing shows otherwise, not even a failed check. Whether it's on or not, what the last
+    /// update left behind is deleted meanwhile.
     /// </summary>
-    public Task CheckAtStartup() => Checked = AtStartup();
+    public Task CheckAtStartup()
+    {
+        CleanedUp = Task.Run(Updates.Source.CleanUp);
+        return Checked = AtStartup();
+    }
+
+    /// <summary>The last clean-up of what updating left behind, done; for tests.</summary>
+    internal Task CleanedUp { get; private set; } = Task.CompletedTask;
 
     /// <summary>
     /// A check by hand, from Help or Settings: the sheet shows the check under way, and then what it found. It is
@@ -165,6 +173,8 @@ internal sealed class UpdateFlow
             bool cancelled = download.IsCancellationRequested;
             download.Dispose();
             download = null;
+            // What it had downloaded goes; the next try starts again.
+            CleanedUp = Task.Run(Updates.Source.CleanUp);
             Offer(update, cancelled ? null : "The download failed");
             return;
         }
@@ -173,6 +183,7 @@ internal sealed class UpdateFlow
         download = null;
         if (called)
         {
+            CleanedUp = Task.Run(Updates.Source.CleanUp);
             Offer(update);
             return;
         }
