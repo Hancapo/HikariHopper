@@ -31,6 +31,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly string previousKeyCache;
     private readonly Func<string, LoadedGame> previousGameLoader;
     private readonly Func<string, GameTarget, GameCrypto, GameTextures.Tables> previousTableBuilder;
+    private readonly TimeSpan previousFade;
     private readonly Func<string, string, long, long, GameTarget, GameCrypto?, GameTextureDirectory.Part> previousScanner;
     private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
@@ -61,6 +62,9 @@ public abstract class ExplorerTestBase : IDisposable
         // And a scratch game, which has no models, has empty ones, at once.
         previousTableBuilder = GameTextures.Builder;
         GameTextures.Builder = (_, _, _) => new GameTextures.Tables();
+        // The loading view goes at once when a load ends, unless a test fades it.
+        previousFade = Views.GameLoadingView.FadeDuration;
+        Views.GameLoadingView.FadeDuration = TimeSpan.Zero;
         // Nor the texture directory, which would hold the test's RPFs open meanwhile.
         previousScanner = GameTextureDirectory.Scanner;
         GameTextureDirectory.Scanner = (_, archive, length, written, _, _) => new GameTextureDirectory.Part(archive, length, written, []);
@@ -102,6 +106,7 @@ public abstract class ExplorerTestBase : IDisposable
         AppServices.Clipboard = previousClipboard;
         ExplorerViewModel.GameLoader = previousGameLoader;
         GameTextures.Builder = previousTableBuilder;
+        Views.GameLoadingView.FadeDuration = previousFade;
         GameTextureDirectory.Scanner = previousScanner;
         GameTextureDirectory.ForgetAll();
         ExplorerViewModel.SearchDelay = previousSearchDelay;

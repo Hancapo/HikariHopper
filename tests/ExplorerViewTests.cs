@@ -1623,6 +1623,142 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         }
     }
 
+    // Opens a game in a new explorer (one with a game open already in its first tab, when asked), the load held until the
+    // loading view shows, with motion as given and the view's fade as long as given (its own, 320 ms, unless a test
+    // needs to see it partway); a failure given fails the load.
+    private (Explorer Ui, GameLoadingView Loading) LoadWithFade(bool motion, Exception? failure = null, int fade = 320, bool besideAGame = false)
+    {
+        GameLoadingView.FadeDuration = TimeSpan.FromMilliseconds(fade);
+        Ui.Motion.ReducedOverride = !motion;
+        // Whatever loader a load before left behind, the first tab's game opens at once.
+        ExplorerViewModel.GameLoader = FakeLoadedGame;
+        Explorer ui = OpenExplorer(openGame: besideAGame);
+        if (besideAGame)
+        {
+            ui.Tabs.NewTab();
+            Pump();
+        }
+        GameLoadingView loading = ui.Find<GameLoadingView>();
+        using var release = new ManualResetEventSlim();
+        ExplorerViewModel.GameLoader = path =>
+        {
+            release.Wait(TimeSpan.FromSeconds(10));
+            return failure is null ? FakeLoadedGame(path) : throw failure;
+        };
+        ExplorerViewModel tab = ui.Tabs.ActiveBridge!;
+        tab.OpenGameAsync(Work);
+        TestWait.Until(() => loading.Revealed && loading.IsVisible, "the loading view to show");
+        release.Set();
+        Settle(tab);
+        return (ui, loading);
+    }
+
+    [AvaloniaFact]
+    public void TheLoadingViewFadesOutOverTheOpenedGame()
+    {
+        try
+        {
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: true, fade: 1500);
+            // The game is open under it: the view stays over it, its train still running, and fades out, letting
+            // clicks through from the start.
+            Assert.True(ui.Bridge.HasWorkspace);
+            Assert.True(loading.Fading);
+            Assert.True(loading.IsVisible);
+            Assert.False(loading.IsHitTestVisible);
+            Assert.True(loading.Overlay.IsRunning);
+            TestWait.Until(() => loading.Opacity is > 0.05 and < 0.95, "the view to be fading");
+            // Then it's gone, opaque again for the next load.
+            TestWait.Until(() => !loading.IsVisible, "the fade to end");
+            Assert.False(loading.Fading);
+            Assert.Equal(1, loading.Opacity);
+            Assert.True(loading.IsHitTestVisible);
+            Assert.False(loading.Overlay.IsRunning);
+            Assert.False(loading.Pattern.Animating);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ALoadBegunAsTheLoadingViewFadesBringsItBackAndAnotherTabTakesItAway()
+    {
+        try
+        {
+            // A load begun while it fades: back at once, opaque, taking clicks, and not fading.
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: true, fade: 1500);
+            Assert.True(loading.Fading);
+            using var again = new ManualResetEventSlim();
+            ExplorerViewModel.GameLoader = path =>
+            {
+                again.Wait(TimeSpan.FromSeconds(10));
+                return FakeLoadedGame(path);
+            };
+            ui.Bridge.OpenGameAsync(Work);
+            TestWait.Until(() => ui.Bridge.GameLoading, "the second load to start");
+            Pump();
+            Assert.False(loading.Fading);
+            Assert.True(loading.IsVisible);
+            Assert.True(loading.IsHitTestVisible);
+            Assert.Equal(1, loading.Opacity);
+            again.Set();
+            Settle(ui.Bridge);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+        try
+        {
+            // Another tab, with a game of its own, picked while it fades: gone, rather than fading again over that one.
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: true, fade: 1500, besideAGame: true);
+            Assert.True(loading.Fading);
+            ui.Tabs.ActivateTab(0);
+            Pump();
+            Assert.True(ui.Tabs.ActiveBridge!.HasWorkspace);
+            Assert.False(loading.Fading);
+            Assert.False(loading.IsVisible);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void TheLoadingViewGoesAtOnceWithMotionReduced()
+    {
+        try
+        {
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: false);
+            Assert.True(ui.Bridge.HasWorkspace);
+            Assert.False(loading.Fading);
+            Assert.False(loading.IsVisible);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void TheLoadingViewGoesAtOnceWhenTheLoadFails()
+    {
+        try
+        {
+            // Nothing opened to fade to.
+            (Explorer ui, GameLoadingView loading) = LoadWithFade(motion: true, new IOException("no game here"));
+            Assert.False(ui.Bridge.HasWorkspace);
+            Assert.False(loading.Fading);
+            Assert.False(loading.IsVisible);
+        }
+        finally
+        {
+            Ui.Motion.ReducedOverride = null;
+        }
+    }
+
     [AvaloniaFact]
     public void TabStripActivatesAndClosesTabs()
     {
