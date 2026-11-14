@@ -24,8 +24,9 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     /// Reads a collision (.ybn), a navmesh (.ynv), a drawable (.ydr), a drawable dictionary (.ydd, its drawables
     /// together) or a fragment (.yft: its main drawable, a vehicle's body and parts, and its wheels). A drawable's
     /// textures come from its own dictionary, then from <paramref name="dictionaries"/> (the .ytd files named for it,
-    /// in order), and then from <paramref name="nearby"/> (the other .ytd files beside it), which are read only for a
-    /// texture still missing. Dictionaries that can't be read are left out.
+    /// in order), and then, each read only for a texture still missing, from <paramref name="nearby"/> (the game's
+    /// dictionaries for it), the ones the game's texture directory names (<paramref name="elsewhere"/>), and, when it
+    /// can't say, <paramref name="beside"/> (the other .ytd files beside it). Dictionaries that can't be read are left out.
     /// </summary>
     /// <summary>
     /// The textures a .ydr, .ydd or .yft carries in its drawables' own dictionaries, each name once, and its edition:
@@ -64,7 +65,8 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
 
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
     public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
-        IReadOnlyList<NearbyDictionary>? nearby = null, IReadOnlyList<FiveFury.Textures.Texture>? overrides = null)
+        IReadOnlyList<NearbyDictionary>? nearby = null, IReadOnlyList<FiveFury.Textures.Texture>? overrides = null,
+        Func<string, IReadOnlyList<NearbyDictionary>?>? elsewhere = null, IReadOnlyList<NearbyDictionary>? beside = null)
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
         Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
@@ -93,7 +95,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
                 {
                 }
             }
-            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? [], overrides),
+            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? [], overrides, elsewhere, beside),
                 fragment?.PhysicsLods.FirstOrDefault(lod => lod is not null)?.CompositeBound, fragment?.Lights);
             scene.Writer = writer;
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);

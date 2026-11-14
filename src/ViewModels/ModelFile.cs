@@ -19,6 +19,13 @@ public sealed record ModelFile(string Name, byte[] Data)
     /// </summary>
     internal Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries { get; init; }
 
+    /// <summary>
+    /// The game's dictionaries that hold a texture of a name, nearest the drawable first, from its texture directory
+    /// (<see cref="Core.GameTextureDirectory"/>), searched after <see cref="GameDictionaries"/>; none when the game has none,
+    /// null when it can't say, and then <see cref="Nearby"/> are searched instead. Null outside a game.
+    /// </summary>
+    internal Func<string, IReadOnlyList<Rendering.NearbyDictionary>?>? GameHolding { get; init; }
+
     /// <summary>The sun's and moon's paths across the game's sky, from its <c>time.xml</c>; null outside a game.</summary>
     internal Task<Rendering.SkyPath>? GameSky { get; init; }
 
@@ -37,8 +44,9 @@ public sealed record ModelFile(string Name, byte[] Data)
     internal SaveTarget? SaveTarget { get; init; }
 
     /// <summary>
-    /// The other .ytd files beside a drawable, read only if a texture is still missing: a vehicle's parent dictionary
-    /// (its interior's, say) is among them under a name of its own.
+    /// The other .ytd files beside a drawable, read only if a texture is still missing and the game's texture directory
+    /// can't say where it is (<see cref="GameHolding"/>): a vehicle's parent dictionary (its interior's, say) is among
+    /// them under a name of its own.
     /// </summary>
     internal IReadOnlyList<Rendering.NearbyDictionary> Nearby { get; init; } = [];
 

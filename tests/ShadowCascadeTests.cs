@@ -61,7 +61,7 @@ public sealed class ShadowCascadeTests
             Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
 
             // One map over the whole model would have a texel of its diameter over the resolution: about 14 cm here.
-            float whole = radius * 2 / ViewportRenderer.ShadowResolution;
+            float whole = radius * 2 / Core.GraphicsSettings.DefaultShadowResolution;
             Assert.True(texels.X < whole / 10, $"nearest cascade's texel {texels.X} m, one map's {whole} m");
             // Each cascade reaches further and is coarser than the one before; the last takes in the far side.
             Assert.True(splits.X < splits.Y && splits.Y < splits.Z && splits.Z < splits.W, $"{splits}");
