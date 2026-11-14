@@ -8,7 +8,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
-- The game loading screen fades out over the opened game. ([#222](https://github.com/Hancapo/HikariHopper/pull/222))
+- The game loading screen fades out over the opened game. ([#222](https://github.com/Hancapo/HikariHopper/pull/222), [#223](https://github.com/Hancapo/HikariHopper/pull/223))
 - A faint railway pattern drifts slowly behind the start page and the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213), [#221](https://github.com/Hancapo/HikariHopper/pull/221))
 
 ### Changed
