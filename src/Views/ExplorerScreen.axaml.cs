@@ -126,5 +126,9 @@ public partial class ExplorerScreen : UserControl
                 start.Tabs = null;
         }
         PageHost.Content = page;
+        // The start page takes the whole screen, the strip over its top when there is one; a workspace starts under it.
+        bool launcher = page is StartPage;
+        Grid.SetRow(Pages, launcher ? 0 : 1);
+        Grid.SetRowSpan(Pages, launcher ? 2 : 1);
     }
 }
