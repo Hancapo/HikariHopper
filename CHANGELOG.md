@@ -10,6 +10,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- The window's close mark is drawn like the minimize and maximize marks: the same box, stroke and centre. ([#224](https://github.com/Hancapo/HikariHopper/pull/224))
+
 ### Fixed
 
 ### Removed
