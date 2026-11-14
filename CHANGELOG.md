@@ -9,12 +9,17 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Added
 
 - Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
+- A faint railway pattern drifts slowly behind the start page. ([#203](https://github.com/Hancapo/HikariHopper/pull/203))
 
 ### Changed
 
+
 ### Fixed
 
+- The last tab no longer gets cut off as the tabs glide into place after one closes. ([#202](https://github.com/Hancapo/HikariHopper/pull/202))
+
 ### Removed
+
 
 ## [0.2.0] - 2026-11-12
 
