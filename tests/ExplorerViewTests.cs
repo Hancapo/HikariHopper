@@ -141,6 +141,39 @@ public sealed class ExplorerViewTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void ALoneLauncherKeepsItsPlaceWhileAGameLoadsAndTheStripComesWithTheGame()
+    {
+        Explorer ui = OpenExplorer(openGame: false);
+        ExplorerScreen screen = ui.Find<ExplorerScreen>();
+        StartPage start = Assert.IsType<StartPage>(screen.Page);
+        Point Where() => start.TranslatePoint(default, ui.Window)!.Value;
+        Point before = Where();
+        using var release = new ManualResetEventSlim();
+        ExplorerViewModel.GameLoader = path =>
+        {
+            release.Wait(TimeSpan.FromSeconds(10));
+            return FakeLoadedGame(path);
+        };
+        ui.Bridge.OpenGameAsync(Work);
+        TestWait.Until(() => ui.Bridge.GameLoading, "the game to start loading");
+        Pump(300);
+        // Loading, the launcher and the loading cover over it stay where they were: no strip pushes them down.
+        Assert.True(ui.Find<GameLoadingView>().IsVisible);
+        Assert.False(screen.StripVisible);
+        Assert.False(ui.Find<TabStrip>().IsVisible);
+        Assert.Equal(before, Where());
+        Assert.Equal(before, ui.Find<GameLoadingView>().TranslatePoint(default, ui.Window)!.Value);
+        // The game open, its tab comes with it.
+        release.Set();
+        Settle(ui.Bridge);
+        Pump();
+        Assert.True(ui.Bridge.HasWorkspace);
+        Assert.True(screen.StripVisible);
+        Assert.True(ui.Find<TabStrip>().IsVisible);
+    }
+
+
+    [AvaloniaFact]
     public void TheLauncherHasNoExplorerChromeAndListsTheGamesToOpen()
     {
         Explorer ui = OpenExplorer(openGame: false);
