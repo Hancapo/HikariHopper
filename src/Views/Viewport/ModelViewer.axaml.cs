@@ -1675,7 +1675,7 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         try
         {
-            return (ModelContent.Read(file.Name, data, file.Dictionaries, [.. game, .. file.Nearby], savedTextures), null);
+            return (ModelContent.Read(file.Name, data, file.Dictionaries, game, savedTextures, file.GameHolding, file.Nearby), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)

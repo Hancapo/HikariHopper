@@ -28,6 +28,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The 3D viewer finds a model's textures wherever the game holds them, such as a vehicle mod part's shared vehicle textures: of 400 sampled models, 12 are left with a texture missing, down from 141, and they read 3.5× faster. ([#218](https://github.com/Hancapo/HikariHopper/pull/218))
 - The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
 - Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
 - The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
