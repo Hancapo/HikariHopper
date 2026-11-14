@@ -58,7 +58,7 @@ public sealed class SkySystemTests
     {
         TimecycleSample tc = Timecycle.Sample(13);
         Assert.Equal(SkySystem.At(13).HdrIntensity * tc.Get("reflection_hdr_mult"), SkySystem.At(13, reflection: true).HdrIntensity, 4);
-        Assert.Equal(10u, ViewportRenderer.ReflectionMips);
+        Assert.Equal(10u, ViewportRenderer.MipsFor(Core.GraphicsSettings.DefaultReflectionWidth));
     }
 
     private static void AssertClose(Vector3 expected, Vector3 actual, float tolerance = 1e-3f)

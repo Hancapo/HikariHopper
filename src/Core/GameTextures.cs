@@ -74,6 +74,58 @@ public sealed class GameTextures
     /// <summary>Forgets every shared instance; for tests.</summary>
     internal static void ForgetAll() => Shared.Clear();
 
+    /// <summary>
+    /// The bytes the cache holds: every game's tables, a write of them left unfinished, and FiveFury's index of their
+    /// archives, what <see cref="DeleteCache"/> deletes.
+    /// </summary>
+    public static long CacheSize =>
+        CacheFiles.Size(CacheFolder, "*.bin") + CacheFiles.Size(CacheFolder, "*.tmp") + CacheFiles.Size(IndexFolder, "*", deep: true);
+
+    /// <summary>
+    /// Deletes every game's cached tables and FiveFury's index of their archives. The tables in use stay as they are
+    /// until the app starts again; a game made again then reads all its archives. False when a file couldn't go (in
+    /// use by a build under way, say).
+    /// </summary>
+    public static bool DeleteCache()
+    {
+        bool all = CacheFiles.Delete(CacheFolder, "*.bin") & CacheFiles.Delete(CacheFolder, "*.tmp");
+        return CacheFiles.DeleteFolder(IndexFolder) && all;
+    }
+
+    /// <summary>
+    /// Deletes the cache (see <see cref="DeleteCache"/>) and makes again, from every archive, the tables of each game
+    /// loaded since the app started; models opened from then on use them. Done once they are made; false when a file
+    /// of the cache couldn't go, though the tables are made again all the same.
+    /// </summary>
+    public static async Task<bool> RebuildCache()
+    {
+        // Tables being made now hold their game's archives open, and a write to one waits for them (see
+        // WaitForArchiveReaders): they finish first, so none is replaced while it still reads.
+        KeyValuePair<string, GameTextures>[] games = Shared.ToArray();
+        await Task.WhenAll(games.Select(game => game.Value.Running() is { } running ? Task.WhenAny(running) : Task.CompletedTask));
+        bool deleted = DeleteCache();
+        var loads = new List<Task>();
+        foreach ((string key, GameTextures old) in games)
+        {
+            // Made from the archives, even if a cache file stayed.
+            var fresh = new GameTextures(old.root, old.target, old.build) { fromArchives = true };
+            Shared[key] = fresh;
+            loads.Add(fresh.Load());
+        }
+        await Task.WhenAll(loads);
+        return deleted;
+    }
+
+    // Set on tables rebuilt by hand: they are made from the archives, never read from the cache.
+    private bool fromArchives;
+
+    // The tables being read or made, while they are.
+    private Task? Running()
+    {
+        lock (gate)
+            return loading is { IsCompleted: false } running ? running : null;
+    }
+
     /// <summary>Shares tables made by <paramref name="make"/> as the game at <paramref name="gameRoot"/>'s; for tests.</summary>
     internal static GameTextures Share(string gameRoot, Func<Tables> make) =>
         Shared[Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot))] = new GameTextures(Path.GetFullPath(gameRoot), GameTarget.Legacy, make);
@@ -86,6 +138,8 @@ public sealed class GameTextures
     /// </summary>
     public static void WaitForArchiveReaders(string path)
     {
+        // The game's texture directory reads them too.
+        GameTextureDirectory.WaitForArchiveReaders(path);
         foreach (GameTextures textures in Holding(path))
         {
             Task? running;
@@ -107,6 +161,7 @@ public sealed class GameTextures
     /// </summary>
     public static void Changed(string path)
     {
+        GameTextureDirectory.Changed(path);
         foreach (GameTextures textures in Holding(path))
             lock (textures.writing)
             {
@@ -208,7 +263,8 @@ public sealed class GameTextures
         Tables? tables = null;
         try
         {
-            tables = Tables.Read(CachePath, stamp);
+            if (!fromArchives)
+                tables = Tables.Read(CachePath, stamp);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or EndOfStreamException)
         {
@@ -246,6 +302,8 @@ public sealed class GameTextures
     public static Task Rewritten(string archivePath)
     {
         string written = Path.GetFullPath(archivePath);
+        // The dictionaries in it may hold other textures now.
+        GameTextureDirectory.Changed(written);
         GameTextures[] games = [.. Shared.Values.Where(game => written.StartsWith(game.root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))];
         return games.Length == 0 ? Task.CompletedTask : Task.Run(() =>
         {
