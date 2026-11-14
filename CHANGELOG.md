@@ -14,6 +14,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- GTA V Legacy's V mark is sand instead of grey, so it no longer looks disabled next to Enhanced's green. ([#209](https://github.com/Hancapo/HikariHopper/pull/209))
 - Settings lists its groups in a sidebar running the height of the dialog, with even 16 px spacing around the page, each game's folder and clear buttons in one well, and the folder check in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
 - The footer text of Settings and About is in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
 - The 3D viewer's footer is taller, so its controls sit evenly from its edges and the window's corner, and its level of detail is shown with a layers icon, in the app's font. ([#207](https://github.com/Hancapo/HikariHopper/pull/207))
