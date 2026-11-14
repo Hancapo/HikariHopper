@@ -34,6 +34,43 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroupLayout? furLayout, cableLayout;
     private RenderPipeline? furSurfaces, furReflected, cableSurfaces;
     private Sampler? surfaceSampler;
+    private int anisotropy = Core.GraphicsSettings.DefaultAnisotropy;
+    // The materials shown, by index, to make their groups again with another sampler.
+    private IReadOnlyList<SurfaceMaterial>? shownMaterials;
+
+    /// <summary>
+    /// The textures' anisotropic filtering, 1 (trilinear alone) to 16 (Core.GraphicsSettings.Anisotropies); a change
+    /// makes the shown materials' groups again with the new sampler, from the textures and values they have.
+    /// </summary>
+    public int Anisotropy
+    {
+        get => anisotropy;
+        set
+        {
+            value = Math.Clamp(value, 1, 16);
+            if (value == anisotropy)
+                return;
+            anisotropy = value;
+            if (surfaceSampler is null)
+                return;
+            surfaceSampler = SurfaceSampler();
+            RebuildMaterialGroups();
+        }
+    }
+
+    // Repeating, trilinear, at the anisotropy asked for.
+    private Sampler SurfaceSampler() => device.CreateSampler(new SamplerDescriptor
+    {
+        AddressModeU = AddressMode.Repeat,
+        AddressModeV = AddressMode.Repeat,
+        AddressModeW = AddressMode.Repeat,
+        MagFilter = FilterMode.Linear,
+        MinFilter = FilterMode.Linear,
+        MipmapFilter = MipmapFilterMode.Linear,
+        LodMinClamp = 0,
+        LodMaxClamp = 32,
+        MaxAnisotropy = (ushort)anisotropy,
+    });
     private Sampler? paletteSampler;
     private TextureView? white;
     private TextureView? missing;
@@ -238,18 +275,7 @@ internal sealed unsafe partial class ViewportRenderer
         furSurfaces = Pipeline(CullMode.None, blend: false, kind: PartKind.Fur);
         furReflected = Pipeline(CullMode.None, blend: false, reflected: true, kind: PartKind.Fur);
         cableSurfaces = Pipeline(CullMode.None, blend: true, kind: PartKind.Cable);
-        surfaceSampler = device.CreateSampler(new SamplerDescriptor
-        {
-            AddressModeU = AddressMode.Repeat,
-            AddressModeV = AddressMode.Repeat,
-            AddressModeW = AddressMode.Repeat,
-            MagFilter = FilterMode.Linear,
-            MinFilter = FilterMode.Linear,
-            MipmapFilter = MipmapFilterMode.Linear,
-            LodMinClamp = 0,
-            LodMaxClamp = 32,
-            MaxAnisotropy = 8,
-        });
+        surfaceSampler = SurfaceSampler();
         // A palette's texels are colours apart: each is read whole, and its edges don't wrap.
         paletteSampler = device.CreateSampler(new SamplerDescriptor
         {
@@ -348,6 +374,7 @@ internal sealed unsafe partial class ViewportRenderer
             return (part, groups[part.Material], mode, kind, fringes[part.Material]);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
+        shownMaterials = drawable.Materials;
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
     }
@@ -358,6 +385,25 @@ internal sealed unsafe partial class ViewportRenderer
         float[] blended = [.. material.Uniforms];
         blended[10] = (float)AlphaMode.Blend;
         return blended;
+    }
+
+    // Each material's group (and hair's second pass's) made again, as after a change of sampler: from the same
+    // textures, reading the same uniform buffers, so edited values stay.
+    private void RebuildMaterialGroups()
+    {
+        if (shownMaterials is not { } materials || materials.Count != materialUniforms.Length)
+            return;
+        var groups = new BindGroup[materials.Count];
+        var fringes = new BindGroup?[materials.Count];
+        for (int i = 0; i < materials.Count; i++)
+        {
+            SurfaceMaterial material = materials[i];
+            groups[i] = material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
+                : material.Cable ? CableGroup(material, materialUniforms[i]) : MaterialGroup(material, material.Uniforms, materialUniforms[i]);
+            if (fringeUniforms[i] is { } fringe)
+                fringes[i] = MaterialGroup(material, material.Uniforms, fringe);
+        }
+        surfaceParts = [.. surfaceParts.Select(p => (p.Part, groups[p.Part.Material], p.Mode, p.Kind, fringes[p.Part.Material]))];
     }
 
     /// <summary>
@@ -383,6 +429,7 @@ internal sealed unsafe partial class ViewportRenderer
         materialBuffers.Clear();
         materialUniforms = [];
         fringeUniforms = [];
+        shownMaterials = null;
         surfaceVertices = surfaceIndices = null;
         ShowOverlays([]);
         ShowSolid([]);
@@ -396,11 +443,15 @@ internal sealed unsafe partial class ViewportRenderer
         textures.Clear();
     }
 
-    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values)
+    // With a uniform buffer of its own, filled with the values; or reading one it had, as it is.
+    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null)
     {
-        Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        materialBuffers.Add(uniforms);
-        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)values);
+        Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        if (had is null)
+        {
+            materialBuffers.Add(uniforms);
+            queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)values);
+        }
         return device.CreateBindGroup(new BindGroupDescriptor
         {
             Layout = materialLayout!,
@@ -440,12 +491,12 @@ internal sealed unsafe partial class ViewportRenderer
 
     // A missing combo height map has no fur, so only the first shell shows; a missing mask, no fur at all; a missing
     // colour map changes nothing.
-    private BindGroup FurGroup(SurfaceMaterial material) => device.CreateBindGroup(new BindGroupDescriptor
+    private BindGroup FurGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
     {
         Layout = furLayout!,
         Entries =
         [
-            new BindGroupEntry { Binding = 0, Buffer = MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes },
+            new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes },
             new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
             new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
             new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
@@ -461,17 +512,20 @@ internal sealed unsafe partial class ViewportRenderer
         ],
     });
 
-    private BindGroup CableGroup(SurfaceMaterial material) => device.CreateBindGroup(new BindGroupDescriptor
+    private BindGroup CableGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
     {
         Layout = cableLayout!,
-        Entries = [new BindGroupEntry { Binding = 0, Buffer = MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
+        Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
     });
 
-    private BindGroup TerrainGroup(SurfaceMaterial material)
+    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null)
     {
-        Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        materialBuffers.Add(uniforms);
-        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+        Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        if (had is null)
+        {
+            materialBuffers.Add(uniforms);
+            queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+        }
         // A missing layer reads white, as a missing diffuse map does elsewhere, a missing bump map flat and a missing
         // height map as high as it goes; without a lookup map every weight is nothing, which is all the first layer.
         var entries = new List<BindGroupEntry>

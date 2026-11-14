@@ -27,6 +27,7 @@
             BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="0,0,1,0">
       <StackPanel Spacing="2">
         <v:SettingsGroupRow Name="GamesGroup" Label="Games" Icon="box" Selected="True" />
+        <v:SettingsGroupRow Name="GraphicsGroup" Label="Graphics" Icon="monitor" />
         <v:SettingsGroupRow Name="StartupGroup" Label="Startup" Icon="zap" />
         <v:SettingsGroupRow Name="UpdatesGroup" Label="Updates" Icon="download" />
         <v:SettingsGroupRow Name="CacheGroup" Label="Cache" Icon="database" />
@@ -38,6 +39,31 @@
       <Panel Margin="16">
         <StackPanel Name="GamesPage">
           <StackPanel Name="GameRows" />
+        </StackPanel>
+
+        <!-- How the 3D views draw, the same in every viewer. -->
+        <StackPanel Name="GraphicsPage" IsVisible="False">
+          <TextBlock Classes="section" Text="IMAGE" Margin="0,2,0,8" />
+          <v:SettingsCard>
+            <v:SettingsRow Title="Anti-aliasing (CMAA 2)">
+              <c:OnOffSwitch Name="AntialiasingSwitch" />
+            </v:SettingsRow>
+            <v:SettingsRow Title="Bloom">
+              <c:OnOffSwitch Name="BloomSwitch" />
+            </v:SettingsRow>
+          </v:SettingsCard>
+          <TextBlock Classes="section" Text="LIGHTING" Margin="0,22,0,8" />
+          <v:SettingsCard>
+            <v:SettingsRow Title="Shadows">
+              <c:SegmentedSwitch Name="ShadowSwitch" Height="26" />
+            </v:SettingsRow>
+          </v:SettingsCard>
+          <TextBlock Classes="section" Text="DETAIL" Margin="0,22,0,8" />
+          <v:SettingsCard>
+            <v:SettingsRow Title="Texture filtering">
+              <c:SegmentedSwitch Name="FilteringSwitch" Height="26" />
+            </v:SettingsRow>
+          </v:SettingsCard>
         </StackPanel>
 
         <StackPanel Name="StartupPage" IsVisible="False">
