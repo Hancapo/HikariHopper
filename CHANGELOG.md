@@ -2,47 +2,56 @@
 
 All notable changes to HikariHopper are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, a minor version marks a new capability
+(0.1.0 the 3D viewer, 0.2.0 editing models); every other release is a patch.
 
 ## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.2.1] - 2026-11-14
 
 ### Added
 
 - Save a collision or a navmesh as another file from the 3D viewer. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
 - The game loading screen fades out over the opened game. ([#222](https://github.com/Hancapo/HikariHopper/pull/222), [#223](https://github.com/Hancapo/HikariHopper/pull/223))
 - A faint railway pattern drifts slowly behind the start page and the game loading screen. ([#203](https://github.com/Hancapo/HikariHopper/pull/203), [#213](https://github.com/Hancapo/HikariHopper/pull/213), [#221](https://github.com/Hancapo/HikariHopper/pull/221))
-- A Graphics page in Settings: turn anti-aliasing (CMAA 2) and bloom on or off, set the shadows to Off, Medium, High or Ultra, and choose the texture filtering, for every viewer at once. ([#211](https://github.com/Hancapo/HikariHopper/pull/211))
-- Render scale (75% to 200%, supersampled above 100%) and reflection quality (Low, Medium or High) on the Graphics page. ([#212](https://github.com/Hancapo/HikariHopper/pull/212))
-- Fur grass (grass_fur, grass_fur_mask, grass_fur_tnt) and cables are drawn with GTA V's own shaders in the 3D viewer: fur as its eight shells, cables widened to face the camera. ([#210](https://github.com/Hancapo/HikariHopper/pull/210))
+- A Graphics page in Settings, to turn anti-aliasing and bloom on or off and set the shadows and texture filtering for every viewer at once. ([#211](https://github.com/Hancapo/HikariHopper/pull/211))
+- Render scale (75% to 200%) and reflection quality on the Graphics page. ([#212](https://github.com/Hancapo/HikariHopper/pull/212))
+- Fur grass and cables are drawn with GTA V's own shaders in the 3D viewer. ([#210](https://github.com/Hancapo/HikariHopper/pull/210))
 - Show an item, or the folder you're in, in Windows Explorer. ([#206](https://github.com/Hancapo/HikariHopper/pull/206))
 - Rebuild or delete the texture and search indexes from a new Cache page in Settings, which shows how much each takes on disk. ([#204](https://github.com/Hancapo/HikariHopper/pull/204))
 
 ### Changed
 
-- Vehicle glass is shaded with GTA V's own glass shaders in the 3D viewer: tinted, with its dirt, the sun's highlight and the sky's reflection, and seen from its outside only. ([#227](https://github.com/Hancapo/HikariHopper/pull/227))
-- The window's close mark is drawn like the minimize and maximize marks: the same box, stroke and centre. ([#224](https://github.com/Hancapo/HikariHopper/pull/224))
+- Vehicle glass is shaded with GTA V's own glass shaders in the 3D viewer: tinted, dirty and reflecting the sky. ([#227](https://github.com/Hancapo/HikariHopper/pull/227))
+- The window's close mark matches the minimize and maximize marks. ([#224](https://github.com/Hancapo/HikariHopper/pull/224))
 - The 3D viewer keeps the game's texture dictionaries it has read, so models sharing them read up to 6.8× faster: 6.8× for a map piece after another from its area, 3.4× for a map piece opened again, 1.5× for a vehicle opened again. ([#217](https://github.com/Hancapo/HikariHopper/pull/217))
 - Reading a model for the 3D viewer is up to 2.7× faster: 2.7× for a vehicle (the Adder), whose scene is built 3.5× faster, 1.8× the first time in a session. ([#216](https://github.com/Hancapo/HikariHopper/pull/216))
 - GTA V Legacy's V mark is sand instead of grey, so it no longer looks disabled next to Enhanced's green. ([#209](https://github.com/Hancapo/HikariHopper/pull/209))
-- Settings lists its groups in a sidebar running the height of the dialog, with even 16 px spacing around the page, each game's folder and clear buttons in one well, and the folder check in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
+- Settings lists its groups in a sidebar running the height of the dialog. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
 - The footer text of Settings and About is in the app's font. ([#208](https://github.com/Hancapo/HikariHopper/pull/208))
-- The 3D viewer's footer is taller, so its controls sit evenly from its edges and the window's corner, and its level of detail is shown with a layers icon, in the app's font. ([#207](https://github.com/Hancapo/HikariHopper/pull/207))
+- The 3D viewer's footer is taller, with its controls spaced evenly and a layers icon for the level of detail. ([#207](https://github.com/Hancapo/HikariHopper/pull/207))
 - Shader values are called shader parameters. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 
 ### Fixed
 
-- A collision's or navmesh's 3D viewer no longer shows the drawable's menu items, such as embedded textures and shader resets, greyed out. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
-- Every menu bar behaves the same: in the 3D and text viewers, pointing at another title switches menus while one is open; a click on an open menu's title closes it; and menus take the arrow keys, Enter and Escape, with Left and Right moving to the menus beside. ([#225](https://github.com/Hancapo/HikariHopper/pull/225))
-- The start page no longer jumps up when the tab strip goes, as the tab beside it closes: the strip lies over its top. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
-- Opening a game from the start page no longer pushes the page down as it starts loading: the tab strip comes with the game. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
+- The 3D viewer no longer shows greyed-out model items, such as embedded textures, in the menus of collisions and navmeshes. ([#226](https://github.com/Hancapo/HikariHopper/pull/226))
+- Menus in the 3D and text viewers switch as you point along the menu bar and work with the keyboard, as the explorer's do. ([#225](https://github.com/Hancapo/HikariHopper/pull/225))
+- The start page no longer jumps up when the tab strip goes. ([#215](https://github.com/Hancapo/HikariHopper/pull/215))
+- Opening a game from the start page no longer pushes the page down as it starts loading. ([#214](https://github.com/Hancapo/HikariHopper/pull/214))
 - DLC map pieces, Cayo Perico's island among them, get their textures in the 3D viewer: of 300 sampled island models, 69 are left with a texture missing, down from 209. ([#219](https://github.com/Hancapo/HikariHopper/pull/219))
 - Vehicle mod parts and wheels get their vehicles' textures in the 3D viewer: of 300 sampled models, 34 are left with a texture missing, down from 114. ([#220](https://github.com/Hancapo/HikariHopper/pull/220))
 - The 3D viewer finds a model's textures wherever the game holds them, such as a vehicle mod part's shared vehicle textures: of 400 sampled models, 12 are left with a texture missing, down from 141, and they read 3.5× faster. ([#218](https://github.com/Hancapo/HikariHopper/pull/218))
-- The shader parameters card stays open until it's closed, coming back with the next geometry picked instead of closing for good. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
+- The shader parameters card stays open until it's closed. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 - The shader parameters card shows where it belongs, no longer at its last place for a moment. ([#205](https://github.com/Hancapo/HikariHopper/pull/205))
 - The last tab no longer gets cut off as the tabs glide into place after one closes. ([#202](https://github.com/Hancapo/HikariHopper/pull/202))
-
-### Removed
 
 ## [0.2.0] - 2026-11-12
 
@@ -278,7 +287,8 @@ All notable changes to HikariHopper are documented here. The format follows
 - Explorer for GTA V Legacy and Enhanced game files, with nested RPF archives, a folder tree, list and grid views, search and tabs.
 - Texture editor for YTD dictionaries and textures embedded in YDR drawables.
 
-[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Hancapo/HikariHopper/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Hancapo/HikariHopper/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Hancapo/HikariHopper/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Hancapo/HikariHopper/compare/v0.0.5...v0.1.0
 [0.0.5]: https://github.com/Hancapo/HikariHopper/compare/v0.0.4...v0.0.5
