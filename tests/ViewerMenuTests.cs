@@ -209,17 +209,41 @@ public sealed class ViewerMenuTests
     [AvaloniaFact]
     public void A_collision_or_a_navmesh_has_only_what_applies_to_it_in_the_menus()
     {
-        // No shader values to edit, undo or save, and no textures: File, with Close.
+        // No shader values to edit, undo or save, and no textures: File, with Save as and Close.
         byte[] box = new FiveFury.Ybn.Ybn(new FiveFury.Bounds.BoundBox(new CommonFury.Numerics.Aabb3(new Vector3(-1), new Vector3(1)))).Write();
-        foreach (var file in new[] { new ModelFile("box.ybn", box), new ModelFile("navmesh[0][0].ynv", []) })
+        foreach (var file in new[] { new ModelFile("box.ybn", box), new ModelFile("navmesh[0][0].ynv", [1, 2, 3]) })
         {
             var viewer = new Views.ModelViewer(file);
             Assert.Equal(["File"], viewer.Menus.Titles);
-            Assert.Equal([("Close", "Ctrl+W", true)], viewer.Menus.ItemsOf("File"));
+            Assert.Equal([("Save as…", "Ctrl+Shift+S", true), ("-", "", false), ("Close", "Ctrl+W", true)], viewer.Menus.ItemsOf("File"));
         }
         // A drawable keeps both, whatever it has to offer now.
         var drawable = new Views.ModelViewer(new ModelFile("tri.ydr", Textured()));
         Assert.Equal(["File", "Edit"], drawable.Menus.Titles);
+    }
+
+    [AvaloniaFact]
+    public void Save_as_writes_a_collision_as_it_was_opened_and_never_replaces_a_file_that_wasnt_picked()
+    {
+        using var folder = new TempFolder();
+        byte[] box = new FiveFury.Ybn.Ybn(new FiveFury.Bounds.BoundBox(new CommonFury.Numerics.Aabb3(new Vector3(-1), new Vector3(1)))).Write();
+        var viewer = new Views.ModelViewer(new ModelFile("box.ybn", box));
+        var dialogs = new FakeDialogs { SaveFile = folder.File("copy") };
+        viewer.Dialogs = dialogs;
+        // Picked without its extension, from Ctrl+Shift+S: it gets the file's, and the bytes it was opened with.
+        Assert.True(viewer.Command('s', shift: true));
+        Wait(viewer.Saving);
+        Assert.Equal(box, File.ReadAllBytes(folder.File("copy.ybn")));
+        Assert.Equal("Save box.ybn as", Assert.Single(dialogs.Titles));
+        Assert.Equal("copy.ybn", viewer.TitleText.Text);
+        Assert.Equal("Saved copy.ybn", viewer.StatusText.Text);
+        // A file of the name with the extension added, which wasn't the one picked, isn't replaced.
+        File.WriteAllBytes(folder.File("other.ybn"), [9]);
+        dialogs.SaveFile = folder.File("other");
+        Task<bool> again = viewer.SaveAs();
+        Wait(again);
+        Assert.False(again.Result);
+        Assert.Equal([9], File.ReadAllBytes(folder.File("other.ybn")));
     }
 
     [AvaloniaFact]
