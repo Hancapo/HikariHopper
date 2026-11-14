@@ -28,6 +28,8 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? solidSurfaces;
     private RenderPipeline? doubleSidedSurfaces;
     private RenderPipeline? blendedSurfaces;
+    // Glass, blended with its back culled, as the game draws it: a vehicle's inside has glass of its own.
+    private RenderPipeline? blendedCulledSurfaces;
     private RenderPipeline? solidReflected, doubleSidedReflected, blendedReflected;
     private BindGroupLayout? terrainLayout;
     private RenderPipeline? terrainSurfaces, terrainReflected;
@@ -82,7 +84,8 @@ internal sealed unsafe partial class ViewportRenderer
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.
-    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, PartKind Kind, BindGroup? Fringe)[] surfaceParts = [];
+    // Culled: blended with its back culled (glass).
+    private (SurfacePart Part, BindGroup Material, AlphaMode Mode, PartKind Kind, BindGroup? Fringe, bool Culled)[] surfaceParts = [];
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
     private readonly List<Buffer> materialBuffers = [];
@@ -263,6 +266,7 @@ internal sealed unsafe partial class ViewportRenderer
         solidSurfaces = Pipeline(CullMode.Back, blend: false);
         doubleSidedSurfaces = Pipeline(CullMode.None, blend: false);
         blendedSurfaces = Pipeline(CullMode.None, blend: true);
+        blendedCulledSurfaces = Pipeline(CullMode.Back, blend: true);
         // Into the reflection map: nothing culled, as the paraboloid mirrors the winding and the map's halves differ.
         solidReflected = Pipeline(CullMode.None, blend: false, reflected: true);
         doubleSidedReflected = solidReflected;
@@ -371,7 +375,7 @@ internal sealed unsafe partial class ViewportRenderer
                 PartKind.Cable => AlphaMode.Blend,
                 _ => material.Decal ? AlphaMode.Blend : material.AlphaMode,
             };
-            return (part, groups[part.Material], mode, kind, fringes[part.Material]);
+            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         shownMaterials = drawable.Materials;
@@ -403,7 +407,7 @@ internal sealed unsafe partial class ViewportRenderer
             if (fringeUniforms[i] is { } fringe)
                 fringes[i] = MaterialGroup(material, material.Uniforms, fringe);
         }
-        surfaceParts = [.. surfaceParts.Select(p => (p.Part, groups[p.Part.Material], p.Mode, p.Kind, fringes[p.Part.Material]))];
+        surfaceParts = [.. surfaceParts.Select(p => (p.Part, groups[p.Part.Material], p.Mode, p.Kind, fringes[p.Part.Material], p.Culled))];
     }
 
     /// <summary>
@@ -556,7 +560,7 @@ internal sealed unsafe partial class ViewportRenderer
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
         for (int i = 0; i < surfaceParts.Length; i++)
         {
-            var (part, group, mode, kind, _) = surfaceParts[i];
+            var (part, group, mode, kind, _, _) = surfaceParts[i];
             if (mode != AlphaMode.Blend && partsShown[i])
             {
                 pass.SetPipeline(kind switch
@@ -574,13 +578,14 @@ internal sealed unsafe partial class ViewportRenderer
         // Then what blends, furthest first: blended parts, and hair's second pass, which keeps the depth its first wrote
         // where it is solid and blends the rest in by its alpha, so hair covers a pixel as much as its alpha says, as the
         // game's noise-dropped hair does once its TAA has averaged it.
-        // Cables among them, but not into the reflection map.
+        // Cables among them, but not into the reflection map. Glass culls its back, as in the game, but into the
+        // reflection map, whose paraboloid mirrors the winding.
         Vector3 eye = Camera.Eye - origin;
-        foreach (var (part, group, kind) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i]
+        foreach (var (part, group, kind, culled) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i]
                 && !(reflected && p.Kind == PartKind.Cable))
-            .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind)))
+            .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind, p.Culled)))
         {
-            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces! : reflected ? blendedReflected! : blendedSurfaces!);
+            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces! : reflected ? blendedReflected! : culled ? blendedCulledSurfaces! : blendedSurfaces!);
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }

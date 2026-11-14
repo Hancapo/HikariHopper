@@ -8,6 +8,8 @@
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
 // arithmetic. The light is the game's own, from its timecycle (light.wgsl): the directional light with its shadow, the
 // natural ambient hemisphere and the directional ambient. The result is linear HDR with coverage, for tonemap.wgsl.
+// A vehicle's glass is no deferred shader: the game draws it forward, blended, lit as it is drawn (PS_VehicleTextured,
+// in vehicle_vehglass and its _crack and _inner), and so does glass() here.
 // Scene comes from scene.wgsl, the light from light.wgsl.
 
 struct Material {
@@ -63,6 +65,10 @@ struct Material {
     hair_colour: vec4f,
     // Hair: specularNoiseMapUVScaleFactor, the noise map's tiling for each highlight.
     hair_noise: vec4f,
+    // Glass: which of PS_VehicleTextured's programs (0 not glass, 1 vehicle_vehglass, 2 _crack, 3 _inner).
+    glass: vec4f,
+    // Glass: matDiffuseColorTint, which the vertex alpha blends the diffuse towards, and whose alpha it adds.
+    glass_tint: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -228,6 +234,9 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     if (mode == 1u && alpha < material.extra.x) {
         discard;
     }
+    if (material.glass.x > 0.5) {
+        return glass(input, diffuse, specular_sample, dirt);
+    }
 
     // PS_DeferredTextured's detail: the two reads' red and green, centred and summed; by detailSettings and the mask,
     // red darkens the diffuse and the specular, and both nudge the bump map before it is unpacked.
@@ -274,6 +283,81 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     // With the parallax self-shadow, which the game's directional pass multiplies the sun by.
     let shadow = sun_shadow(input.place, select(-1.0, 1.0, front) * normalize(input.normal)) * self_shadow;
     return vec4f(lit(input, surface, diffuse, view, to_light, shadow), surface.alpha);
+}
+
+// PS_VehicleTextured, as vehicle_vehglass compiles it (in its program without forward lights, PS_VehicleTextured_Zero):
+// glass, lit as it is drawn and blended over what is behind it by its alpha.
+//   - Colour: the diffuse map tinted towards matDiffuseColorTint by the vertex alpha, by matDiffuseColor and the vertex
+//     red, squared into linear; the tint's alpha, by the vertex alpha, adds to the map's alpha.
+//   - Dirt: the dirt map's red, by dirtLevelMod.x, towards dirtColor, and the vertex blue towards the map's blue; it
+//     makes the glass more opaque and its green less shiny. The viewer shows a vehicle clean, dirtLevelMod.x nought.
+//   - Specular: the specular map's R and G squared and B as it is, by specMapIntMask and the vertex red; its alpha the
+//     power (times 510), turned into the exponent as the deferred passes do. Its fresnel is fixed at 0.96.
+//   - The sun: the directional light with its shadow, by n.l on the side facing it, and through the glass, by as much as
+//     it lets through, on the other; normalised Blinn-Phong for the highlight.
+//   - Ambient and reflection: the natural and directional ambient on what the fresnel leaves, and the reflection map in
+//     the mirrored view at a blur set by the exponent, by what the fresnel takes: as gta_lit's, by the vertex red squared.
+// _crack is undamaged (its crack map unread) and turns its normal to face the camera. _inner reflects a twentieth as
+// much (power times 512), its fresnel without the 0.04 floor, and it turns opaque at grazing angles.
+fn glass(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec4f) -> vec4f {
+    let program = u32(material.glass.x + 0.5);
+    let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
+    // The vertex normal as it is: the game culls the glass's back. _crack turns it to the camera.
+    var normal = normalize(input.normal);
+    if (program == 2u) {
+        normal = select(-normal, normal, dot(normal, view) >= 0.0);
+    }
+    let ao = input.colour0.r;
+
+    let tint = material.glass_tint;
+    var albedo = diffuse.rgb * (1.0 + input.colour0.a * (tint.rgb - 1.0)) * material.paint.rgb * ao;
+    var alpha = saturate(tint.w * input.colour0.a + diffuse.a);
+    albedo = albedo * albedo;
+
+    // Dirt, dry: its amount the map's red (wet, it leans to the blue).
+    let level = material.dirt_level;
+    let clean = 1.0 - level.z;
+    let spread = clean * (input.colour0.b * clean - 1.0) + 1.0;
+    let amount = dirt.r * level.x;
+    albedo = mix(albedo, material.dirt_colour.rgb * level.y, amount * spread);
+    albedo = mix(albedo, vec3f(dirt.b), clean * input.colour0.b * level.x);
+    alpha += amount * spread;
+
+    let squared = specular_sample.rg * specular_sample.rg;
+    var intensity = dot(vec3f(squared, specular_sample.b), material.mask.xyz) * ao;
+    var power = specular_sample.a * 510.0;
+    if (program == 3u) {
+        intensity *= 0.05;
+        power = specular_sample.a * 512.0;
+    }
+    intensity = saturate(intensity * (1.0 - dirt.g * level.x * spread));
+    let exponent = 3.0 * min(power, 500.0) + 558.0 * max(0.0, power - 500.0);
+
+    let to_light = normalize(light.sun_direction.xyz);
+    let n_dot_l = dot(normal, to_light);
+    // Lit through from behind by as much as it lets through.
+    let facing = abs(n_dot_l) + alpha * (saturate(n_dot_l) - abs(n_dot_l));
+    let half_vector = normalize(view + to_light);
+    let grazing = pow(1.0 - saturate(dot(normal, view)), 5.0);
+    let grazing_half = pow(1.0 - saturate(dot(half_vector, to_light)), 5.0);
+    var reflected = 0.04 + 0.96 * grazing;
+    var highlight_fresnel = 0.04 + 0.96 * grazing_half;
+    var shown = alpha;
+    if (program == 3u) {
+        shown = max(alpha, grazing);
+        reflected = 1.0 - shown * (1.0 - grazing);
+        highlight_fresnel = grazing_half;
+    }
+    let kept = 1.0 - intensity * reflected;
+    let highlight = (exponent + 2.0) / 8.0 * pow(saturate(dot(normal, half_vector)), exponent) * highlight_fresnel * intensity;
+    // Shadowed as a face turned to the sun, so light let through from behind isn't cut off at the terminator.
+    let shadow = sun_shadow(input.place, select(-normal, normal, n_dot_l >= 0.0));
+    let sun = light.sun_colour.rgb * shadow * facing * (albedo * kept + vec3f(highlight));
+
+    let ambient_scale = ao * ao;
+    let ambient = albedo * kept * gta_ambient(normal) * ambient_scale;
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale;
+    return vec4f(sun + ambient + reflection, saturate(shown));
 }
 
 // PS_DeferredTextured. Specular intensity, power and fresnel as written to the G-buffer: a specular map's R and G

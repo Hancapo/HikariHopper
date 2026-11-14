@@ -24,6 +24,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Vehicle glass is shaded with GTA V's own glass shaders in the 3D viewer: tinted, with its dirt, the sun's highlight and the sky's reflection, and seen from its outside only. ([#227](https://github.com/Hancapo/HikariHopper/pull/227))
 - The window's close mark is drawn like the minimize and maximize marks: the same box, stroke and centre. ([#224](https://github.com/Hancapo/HikariHopper/pull/224))
 - The 3D viewer keeps the game's texture dictionaries it has read, so models sharing them read up to 6.8× faster: 6.8× for a map piece after another from its area, 3.4× for a map piece opened again, 1.5× for a vehicle opened again. ([#217](https://github.com/Hancapo/HikariHopper/pull/217))
 - Reading a model for the 3D viewer is up to 2.7× faster: 2.7× for a vehicle (the Adder), whose scene is built 3.5× faster, 1.8× the first time in a session. ([#216](https://github.com/Hancapo/HikariHopper/pull/216))
