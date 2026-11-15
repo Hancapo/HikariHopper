@@ -78,7 +78,7 @@ public sealed partial class TextureViewerViewModel
             return;
         if (SelectedCount > 1)
         {
-            var selection = new TextureSet(SelectionRecords().Select(item => item.Item.Texture), dictionary!.Target);
+            var selection = dictionary!.WithTextures(SelectionRecords().Select(item => item.Item.Texture));
             string? folder = await Dialogs.PickFolderAsync("Extract selected textures");
             if (string.IsNullOrEmpty(folder))
                 return;
@@ -140,7 +140,7 @@ public sealed partial class TextureViewerViewModel
         {
             try
             {
-                CheckExtract(items, target);
+                CheckExtract(textures, items);
             }
             catch (Exception exception)
             {
@@ -178,9 +178,13 @@ public sealed partial class TextureViewerViewModel
     /// The checks the library's export makes across a whole dictionary, which one texture at a time never meets: names
     /// whose lookup hashes repeat, and file names that are the same but for case.
     /// </summary>
-    private static void CheckExtract(Texture[] items, GameTarget target)
+    private static void CheckExtract(TextureSet dictionary, Texture[] items)
     {
-        new TextureSet(items, target).ToDictionary().Validate().ThrowIfInvalid();
+        // The edition's own checks: GTA V's library's, or RDR2's.
+        if (dictionary.IsRdr2)
+            dictionary.WithTextures(items).Validate().ThrowIfInvalid();
+        else
+            dictionary.WithTextures(items).ToDictionary().Validate().ThrowIfInvalid();
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Texture texture in items)
         {

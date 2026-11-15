@@ -58,7 +58,7 @@ public sealed class Rdr2GatesTests : ExplorerTestBase
         Assert.False(tab.CanOpenSelection);
         tab.ActivateEntry(row);
         Assert.Null(opened);
-        Assert.Equal("0x00C0FFEE.ydr: Red Dead Redemption 2's textures and models don't open in HikariHopper yet", tab.Status);
+        Assert.Equal("0x00C0FFEE.ydr: Red Dead Redemption 2's models don't open in HikariHopper yet", tab.Status);
     }
 
     [Fact]

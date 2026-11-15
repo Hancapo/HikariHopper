@@ -284,9 +284,10 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
 
     public bool CanRemoveDuplicates => DuplicateTextureCount > 0 && !OperationBusy;
 
-    public bool CanSave => HasDocument && !OperationBusy && CanSaveSource;
+    // An RDR2 dictionary isn't saved yet: saving it would lose what each texture carries beyond the editor's model.
+    public bool CanSave => HasDocument && !OperationBusy && CanSaveSource && dictionary?.IsRdr2 != true;
 
-    public bool CanSaveAs => HasDocument && !OperationBusy;
+    public bool CanSaveAs => HasDocument && !OperationBusy && dictionary?.IsRdr2 != true;
 
     public bool CanExtractAll => TextureCount > 0;
 

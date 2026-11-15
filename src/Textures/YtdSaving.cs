@@ -14,6 +14,9 @@ public static class YtdSaving
 {
     public static TextureSet Read(ReadOnlySpan<byte> data)
     {
+        // RDR2's, read through RedFury.
+        if (Rdr2TextureSource.IsRdr2(data))
+            return Rdr2TextureSource.Read(data);
         Ytd ytd = Ytd.Read(data);
         return new TextureSet(ytd.Textures, ytd.Target);
     }
@@ -21,6 +24,8 @@ public static class YtdSaving
     /// <summary>Builds and verifies YTD bytes before any destination is touched.</summary>
     public static byte[] Serialize(TextureSet dictionary)
     {
+        if (dictionary.IsRdr2)
+            throw new NotSupportedException("Red Dead Redemption 2 texture dictionaries can't be saved yet");
         Ytd model = dictionary.ToYtd();
         if (dictionary.Textures.IsEmpty)
             return model.Write(allowEmpty: true);
