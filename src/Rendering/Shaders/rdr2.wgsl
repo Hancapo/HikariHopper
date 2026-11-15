@@ -34,6 +34,12 @@ fn vs_rdr2_paraboloid(vertex: Rdr2Vertex) -> MaterialVertexOutput {
     return output;
 }
 
+// A model in the viewer has no local lights: the world's are rdr2_world.wgsl's.
+fn local_irradiance(pixel: vec2f, position: vec3f, n: vec3f, v: vec3f, base_colour: vec3f,
+    f0: vec3f, roughness: f32, metallic: f32, specular_scale: f32, edge_strength: f32) -> vec3f {
+    return vec3f(0.0);
+}
+
 @fragment
 fn fs_rdr2(input: MaterialVertexOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     return shade_material(input, front);

@@ -23,6 +23,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Prepare Red Dead Redemption 2's world in the background as the game opens, cached until the game's archives change, with a loading screen saying how far it has got when the world is shown before it's ready. ([#250](https://github.com/Hancapo/HikariHopper/pull/250))
 - Fly through Red Dead Redemption 2's world: the whole map through the game's own levels of detail, with full detail streamed in around the camera within a 4 GB budget. ([#251](https://github.com/Hancapo/HikariHopper/pull/251))
 - Cast the sun's shadow over Red Dead Redemption 2's world, its four cascades cast in turn while the camera moves. ([#252](https://github.com/Hancapo/HikariHopper/pull/252))
+- Grow Red Dead Redemption 2's grass around the camera and light its lamps, windows and fires after dark, each light at its own hours. ([#253](https://github.com/Hancapo/HikariHopper/pull/253))
 
 ### Changed
 

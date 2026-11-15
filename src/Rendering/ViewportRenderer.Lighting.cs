@@ -14,7 +14,8 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 560, ShadowViewBytes = 64;
+    // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
+    private const int LightBytes = 560, ShadowViewBytes = 80;
     private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
     private Sampler? shadowCompare;
 
