@@ -144,6 +144,9 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
 
     /// <summary>A name the game is known to use for a hash, or the hash itself as the explorer writes it.</summary>
     public abstract string NameOf(uint hash);
+
+    /// <summary>The ambient of the interior room a placement is in; null for one outside, or a game without rooms' ambients.</summary>
+    public virtual InteriorAmbient? AmbientOf(WorldLodNode node) => null;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>

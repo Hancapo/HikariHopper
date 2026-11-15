@@ -534,6 +534,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
         {
             _ = GameTextures.ForGame(game).Load();
             _ = GameTextureDirectory.ForGame(game).Load();
+            // The light: the game's own timecycle, a moment to read; one that can't be read keeps the one in use.
+            _ = Task.Run(() =>
+            {
+                if (GameTimecycle.ForGame(game) is { } timecycle)
+                    Rendering.Timecycle.Use(timecycle);
+            });
         }
         // Red Dead Redemption 2's: where its models' textures are, a few seconds from nothing, a moment from the cache.
         _ = Rdr2IndexOfProvider()?.Load();

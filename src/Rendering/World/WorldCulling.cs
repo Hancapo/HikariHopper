@@ -28,6 +28,9 @@ internal sealed class WorldCullSet
     // Per entry: which of its node's instances it is; -1 for a node without instances.
     internal int[] Instance = [];
 
+    /// <summary>The room ambient of a placement inside an interior; null outside (GtaWorldIndex knows GTA V's).</summary>
+    internal Func<WorldLodNode, InteriorAmbient?>? Ambient { get; set; }
+
     // Only the current coverage keeps its prepared placements; the arrays keep their largest size.
     private Dictionary<WorldLodNode, PreparedNode> prepared = new(ReferenceEqualityComparer.Instance);
     private Dictionary<WorldLodNode, PreparedNode> nextPrepared = new(ReferenceEqualityComparer.Instance);
@@ -43,7 +46,7 @@ internal sealed class WorldCullSet
         internal readonly int[] Index;
         internal int Count;
 
-        internal PreparedNode(WorldLodNode node)
+        internal PreparedNode(WorldLodNode node, InteriorAmbient? room = null)
         {
             int capacity = node.Instances.Count == 0 ? (node.Grass is null ? 1 : 0) : node.Instances.Count;
             World = new Matrix4x4[capacity];
@@ -57,7 +60,7 @@ internal sealed class WorldCullSet
             if (node.Instances.Count == 0)
             {
                 if (node.Grass is null)
-                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue, -1);
+                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue, -1, room);
             }
             else
                 for (int i = 0; i < node.Instances.Count; i++)
@@ -68,7 +71,8 @@ internal sealed class WorldCullSet
                 }
         }
 
-        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint, int index)
+        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint, int index,
+            InteriorAmbient? room = null)
         {
             // Degenerate or non-invertible transforms were never drawn.
             if (transform == default || !Matrix4x4.Invert(transform, out Matrix4x4 inverse))
@@ -86,9 +90,19 @@ internal sealed class WorldCullSet
                 normal.M44 = attributes.AmbientOcclusion;
             }
             // An affine inverse transpose leaves M41 to M43 at zero, which the normals never read: an ordinary
-            // placement's tint palette row rides there (0 keeps the material's).
+            // placement's tint palette row rides there (0 keeps the material's), and an interior one's room ambient
+            // (world_instances.wgsl's instance_room): its artificial ambient from above and below packed, and minus
+            // one less its natural multiplier, which no plant's marker can be.
             else
+            {
                 normal.M41 = tint;
+                if (room is { } ambient)
+                {
+                    normal.M42 = InteriorAmbient.Pack(ambient.Down);
+                    normal.M43 = -1 - Math.Max(0, ambient.Natural);
+                    normal.M44 = InteriorAmbient.Pack(ambient.Up);
+                }
+            }
             World[Count] = transform;
             Normal[Count] = normal;
             X[Count] = center.X;
@@ -147,7 +161,7 @@ internal sealed class WorldCullSet
             Nodes[n] = node;
             Passes[n] = WorldVisibility.Resolve(node.EntityFlags, node.ArchetypeFlags);
             if (!prepared.TryGetValue(node, out PreparedNode? block) && !nextPrepared.TryGetValue(node, out block))
-                block = new PreparedNode(node);
+                block = new PreparedNode(node, Ambient?.Invoke(node));
             nextPrepared[node] = block;
             Blocks[n] = block;
             int count = block.Count;

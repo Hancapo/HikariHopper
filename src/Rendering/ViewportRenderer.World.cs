@@ -264,6 +264,16 @@ internal sealed unsafe partial class ViewportRenderer
                 asset.Used = worldClock;
     }
 
+    /// <summary>
+    /// The room ambient of a placement inside an interior, as the world's index has it; null outside. Set before the
+    /// first selection.
+    /// </summary>
+    public Func<WorldLodNode, InteriorAmbient?>? WorldAmbient
+    {
+        get => worldCull.Ambient;
+        set => worldCull.Ambient = value;
+    }
+
     /// <summary>Lets go of every asset: another world, or none.</summary>
     public void ClearWorld()
     {

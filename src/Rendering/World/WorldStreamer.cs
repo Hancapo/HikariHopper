@@ -31,6 +31,7 @@ internal sealed class WorldStreamer : IDisposable
     private const int MaximumGrassInstances = 131072;
 
     private readonly WorldIndex index;
+    private readonly Func<WorldLodNode, InteriorAmbient?> ambient;
     private readonly CancellationTokenSource stop = new();
     private readonly Lock gate = new();
     private readonly SemaphoreSlim workAvailable = new(0, 1);
@@ -82,6 +83,7 @@ internal sealed class WorldStreamer : IDisposable
 
     public WorldStreamer(WorldIndex index)
     {
+        ambient = index.AmbientOf;
         this.index = index;
         worker = Task.Run(Work);
     }
@@ -359,6 +361,7 @@ internal sealed class WorldStreamer : IDisposable
         if (applying is not var (display, eye, hour))
             return;
         applying = null;
+        viewport.WorldAmbient = ambient;
         viewport.SetWorldSelection(display);
         // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
         HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];

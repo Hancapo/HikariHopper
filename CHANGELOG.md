@@ -29,10 +29,12 @@ All notable changes to HikariHopper are documented here. The format follows
 - Fly through GTA V's world: its maps' models streamed around the camera and drawn with the 3D viewer's GTA V shaders, terrain included, textured through their archetypes' dictionaries and those dictionaries' parents, and casting the sun's shadow. ([#257](https://github.com/Hancapo/HikariHopper/pull/257))
 - Grow GTA V's grass around the camera and light its street lamps, signs and windows after dark, each light at its own hours, capsule lights included. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V models in the 3D viewer with the lights they carry, at the viewer's time of day. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Show GTA V's interiors in its world: each interior's contents and the entity sets it turns on by default, every room lit by its own ambient from the game's timecycle modifiers. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 
 ### Changed
 
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 
 ### Fixed
 

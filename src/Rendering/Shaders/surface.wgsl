@@ -116,6 +116,8 @@ struct SurfaceOutput {
     // The _pxm shaders' parallax controls: how much of the height to drop (x), and how flat a view may go before the
     // parallax stops growing (one less y).
     @location(9) controls: vec2f,
+    // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
+    @location(10) @interpolate(flat) room: vec4f,
 };
 
 // The camera's reflection map being drawn (ViewportRenderer.Reflections.cs): the eye relative to the scene's origin,
@@ -154,6 +156,7 @@ fn vs_surface_paraboloid(input: SurfaceInput) -> SurfaceOutput {
 fn surface_vertex(input: SurfaceInput) -> SurfaceOutput {
     var output: SurfaceOutput;
     output.hemisphere = 1.0;
+    output.room = vec4f(0.0);
     output.place = input.position;
     // As VS_Transform: the normal normalised, the tangent as it is, the binormal cross(T, N) by the handedness.
     output.normal = normalize(input.normal);
@@ -181,6 +184,7 @@ struct Surface {
     power: f32,
     fresnel: f32,
     ambient: f32,
+    artificial: f32,
     reflection: f32,
     alpha: f32,
 };
@@ -188,6 +192,7 @@ struct Surface {
 @fragment
 fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.place);
+    use_room(input.room);
     return shade_surface(input, front);
 }
 
@@ -392,6 +397,7 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     surface.base = diffuse.rgb * input.tint;
     // The vertex colour's red is the natural ambient (its green the artificial, which the viewer leaves out).
     surface.ambient = occluded(input.colour0.r, light.natural_up.w);
+    surface.artificial = input.colour0.g;
     surface.reflection = 1.0;
     surface.alpha = diffuse.a * select(1.0, input.colour0.a, material.parallax_global.y > 0.5);
     return surface;
@@ -684,8 +690,9 @@ fn kajiya(towards: vec3f, view: vec3f, strand: vec3f) -> f32 {
 // adds in its ambient pass.
 fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {
     let scale = clamp(surface.ambient, 0.0, 2.0);
+    let artificial = clamp(surface.artificial, 0.0, 2.0);
     let colour = gta_lit(surface.base, surface.normal, view, surface.intensity, surface.power, surface.fresnel, scale * scale, shadow,
-        surface.reflection);
+        surface.reflection, artificial * artificial);
 
     // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
     // brought back, facing the camera.
