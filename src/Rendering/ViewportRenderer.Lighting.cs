@@ -526,7 +526,7 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetVertexBuffer(0, surfaceVertices!);
             pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
             for (int i = 0; i < surfaceParts.Length; i++)
-                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && partsShown[i])
+                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i])
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
             // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
             pass.SetPipeline(maskedShadowPipeline!);
@@ -536,6 +536,8 @@ internal sealed unsafe partial class ViewportRenderer
                     pass.SetBindGroup(1, surfaceParts[i].Material);
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
                 }
+            // RDR2's cut-out ones, through theirs.
+            DrawRdr2Shadow(pass);
             pass.End();
         }
 
