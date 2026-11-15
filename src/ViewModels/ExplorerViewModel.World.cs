@@ -80,6 +80,75 @@ public sealed partial class ExplorerViewModel
     /// <summary>The camera's coordinates, as the address row shows them on the World side.</summary>
     public string WorldCoordinates => InWorld ? WorldSpot.Coordinates : "";
 
+    // The tab's game's world, while it has one: its index, made or being made.
+    private Rdr2World? world;
+
+    private static readonly string[] WorldIndexProperties =
+        [nameof(WorldReady), nameof(WorldPreparing), nameof(WorldStage), nameof(WorldProgress), nameof(WorldStatus), nameof(WorldFailure)];
+
+    /// <summary>Whether the world's index is ready, so the world can be shown.</summary>
+    public bool WorldReady => world?.Index is not null;
+
+    /// <summary>
+    /// Whether the world's index is still being made (or read from the cache), or couldn't be: its loading screen shows
+    /// meanwhile, saying why when it couldn't.
+    /// </summary>
+    public bool WorldPreparing => world is not null && world.Index is null;
+
+    /// <summary>Why the world's index couldn't be made; null while it's being made, or once it is.</summary>
+    public string? WorldFailure => world?.Failure;
+
+    /// <summary>What making the world's index is doing, as its loading screen says it.</summary>
+    public string WorldStage => world?.Progress.Stage ?? "";
+
+    /// <summary>How far making the world's index has got, 0 to 1; null while that isn't known.</summary>
+    public double? WorldProgress => world?.Progress.Fraction;
+
+    /// <summary>The world's index, once it's ready.</summary>
+    internal Rdr2WorldIndex? WorldIndex => world?.Index;
+
+    /// <summary>
+    /// Starts the tab's game's world on its way, in the background, when the game has one: its index is made, or read
+    /// from the cache, as the game opens, so it's ready (or nearly) by the time the world is shown.
+    /// </summary>
+    private void PrepareWorld()
+    {
+        DetachWorld();
+        if (!HasWorld || Provider.Keys is not Rdr2Keys keys)
+            return;
+        world = Rdr2World.ForGame(Provider.GamePath, keys.Crypto);
+        world.ProgressChanged += OnWorldProgress;
+        Rdr2World started = world;
+        _ = started.Load().ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (world == started)
+                PublishWorldIndex();
+        }), TaskScheduler.Default);
+        PublishWorldIndex();
+    }
+
+    private void DetachWorld()
+    {
+        if (world is not null)
+            world.ProgressChanged -= OnWorldProgress;
+        world = null;
+    }
+
+    // Raised on the thread making the index: told on the UI thread.
+    private void OnWorldProgress(Rdr2WorldProgress progress) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(PublishWorldIndex);
+
+    private void PublishWorldIndex()
+    {
+        if (world?.Index is { } index)
+            worldStatus = string.Create(CultureInfo.CurrentCulture, $"{index.MapCount:N0} maps · {index.Placements:N0} placements");
+        else if (world?.Failure is not null)
+            worldStatus = "The world couldn't be prepared";
+        else if (world is not null)
+            worldStatus = "Preparing the world";
+        RaiseAll(WorldIndexProperties);
+    }
+
     private float worldHours = Rendering.DayCycle.DefaultHours;
 
     /// <summary>The time of day the world is lit at, in hours.</summary>
@@ -210,7 +279,9 @@ public sealed partial class ExplorerViewModel
             StoreSpot();
         face = TabFace.Files;
         worldSpot = null;
+        DetachWorld();
         RaiseAll(FaceProperties);
+        RaiseAll(WorldIndexProperties);
         OnPropertyChanged(nameof(HasWorld));
     }
 
