@@ -337,9 +337,9 @@ public sealed class SearchIndex
         var files = new List<IndexedEntry>();
         void Walk(ArchiveNode node, string prefix)
         {
-            foreach (RpfEntry entry in node.Archive.EnumerateEntries())
+            foreach (ArchiveEntry entry in node.EnumerateEntries())
             {
-                if (entry is not RpfFileEntry file)
+                if (entry.IsDirectory)
                     continue;
                 string inner = entry.Path;
                 int slash = inner.LastIndexOf('/');
@@ -350,12 +350,12 @@ public sealed class SearchIndex
                     folders.Add(folder);
                     folderIndex[folder] = index;
                 }
-                files.Add(new IndexedEntry(index, entry.Name, file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize));
-                if (entry is RpfBinaryFileEntry binary && entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
+                files.Add(new IndexedEntry(index, entry.Name, entry.Size));
+                if (entry.IsBinaryFile && entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
                 {
                     try
                     {
-                        Walk(node.OpenNested(binary), $"{prefix}/{inner}");
+                        Walk(node.OpenNested(entry), $"{prefix}/{inner}");
                     }
                     catch (InvalidDataException)
                     {

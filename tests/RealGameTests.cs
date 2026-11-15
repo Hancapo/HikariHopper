@@ -53,7 +53,7 @@ public sealed class RealGameTests
             EntryOperations.CreateFolderAt(target, "hikari_test");
             EntryOperations.CreateYtdAt(target, "empty");
 
-            ArchiveNode reopened = ArchiveNode.OpenRoot(copy, crypto);
+            Rpf7ArchiveNode reopened = Rpf7ArchiveNode.OpenRoot(copy, crypto);
             try
             {
                 Assert.IsType<RpfDirectoryEntry>(reopened.Archive.Find("hikari_test"));

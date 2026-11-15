@@ -143,7 +143,7 @@ public sealed class YtdSavingTests
 
     private static byte[] ReadArchived(string archivePath, string name)
     {
-        ArchiveNode node = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode node = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         try
         { return ((RpfResourceFileEntry)node.Archive.Find(name)!).ReadStandalone(); }
         finally

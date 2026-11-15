@@ -654,11 +654,11 @@ public sealed partial class ExplorerViewModel
         ArchiveNode root = ArchiveNode.OpenRoot(where.RootPath, where.Crypto);
         try
         {
-            if (root.FindEntry(where.EntryPath) is not { Entry: FiveFury.Rpf.RpfFileEntry file })
+            if (root.FindEntry(where.EntryPath) is not { Entry: { IsDirectory: false } file })
                 throw new FileNotFoundException($"{Path.GetFileName(where.EntryPath)} is no longer in {Path.GetFileName(where.RootPath)}");
             // Its size as the explorer lists it.
-            long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
-            return (size > limit ? null : file.ReadStandalone(), size);
+            long size = file.Size;
+            return (size > limit ? null : file.Read(), size);
         }
         finally
         {
