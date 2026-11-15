@@ -100,6 +100,21 @@ public sealed partial class ExplorerViewModel
     /// <summary>Asks the world view to put its camera at <see cref="WorldSpot"/>: Back or Forward to a World stop.</summary>
     public event EventHandler? WorldSpotRequested;
 
+    // Whether the game being loaded opens on its World side.
+    private bool worldAsked;
+
+    /// <summary>
+    /// Loads a game in the background, as the start page's row does, and shows its world once it's open: the row's
+    /// globe. False while another operation runs.
+    /// </summary>
+    public bool OpenGameOnWorld(string path)
+    {
+        if (!OpenGameAsync(path))
+            return false;
+        worldAsked = true;
+        return true;
+    }
+
     /// <summary>Shows the game's world, where its camera was left: one more stop in Back and Forward.</summary>
     public void ShowWorld()
     {

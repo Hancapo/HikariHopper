@@ -192,4 +192,36 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.False(world.Covered);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void The_start_pages_globe_opens_a_game_with_a_world_on_its_World_side()
+    {
+        string rdr2 = MakeRdr2();
+        string gta = MakeGame("Grand Theft Auto V", "GTA5.exe");
+        AppSettings.SetString(GameSettings.Rdr2GameRootKey, rdr2);
+        AppSettings.SetString(GameSettings.LegacyGameRootKey, gta);
+        var real = LoadHook!;
+        LoadHook = path => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) == Path.GetFullPath(gta).TrimEnd(Path.DirectorySeparatorChar)
+            ? FakeLoadedGame(path) : real(path);
+        var session = new ExplorerSession();
+        var window = new MainWindow { Width = 1360, Height = 840 };
+        session.Attach(window);
+        window.Show();
+        TestWait.Pump(100);
+        LauncherRow[] rows = [.. window.GetVisualDescendants().OfType<LauncherRow>()];
+        LauncherRow red = rows.Single(row => row.Entry.Game.Id == GameCatalog.Rdr2);
+        Assert.All(rows.Where(row => row.Entry.Game.Id == GameCatalog.GtaV), row => Assert.Null(row.WorldButton));
+        Assert.NotNull(red.WorldButton);
+
+        red.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.HasGame && !tab.GameLoading, "the game to load");
+        TestWait.Pump(100);
+        Assert.True(tab.InWorld);
+        Assert.Equal("World", tab.TabTitle);
+        // Back is its files, at its root.
+        tab.GoBack();
+        Assert.False(tab.InWorld);
+        window.Close();
+    }
 }
