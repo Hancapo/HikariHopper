@@ -33,7 +33,7 @@ public sealed partial class ExplorerViewModel
 
     public int SelectionCount => selectedRows.Count;
 
-    public bool SelectionDeletable => SelectedEntries().Count > 0;
+    public bool SelectionDeletable => SelectedEntries().Count > 0 && Provider.ArchiveWritable;
 
     /// <summary>Selects one row; Ctrl toggles it, Shift extends from the anchor (both: adds the range).</summary>
     public void SelectEntry(int row, KeyModifiers modifiers = KeyModifiers.None)
@@ -332,7 +332,19 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Whether the one selected item is something <see cref="ActivateEntry"/> opens.</summary>
-    public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry);
+    public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry) && !GtaViewerOnly(entry.Name);
+
+    /// <summary>
+    /// Whether <paramref name="name"/> opens only in a viewer that's GTA V's so far (the texture editor, the 3D viewer)
+    /// while what's open is Red Dead Redemption 2's: its game folder, or one of its RPF8 archives.
+    /// </summary>
+    private bool GtaViewerOnly(string name) =>
+        (name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) || IsModelName(name))
+        && (Provider.GameEditionId == GameSettings.Rdr2Edition || !Provider.ArchiveWritable);
+
+    // Said in place of opening a file only GTA V's viewers open.
+    private void SayGtaViewerOnly(string name) =>
+        SetStatus($"{name}: Red Dead Redemption 2's textures and models don't open in HikariHopper yet");
 
     /// <summary>
     /// What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD texture dictionaries, text files, images, and the 3D
@@ -369,6 +381,11 @@ public sealed partial class ExplorerViewModel
         if (entry.IsDirectory)
         {
             Navigate(Provider.InArchive ? RpfProvider.EntryLocalPath(entry) : entry.Path);
+            return;
+        }
+        if (GtaViewerOnly(entry.Name))
+        {
+            SayGtaViewerOnly(entry.Name);
             return;
         }
         if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
