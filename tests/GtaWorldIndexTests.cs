@@ -74,6 +74,11 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.Contains("interior_v_michael", index.NameOf(armchair.Id.Map));
             Assert.Equal(.2f, index.AmbientOf(armchair)!.Value.Natural, 3);
             Assert.Null(index.AmbientOf(placed));
+            // The interior takes its placement's place under the interior's LOD model, which gives way to all of it.
+            WorldLodNode interiorLod = index.Lod.Nodes.Single(node => node.Id == armchair.Parent);
+            Assert.Equal("bh1_48", index.NameOf(interiorLod.Id.Map));
+            Assert.Equal(index.Lod.Nodes.Count(node => node.Parent == interiorLod.Id), interiorLod.ExpectedChildren);
+            Assert.True(armchair.Distance <= 45);
         }
         finally
         {

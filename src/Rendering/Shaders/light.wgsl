@@ -268,7 +268,12 @@ fn gta_reflection(normal: vec3f, view: vec3f, exponent: f32, reflected_share: f3
     let rough = 1.0 - saturate(exponent / 1500.0);
     let mips = light.reflection.x;
     let level = select(rough * rough * 5.0 + mips - 5.0, rough * mips - 5.0, rough * mips < mips - 5.0);
-    let environment = textureSampleLevel(reflection_map, reflection_sampler, paraboloid_uv(direction), max(level, 0.0)).rgb;
+    var environment = textureSampleLevel(reflection_map, reflection_sampler, paraboloid_uv(direction), max(level, 0.0)).rgb;
+    // Inside an interior the game's reflection map, drawn from the camera, holds the room; the viewer's holds only the
+    // sky, so a room reflects its own artificial ambient in its place.
+    if (shaded_room.w > 0.5) {
+        environment = gta_artificial_ambient(direction);
+    }
     let energy = 0.31830987 + 0.68169010 * saturate(exponent / 563.0);
     return environment * reflected_share * energy;
 }
