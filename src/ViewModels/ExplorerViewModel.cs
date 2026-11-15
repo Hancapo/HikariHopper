@@ -23,7 +23,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
         nameof(ArchiveRootName), nameof(TabTitle), nameof(ArchiveIsRoot), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
-        nameof(InArchive), nameof(GameEdition), nameof(GameEditionId),
+        nameof(InArchive), nameof(GameEdition), nameof(GameEditionId), nameof(CanCreateHere),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =

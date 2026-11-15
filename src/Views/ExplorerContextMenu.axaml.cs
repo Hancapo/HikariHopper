@@ -87,7 +87,8 @@ public partial class ExplorerContextMenu : RetroMenu
         // The folder's: making something new in it, and reading it again.
         NewEntryMenu.IsVisible = PasteItem.IsVisible = RefreshSeparator.IsVisible = RefreshItem.IsVisible = ForFolder;
         PasteItem.IsEnabled = bridge?.CanPaste == true;
-        NewEntryMenu.IsEnabled = RefreshItem.IsEnabled = !busy;
+        NewEntryMenu.IsEnabled = !busy && bridge?.CanCreateHere == true;
+        RefreshItem.IsEnabled = !busy;
     }
 
     /// <summary><c>Qt.callLater(createRequested(...))</c>.</summary>

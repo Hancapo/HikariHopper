@@ -514,6 +514,11 @@ public sealed partial class ExplorerViewModel
         bool text = TextDocument.IsTextName(name);
         bool image = Textures.TextureImport.IsImagePath(name);
         bool model = IsModelName(name);
+        if (GtaViewerOnly(name))
+        {
+            SayGtaViewerOnly(name);
+            return;
+        }
         if (!texture && !text && !image && !model)
         {
             SetStatus($"{name} has no viewer here; Open location shows it in its folder");
@@ -568,7 +573,7 @@ public sealed partial class ExplorerViewModel
     private (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadHit(SearchHit hit) =>
         RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
             new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
-                reader.InArchive ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
+                reader.InArchive && reader.ArchiveWritable ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
 
     /// <summary>A texture dictionary, or a drawable's own, in the texture editor, saving back into its RPF.</summary>
     private void OpenHitDictionary(string name, (byte[] Data, string Source, ArchiveEntryTarget? Target) file,

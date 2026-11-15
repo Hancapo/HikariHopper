@@ -101,6 +101,15 @@ public sealed class RpfProvider
     /// <summary>GTA V's keys while a GTA V game is open; null for RDR2 or without a game.</summary>
     public GameCrypto? Crypto => crypto;
 
+    /// <summary>
+    /// Whether what's open can be changed: loose files, or a GTA V RPF7 archive. Red Dead Redemption 2's RPF8 archives
+    /// are read only, so far.
+    /// </summary>
+    public bool ArchiveWritable => !InArchive || archive is Rpf7ArchiveNode;
+
+    /// <summary>Why an archive can't be changed, as the explorer says it.</summary>
+    public const string ReadOnlyArchive = "Red Dead Redemption 2's archives can't be changed yet";
+
     /// <summary>The open game's keys, whatever the game; null without a game.</summary>
     public ArchiveKeys? Keys => keys;
 
@@ -283,6 +292,8 @@ public sealed class RpfProvider
         string normalized = EntryNames.NormalizedDirectory(directoryPath);
         if (InArchive)
         {
+            if (!ArchiveWritable)
+                throw new ArgumentException(ReadOnlyArchive);
             if (archive!.DirectoryAt(normalized) is null)
                 throw new ArgumentException($"Archive folder does not exist: {normalized}");
             ArchiveNode root = RootArchive()!;
@@ -557,8 +568,14 @@ public sealed class RpfProvider
             using FileStream stream = File.OpenRead(GameEntryPath(entry));
             Span<byte> start = stackalloc byte[ResourceHeader.ByteSize];
             if (stream.ReadAtLeast(start, start.Length, throwOnEndOfStream: false) < start.Length
-                || BitConverter.ToUInt32(start) != ResourceHeader.Magic)
+                || BitConverter.ToUInt32(start) is not (ResourceHeader.Magic or RedFury.Resources.Rsc8Header.Magic))
                 return null;
+            // RDR2's: its RSC8 header, the version and unpacked size from its flags.
+            if (BitConverter.ToUInt32(start) == RedFury.Resources.Rsc8Header.Magic)
+            {
+                RedFury.Resources.Rsc8Header rsc8 = RedFury.Resources.Rsc8Header.Read(start);
+                return ("RSC8", rsc8.ResourceVersion, (long)rsc8.LogicalSize);
+            }
             ResourceHeader header = ResourceHeader.Read(start);
             return ("RSC7", (int)header.Version, header.TotalSize);
         }
@@ -645,6 +662,8 @@ public sealed class RpfProvider
             throw new ArgumentException("The selected entry is not inside an RPF archive");
         if (item.Entry.IsDetached)
             throw new ArgumentException("The selected archive entry is detached");
+        if (item.Node.Root is not Rpf7ArchiveNode)
+            throw new ArgumentException(ReadOnlyArchive);
         ArchiveNode root = item.Node.Root;
         string rootPath = Path.GetFullPath(root.SourcePath ?? "");
         if (!File.Exists(rootPath))

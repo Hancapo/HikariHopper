@@ -13,7 +13,10 @@ public sealed partial class ExplorerViewModel
     private DragStaging? clipboardStaging;
 
     /// <summary>Whether a paste can run here now: files on the clipboard, a location open and nothing else running.</summary>
-    public bool CanPaste => HasWorkspace && !searching && !EntryOperationBusy && AppServices.Clipboard.HasFiles;
+    public bool CanPaste => HasWorkspace && !searching && !EntryOperationBusy && Provider.ArchiveWritable && AppServices.Clipboard.HasFiles;
+
+    /// <summary>Whether something can be made where the explorer is: anywhere but in an archive it can't change.</summary>
+    public bool CanCreateHere => HasWorkspace && Provider.ArchiveWritable;
 
     /// <summary>Copy: puts the selected files and folders on the clipboard.</summary>
     public async Task<bool> CopySelection()
