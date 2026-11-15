@@ -81,8 +81,19 @@ public abstract class ArchiveNode
 
     public bool IsClosed { get; private set; }
 
-    /// <summary>Opens a root archive with a read-only handle that tolerates concurrent replacement.</summary>
-    public static ArchiveNode OpenRoot(string path, ArchiveKeys? keys) => Rpf7ArchiveNode.OpenRoot(path, keys);
+    /// <summary>
+    /// Opens a root archive in whichever format it is, by its first four bytes: RDR2's RPF8 (<see cref="Rpf8ArchiveNode"/>)
+    /// or GTA V's RPF7 (<see cref="Rpf7ArchiveNode"/>, which says what's wrong with anything else).
+    /// </summary>
+    public static ArchiveNode OpenRoot(string path, ArchiveKeys? keys)
+    {
+        Span<byte> start = stackalloc byte[4];
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            if (stream.ReadAtLeast(start, 4, throwOnEndOfStream: false) == 4
+                && System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(start) == Rpf8ArchiveNode.Magic)
+                return Rpf8ArchiveNode.OpenRoot(path, keys);
+        return Rpf7ArchiveNode.OpenRoot(path, keys);
+    }
 
     /// <summary>Full path of an entry of this archive from the root archive.</summary>
     public string FullPath(ArchiveEntry entry)
