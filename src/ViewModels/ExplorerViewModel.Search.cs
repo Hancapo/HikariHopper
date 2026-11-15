@@ -514,11 +514,6 @@ public sealed partial class ExplorerViewModel
         bool text = TextDocument.IsTextName(name);
         bool image = Textures.TextureImport.IsImagePath(name);
         bool model = IsModelName(name);
-        if (GtaViewerOnly(name))
-        {
-            SayGtaViewerOnly(name);
-            return;
-        }
         if (!texture && !text && !image && !model)
         {
             SetStatus($"{name} has no viewer here; Open location shows it in its folder");

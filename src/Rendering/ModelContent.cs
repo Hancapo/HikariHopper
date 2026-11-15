@@ -66,13 +66,26 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
     public static ModelContent Read(string name, ReadOnlySpan<byte> data, IReadOnlyList<byte[]>? dictionaries = null,
         IReadOnlyList<NearbyDictionary>? nearby = null, IReadOnlyList<FiveFury.Textures.Texture>? overrides = null,
-        Func<string, IReadOnlyList<NearbyDictionary>?>? elsewhere = null, IReadOnlyList<NearbyDictionary>? beside = null)
+        Func<string, IReadOnlyList<NearbyDictionary>?>? elsewhere = null, IReadOnlyList<NearbyDictionary>? beside = null,
+        RedFury.Collisions.CollisionMaterialCatalog? rdr2Materials = null)
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
         // Red Dead Redemption 2's, read through RedFury: its textures from the dictionaries named for it, the game's for it
         // (Rdr2TextureIndex), and the ones beside it.
         if (Textures.Rdr2TextureSource.IsRdr2(data))
         {
+            // Its collisions, their materials named from the game's materials.meta (rdr2Materials); its navmeshes at
+            // their map coordinates.
+            if (extension == ".ybn")
+            {
+                RedFury.Ybn.Ybn ybn = RedFury.Ybn.Ybn.Read(data);
+                return new ModelContent(new Aabb3(ybn.Root.BoxMin, ybn.Root.BoxMax), Rdr2CollisionMesh.Build(ybn, rdr2Materials));
+            }
+            if (extension == ".ynv")
+            {
+                (ViewportMesh mesh, Aabb3 box) = Rdr2CollisionMesh.Navmesh(RedFury.Ynv.Ynv.Read(data));
+                return new ModelContent(box, mesh);
+            }
             DrawableScene rdr2 = Rdr2Scene.Read(name, data, new TextureLookup(Parsed(dictionaries), nearby ?? [], overrides, null, beside));
             return new ModelContent(rdr2.Box, new ViewportMesh(rdr2.Origin), rdr2);
         }
