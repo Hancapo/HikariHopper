@@ -37,10 +37,8 @@
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="WebGPUSharp" Version="0.5.8" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- FiveFury is consumed as a managed .NET library. -->
-    <ProjectReference Include="$(FiveFuryRoot)FiveFury/FiveFury.csproj" />
-  </ItemGroup>
+  <!-- FiveFury (GTA V), RedFury (RDR2) and the CommonFury they share. -->
+  <Import Project="../GameLibraries.props" />
   <ItemGroup>
     <InternalsVisibleTo Include="HikariHopper.Tests" />
   </ItemGroup>

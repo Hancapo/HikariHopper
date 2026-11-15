@@ -17,4 +17,6 @@
   <ItemGroup>
     <ProjectReference Include="../src/HikariHopper.csproj" />
   </ItemGroup>
+  <!-- The tests use the game libraries directly too, from the same place as the app. -->
+  <Import Project="../GameLibraries.props" />
 </Project>
