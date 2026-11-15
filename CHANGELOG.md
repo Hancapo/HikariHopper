@@ -10,6 +10,7 @@ All notable changes to HikariHopper are documented here. The format follows
 ### Added
 
 - Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
+- Browse, search and extract from Red Dead Redemption 2's archives, their folders and file names rebuilt from the names the game is known to use. ([#238](https://github.com/Hancapo/HikariHopper/pull/238))
 
 ### Changed
 
