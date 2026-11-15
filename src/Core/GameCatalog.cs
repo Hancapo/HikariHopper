@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.Versioning;
 
 namespace HikariHopper.Core;
@@ -26,7 +27,22 @@ public sealed record GameEditionInfo(string Id, string Title, string Executable,
 }
 
 /// <summary>A game HikariHopper can open, with its editions in the order the launcher lists them.</summary>
-public sealed record SupportedGame(string Id, string Title, string ShortTitle, IReadOnlyList<GameEditionInfo> Editions);
+public sealed record SupportedGame(string Id, string Title, string ShortTitle, IReadOnlyList<GameEditionInfo> Editions)
+{
+    /// <summary>
+    /// Where its world's camera starts the first time it's shown, for a game whose world HikariHopper shows (its tab's
+    /// World side); null for one it doesn't yet.
+    /// </summary>
+    public WorldLandmark? Landmark { get; init; }
+
+    /// <summary>Whether HikariHopper shows its world.</summary>
+    public bool HasWorld => Landmark is not null;
+}
+
+/// <summary>A place in a game's world the camera starts at: its name, the camera's eye there, and where it looks.</summary>
+/// <param name="Yaw">The camera's azimuth, in radians: -π/2 looks north (+Y).</param>
+/// <param name="Pitch">Its elevation, in radians: above zero looks down.</param>
+public sealed record WorldLandmark(string Name, Vector3 Eye, float Yaw, float Pitch);
 
 /// <summary>One installation the start page offers to open.</summary>
 /// <param name="Game">The game it belongs to.</param>
@@ -60,7 +76,11 @@ public static class GameCatalog
         new(Rdr2, "Red Dead Redemption 2", "RDR2",
         [
             new(GameSettings.Rdr2Edition, "", "RDR2.exe", GameSettings.Rdr2GameRootKey),
-        ]),
+        ])
+        {
+            // Valentine's main street, from its south end, looking up it.
+            Landmark = new("Valentine", new Vector3(-300, 740, 132), -MathF.PI / 2, .18f),
+        },
     ]);
 
     /// <summary>Every edition of every game, in the order an installation is recognised.</summary>

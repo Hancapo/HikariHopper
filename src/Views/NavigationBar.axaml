@@ -49,7 +49,7 @@
                               AutomationProperties.Name="Back" Click="OnBack" />
           <c:ChromeToolButton Classes="segment nav" IconKind="forward" IsEnabled="{Binding CanGoForward}"
                               AutomationProperties.Name="Forward" Click="OnForward" />
-          <c:ChromeToolButton Classes="segment nav" IconKind="up" IconSize="15" IsEnabled="{Binding CanGoUp}"
+          <c:ChromeToolButton Name="UpButton" Classes="segment nav" IconKind="up" IconSize="15" IsEnabled="{Binding CanGoUp}"
                               AutomationProperties.Name="Up one level" Click="OnUp" />
         </StackPanel>
       </Border>
@@ -71,6 +71,26 @@
             <v:PathCrumbPanel Name="Segments" HorizontalAlignment="Left" />
           </DockPanel>
         </DockPanel>
+      </Border>
+
+      <!-- On the World side, in the address bar's place: where the world's camera is. -->
+      <Border Name="CoordinatesBar" Grid.Column="1" Margin="8,0,0,0" Height="{x:Static ui:Theme.ToolbarControlHeight}" VerticalAlignment="Center"
+              IsVisible="False" CornerRadius="{x:Static ui:Theme.ControlCorner}" Background="{x:Static ui:Theme.InsetBg}"
+              AutomationProperties.Name="Camera coordinates">
+        <StackPanel Orientation="Horizontal" Spacing="9" Margin="11,0">
+          <c:ChromeIcon Kind="pin" Width="14" Height="14" Thickness="1.5" Stroke="{x:Static ui:Theme.TextDim}" VerticalAlignment="Center" />
+          <TextBlock Name="CoordinatesText" VerticalAlignment="Center" Foreground="{x:Static ui:Theme.Text}"
+                     FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.FontSize}" Text="{Binding WorldCoordinates}" />
+        </StackPanel>
+      </Border>
+
+      <!-- On the World side, in the search box's place: the time of day, which opens a dial of the day under it. -->
+      <Border Name="TimeWell" Grid.Column="2" Grid.ColumnSpan="2" Classes="well" Margin="8,0,0,0" IsVisible="False">
+        <Panel>
+          <c:ChromeToolButton Name="TimeButton" Classes="segment" Width="86" Padding="26,0,10,0" AutomationProperties.Name="Time of day" />
+          <v:TimeDial Name="TimeGlyph" Compact="True" Width="13" Height="13" Margin="9,0,0,0" Focusable="False"
+                      HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+        </Panel>
       </Border>
 
       <!-- The address as text, in the address bar's place while it is edited: a click on the bar's empty part,

@@ -12,6 +12,10 @@
   <DockPanel>
     <v:NavigationBar Name="Navigation" DockPanel.Dock="Top" />
     <v:StatusBar DockPanel.Dock="Bottom" />
+    <!-- The tab's files, or its game's world (its World side), in the same place: the world view is made the first
+         time a tab shows it. -->
+    <Panel>
+    <ContentControl Name="WorldHost" IsVisible="False" />
     <Grid Name="Split" Margin="{x:Static v:WorkspaceView.PanelMargin}" ColumnDefinitions="238,8,*">
       <Border Name="FoldersFrame" Grid.Column="0" ClipToBounds="True"
               CornerRadius="{x:Static ui:Theme.PanelCorner}" Background="{x:Static ui:Theme.SidebarBg}">
@@ -26,5 +30,6 @@
         </Panel>
       </Border>
     </Grid>
+    </Panel>
   </DockPanel>
 </UserControl>

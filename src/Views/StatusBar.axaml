@@ -42,8 +42,11 @@
           <TextBlock Name="EditionText" Foreground="{x:Static ui:Theme.TextRow}" Text="{Binding GameEdition}" />
         </StackPanel>
       </Border>
+      <!-- For a game with a world: its tab's sides, Files and World, right after the game (F6 flips them). -->
+      <c:SegmentedSwitch Name="FaceSwitch" Height="22" VerticalAlignment="Center" IsVisible="False" />
       <Panel Name="Count">
-        <TextBlock IsVisible="{Binding ShowsItemCount}" Text="{Binding VisibleCount, Converter={x:Static v:ViewConverters.ItemCount}}" />
+        <TextBlock Name="ItemCountText" Text="{Binding VisibleCount, Converter={x:Static v:ViewConverters.ItemCount}}" />
+        <TextBlock Name="WorldText" IsVisible="False" Text="{Binding WorldStatus}" />
         <TextBlock IsVisible="{Binding !HasWorkspace}" Text="NO GAME" />
       </Panel>
       <Border Name="StatusDivider" Classes="divider" />

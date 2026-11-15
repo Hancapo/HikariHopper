@@ -215,6 +215,21 @@ internal sealed partial class ViewportHost : NativeControlHost
             camera.Orbit(dx, dy);
     }
 
+    // Where the camera goes once the renderer starts, if somewhere was asked for before it did.
+    private (System.Numerics.Vector3 Eye, float Yaw, float Pitch)? placed;
+
+    /// <summary>Puts the camera's eye somewhere, looking along a yaw and pitch: now, or once the viewport starts.</summary>
+    public void Place(System.Numerics.Vector3 eye, float yaw, float pitch)
+    {
+        placed = (eye, yaw, pitch);
+        if (renderer is not null)
+            renderer.Camera.Place(eye, yaw, pitch);
+    }
+
+    /// <summary>Where the camera's eye is and where it looks; null before the viewport starts.</summary>
+    public (System.Numerics.Vector3 Eye, float Yaw, float Pitch)? CameraSpot =>
+        renderer?.Camera is { } camera ? (camera.Eye, camera.Yaw, camera.Pitch) : null;
+
     /// <summary>Points the camera back at what was framed last.</summary>
     public void Reframe() => renderer?.Frame(framed);
 
@@ -285,6 +300,12 @@ internal sealed partial class ViewportHost : NativeControlHost
     /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
     public event Action<char>? ShortcutPressed;
 
+    /// <summary>
+    /// A key the window's shortcuts handle (F6, Alt+Left, Alt+Right) was pressed while the viewport had the keyboard, which
+    /// the window never sees then: named as <see cref="WindowShortcut"/> names it.
+    /// </summary>
+    public event Action<string>? KeyForwarded;
+
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
         if (!OperatingSystem.IsWindows())
@@ -310,6 +331,8 @@ internal sealed partial class ViewportHost : NativeControlHost
             (surfaceWidth, surfaceHeight) = ClientSize();
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
+            if (placed is { } spot)
+                renderer.Camera.Place(spot.Eye, spot.Yaw, spot.Pitch);
             renderer.SetSky(sky);
             renderer.SetTime(hours);
             ApplyGraphics();
@@ -462,6 +485,7 @@ internal sealed partial class ViewportHost : NativeControlHost
     private const uint RightUp = 0x0205;
     private const uint Wheel = 0x020A;
     private const uint KeyPressed = 0x0100;
+    private const uint SystemKeyPressed = 0x0104;
     private const uint CaptureChanged = 0x0215;
 
     /// <summary>Handles a message, or returns null to leave it to the window's own procedure.</summary>
@@ -519,6 +543,13 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case Wheel:
                 r.Camera.Zoom((short)((wParam >> 16) & 0xffff) / 120f);
+                return 0;
+            case KeyPressed when wParam == 0x75:
+                Dispatcher.UIThread.Post(() => KeyForwarded?.Invoke("F6"));
+                return 0;
+            case SystemKeyPressed when (uint)wParam is 0x25 or 0x27:
+                string arrow = (uint)wParam == 0x25 ? "Alt+Left" : "Alt+Right";
+                Dispatcher.UIThread.Post(() => KeyForwarded?.Invoke(arrow));
                 return 0;
             case KeyPressed when wParam == 0x1B:
                 Dispatcher.UIThread.Post(() => EscapePressed?.Invoke());

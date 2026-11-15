@@ -46,7 +46,9 @@ public partial class MenuRow : UserControl
             new WindowShortcut("Ctrl+C", () => Bridge?.HasSelection == true, () => _ = Bridge?.CopySelection()),
             new WindowShortcut("Ctrl+V", () => Bridge?.HasWorkspace == true, () => _ = Bridge?.Paste()),
             new WindowShortcut("Ctrl+Shift+C", () => Bridge?.HasSelection == true, () => Bridge?.CopySelectedPath()),
-            new WindowShortcut("Ctrl+Shift+E", () => Bridge?.CanShowInExplorer == true, () => Bridge?.ShowInExplorer()));
+            new WindowShortcut("Ctrl+Shift+E", () => Bridge?.CanShowInExplorer == true, () => Bridge?.ShowInExplorer()),
+            // A game with a world: its tab's other side.
+            new WindowShortcut("F6", () => Bridge?.HasWorld == true, () => Bridge?.ToggleFace()));
     }
 
     /// <summary>QML <c>searchRequested</c>: Edit › Search current location….</summary>
@@ -157,6 +159,17 @@ public partial class MenuRow : UserControl
     private void OnListView(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("list");
 
     private void OnGridView(object? sender, RoutedEventArgs e) => Bridge?.SetViewMode("grid");
+
+    // The item's state says the side, so its own update from the tab doesn't flip it back.
+    private void OnWorldToggled(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not RetroMenuItem item)
+            return;
+        if (item.IsChecked)
+            Bridge?.ShowWorld();
+        else
+            Bridge?.ShowFiles();
+    }
 
     private void OnFoldersToggled(object? sender, RoutedEventArgs e)
     {
