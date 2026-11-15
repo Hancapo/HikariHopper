@@ -145,6 +145,7 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
 
 @fragment
 fn fs_terrain(input: TerrainOutput) -> @location(0) vec4f {
+    use_local_lights(input.position.xy, input.place);
     return shade_terrain(input);
 }
 

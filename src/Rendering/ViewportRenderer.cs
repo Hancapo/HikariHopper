@@ -408,6 +408,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         bool worldShadows = worldShown && Shadows && key.Direction.Z > 0;
         if (lit)
         {
+            WriteLocalLights();
             WriteLight(drawable ? Shadows : worldShadows);
             if (drawable && Shadows)
                 DrawShadow(encoder);
@@ -419,7 +420,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (!worldShadows)
                 SkipWorldShadows();
             UpdateWorldVisibility(worldCascades, worldShadows);
-            WriteLocalLights();
             if (worldShadows)
                 DrawWorldShadows(encoder);
         }

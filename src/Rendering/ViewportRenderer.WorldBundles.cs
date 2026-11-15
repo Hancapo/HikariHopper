@@ -136,8 +136,7 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (worldInstanceLayout is not null)
             return;
-        // An asset's placements, and the world's local lights and their screen tiles, the same buffers in every asset's
-        // group: they keep their size, so bundles keep reading them.
+        // An asset's placements (the local lights are the light group's).
         worldInstanceLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
             Entries =
@@ -148,22 +147,8 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Vertex,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = 128 },
                 },
-                new BindGroupLayoutEntry
-                {
-                    Binding = 1,
-                    Visibility = ShaderStage.Fragment,
-                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = LocalLightFrame.LightBytes },
-                },
-                new BindGroupLayoutEntry
-                {
-                    Binding = 2,
-                    Visibility = ShaderStage.Fragment,
-                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = LocalLightFrame.TileBytes },
-                },
             ],
         });
-        localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
-        localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
         worldEmptyLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = [] });
         worldEmptyGroup = device.CreateBindGroup(new BindGroupDescriptor { Layout = worldEmptyLayout, Entries = [] });
 

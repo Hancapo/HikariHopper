@@ -125,7 +125,7 @@ internal sealed class WorldAsset
             foreach (GameTexture? texture in material.BoundTextures())
                 if (texture is not null)
                     textures.Add(texture);
-        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.Empty);
+        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.Carrying(scene.Lights));
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once.

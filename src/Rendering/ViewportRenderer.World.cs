@@ -272,6 +272,7 @@ internal sealed unsafe partial class ViewportRenderer
             RemoveWorldAsset(key);
         worldSelection = new WorldSelection([], []);
         worldCull.Update([]);
+        localLights = [];
         listedAssets.Clear();
         worldBlendedDraws.Clear();
         worldPicked = null;
@@ -377,8 +378,6 @@ internal sealed unsafe partial class ViewportRenderer
                     Entries =
                     [
                         new BindGroupEntry { Binding = 0, Buffer = asset.SourceInstances, Size = (ulong)capacity * 128 },
-                        new BindGroupEntry { Binding = 1, Buffer = localLightBuffer!, Size = LocalLightFrame.LightBytes },
-                        new BindGroupEntry { Binding = 2, Buffer = localLightTiles!, Size = LocalLightFrame.TileBytes },
                     ],
                 });
                 asset.Instances = device.CreateBuffer(new BufferDescriptor { Size = (ulong)capacity * 4, Usage = BufferUsage.Vertex | BufferUsage.CopyDst });

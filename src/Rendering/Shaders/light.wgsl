@@ -1,7 +1,7 @@
 // The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl, bloom.wgsl and tonemap.wgsl:
 // GTA V's timecycle light at the viewer's time of day (Timecycle.cs), the exposure, bloom and filmic curve its
-// post-process settles on, the directional light's shadow map, and the reflection map (reflection_map.wgsl). Put
-// after scene.wgsl, as group 2.
+// post-process settles on, the directional light's shadow map, the reflection map (reflection_map.wgsl), and the local
+// lights. Put after scene.wgsl, as group 2.
 
 struct Light {
     // Unit direction towards the directional light (the sun, or the moon).
@@ -50,6 +50,106 @@ struct Light {
 @group(2) @binding(2) var shadow_compare: sampler_comparison;
 @group(2) @binding(3) var reflection_map: texture_2d<f32>;
 @group(2) @binding(4) var reflection_sampler: sampler;
+
+// The local lights drawables are lit by (ViewportRenderer.LocalLights.cs): a model's own in the 3D viewer, the cut's in
+// a world. At most 512 nearest the camera that reach the screen, each a position relative to the scene's origin and
+// its radius, its colour times its intensity and its type (1 a spot, 2 a capsule), its direction and a spot's inner
+// cosine, then its outer cosine, falloff exponent and a capsule's length; and a 32 by 18 grid of the screen, each
+// tile's lights as a 512-bit mask.
+struct LocalLight {
+    position_radius: vec4f,
+    colour_type: vec4f,
+    direction_inner: vec4f,
+    outer_falloff: vec4f,
+};
+
+@group(2) @binding(5) var<storage, read> local_lights: array<LocalLight, 512>;
+@group(2) @binding(6) var<storage, read> local_light_tiles: array<u32, 9216>;
+
+// Set by a fragment entry point that takes the local lights: the pixel and the point being shaded, relative to the
+// scene's origin. Left off where the screen's tiles don't apply (the reflection map).
+var<private> local_lights_on: bool = false;
+var<private> local_pixel: vec2f;
+var<private> local_place: vec3f;
+
+fn use_local_lights(pixel: vec2f, place: vec3f) {
+    local_lights_on = true;
+    local_pixel = pixel;
+    local_place = place;
+}
+
+// Where the tile holding the pixel being shaded starts in the masks, sixteen words of them: past the end (no lights)
+// unless use_local_lights was called.
+fn local_light_tile() -> u32 {
+    if (!local_lights_on) {
+        return 9216u;
+    }
+    // The tiles cover the frame the surfaces are drawn into (scene.viewport.zw).
+    let tile = min(vec2u(local_pixel / max(scene.viewport.zw, vec2f(1.0)) * vec2f(32.0, 18.0)), vec2u(31u, 17u));
+    return (tile.y * 32u + tile.x) * 16u;
+}
+
+// One word of the pixel's tile's mask: the lights 32 * word to 32 * word + 31 that reach it.
+fn local_light_word(tile: u32, word: u32) -> u32 {
+    if (tile >= 9216u) {
+        return 0u;
+    }
+    return local_light_tiles[tile + word];
+}
+
+// GTA's local lights over what a deferred shader wrote, as PS_pointCM_standard and PS_spotCM_standard light it (in
+// Enhanced's programs, Legacy's alike), without their shadows, occlusion and contact shadows:
+//   - Falloff: a = saturate(1 - d^2 / r^2), shaped by a / ((1 - k) a + k), Schlick's stand-in for a^k with k the light's
+//     falloff exponent.
+//   - A spot's cone: linear from its outer cosine to its inner one (gLightConeScale and gLightConeOffset).
+//   - A capsule (PS_capsule's): lit from the nearest point of its segment, along its direction, its middle at its
+//     position.
+//   - Then the directional pass's own arithmetic: the diffuse less what the surface reflects, normalised Blinn-Phong.
+// Where a light shines from, relative to the scene's origin: a capsule from the nearest point of its segment.
+fn local_light_point(source: LocalLight) -> vec3f {
+    if (source.colour_type.w < 1.5) {
+        return source.position_radius.xyz;
+    }
+    let extent = source.outer_falloff.z;
+    let axis = source.direction_inner.xyz;
+    let start = source.position_radius.xyz - axis * (extent * 0.5);
+    return start + axis * (saturate(dot(local_place - start, axis) / max(extent, 1e-4)) * extent);
+}
+
+fn gta_local_lights(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_value: f32, normal: vec3f, view: vec3f) -> vec3f {
+    let tile = local_light_tile();
+    var radiance = vec3f(0.0);
+    for (var word = 0u; word < 16u; word++) {
+        var mask = local_light_word(tile, word);
+        while (mask != 0u) {
+            let index = word * 32u + firstTrailingBit(mask);
+            mask &= mask - 1u;
+            let source = local_lights[index];
+            let delta = local_light_point(source) - local_place;
+            let distance2 = dot(delta, delta);
+            let radius = source.position_radius.w;
+            let a = saturate(1.0 - distance2 / max(radius * radius, 1e-6));
+            if (a <= 0.0) { continue; }
+            let k = max(source.outer_falloff.y, 1e-3);
+            var attenuation = a / ((1.0 - k) * a + k);
+            let to_light = delta * inverseSqrt(max(distance2, 1e-8));
+            if (source.colour_type.w > 0.5 && source.colour_type.w < 1.5) {
+                let cosine = dot(to_light, -source.direction_inner.xyz);
+                let inner = source.direction_inner.w;
+                let outer = source.outer_falloff.x;
+                attenuation *= saturate((cosine - outer) / max(inner - outer, 1e-4));
+            }
+            if (attenuation < 1e-6) { continue; }
+            let half_vector = normalize(to_light + view);
+            let n_dot_l = saturate(dot(normal, to_light));
+            let h_dot_l = saturate(dot(half_vector, to_light));
+            let n_dot_h = saturate(dot(normal, half_vector));
+            let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h + 1e-8, exponent) * fresnel(fresnel_value, h_dot_l);
+            radiance += source.colour_type.rgb * attenuation * n_dot_l * (albedo * kept + vec3f(spec * highlight));
+        }
+    }
+    return radiance;
+}
 
 // The exposure in stops for the frame's measured mean luminance (exposure.wgsl), as PS_CalculateExposure works it
 // out: scale * L^power + offset + the timecycle's exposure, kept in the timecycle's range.
@@ -181,5 +281,8 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is, and by the scale
     // the G-buffer's last channel holds (one for all but peds, whose deferred shaders write their own).
     let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale * reflection_scale;
-    return sun + ambient + reflection;
+
+    // The local lights, lit as the sun is, after their falloff.
+    let local = gta_local_lights(albedo, kept, spec, exponent, fresnel_value, normal, view);
+    return sun + ambient + reflection + local;
 }

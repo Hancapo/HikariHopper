@@ -187,6 +187,7 @@ struct Surface {
 
 @fragment
 fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+    use_local_lights(input.position.xy, input.place);
     return shade_surface(input, front);
 }
 

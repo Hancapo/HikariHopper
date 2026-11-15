@@ -27,8 +27,12 @@ All notable changes to HikariHopper are documented here. The format follows
 - Pick what's in Red Dead Redemption 2's world: a click outlines it, and a right click names it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#254](https://github.com/Hancapo/HikariHopper/pull/254))
 - Give GTA V tabs a World side and a globe on the start page, starting at Legion Square, with the base game's maps indexed in the background for Legacy and Enhanced and cached until the game's archives change. ([#256](https://github.com/Hancapo/HikariHopper/pull/256))
 - Fly through GTA V's world: its maps' models streamed around the camera and drawn with the 3D viewer's GTA V shaders, terrain included, textured through their archetypes' dictionaries and those dictionaries' parents, and casting the sun's shadow. ([#257](https://github.com/Hancapo/HikariHopper/pull/257))
+- Grow GTA V's grass around the camera and light its street lamps, signs and windows after dark, each light at its own hours, capsule lights included. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Light GTA V models in the 3D viewer with the lights they carry, at the viewer's time of day. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 
 ### Changed
+
+- Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 
 ### Fixed
 

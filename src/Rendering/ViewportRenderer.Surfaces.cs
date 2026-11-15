@@ -349,6 +349,8 @@ internal sealed unsafe partial class ViewportRenderer
         if (drawable is null || drawable.Indices.Length == 0)
             return;
         origin = drawable.Origin;
+        modelLights = drawable.Lights;
+        modelLit = null;
         surfaceVertices = Upload((ReadOnlySpan<SurfaceVertex>)drawable.Vertices, SurfaceVertex.Size);
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
