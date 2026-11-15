@@ -121,9 +121,13 @@ internal sealed class GpuDevice
 
     private static Device RequestDevice(Adapter adapter, bool compressedTextures, Action<string> failed)
     {
+        // What the adapter allows, asked for whole: Red Dead Redemption 2's material reads more textures at once than
+        // WebGPU's defaults let a shader (rdr2.wgsl, Rdr2TextureSlots).
+        adapter.GetLimits(out Limits limits);
         // The descriptor is a ref struct, so it is built where the request is made, off the caller's context.
         return Task.Run(() => adapter.RequestDeviceAsync(new DeviceDescriptor
         {
+            RequiredLimits = limits,
             RequiredFeatures = compressedTextures ? new[] { FeatureName.TextureCompressionBC } : [],
             UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {Encoding.UTF8.GetString(message)}"),
             DeviceLostCallback = (reason, message) =>

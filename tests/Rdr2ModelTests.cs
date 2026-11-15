@@ -86,8 +86,8 @@ public sealed class Rdr2ModelTests
         DrawableScene scene = content.Surfaces!;
         AssertDrawn(scene);
         Assert.Contains(scene.Materials, material => material.Diffuse is not null);
-        // What isn't drawn as RDR2 draws it yet is said.
-        Assert.Contains(scene.Diagnostics, line => line.StartsWith("Drawn as a plain textured surface", StringComparison.Ordinal));
+        // Each material RedFury's.
+        Assert.All(scene.Materials, material => Assert.NotNull(material.Rdr2));
         // Nothing of GTA V's to edit or save.
         Assert.Empty(scene.Sources);
         Assert.Null(scene.Writer);

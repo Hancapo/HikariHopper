@@ -15,8 +15,8 @@ namespace HikariHopper.Rendering;
 /// <summary>
 /// Red Dead Redemption 2's drawables (.ydr, .ydd, .yft), read through RedFury, made into the viewer's scene as GTA V's
 /// are (after RedFury's ViewerDocument): every level of detail, each model placed by its transform and the bone it's
-/// bound to, skinned ones in their authored pose, a part per geometry. Its materials are drawn as plain textured
-/// surfaces for now (<see cref="SurfaceMaterial.FromRdr2"/>).
+/// bound to, skinned ones in their authored pose, a part per geometry. Its materials are RedFury's, drawn with
+/// rdr2.wgsl (<see cref="SurfaceMaterial.FromRdr2"/>).
 /// </summary>
 internal static class Rdr2Scene
 {
@@ -118,8 +118,8 @@ internal static class Rdr2Scene
         }
         foreach (string texture in materials.SelectMany(m => m.MissingTextures).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             diagnostics.Add($"Texture not found: {texture}");
-        foreach (string shader in materials.Select(m => m.Shader).Distinct().Order())
-            diagnostics.Add($"Drawn as a plain textured surface until RDR2's own materials: {shader}");
+        foreach (string shader in materials.Where(m => m.Rdr2?.Water == true).Select(m => m.Shader).Distinct().Order())
+            diagnostics.Add($"Water drawn with the generic material, until the viewer copies the scene behind it: {shader}");
         if (skinned)
             diagnostics.Add("Skinned parts are shown in their authored pose.");
 
@@ -160,7 +160,7 @@ internal static class Rdr2Scene
             if (positions.Length == 0 || count == 0)
                 continue;
             int baseVertex = vertices.Count;
-            Read(geometry, positions, transform, origin, vertices);
+            Read(geometry, positions, transform, origin, materials[material].Rdr2, vertices);
             uint first = (uint)indices.Count;
             var used = new HashSet<uint>();
             for (int c = 0; c < count; c++)
@@ -227,18 +227,25 @@ internal static class Rdr2Scene
         : $"model {index + 1}";
 
     /// <summary>
-    /// A geometry's vertices as surface.wgsl reads them, placed and relative to the scene's origin. A missing normal is
-    /// the faces' around it; a missing tangent runs along X. Its colours are left white for now: GTA's program reads the
-    /// first as ambient and emissive, which RDR2's aren't.
+    /// A geometry's vertices as rdr2.wgsl reads them, placed and relative to the scene's origin, as RedFury's
+    /// MeshPreparation makes them: a missing normal is the faces' around it, a missing tangent runs along X, missing
+    /// second and third UV sets are the first. The first colour is the one its material's program reads (COLOR1 for the
+    /// terrain programs that take it, white when missing), the second's red the tint palette's coordinate (its blue, or
+    /// nothing without one); river water's COLOR1 rides in the second and third UV sets, as RedFury's viewer has it.
     /// </summary>
-    private static void Read(RedGeometry geometry, Vector3[] positions, Matrix4x4 transform, Vector3 origin, List<SurfaceVertex> into)
+    private static void Read(RedGeometry geometry, Vector3[] positions, Matrix4x4 transform, Vector3 origin, Rdr2Material? material,
+        List<SurfaceVertex> into)
     {
         Vector4[]? normals = Decode(geometry, RedSemantic.Normal), tangents = Decode(geometry, RedSemantic.Tangent0);
         Vector4[]? uv0 = Decode(geometry, RedSemantic.TexCoord0), uv1 = Decode(geometry, RedSemantic.TexCoord1);
         Vector4[]? uv2 = Decode(geometry, RedSemantic.TexCoord2);
+        Vector4[]? colours = Decode(geometry, RedSemantic.Colour0);
+        // These terrain programs read COLOR1, even where COLOR0 is there; without it, nothing painted: the lookup mask.
+        if (material?.TerrainColour1 == true)
+            colours = Decode(geometry, RedSemantic.Colour1) ?? new Vector4[positions.Length];
+        Vector4[]? flow = material?.WaterVertexFlow == true ? Decode(geometry, RedSemantic.Colour1) : null;
         Vector3[]? faces = normals is null ? FaceNormals(geometry, positions) : null;
         Matrix4x4 normalTransform = Matrix4x4.Invert(transform, out Matrix4x4 inverse) ? Matrix4x4.Transpose(inverse) : transform;
-        uint white = SurfaceVertex.Pack(Vector4.One);
         for (int i = 0; i < positions.Length; i++)
         {
             Vector3 normal = normals is not null ? normals[i].AsVector3() : faces![i];
@@ -247,8 +254,15 @@ internal static class Rdr2Scene
             Vector4 along = tangents?[i] ?? new Vector4(1, 0, 0, 1);
             Vector3 tangent = Vector3.TransformNormal(along.AsVector3(), transform);
             Vector4 t0 = uv0?[i] ?? default, t1 = uv1?[i] ?? t0, t2 = uv2?[i] ?? t0;
+            if (material?.WaterVertexFlow == true)
+            {
+                Vector4 c = flow?[i] ?? new Vector4(.5f, .5f, 1, 1);
+                (t1, t2) = (new Vector4(c.X, c.Y, 0, 0), new Vector4(c.Z, c.W, 0, 0));
+            }
+            Vector4 colour = colours?[i] ?? Vector4.One;
             into.Add(new SurfaceVertex(Vector3.Transform(positions[i], transform) - origin, normal,
-                new Vector4(tangent, along.W < 0 ? -1 : 1), new Vector2(t0.X, t0.Y), new Vector2(t1.X, t1.Y), white, 0, new Vector2(t2.X, t2.Y)));
+                new Vector4(tangent, along.W < 0 ? -1 : 1), new Vector2(t0.X, t0.Y), new Vector2(t1.X, t1.Y),
+                SurfaceVertex.Pack(colour), SurfaceVertex.Pack(new Vector4(colours?[i].Z ?? 0, 0, 0, 0)), new Vector2(t2.X, t2.Y)));
         }
     }
 

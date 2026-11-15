@@ -18,6 +18,8 @@ internal sealed unsafe partial class ViewportRenderer
         Terrain,
         Fur,
         Cable,
+        /// <summary>Red Dead Redemption 2's material, RedFury's (rdr2.wgsl).</summary>
+        Rdr2,
     }
 
     /// <summary>The fur grass's shells, drawn as instances of one draw (fur.wgsl's SHELLS).</summary>
@@ -80,6 +82,9 @@ internal sealed unsafe partial class ViewportRenderer
     // A missing second diffuse layer lays nothing over the paint.
     private TextureView? clear;
     private readonly Dictionary<GameTexture, TextureView?> textures = new(ReferenceEqualityComparer.Instance);
+    // Each uploaded texture's GPU texture, and its sRGB view, for the colour slots of RDR2's material.
+    private readonly Dictionary<GameTexture, WebGpuSharp.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<GameTexture, TextureView?> srgbViews = new(ReferenceEqualityComparer.Instance);
     private readonly List<WebGpuSharp.Texture> uploaded = [];
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
@@ -353,7 +358,8 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < groups.Length; i++)
         {
             SurfaceMaterial material = drawable.Materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material) : material.Fur ? FurGroup(material) : material.Cable ? CableGroup(material)
+            groups[i] = DrawsRdr2(material) ? Rdr2Group(material.Rdr2!)
+                : material.Terrain ? TerrainGroup(material) : material.Fur ? FurGroup(material) : material.Cable ? CableGroup(material)
                 : MaterialGroup(material, material.Uniforms);
             materialUniforms[i] = materialBuffers[^1];
             // Hair is drawn again, blended, for what isn't solid (SurfaceMaterial.HairFringe).
@@ -368,7 +374,8 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceParts = [.. drawable.Parts.Select(part =>
         {
             SurfaceMaterial material = drawable.Materials[part.Material];
-            PartKind kind = material.Terrain ? PartKind.Terrain : material.Fur ? PartKind.Fur : material.Cable ? PartKind.Cable : PartKind.Surface;
+            PartKind kind = DrawsRdr2(material) ? PartKind.Rdr2
+                : material.Terrain ? PartKind.Terrain : material.Fur ? PartKind.Fur : material.Cable ? PartKind.Cable : PartKind.Surface;
             AlphaMode mode = kind switch
             {
                 PartKind.Terrain or PartKind.Fur => AlphaMode.Opaque,
@@ -378,6 +385,7 @@ internal sealed unsafe partial class ViewportRenderer
             return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
+        partRdr2 = [.. surfaceParts.Select(p => p.Kind == PartKind.Rdr2 ? drawable.Materials[p.Part.Material].Rdr2 : null)];
         shownMaterials = drawable.Materials;
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
@@ -402,7 +410,8 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < materials.Count; i++)
         {
             SurfaceMaterial material = materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
+            groups[i] = DrawsRdr2(material) ? Rdr2Group(material.Rdr2!, materialUniforms[i])
+                : material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
                 : material.Cable ? CableGroup(material, materialUniforms[i]) : MaterialGroup(material, material.Uniforms, materialUniforms[i]);
             if (fringeUniforms[i] is { } fringe)
                 fringes[i] = MaterialGroup(material, material.Uniforms, fringe);
@@ -440,11 +449,14 @@ internal sealed unsafe partial class ViewportRenderer
         shadowRadius = 0;
         surfaceParts = [];
         partsShown = [];
+        partRdr2 = [];
         partsPicked = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
         uploaded.Clear();
         textures.Clear();
+        uploadedOf.Clear();
+        srgbViews.Clear();
     }
 
     // With a uniform buffer of its own, filled with the values; or reading one it had, as it is.
@@ -565,6 +577,8 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 pass.SetPipeline(kind switch
                 {
+                    // RDR2's: culled only when solid and not drawn from both sides, as RedFury's CullBackFaces.
+                    PartKind.Rdr2 => reflected ? rdr2Reflected! : mode == AlphaMode.Mask || partRdr2[i]?.DoubleSided == true ? rdr2DoubleSided! : rdr2Solid!,
                     PartKind.Terrain => reflected ? terrainReflected! : terrainSurfaces!,
                     PartKind.Fur => reflected ? furReflected! : furSurfaces!,
                     _ => reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
@@ -585,7 +599,9 @@ internal sealed unsafe partial class ViewportRenderer
                 && !(reflected && p.Kind == PartKind.Cable))
             .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind, p.Culled)))
         {
-            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces! : reflected ? blendedReflected! : culled ? blendedCulledSurfaces! : blendedSurfaces!);
+            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces!
+                : kind == PartKind.Rdr2 ? (reflected ? rdr2BlendedReflected! : rdr2Blended!)
+                : reflected ? blendedReflected! : culled ? blendedCulledSurfaces! : blendedSurfaces!);
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
@@ -691,6 +707,8 @@ internal sealed unsafe partial class ViewportRenderer
         if (mapped is not var (format, block) || source.Shape.Dimension != CommonFury.Textures.TextureDimension.TwoD || source.Shape.ArraySize != 1
             || source.Width <= 0 || source.Height <= 0 || source.Width % block != 0 || source.Height % block != 0 || (block > 1 && !compressedTextures))
             return null;
+        // Viewable as sRGB too, where the format has a variant: RDR2's material reads its colours so.
+        TextureFormat? srgb = SrgbOf(format);
         WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
@@ -699,8 +717,10 @@ internal sealed unsafe partial class ViewportRenderer
             Format = format,
             MipLevelCount = (uint)source.MipCount,
             SampleCount = 1,
+            ViewFormats = srgb is { } variant ? [variant] : [],
         });
         uploaded.Add(texture);
+        uploadedOf[source] = texture;
         for (int level = 0; level < source.MipCount; level++)
         {
             CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
