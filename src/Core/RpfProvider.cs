@@ -67,6 +67,8 @@ public sealed class RpfProvider
     private bool archiveIsNested;
     private bool inArchive;
     private GameCrypto? crypto;
+    private string gameEdition = "";
+    private ArchiveKeys? keys;
 
     public WorkspaceInfo Info
     {
@@ -81,8 +83,7 @@ public sealed class RpfProvider
     }
 
     /// <summary>The open game's edition id (<see cref="GameCatalog"/>), "" without a game.</summary>
-    public string GameEditionId => gameRoot is null ? ""
-        : gameTarget == FiveFury.GameTarget.Enhanced ? GameSettings.EnhancedEdition : GameSettings.LegacyEdition;
+    public string GameEditionId => gameRoot is null ? "" : gameEdition;
 
     /// <summary>The open game's edition as the status bar and tabs name it ("GTA V Legacy"), "" without a game.</summary>
     public string GameEdition => GameCatalog.Edition(GameEditionId)?.ShortName ?? "";
@@ -97,7 +98,15 @@ public sealed class RpfProvider
 
     public GameTarget? GameTarget => gameTarget;
 
+    /// <summary>GTA V's keys while a GTA V game is open; null for RDR2 or without a game.</summary>
     public GameCrypto? Crypto => crypto;
+
+    /// <summary>The open game's keys, whatever the game; null without a game.</summary>
+    public ArchiveKeys? Keys => keys;
+
+    // What an archive of the game, or one opened on its own, is opened with: the game's keys, else GTA V's if they
+    // can be found.
+    private ArchiveKeys? KeysForArchives => keys ?? (ArchiveKeys?)GameKeys.TryLoadDefault();
 
     public string GameName => gameRoot is not null ? Path.GetFileName(gameRoot) : "No game";
 
@@ -150,6 +159,13 @@ public sealed class RpfProvider
         if (!Directory.Exists(root))
             throw new ArgumentException($"Game folder does not exist: {root}");
         string edition = GameSettings.GameEditionForPath(root);
+        if (edition == GameSettings.Rdr2Edition)
+        {
+            // The shipped tables open one build of the game: another can't be read, so it says so.
+            if (GameSettings.InstallationProblem(root, edition) is { } problem)
+                throw new ArgumentException(problem);
+            return new LoadedGame(root.TrimEnd(Path.DirectorySeparatorChar), edition, Rdr2Keys.Bundled);
+        }
         GameTarget target = edition switch
         {
             GameSettings.EnhancedEdition => FiveFury.GameTarget.Enhanced,
@@ -166,8 +182,11 @@ public sealed class RpfProvider
     {
         Close();
         gameRoot = loaded.Root;
-        gameTarget = loaded.Target;
-        crypto = loaded.Crypto;
+        gameEdition = loaded.Edition;
+        keys = loaded.Keys;
+        // FiveFury's own view of the game, GTA V's only.
+        gameTarget = loaded.IsGtaV ? loaded.Target : null;
+        crypto = loaded.IsGtaV ? loaded.Crypto : null;
         inArchive = false;
         return Info;
     }
@@ -179,7 +198,7 @@ public sealed class RpfProvider
             throw new ArgumentException($"Archive does not exist: {resolved}");
         if (!string.Equals(Path.GetExtension(resolved), ".rpf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("HikariHopper can only open .rpf archives");
-        ArchiveNode opened = ArchiveNode.OpenRoot(resolved, crypto ?? GameKeys.TryLoadDefault());
+        ArchiveNode opened = ArchiveNode.OpenRoot(resolved, KeysForArchives);
         CloseArchiveCore();
         archive = opened;
         archivePath = resolved;
@@ -242,6 +261,8 @@ public sealed class RpfProvider
     {
         CloseArchiveCore();
         gameRoot = null;
+        gameEdition = "";
+        keys = null;
         gameTarget = null;
         crypto = null;
         inArchive = false;
@@ -390,7 +411,7 @@ public sealed class RpfProvider
             ExportArchiveContents(nested, target);
             return target;
         }
-        ArchiveNode opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+        ArchiveNode opened = ArchiveNode.OpenRoot(GameEntryPath(entry), KeysForArchives);
         try
         { ExportArchiveContents(opened, target); }
         finally
@@ -574,7 +595,7 @@ public sealed class RpfProvider
             }
             else
             {
-                node = opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+                node = opened = ArchiveNode.OpenRoot(GameEntryPath(entry), KeysForArchives);
             }
             ArchiveEntry[] entries = [.. node.EnumerateEntries()];
             int files = entries.Count(item => !item.IsDirectory);
@@ -645,7 +666,6 @@ public sealed class RpfProvider
         string currentPrefix = archive.Prefix;
         bool wasInArchive = inArchive;
         root.Close();
-        ArchiveKeys? keys = crypto;
         ArchiveNode reloadedRoot = ArchiveNode.OpenRoot(expected, keys ?? root.Keys);
         ArchiveNode reloaded = reloadedRoot;
         if (currentPrefix.Length > 0)

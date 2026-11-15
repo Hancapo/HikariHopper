@@ -443,7 +443,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
         Enqueue(() =>
         {
             LoadedGame game = loader(path);
-            ReadGameTextures(game);
+            // Texture tables are GTA V's only, so far.
+            if (game.IsGtaV)
+                ReadGameTextures(game);
             return game;
         }, GameLoadCompleted, GameLoadFailed);
         return true;

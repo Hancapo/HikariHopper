@@ -75,6 +75,8 @@ public static class Theme
 
     // Sand: GTA V Legacy's mark, as light as Enhanced's green, so neither reads as off; paler than the warning amber.
     public static IImmutableSolidColorBrush LegacyMark { get; } = Hex("#E3CC9F");
+    // Rust: Red Dead Redemption 2's mark, as light as the two GTA V marks.
+    public static IImmutableSolidColorBrush Rdr2Mark { get; } = Hex("#F2A792");
     public static IImmutableSolidColorBrush SelectionFaint { get; } = Rgba(0.106, 0.110, 0.173, 0.66);
     public static IImmutableSolidColorBrush SelectionWash { get; } = Rgba(0.819, 0.941, 0.667, 0.13);  // unfocused pane
     public static IImmutableSolidColorBrush SelectionRing { get; } = Rgba(0.819, 0.941, 0.667, 0.55);

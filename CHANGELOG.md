@@ -9,6 +9,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
+
 ### Changed
 
 ### Fixed

@@ -495,7 +495,7 @@ public sealed class TabStripTab : Decorator
         bool searching = Tab?.IsSearching == true;
         searchMark.IsVisible = searching;
         edition.IsVisible = game && !searching;
-        edition.Enhanced = Tab?.GameEditionId == Core.GameSettings.EnhancedEdition;
+        edition.Edition = Tab?.GameEditionId ?? "";
         glyph.IsVisible = !game && !searching;
         glyph.Kind = text.EndsWith(".rpf", StringComparison.Ordinal) ? "archive" : "folder";
         RefreshTip();
