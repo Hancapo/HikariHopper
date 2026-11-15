@@ -6,7 +6,7 @@ using Hash32 = CommonFury.Hashing.Hash32;
 
 namespace HikariHopper.Tests;
 
-/// <summary>What stays GTA V's so far, kept from Red Dead Redemption 2: changing its archives, and the viewers only GTA V files open in.</summary>
+/// <summary>What stays GTA V's so far, kept from Red Dead Redemption 2: changing its archives.</summary>
 [Collection(ExplorerCollection.Name)]
 public sealed class Rdr2GatesTests : ExplorerTestBase
 {
@@ -49,26 +49,21 @@ public sealed class Rdr2GatesTests : ExplorerTestBase
     }
 
     [Fact]
-    public void Its_drawables_open_in_the_3D_viewer_and_its_collisions_say_they_dont_yet()
+    public void Its_drawables_and_collisions_open_in_the_3D_viewer()
     {
         ExplorerViewModel tab = OpenRpf8();
-        ModelFile? opened = null;
-        tab.ModelFileOpened += (_, file) => opened = file;
-        int row = RowOf(tab, "0x00C0FFEE.ydr");
-        tab.SelectEntry(row);
-        Assert.True(tab.CanOpenSelection);
-        tab.ActivateEntry(row);
-        Assert.Equal("0x00C0FFEE.ydr", opened?.Name);
-        // Read only: nothing to save it back to.
-        Assert.Null(opened!.SaveTarget);
-
-        opened = null;
-        row = RowOf(tab, "0x00B0B0B0.ybn");
-        tab.SelectEntry(row);
-        Assert.False(tab.CanOpenSelection);
-        tab.ActivateEntry(row);
-        Assert.Null(opened);
-        Assert.Equal("0x00B0B0B0.ybn: Red Dead Redemption 2's collisions and navmeshes don't open in HikariHopper yet", tab.Status);
+        var opened = new List<ModelFile>();
+        tab.ModelFileOpened += (_, file) => opened.Add(file);
+        foreach (string name in new[] { "0x00C0FFEE.ydr", "0x00B0B0B0.ybn" })
+        {
+            int row = RowOf(tab, name);
+            tab.SelectEntry(row);
+            Assert.True(tab.CanOpenSelection);
+            tab.ActivateEntry(row);
+        }
+        Assert.Equal(["0x00C0FFEE.ydr", "0x00B0B0B0.ybn"], opened.Select(file => file.Name));
+        // Read only: nothing to save them back to.
+        Assert.All(opened, file => Assert.Null(file.SaveTarget));
     }
 
     [Fact]

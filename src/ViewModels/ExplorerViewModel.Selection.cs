@@ -332,20 +332,7 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Whether the one selected item is something <see cref="ActivateEntry"/> opens.</summary>
-    public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry) && !GtaViewerOnly(entry.Name);
-
-    /// <summary>
-    /// Whether <paramref name="name"/> opens only in a viewer that's GTA V's so far (the collision and navmesh views)
-    /// while what's open is Red Dead Redemption 2's: its game folder, or one of its RPF8 archives. Its texture
-    /// dictionaries open in the editor, and its drawables in the 3D viewer.
-    /// </summary>
-    private bool GtaViewerOnly(string name) =>
-        IsModelName(name) && !ModelFile.IsDrawableName(name)
-        && (Provider.GameEditionId == GameSettings.Rdr2Edition || !Provider.ArchiveWritable);
-
-    // Said in place of opening a file only GTA V's viewers open.
-    private void SayGtaViewerOnly(string name) =>
-        SetStatus($"{name}: Red Dead Redemption 2's collisions and navmeshes don't open in HikariHopper yet");
+    public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry);
 
     /// <summary>
     /// What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD texture dictionaries, text files, images, and the 3D
@@ -382,11 +369,6 @@ public sealed partial class ExplorerViewModel
         if (entry.IsDirectory)
         {
             Navigate(Provider.InArchive ? RpfProvider.EntryLocalPath(entry) : entry.Path);
-            return;
-        }
-        if (GtaViewerOnly(entry.Name))
-        {
-            SayGtaViewerOnly(entry.Name);
             return;
         }
         if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
@@ -488,6 +470,8 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            CollisionMaterials = entry.Name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase) && Provider.GameEditionId == GameSettings.Rdr2Edition
+                && Provider.GamePath.Length > 0 && Provider.Keys is Rdr2Keys rdr2Keys ? Rdr2CollisionMaterials.ForGame(Provider.GamePath, rdr2Keys.Crypto) : null,
             GameHolding = GameHolding(LoadedGameOfProvider(), GamePathOf(entry)),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,

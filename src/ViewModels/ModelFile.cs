@@ -26,6 +26,9 @@ public sealed record ModelFile(string Name, byte[] Data)
     /// </summary>
     internal Func<string, IReadOnlyList<Rendering.NearbyDictionary>?>? GameHolding { get; init; }
 
+    /// <summary>For a Red Dead Redemption 2 collision opened from its game, the game's collision materials; null otherwise.</summary>
+    internal Task<RedFury.Collisions.CollisionMaterialCatalog?>? CollisionMaterials { get; init; }
+
     /// <summary>The sun's and moon's paths across the game's sky, from its <c>time.xml</c>; null outside a game.</summary>
     internal Task<Rendering.SkyPath>? GameSky { get; init; }
 
