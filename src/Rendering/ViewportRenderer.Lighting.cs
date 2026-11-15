@@ -15,7 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
     // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
-    private const int LightBytes = 592, ShadowViewBytes = 80;
+    private const int LightBytes = 608, ShadowViewBytes = 80;
     private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
     private Sampler? shadowCompare;
 
@@ -179,6 +179,19 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.TileBytes },
                 },
+                // The scene behind the water, read pixel by pixel.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 7,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 8,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
+                },
             ],
         });
         localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
@@ -335,7 +348,8 @@ internal sealed unsafe partial class ViewportRenderer
         (hdrWidth, hdrHeight) = ScaledSize(width, height, renderScale);
         hdr = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            // Copied from for the water (ViewportRenderer.Water.cs).
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = HdrFormat,
@@ -345,7 +359,7 @@ internal sealed unsafe partial class ViewportRenderer
         hdrView = hdr.CreateView();
         hdrDepth = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment,
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = DepthFormat,
@@ -353,6 +367,7 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
         });
         hdrDepthView = hdrDepth.CreateView();
+        CreateWaterTargets();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
@@ -472,6 +487,7 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
         vectors[35] = new Vector4(cycle.ArtificialDown, 0);
         vectors[36] = new Vector4(cycle.ArtificialUp, 0);
+        vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -526,6 +542,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
                 new BindGroupEntry { Binding = 5, Buffer = localLightBuffer!, Size = World.LocalLightFrame.LightBytes },
                 new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
+                new BindGroupEntry { Binding = 7, TextureView = WaterBackgroundView() },
+                new BindGroupEntry { Binding = 8, TextureView = WaterDepthView() },
             ],
         });
         lightGroup = LightGroup(sceneMap!.View);

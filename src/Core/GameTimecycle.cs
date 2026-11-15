@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text;
 using System.Xml;
 using CommonFury.Hashing;
 
@@ -60,27 +59,8 @@ internal sealed class GameTimecycle
     }
 
     // A timecycle file: the update's, else the base game's; null when neither has it.
-    private static string? ReadText(LoadedGame game, string name)
-    {
-        foreach (var (archive, folder) in Places)
-        {
-            if (!File.Exists(Path.Combine(game.Root, archive)))
-                continue;
-            var reader = new RpfProvider();
-            try
-            {
-                reader.ApplyLoadedGame(game);
-                reader.OpenArchive(Path.Combine(game.Root, archive));
-                if (reader.ArchiveEntryFromRoot(folder + name) is { } entry)
-                    return Encoding.UTF8.GetString(reader.ReadEntryBytes(entry));
-            }
-            finally
-            {
-                reader.Close();
-            }
-        }
-        return null;
-    }
+    private static string? ReadText(LoadedGame game, string name) =>
+        GameFiles.ReadText(game, Places.Select(place => (place.Archive, place.Folder + name)));
 
     /// <summary>A weather file's GLOBAL region: each field's values at the keyframes.</summary>
     internal static Dictionary<string, float[]> ParseWeather(string xml)

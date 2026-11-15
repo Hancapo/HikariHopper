@@ -46,6 +46,9 @@ struct Light {
     // The artificial ambient outside interiors, on what faces up and on what faces down (light_artificial_ext_*).
     artificial_down: vec4f,
     artificial_up: vec4f,
+    // The water's: seconds since the view began (its ripples' time), the timecycle's water_foglight, and the frame's
+    // near plane (depth is near over distance).
+    water: vec4f,
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
@@ -68,6 +71,10 @@ struct LocalLight {
 
 @group(2) @binding(5) var<storage, read> local_lights: array<LocalLight, 512>;
 @group(2) @binding(6) var<storage, read> local_light_tiles: array<u32, 9216>;
+
+// The scene behind the water, copied before water is drawn (ViewportRenderer.Water.cs): its colour and its depth.
+@group(2) @binding(7) var water_background: texture_2d<f32>;
+@group(2) @binding(8) var water_depth: texture_depth_2d;
 
 // Set by a fragment entry point that takes the local lights: the pixel and the point being shaded, relative to the
 // scene's origin. Left off where the screen's tiles don't apply (the reflection map).

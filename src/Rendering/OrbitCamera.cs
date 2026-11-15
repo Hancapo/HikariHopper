@@ -16,6 +16,9 @@ internal sealed class OrbitCamera
     /// <summary>The furthest the near plane is, in metres.</summary>
     public const float NearPlane = .005f;
 
+    /// <summary>The near plane for the camera as it is: closer the closer it orbits, at most <see cref="NearPlane"/>.</summary>
+    public float Near => Math.Clamp(Distance * .002f, .0001f, NearPlane);
+
     public Vector3 Center { get; private set; }
 
     /// <summary>The size of what is framed, which sets the zoom limits and how fast the free camera flies.</summary>
@@ -148,7 +151,7 @@ internal sealed class OrbitCamera
     public Matrix4x4 ViewProjection(float aspect, Vector3 origin = default)
     {
         Vector3 eye = Eye - origin;
-        float near = Math.Clamp(Distance * .002f, .0001f, NearPlane);
+        float near = Near;
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(FieldOfView, aspect, near, near * 2);
         projection.M33 = 0;
         projection.M43 = near;

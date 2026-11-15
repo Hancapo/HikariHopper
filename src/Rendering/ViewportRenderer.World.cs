@@ -93,6 +93,9 @@ internal sealed unsafe partial class ViewportRenderer
 
         internal bool Blended => Mode == AlphaMode.Blend && !Decal;
 
+        // Water: drawn after the copy of the scene behind it.
+        internal bool Water => Family is WorldFamily.Rdr2Water or WorldFamily.GtaWater;
+
         // Solid without a cut-out: casts without its material, beside the others of its level.
         internal bool Caster => Mode == AlphaMode.Opaque && !Decal;
     }
@@ -122,11 +125,11 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? worldShadow;
 
     // Each family's pipelines (see WorldFamily).
-    private const int WorldFamilies = 3;
+    private const int WorldFamilies = 5;
     private readonly RenderPipeline?[] worldSolid = new RenderPipeline?[WorldFamilies], worldUnculled = new RenderPipeline?[WorldFamilies],
         worldBlended = new RenderPipeline?[WorldFamilies], worldDecal = new RenderPipeline?[WorldFamilies],
         worldMaskedShadow = new RenderPipeline?[WorldFamilies];
-    private readonly List<WorldBlendedDraw> worldBlendedDraws = [];
+    private readonly List<WorldBlendedDraw> worldBlendedDraws = [], worldWaterDraws = [];
     private bool worldShown;
     private int worldAssetIds;
 
@@ -285,6 +288,7 @@ internal sealed unsafe partial class ViewportRenderer
         localLights = [];
         listedAssets.Clear();
         worldBlendedDraws.Clear();
+        worldWaterDraws.Clear();
         worldPicked = null;
         WorldDrawnCount = 0;
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
@@ -518,6 +522,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Gather(worldVisible[1 + c], c);
         int drawn = 0;
         worldBlendedDraws.Clear();
+        worldWaterDraws.Clear();
         foreach (WorldGpuAsset asset in listedAssets)
         {
             TrackBundleLods(asset);
@@ -548,10 +553,11 @@ internal sealed unsafe partial class ViewportRenderer
                     for (int i = asset.LodStart[mesh.Level], end = i + asset.LodCount[mesh.Level]; i < end; i++)
                     {
                         Vector3 center = Vector3.Transform(mesh.Part.Center, asset.Sources.Matrices[asset.Data.Values[i] * 2]);
-                        worldBlendedDraws.Add(new WorldBlendedDraw(asset, mesh, (uint)i, Vector3.DistanceSquared(center, eye)));
+                        (mesh.Water ? worldWaterDraws : worldBlendedDraws).Add(new WorldBlendedDraw(asset, mesh, (uint)i, Vector3.DistanceSquared(center, eye)));
                     }
         }
         worldBlendedDraws.Sort(static (a, b) => b.Distance.CompareTo(a.Distance));
+        worldWaterDraws.Sort(static (a, b) => b.Distance.CompareTo(a.Distance));
         WorldDrawnCount = drawn;
         UpdateWorldArguments();
 
@@ -603,10 +609,15 @@ internal sealed unsafe partial class ViewportRenderer
     }
 }
 
-/// <summary>Which world shaders draw a surface: RDR2's material, or GTA V's surface.wgsl or terrain.wgsl.</summary>
+/// <summary>
+/// Which world shaders draw a surface: RDR2's material, GTA V's surface.wgsl or terrain.wgsl, or either game's water
+/// (rdr2_water.wgsl, gta_water.wgsl).
+/// </summary>
 internal enum WorldFamily
 {
     Rdr2,
     Gta,
     GtaTerrain,
+    Rdr2Water,
+    GtaWater,
 }

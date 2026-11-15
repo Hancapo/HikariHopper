@@ -30,6 +30,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Grow GTA V's grass around the camera and light its street lamps, signs and windows after dark, each light at its own hours, capsule lights included. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V models in the 3D viewer with the lights they carry, at the viewer's time of day. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Show GTA V's interiors in its world: each interior's contents and the entity sets it turns on by default, every room lit by its own ambient from the game's timecycle modifiers. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
+- Draw water in both games' worlds over the scene behind it, refracting and reflecting it: Red Dead Redemption 2's rivers and lakes with RedFury's water, and GTA V's ocean, lakes and pools from its water.xml and its water shaders' rivers and fountains, shaded as its own water shader does with the game's water textures and tuning. ([#260](https://github.com/Hancapo/HikariHopper/pull/260))
 
 ### Changed
 

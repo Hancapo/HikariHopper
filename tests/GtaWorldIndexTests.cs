@@ -79,6 +79,16 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.Equal("bh1_48", index.NameOf(interiorLod.Id.Map));
             Assert.Equal(index.Lod.Nodes.Count(node => node.Parent == interiorLod.Id), interiorLod.ExpectedChildren);
             Assert.True(armchair.Distance <= 45);
+            // The open water: water.xml's quads, each its own asset, with the game's water textures and watertune.xml's
+            // values; the ocean's fog map read over the map by world position.
+            WorldLodNode sea = index.Lod.Nodes.First(node => node.Asset.Extension == GtaWorldWater.Extension);
+            Rendering.World.WorldAsset quad;
+            lock (index.Gate)
+                quad = index.LoadAsset(sea.Asset);
+            Rendering.GtaWater ocean = Assert.Single(quad.Layout.Kept).Material.Water!;
+            Assert.True(ocean.WorldFog);
+            Assert.All(ocean.Textures, Assert.NotNull);
+            Assert.Equal(1118, ocean.SpecularFalloff);
         }
         finally
         {

@@ -476,7 +476,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 {
                     View = hdrDepthView!,
                     DepthLoadOp = LoadOp.Clear,
-                    DepthStoreOp = StoreOp.Discard,
+                    // Kept: the water reads it, after the world's solid surfaces.
+                    DepthStoreOp = StoreOp.Store,
                     DepthClearValue = 0,
                 },
             });
@@ -485,7 +486,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (drawable)
                 DrawSurfaces(hdrPass);
             if (worldShown)
-                DrawWorld(hdrPass);
+                hdrPass = DrawWorld(hdrPass, encoder);
             hdrPass.End();
             MeasureFrame(encoder);
             if (Bloom)
