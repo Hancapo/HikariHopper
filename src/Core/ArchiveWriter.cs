@@ -6,7 +6,7 @@ namespace HikariHopper.Core;
 /// <summary>
 /// Applies one edit to an archive on disk: opens the root RPF afresh, walks to the nested
 /// archive concerned, mutates it, writes every edited nested archive back into its owner and
-/// atomically replaces the root file.
+/// atomically replaces the root file. GTA V's RPF7 archives only, through FiveFury (<see cref="Rpf7ArchiveNode"/>).
 /// </summary>
 public static class ArchiveWriter
 {
@@ -16,7 +16,7 @@ public static class ArchiveWriter
         Edit(rootPath, crypto, keepsTables: false, root =>
         {
             ArchiveNode target = NestedArchive(root, archivePrefix);
-            mutation(target.Archive);
+            mutation(((Rpf7ArchiveNode)target).Archive);
             return target;
         });
 
@@ -26,7 +26,7 @@ public static class ArchiveWriter
         {
             var (node, entry) = root.FindEntry(entryPath)
                 ?? throw new ArgumentException($"Could not find archive entry: {entryPath}");
-            switch (entry)
+            switch (Rpf7ArchiveNode.Native(entry))
             {
                 case RpfResourceFileEntry resource:
                     resource.Replace(data);
@@ -60,7 +60,7 @@ public static class ArchiveWriter
             ArchiveNode? next = null;
             for (int count = 1; count <= parts.Length && next is null; count++)
             {
-                if (current.Archive.Find(string.Join('/', parts[..count])) is RpfBinaryFileEntry binary
+                if (current.EntryAt(string.Join('/', parts[..count])) is { IsBinaryFile: true } binary
                     && binary.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
                 {
                     next = current.OpenNested(binary);
@@ -90,11 +90,14 @@ public static class ArchiveWriter
         string staging = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            ArchiveNode root = ArchiveNode.OpenRoot(path, crypto);
+            Rpf7ArchiveNode root = Rpf7ArchiveNode.OpenRoot(path, crypto);
             try
             {
                 for (ArchiveNode? node = edit(root); node?.Parent is not null; node = node.Parent)
-                    node.Entry!.Replace(node.Archive.Write(crypto), node.Entry.Compression);
+                {
+                    var binary = (RpfBinaryFileEntry)Rpf7ArchiveNode.Native(node.Entry!);
+                    binary.Replace(((Rpf7ArchiveNode)node).Archive.Write(crypto), binary.Compression);
+                }
                 using var output = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 // Measured against the archive as it was, and stopped mid-write if asked: the staging file goes, and
                 // the archive is as it was.

@@ -226,7 +226,7 @@ public sealed class ShaderSaveTests
         ArchiveWriter.AddStandalone(archive, "tri.ydr", ShaderValuesTests.Triangle());
         ArchiveWriter.AddStandalone(archive, "keep.txt", "untouched"u8.ToArray());
         archive.Save(archivePath);
-        ArchiveNode source = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode source = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         var target = new ArchiveEntryTarget(archivePath, "tri.ydr", null, source);
         byte[] data = ((RpfResourceFileEntry)source.Archive.Find("tri.ydr")!).ReadStandalone();
         Views.ModelViewer viewer = Open(data, new SaveTarget(target.Save, target.Prepare));
@@ -234,7 +234,7 @@ public sealed class ShaderSaveTests
         Assert.True(viewer.Save());
         Wait(viewer.Saving);
         Assert.True(viewer.Saving.Result, viewer.StatusText.Text);
-        ArchiveNode saved = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode saved = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         try
         {
             Assert.Equal("untouched"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("keep.txt")!).ReadStandalone());
@@ -264,7 +264,7 @@ public sealed class ShaderSaveTests
             ArchiveWriter.AddStandalone(edited, "added.txt", "added"u8.ToArray());
         });
         Assert.True(save!.Wait(10_000));
-        ArchiveNode saved = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode saved = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         try
         {
             Assert.Equal("added"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("added.txt")!).ReadStandalone());

@@ -273,7 +273,7 @@ public sealed class ImageImportTests
         ArchiveWriter.AddStandalone(archive, "test.ytd", EmptyYtd(GameTarget.Enhanced));
         ArchiveWriter.AddStandalone(archive, "keep.txt", "untouched"u8.ToArray());
         archive.Save(archivePath);
-        ArchiveNode source = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode source = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         var target = new ArchiveEntryTarget(archivePath, "test.ytd", null, source);
         byte[] data = ((RpfResourceFileEntry)source.Archive.Find("test.ytd")!).ReadStandalone();
         var writes = new List<SourceWriteResult>();
@@ -291,7 +291,7 @@ public sealed class ImageImportTests
         Settle(viewer);
         Assert.False(viewer.Modified, viewer.Status);
         Assert.Equal([new SourceWriteResult(archivePath, true)], writes);
-        ArchiveNode saved = ArchiveNode.OpenRoot(archivePath, null);
+        Rpf7ArchiveNode saved = Rpf7ArchiveNode.OpenRoot(archivePath, null);
         try
         {
             Assert.Equal("untouched"u8.ToArray(), ((RpfBinaryFileEntry)saved.Archive.Find("keep.txt")!).ReadStandalone());

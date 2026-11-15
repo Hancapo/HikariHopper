@@ -37,7 +37,7 @@ public sealed class YdrTextureTests
             try
             {
                 var (_, entry) = node.FindEntry(path) ?? throw new FileNotFoundException(path);
-                return Assets[path] = ((RpfResourceFileEntry)entry).ReadStandalone();
+                return Assets[path] = entry.Read();
             }
             finally
             {
@@ -388,15 +388,15 @@ public sealed class YdrTextureTests
         Texture old = document.Dictionary.Textures[0];
         byte[] peer;
         ArchiveNode node = ArchiveNode.OpenRoot(copied, Game.Value.Crypto);
-        peer = ((RpfResourceFileEntry)node.FindEntry("prop_bread_rack_02.ydr")!.Value.Entry).ReadStandalone();
+        peer = node.FindEntry("prop_bread_rack_02.ydr")!.Value.Entry.Read();
         var target = new ArchiveEntryTarget(copied, "prop_bread_rack_01.ydr", Game.Value.Crypto, node);
         target.Save(document.Serialize(Legacy([TextureOperations.WithName(old, "archive_rename"), .. document.Dictionary.Textures.Skip(1)]),
             new Dictionary<string, string> { [old.Name!] = "archive_rename" }));
         ArchiveNode saved = ArchiveNode.OpenRoot(copied, Game.Value.Crypto);
         try
         {
-            Assert.Equal(peer, ((RpfResourceFileEntry)saved.FindEntry("prop_bread_rack_02.ydr")!.Value.Entry).ReadStandalone());
-            AssertPreserved(raw, ((RpfResourceFileEntry)saved.FindEntry("prop_bread_rack_01.ydr")!.Value.Entry).ReadStandalone());
+            Assert.Equal(peer, saved.FindEntry("prop_bread_rack_02.ydr")!.Value.Entry.Read());
+            AssertPreserved(raw, saved.FindEntry("prop_bread_rack_01.ydr")!.Value.Entry.Read());
         }
         finally
         {
@@ -409,7 +409,7 @@ public sealed class YdrTextureTests
         Asset(BreadRack);
         ArchiveNode node = ArchiveNode.OpenRoot(Path.Combine(Game.Value.Root, "x64c.rpf"), Game.Value.Crypto);
         try
-        { return ((RpfBinaryFileEntry)node.FindEntry(path)!.Value.Entry).ReadStandalone(); }
+        { return node.FindEntry(path)!.Value.Entry.Read(); }
         finally
         { node.Close(); }
     }
