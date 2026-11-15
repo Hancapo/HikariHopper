@@ -527,6 +527,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
             _ = GameTextures.ForGame(game).Load();
             _ = GameTextureDirectory.ForGame(game).Load();
         }
+        // Red Dead Redemption 2's: where its models' textures are, a few seconds from nothing, a moment from the cache.
+        _ = Rdr2IndexOfProvider()?.Load();
         GameOpened?.Invoke(this, Provider.GamePath);
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();

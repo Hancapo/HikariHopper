@@ -122,6 +122,7 @@ internal static class Rdr2Scene
             diagnostics.Add($"Water drawn with the generic material, until the viewer copies the scene behind it: {shader}");
         if (skinned)
             diagnostics.Add("Skinned parts are shown in their authored pose.");
+        diagnostics.AddRange(lookup.Diagnostics);
 
         // Each geometry's vertices, decoded once: the box needs the primary levels' before anything is placed.
         var decoded = new List<(Vector3[] Positions, uint[] Indices)>();

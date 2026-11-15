@@ -510,7 +510,11 @@ public sealed partial class ExplorerViewModel
 
     private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(string modelName)
     {
-        if (!ModelFile.IsDrawableName(modelName) || LoadedGameOfProvider() is not { } game)
+        if (!ModelFile.IsDrawableName(modelName))
+            return null;
+        if (Rdr2IndexOfProvider() is { } rdr2)
+            return Rdr2Dictionaries(rdr2, modelName);
+        if (LoadedGameOfProvider() is not { } game)
             return null;
         return Find(game, modelName);
 
@@ -529,6 +533,35 @@ public sealed partial class ExplorerViewModel
             return [.. found.Select(dictionary => GameFileDictionary(game, dictionary))];
         }
     }
+
+    /// <summary>
+    /// Red Dead Redemption 2's dictionaries for a model, in the order RedFury looks in them (<see cref="Rdr2TextureIndex"/>):
+    /// the high-definition ones bound to it, then its archetypes' and the one sharing its name, each with its parents;
+    /// each read when the search reaches it, and parsed once for every model that reads it.
+    /// </summary>
+    private static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Rdr2Dictionaries(Rdr2TextureIndex index, string modelName)
+    {
+        string stem = Path.GetFileNameWithoutExtension(modelName);
+        // Named, or shown as its hash where the game's names don't say (0x1A2B3C4D.ydr).
+        uint asset = stem.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && uint.TryParse(stem[2..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out uint hash)
+            ? hash : RedFury.Hashing.Jenkins.Hash(stem);
+        byte extension = Path.GetExtension(modelName).ToLowerInvariant() switch { ".yft" => 3, ".ydd" => 4, _ => 2 };
+        var found = await index.DictionariesFor(asset, extension).ConfigureAwait(false);
+        return [.. found.Select(dictionary =>
+        {
+            string inside = string.Join('/', dictionary.Indices);
+            return new Rendering.NearbyDictionary($"{dictionary.Archive}[{inside}]", dictionary.Size,
+                () => index.ReadDictionary(dictionary.Archive, dictionary.Indices),
+                Rendering.NearbyDictionary.KeyFor(Path.Combine(index.Root, dictionary.Archive), inside));
+        })];
+    }
+
+    /// <summary>The open Red Dead Redemption 2 game's texture index; null for any other game, or none.</summary>
+    private Rdr2TextureIndex? Rdr2IndexOfProvider() =>
+        Provider.GameEditionId == GameSettings.Rdr2Edition && Provider.GamePath.Length > 0 && Provider.Keys is Rdr2Keys keys
+            ? Rdr2TextureIndex.ForGame(Provider.GamePath, keys.Crypto)
+            : null;
 
     private static Rendering.NearbyDictionary GameFileDictionary(LoadedGame game, GameDictionary dictionary) =>
         new(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
