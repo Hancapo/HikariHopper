@@ -171,9 +171,8 @@ public sealed partial class ExplorerViewModel
         WorldFile? map = index.Locate(pick.Node.Id.Map, 73);
         string name = pick.Asset.Member != 0 ? index.NameOf(pick.Asset.Member) : model?.Title ?? index.NameOf(pick.Asset.Hash);
         string where = map?.Name ?? $"{index.NameOf(pick.Node.Id.Map)}.ymap";
-        string detail = pick.Instance >= 0
-            ? $"{where} · entity {pick.Node.Id.Index} · instance {pick.Instance}"
-            : $"{where} · entity {pick.Node.Id.Index}";
+        string entity = index.PlacementDetail(pick.Node) ?? $"entity {pick.Node.Id.Index}";
+        string detail = pick.Instance >= 0 ? $"{where} · {entity} · instance {pick.Instance}" : $"{where} · {entity}";
         return new WorldPlacement(name, detail, model, map, pick.Position);
     }
 

@@ -27,8 +27,20 @@ namespace HikariHopper.Core;
 internal sealed class GtaWorldIndex : WorldIndex
 {
     private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients,
-        GtaWorldWater water)
-        : base(root, mapCount, lod) => (Game, this.ambients, this.water) = (game, ambients, water);
+        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water)
+        : base(root, mapCount, lod) => (Game, this.ambients, this.interiorEntities, this.water) = (game, ambients, interiorEntities, water);
+
+    // Where each interior's placement is in its interior: an entity of it, or of one of its entity sets (Set from 0).
+    private readonly Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities;
+
+    public override string? PlacementDetail(WorldLodNode node)
+    {
+        if (node.Id.Map == GtaWorldWater.Map)
+            return $"water.xml quad {node.Id.Index}";
+        if (!interiorEntities.TryGetValue(node.Id, out var inside))
+            return null;
+        return inside.Set < 0 ? $"interior entity {inside.Entity}" : $"interior entity set {inside.Set} · entity {inside.Entity}";
+    }
 
     // The open water (water.xml's quads) and its tuning, and the water textures the game binds itself (graphics.ytd's).
     private readonly GtaWorldWater water;
@@ -283,7 +295,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-5";
+    private const string CacheVersion = "hh-gta-world-6";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -298,7 +310,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         try
         {
             string fingerprint = GameWorld.Fingerprint(root, $"{CacheVersion}|{target}"), cache = GameWorld.CachePath(root, "gta-world");
-            (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients)? catalog = null;
+            (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)? catalog = null;
             if (File.Exists(cache))
             {
                 report(new WorldProgress("Reading the world from the cache", null));
@@ -325,7 +337,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
-                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes, catalog.Value.Ambients);
+                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes, catalog.Value.Ambients, catalog.Value.Interiors);
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
@@ -335,7 +347,7 @@ internal sealed class GtaWorldIndex : WorldIndex
             GtaWorldWater water = GtaWorldWater.Read(new LoadedGame(root, target, keys.Crypto));
             lod = new WorldLodGraph([.. catalog.Value.Nodes, .. water.Nodes()]);
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, water);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water);
         }
         catch
         {
@@ -355,10 +367,11 @@ internal static class GtaWorldCatalog
     private sealed record Archetype(WorldAssetKey Asset, Vector3 Center, float Radius, float Distance, ArchetypeFlags Flags, ArchetypeAssetType Type,
         bool Animated, uint TimeFlags);
 
-    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients) Load(GameFileSystem files, GameTimecycle? timecycle,
-        Action<WorldProgress> report, CancellationToken cancellation)
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)
+        Load(GameFileSystem files, GameTimecycle? timecycle, Action<WorldProgress> report, CancellationToken cancellation)
     {
         var ambients = new Dictionary<WorldEntityId, InteriorAmbient>();
+        var interiorEntities = new Dictionary<WorldEntityId, (int Set, int Entity)>();
         // How many more children each LOD model an interior is placed under has than it expects.
         var adopted = new Dictionary<WorldEntityId, int>();
         // Each name's winning file, as the game streams it.
@@ -463,7 +476,7 @@ internal static class GtaWorldCatalog
             }
             int next = AddInstances(ymap, map, archetypes, nodes);
             foreach (var (instance, parent) in placedInteriors)
-                next = AddInterior(instance, parent, map, next, archetypes, interiors, nodes, timecycle, ambients, adopted);
+                next = AddInterior(instance, parent, map, next, archetypes, interiors, nodes, timecycle, ambients, adopted, interiorEntities);
         }
         // The LOD models interiors were placed under expect the interior placement as one child: they have its
         // contents in its place.
@@ -473,7 +486,7 @@ internal static class GtaWorldCatalog
                     nodes[n] = nodes[n] with { ExpectedChildren = Math.Max(0, nodes[n].ExpectedChildren + extra) };
         if (nodes.Count == 0)
             throw new InvalidDataException("No readable world placements were found in the game's maps.");
-        return (read, [.. nodes], ambients);
+        return (read, [.. nodes], ambients, interiorEntities);
     }
 
     /// <summary>The longest a grass batch is drawn from, whatever it says (RedFury's near-field tier).</summary>
@@ -546,7 +559,7 @@ internal static class GtaWorldCatalog
     /// </summary>
     private static int AddInterior(MloInstanceDef instance, WorldEntityId? parent, uint map, int next, Dictionary<uint, Archetype> archetypes,
         Dictionary<uint, MloArchetypeDef> interiors, List<WorldLodNode> nodes, GameTimecycle? timecycle, Dictionary<WorldEntityId, InteriorAmbient> ambients,
-        Dictionary<WorldEntityId, int> adopted)
+        Dictionary<WorldEntityId, int> adopted, Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities)
     {
         if (!interiors.TryGetValue(instance.ArchetypeName.Value, out MloArchetypeDef? interior) || (interior.MloFlags & MloInteriorFlags.CutsceneOnly) != 0)
             return next;
@@ -574,15 +587,17 @@ internal static class GtaWorldCatalog
                     if (attached.Target is { } held)
                         rooms.TryAdd(held, side);
         var sets = new HashSet<uint>(instance.DefaultEntitySets.Select(name => name.Value));
-        var contents = interior.Entities.Select(entity => (Entity: entity, Room: rooms.GetValueOrDefault(entity)))
-            .Concat(interior.EntitySets.Where(set => sets.Contains(set.Name.Value)).SelectMany(set => set.Entities
-                .Select(item => (item.Entity, Room: item.Location.Room ?? rooms.GetValueOrDefault(item.Entity)))));
+        // Each with where it is in the interior: its place in the interior's entities, or in an entity set's.
+        var contents = interior.Entities.Select((entity, at) => (Entity: entity, Room: rooms.GetValueOrDefault(entity), Set: -1, At: at))
+            .Concat(interior.EntitySets.Select((set, number) => (set, number)).Where(pair => sets.Contains(pair.set.Name.Value)).SelectMany(pair => pair.set.Entities
+                .Select((item, at) => (item.Entity, Room: item.Location.Room ?? rooms.GetValueOrDefault(item.Entity), Set: pair.number, At: at))));
         var roomAmbients = new Dictionary<MloRoomDef, InteriorAmbient>(ReferenceEqualityComparer.Instance);
         float reach = instance.LodDistance > 0 ? instance.LodDistance : interior.LodDistance;
         int placedCount = 0;
-        foreach (var (value, room) in contents)
+        foreach (var (value, room, set, at) in contents)
         {
             int index = next++;
+            interiorEntities[new WorldEntityId(map, index)] = (set, at);
             if (value is not EntityDef entity || value is MloInstanceDef || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type)
                 || Place(entity, type, placement) is not { } placed)
                 continue;
@@ -653,7 +668,8 @@ internal static class GtaWorldCache
 {
     private const uint Magic = 0x57474848; // "HHGW"
 
-    public static void Write(string path, string fingerprint, int maps, IReadOnlyList<WorldLodNode> nodes, IReadOnlyDictionary<WorldEntityId, InteriorAmbient> ambients)
+    public static void Write(string path, string fingerprint, int maps, IReadOnlyList<WorldLodNode> nodes, IReadOnlyDictionary<WorldEntityId, InteriorAmbient> ambients,
+        IReadOnlyDictionary<WorldEntityId, (int Set, int Entity)> interiors)
     {
         string temporary = path + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary)))
@@ -722,6 +738,14 @@ internal static class GtaWorldCache
                 Write(writer, ambient.Up);
                 writer.Write(ambient.Natural);
             }
+            writer.Write(interiors.Count);
+            foreach (var (id, inside) in interiors)
+            {
+                writer.Write(id.Map);
+                writer.Write(id.Index);
+                writer.Write(inside.Set);
+                writer.Write(inside.Entity);
+            }
         }
         File.Move(temporary, path, overwrite: true);
     }
@@ -736,7 +760,8 @@ internal static class GtaWorldCache
     private static Vector3 Read(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
     /// <summary>The cached index; null when there's none for the game as it is, or it can't be read.</summary>
-    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients)? Read(string path, string fingerprint)
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)? Read(
+        string path, string fingerprint)
     {
         try
         {
@@ -790,7 +815,13 @@ internal static class GtaWorldCache
             var ambients = new Dictionary<WorldEntityId, InteriorAmbient>(rooms);
             for (int i = 0; i < rooms; i++)
                 ambients[new WorldEntityId(reader.ReadUInt32(), reader.ReadInt32())] = new InteriorAmbient(Read(reader), Read(reader), reader.ReadSingle());
-            return (maps, nodes, ambients);
+            int placed = reader.ReadInt32();
+            if (placed is < 0 or > 10_000_000)
+                return null;
+            var interiors = new Dictionary<WorldEntityId, (int Set, int Entity)>(placed);
+            for (int i = 0; i < placed; i++)
+                interiors[new WorldEntityId(reader.ReadUInt32(), reader.ReadInt32())] = (reader.ReadInt32(), reader.ReadInt32());
+            return (maps, nodes, ambients, interiors);
         }
         catch (Exception error) when (error is IOException or EndOfStreamException or UnauthorizedAccessException or ArgumentException)
         {
