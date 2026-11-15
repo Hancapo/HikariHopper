@@ -50,7 +50,7 @@ public partial class StatusBar : UserControl
         string edition = Bridge?.GameEdition ?? "";
         bool status = StatusWorthShowing(Bridge?.Status ?? "", edition);
         Edition.IsVisible = edition.Length > 0;
-        EditionMark.Enhanced = edition == "GTA V Enhanced";
+        EditionMark.Enhanced = Bridge?.GameEditionId == Core.GameSettings.EnhancedEdition;
         // Without a game's well the count starts the line, at the bar's own margin.
         Count.Margin = new Avalonia.Thickness(Edition.IsVisible ? 0 : 6, 0, 0, 0);
         StatusDivider.IsVisible = StatusText.IsVisible = status;

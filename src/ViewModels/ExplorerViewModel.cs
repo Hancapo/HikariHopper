@@ -23,7 +23,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
         nameof(ArchiveRootName), nameof(TabTitle), nameof(ArchiveIsRoot), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
-        nameof(InArchive), nameof(GameEdition),
+        nameof(InArchive), nameof(GameEdition), nameof(GameEditionId),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =
@@ -130,8 +130,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public string GameName => Provider.GameName;
 
-    /// <summary>The open game's edition ("GTA V Legacy" or "GTA V Enhanced"), "" without a game.</summary>
+    /// <summary>The open game's edition as the status bar and tabs name it ("GTA V Legacy"), "" without a game.</summary>
     public string GameEdition => Provider.GameEdition;
+
+    /// <summary>The open game's edition id (<see cref="GameCatalog"/>), "" without a game.</summary>
+    public string GameEditionId => Provider.GameEditionId;
 
     public string GamePath => Provider.GamePath;
 
@@ -401,13 +404,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         string path = ConfiguredGamePath(edition);
         if (path.Length == 0)
         {
-            string editionName = edition switch
-            {
-                GameSettings.EnhancedEdition => "GTA V Enhanced",
-                GameSettings.LegacyEdition => "GTA V Legacy",
-                _ => "game",
-            };
-            SetStatus($"Configure the {editionName} path in Settings");
+            SetStatus($"Configure the {GameCatalog.Edition(edition)?.ShortName ?? "game"} path in Settings");
             return;
         }
         OpenGameAsync(path);
@@ -437,14 +434,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (EntryOperationBusy)
             return false;
-        string edition = GameSettings.GameEditionForPath(path);
         string folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
-        gameLoadingName = edition switch
-        {
-            GameSettings.EnhancedEdition => "Grand Theft Auto V Enhanced",
-            GameSettings.LegacyEdition => "Grand Theft Auto V Legacy",
-            _ => folderName.Length > 0 ? folderName : "Game",
-        };
+        gameLoadingName = GameCatalog.Edition(GameSettings.GameEditionForPath(path))?.FullName
+            ?? (folderName.Length > 0 ? folderName : "Game");
         SetGameLoading(true);
         SetStatus($"Loading {gameLoadingName}…");
         Func<string, LoadedGame> loader = GameLoader;

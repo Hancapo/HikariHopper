@@ -12,7 +12,7 @@ public sealed record PathSegment(string Label, string Target, bool Archive);
 /// <summary>A source chosen for "RPF from folder/ZIP"; both strings are empty when cancelled.</summary>
 public sealed record RpfSource(string Path, string SuggestedName);
 
-/// <summary>A recently opened GTA V installation shown on the start page.</summary>
+/// <summary>A recently opened game installation shown on the start page, with its edition's short name.</summary>
 public sealed record RecentGame(string Name, string Path, string Edition);
 
 /// <summary>One row of the explorer table/grid (the Qt <c>EntryListModel</c> roles).</summary>
