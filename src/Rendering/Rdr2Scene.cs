@@ -21,7 +21,14 @@ namespace HikariHopper.Rendering;
 internal static class Rdr2Scene
 {
     /// <summary>A drawable placed in the scene, and whether it's drawn always or with its fragment intact or damaged.</summary>
-    internal sealed record Placed(string Name, RedDrawable Drawable, Matrix4x4 Transform, ModelVariant Variant = ModelVariant.Always);
+    /// <param name="BoneGroups">
+    /// For a fragment's drawable, the physics group each bone belongs to: its parts are its groups, a rigid model's its
+    /// bone's, a skinned one's split by the bone each triangle is bound to.
+    /// </param>
+    /// <param name="Only">The groups of it drawn here, when only some are; the rest are drawn by another placement of it.</param>
+    /// <param name="Except">The groups of it not drawn here.</param>
+    internal sealed record Placed(string Name, RedDrawable Drawable, Matrix4x4 Transform, ModelVariant Variant = ModelVariant.Always,
+        IReadOnlyDictionary<int, string>? BoneGroups = null, IReadOnlySet<string>? Only = null, IReadOnlySet<string>? Except = null);
 
     /// <summary>
     /// Reads an RDR2 drawable, drawable dictionary or fragment: its textures from its drawables' own dictionaries, then
@@ -69,18 +76,94 @@ internal static class Rdr2Scene
         return textures;
     }
 
-    // A fragment's main drawable and its extra ones, each where the fragment places it; the damaged one only damaged.
-    private static List<Placed> Fragment(RedFury.Yft.Yft fragment, string title)
+    /// <summary>
+    /// What an RDR2 fragment draws, placed. Unlike GTA V's, its physics children's drawables hold no geometry: its pieces
+    /// are its main drawable's models, each bound to the bone of its physics group (a skinned one weighted to them), so
+    /// its parts are its groups. Its damaged drawable (one of its extra drawables) holds the damaged pieces, each bound to
+    /// a bone under its group's: damaged, those groups are drawn from it and the rest stay as they are; a damaged piece
+    /// in no group (bound to the root) stands for the whole fragment damaged. Its other extra drawables are drawn always.
+    /// </summary>
+    internal static List<Placed> Fragment(RedFury.Yft.Yft fragment, string title)
     {
         var models = new List<Placed>();
-        if (fragment.MainDrawable is { } main)
-            models.Add(new Placed(title, main.Drawable, main.Transform.Matrix,
-                fragment.DamagedDrawableIndex >= 0 ? ModelVariant.Intact : ModelVariant.Always));
+        if (fragment.MainDrawable is not { } main)
+            return models;
+        RedFury.Yft.FragmentDrawable? damaged = fragment.DamagedDrawableIndex >= 0 && fragment.DamagedDrawableIndex < fragment.ExtraDrawables.Count
+            ? fragment.ExtraDrawables[fragment.DamagedDrawableIndex] : null;
+        IReadOnlyDictionary<int, string>? groups = PhysicsGroups(fragment, main.Drawable.Skeleton);
+        // The groups the damaged drawable replaces; null when it replaces the whole fragment.
+        HashSet<string>? replaced = null;
+        if (damaged is not null && groups is not null)
+        {
+            replaced = [];
+            foreach (RedModel model in damaged.Drawable.Models())
+                if (model.Binding.RigidBoneIndex is int bone && groups.TryGetValue(bone, out string? group))
+                    replaced.Add(group);
+                else
+                {
+                    replaced = null;
+                    break;
+                }
+        }
+        // Replacing every group the main drawable draws is the whole fragment damaged.
+        if (replaced is not null && groups is not null)
+        {
+            var drawn = new HashSet<string>();
+            foreach (RedModel model in main.Drawable.Models())
+                if (model.Binding.RigidBoneIndex is int bone && groups.TryGetValue(bone, out string? group))
+                    drawn.Add(group);
+                else if (model.Binding.IsSkinned)
+                    drawn.UnionWith(groups.Values);
+            if (drawn.IsSubsetOf(replaced))
+                replaced = null;
+        }
+        if (damaged is null)
+            models.Add(new Placed(title, main.Drawable, main.Transform.Matrix, BoneGroups: groups));
+        else if (replaced is null)
+            models.Add(new Placed(title, main.Drawable, main.Transform.Matrix, ModelVariant.Intact, groups));
+        else
+        {
+            models.Add(new Placed(title, main.Drawable, main.Transform.Matrix, BoneGroups: groups, Except: replaced));
+            models.Add(new Placed(title, main.Drawable, main.Transform.Matrix, ModelVariant.Intact, groups, Only: replaced));
+        }
         for (int i = 0; i < fragment.ExtraDrawables.Count; i++)
             if (fragment.ExtraDrawables[i] is { } extra)
                 models.Add(new Placed(extra.Label, extra.Drawable, extra.Transform.Matrix,
-                    i == fragment.DamagedDrawableIndex ? ModelVariant.Damaged : ModelVariant.Always));
+                    ReferenceEquals(extra, damaged) ? ModelVariant.Damaged : ModelVariant.Always, ReferenceEquals(extra, damaged) ? groups : null));
         return models;
+    }
+
+    /// <summary>
+    /// The physics group each bone of a fragment's skeleton belongs to: the group at it or nearest above it; none for a
+    /// bone above every group (the root, often). Null when the fragment has no physics, or it can't be read.
+    /// </summary>
+    internal static IReadOnlyDictionary<int, string>? PhysicsGroups(RedFury.Yft.Yft fragment, RedFury.Drawables.Skeleton? skeleton)
+    {
+        if (skeleton is null)
+            return null;
+        RedFury.Yft.FragmentPhysicsLod? physics;
+        try
+        {
+            physics = RedFury.Yft.FragmentPhysics.Read(fragment).FirstOrDefault(lod => lod is not null);
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or ArgumentException)
+        {
+            return null;
+        }
+        if (physics is null || physics.Groups.Count == 0)
+            return null;
+        var byTag = new Dictionary<ushort, string>();
+        foreach (RedFury.Yft.FragmentPhysicsGroupInput group in physics.Groups)
+            byTag.TryAdd(group.BoneId, group.Name.Length > 0 ? group.Name : $"group {byTag.Count + 1}");
+        var groups = new Dictionary<int, string>();
+        for (int bone = 0; bone < skeleton.Bones.Count; bone++)
+            for (int at = bone; at >= 0 && at < skeleton.Bones.Count; at = at < skeleton.ParentIndices.Count ? skeleton.ParentIndices[at] : -1)
+                if (byTag.TryGetValue(skeleton.Bones[at].Tag, out string? name))
+                {
+                    groups[bone] = name;
+                    break;
+                }
+        return groups;
     }
 
     /// <summary>Builds one scene of placed RDR2 drawables, as <see cref="DrawableScene.Build"/> does GTA V's.</summary>
@@ -105,7 +188,7 @@ internal static class Rdr2Scene
         var diagnostics = new List<string>();
         var materials = new List<SurfaceMaterial>();
         var firstMaterial = new Dictionary<IReadOnlyList<RedFury.Drawables.Material>, int>(ReferenceEqualityComparer.Instance);
-        var placed = new List<(RedGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary)>();
+        var placed = new List<(RedGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary, RedModel Source)>();
         bool skinned = false;
         for (int index = 0; index < models.Count; index++)
         {
@@ -140,7 +223,7 @@ internal static class Rdr2Scene
                     for (int m = 0; m < level.Count && !ReferenceEquals(level[m], model); m++)
                         number++;
                     placed.Add((geometry, transform, first + geometry.MaterialIndex, index, lod,
-                        level.Count == 1 ? "" : ModelName(drawable, model, number), lod == best && scene.Variant != ModelVariant.Damaged));
+                        level.Count == 1 ? "" : ModelName(drawable, model, number), lod == best && scene.Variant != ModelVariant.Damaged, model));
                 }
             }
         }
@@ -183,26 +266,39 @@ internal static class Rdr2Scene
         var parts = new List<SurfacePart>();
         for (int i = 0; i < placed.Count; i++)
         {
-            var (geometry, transform, material, model, lod, group, primary) = placed[i];
+            var (geometry, transform, material, model, lod, group, primary, source) = placed[i];
             var (positions, corners) = decoded[i];
             int count = corners.Length / 3 * 3;
             if (positions.Length == 0 || count == 0)
                 continue;
+            Placed scene = models[model];
+            uint[] triangles = new uint[count];
+            for (int c = 0; c < count; c++)
+                triangles[c] = corners[c] < positions.Length ? corners[c] : 0u;
+            // One part for the geometry, or one per physics group its triangles belong to, those drawn here.
+            var split = Split(geometry, source, triangles, scene.BoneGroups, group)
+                .Where(piece => piece.Triangles.Count > 0 && (scene.Only is null || scene.Only.Contains(piece.Name))
+                    && (scene.Except is null || !scene.Except.Contains(piece.Name)))
+                .ToList();
+            if (split.Count == 0)
+                continue;
             int baseVertex = vertices.Count;
             Read(geometry, positions, transform, origin, materials[material].Rdr2, vertices);
-            uint first = (uint)indices.Count;
-            var used = new HashSet<uint>();
-            for (int c = 0; c < count; c++)
+            foreach (var (name, piece) in split)
             {
-                uint corner = corners[c] < positions.Length ? corners[c] : 0u;
-                indices.Add(corner);
-                used.Add(corner);
+                uint first = (uint)indices.Count;
+                var used = new HashSet<uint>();
+                foreach (uint corner in piece)
+                {
+                    indices.Add(corner);
+                    used.Add(corner);
+                }
+                Vector3 sum = Vector3.Zero;
+                foreach (uint corner in used)
+                    sum += vertices[baseVertex + (int)corner].Position;
+                parts.Add(new SurfacePart(material, first, (uint)piece.Count, baseVertex, sum / used.Count, model, lod, name, primary,
+                    used.Count, DrawableScene.CountEdges(indices, (int)first, piece.Count)));
             }
-            Vector3 sum = Vector3.Zero;
-            foreach (uint corner in used)
-                sum += vertices[baseVertex + (int)corner].Position;
-            parts.Add(new SurfacePart(material, first, (uint)count, baseVertex, sum / used.Count, model, lod, group, primary,
-                used.Count, DrawableScene.CountEdges(indices, (int)first, count)));
         }
         return new DrawableScene
         {
@@ -219,6 +315,48 @@ internal static class Rdr2Scene
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             Diagnostics = diagnostics,
         };
+    }
+
+    /// <summary>
+    /// A geometry's triangles, whole under <paramref name="group"/>, or, in a fragment, by physics group: a rigid model's
+    /// all its bone's, a skinned one's each the group of the bone its corners weigh most (RDR2's blend indices are the
+    /// skeleton's bones). Triangles of a bone in no group stay under <paramref name="group"/>.
+    /// </summary>
+    private static List<(string Name, List<uint> Triangles)> Split(RedGeometry geometry, RedModel model, uint[] triangles,
+        IReadOnlyDictionary<int, string>? bones, string group)
+    {
+        if (bones is null)
+            return [(group, [.. triangles])];
+        if (model.Binding.RigidBoneIndex is int rigid)
+            return [(bones.TryGetValue(rigid, out string? name) ? name : group, [.. triangles])];
+        Vector4[]? indices = Decode(geometry, RedSemantic.BlendIndices0), weights = Decode(geometry, RedSemantic.BlendWeights0);
+        if (indices is null || weights is null)
+            return [(group, [.. triangles])];
+        string PartOf(uint vertex)
+        {
+            Vector4 index = indices[vertex], weight = weights[vertex];
+            float best = weight.X, slot = index.X;
+            if (weight.Y > best) (best, slot) = (weight.Y, index.Y);
+            if (weight.Z > best) (best, slot) = (weight.Z, index.Z);
+            if (weight.W > best) slot = index.W;
+            return bones.TryGetValue((int)MathF.Round(slot), out string? name) ? name : group;
+        }
+        var split = new List<(string Name, List<uint> Triangles)>();
+        var at = new Dictionary<string, int>();
+        for (int i = 0; i + 2 < triangles.Length; i += 3)
+        {
+            string name = PartOf(triangles[i]);
+            if (!at.TryGetValue(name, out int slot))
+            {
+                at[name] = slot = split.Count;
+                split.Add((name, []));
+            }
+            split[slot].Triangles.AddRange([triangles[i], triangles[i + 1], triangles[i + 2]]);
+        }
+        // In the order of their names' numbers (leaves1, leaves2 … leaves16), as the parts panel lists them.
+        System.Globalization.CompareInfo compare = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+        return [.. split.OrderBy(piece => piece.Name, Comparer<string>.Create((a, b) =>
+            compare.Compare(a, b, System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.NumericOrdering)))];
     }
 
     /// <summary>
