@@ -60,7 +60,7 @@ public partial class MenuRow : UserControl
     internal RetroMenu MenuFor(MenuBarButton button) => menus[button];
 
     private static bool ConfiguredGameAvailable(ExplorerTabsViewModel tabs) =>
-        tabs.GamePathSettings.EnhancedPathValid || tabs.GamePathSettings.LegacyPathValid;
+        tabs.GamePathSettings.AnyPathValid;
 
     private void Bind(MenuBarButton button, string key)
     {

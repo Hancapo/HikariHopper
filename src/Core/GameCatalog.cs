@@ -2,11 +2,28 @@ using System.Runtime.Versioning;
 
 namespace HikariHopper.Core;
 
-/// <summary>One edition of a supported game, keyed like the settings (<see cref="GameSettings"/>).</summary>
-public sealed record GameEditionInfo(string Id, string Title);
+/// <summary>
+/// One edition of a supported game: its id, unique across games and keyed like the settings
+/// (<see cref="GameSettings"/>); its name within the game ("Legacy"); the executable that marks an installation of it;
+/// and where its installation's folder is kept.
+/// </summary>
+public sealed record GameEditionInfo(string Id, string Title, string Executable, string SettingsKey)
+{
+    /// <summary>The game it belongs to; set by <see cref="GameCatalog"/>.</summary>
+    public SupportedGame Game { get; internal set; } = null!;
+
+    /// <summary>Its short name with the game's, as the status bar and tabs show it: "GTA V Legacy".</summary>
+    public string ShortName => $"{Game.ShortTitle} {Title}";
+
+    /// <summary>Its full name, as the loading screen says it: "Grand Theft Auto V Legacy".</summary>
+    public string FullName => $"{Game.Title} {Title}";
+
+    /// <summary>The folder picker's title for its installation.</summary>
+    public string BrowseTitle => $"Select {ShortName} Installation";
+}
 
 /// <summary>A game HikariHopper can open, with its editions in the order the launcher lists them.</summary>
-public sealed record SupportedGame(string Id, string Title, IReadOnlyList<GameEditionInfo> Editions);
+public sealed record SupportedGame(string Id, string Title, string ShortTitle, IReadOnlyList<GameEditionInfo> Editions);
 
 /// <summary>One installation the start page offers to open.</summary>
 /// <param name="Game">The game it belongs to.</param>
@@ -27,14 +44,29 @@ public static class GameCatalog
 {
     public const string GtaV = "gta5";
 
-    public static IReadOnlyList<SupportedGame> Games { get; } =
+    // Each game's editions, in the order an installation is recognised: a folder with both executables is the first.
+    public static IReadOnlyList<SupportedGame> Games { get; } = Link(
     [
-        new(GtaV, "Grand Theft Auto V",
+        new(GtaV, "Grand Theft Auto V", "GTA V",
         [
-            new(GameSettings.EnhancedEdition, "Enhanced"),
-            new(GameSettings.LegacyEdition, "Legacy"),
+            new(GameSettings.EnhancedEdition, "Enhanced", "GTA5_Enhanced.exe", GameSettings.EnhancedGameRootKey),
+            new(GameSettings.LegacyEdition, "Legacy", "GTA5.exe", GameSettings.LegacyGameRootKey),
         ]),
-    ];
+    ]);
+
+    /// <summary>Every edition of every game, in the order an installation is recognised.</summary>
+    public static IReadOnlyList<GameEditionInfo> Editions { get; } = [.. Games.SelectMany(game => game.Editions)];
+
+    /// <summary>The edition with id <paramref name="id"/>, or null.</summary>
+    public static GameEditionInfo? Edition(string? id) => Editions.FirstOrDefault(edition => edition.Id == id);
+
+    private static IReadOnlyList<SupportedGame> Link(IReadOnlyList<SupportedGame> games)
+    {
+        foreach (SupportedGame game in games)
+            foreach (GameEditionInfo edition in game.Editions)
+                edition.Game = game;
+        return games;
+    }
 
     /// <summary>
     /// The start page's groups: per game, each edition whose configured path is valid, then the

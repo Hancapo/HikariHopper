@@ -4,7 +4,7 @@ using HikariHopper.Infrastructure;
 
 namespace HikariHopper.Core;
 
-/// <summary>Editable GTA V installation paths shown in the Settings window.</summary>
+/// <summary>Editable game installation paths shown in the Settings window, one per edition of each game.</summary>
 [SupportedOSPlatform("windows")]
 public sealed class GamePathSettings : ObservableObject
 {
@@ -32,6 +32,9 @@ public sealed class GamePathSettings : ObservableObject
     public bool LegacyPathValid => GameSettings.IsGameRoot(LegacyPath, GameSettings.LegacyEdition);
 
     public bool EnhancedPathValid => GameSettings.IsGameRoot(EnhancedPath, GameSettings.EnhancedEdition);
+
+    /// <summary>Whether any edition of any game has a valid installation set.</summary>
+    public bool AnyPathValid => paths.Any(path => GameSettings.IsGameRoot(path.Value, path.Key));
 
     public void SetLegacyPath(string value) => SetPath(GameSettings.LegacyEdition, value);
 
@@ -92,6 +95,7 @@ public sealed class GamePathSettings : ObservableObject
         OnPropertyChanged(nameof(EnhancedPath));
         OnPropertyChanged(nameof(LegacyPathValid));
         OnPropertyChanged(nameof(EnhancedPathValid));
+        OnPropertyChanged(nameof(AnyPathValid));
         PathsChanged?.Invoke(this, EventArgs.Empty);
     }
 }
