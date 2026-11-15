@@ -16,6 +16,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw Red Dead Redemption 2's models with RDR2's own materials, as RedFury maps them: their layers, terrain blends, tints, dirt, decals and PBR maps. ([#243](https://github.com/Hancapo/HikariHopper/pull/243))
 - Find Red Dead Redemption 2 models' textures in the game's own dictionaries, as the game binds them: their archetypes', their parents' and the high-definition ones. ([#244](https://github.com/Hancapo/HikariHopper/pull/244))
 - Open Red Dead Redemption 2's collisions and navmeshes in the 3D viewer, collisions by material as the game names them. ([#245](https://github.com/Hancapo/HikariHopper/pull/245))
+- Open and extract the textures a Red Dead Redemption 2 model carries, from its 3D viewer. ([#246](https://github.com/Hancapo/HikariHopper/pull/246))
 
 ### Changed
 

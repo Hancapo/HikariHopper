@@ -35,6 +35,9 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
     public static (IReadOnlyList<Texture> Textures, GameTarget Target) EmbeddedTextures(string name, ReadOnlySpan<byte> data)
     {
+        // RDR2's, through RedFury; the edition is only GTA V's, so Legacy stands for it.
+        if (Textures.Rdr2TextureSource.IsRdr2(data))
+            return (Rdr2Scene.EmbeddedTextures(name, data), GameTarget.Legacy);
         IEnumerable<Drawable> drawables;
         GameTarget target;
         switch (Path.GetExtension(name).ToLowerInvariant())
