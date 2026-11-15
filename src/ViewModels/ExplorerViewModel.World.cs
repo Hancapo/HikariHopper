@@ -91,7 +91,7 @@ public sealed partial class ExplorerViewModel
     public string WorldCoordinates => InWorld ? WorldSpot.Coordinates : "";
 
     // The tab's game's world, while it has one: its index, made or being made.
-    private Rdr2World? world;
+    private GameWorld? world;
 
     private static readonly string[] WorldIndexProperties =
         [nameof(WorldReady), nameof(WorldPreparing), nameof(WorldStage), nameof(WorldProgress), nameof(WorldStatus), nameof(WorldFailure)];
@@ -115,7 +115,7 @@ public sealed partial class ExplorerViewModel
     public double? WorldProgress => world?.Progress.Fraction;
 
     /// <summary>The world's index, once it's ready.</summary>
-    internal Rdr2WorldIndex? WorldIndex => world?.Index;
+    internal WorldIndex? WorldIndex => world?.Index;
 
     /// <summary>
     /// Starts the tab's game's world on its way, in the background, when the game has one: its index is made, or read
@@ -124,11 +124,11 @@ public sealed partial class ExplorerViewModel
     private void PrepareWorld()
     {
         DetachWorld();
-        if (!HasWorld || Provider.Keys is not Rdr2Keys keys)
+        if (!HasWorld || Provider.Keys is not { } keys)
             return;
-        world = Rdr2World.ForGame(Provider.GamePath, keys.Crypto);
+        world = GameWorld.ForGame(Provider.GamePath, keys);
         world.ProgressChanged += OnWorldProgress;
-        Rdr2World started = world;
+        GameWorld started = world;
         _ = started.Load().ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             if (world == started)
@@ -145,7 +145,7 @@ public sealed partial class ExplorerViewModel
     }
 
     // Raised on the thread making the index: told on the UI thread.
-    private void OnWorldProgress(Rdr2WorldProgress progress) =>
+    private void OnWorldProgress(WorldProgress progress) =>
         Avalonia.Threading.Dispatcher.UIThread.Post(PublishWorldIndex);
 
     private void PublishWorldIndex()
@@ -167,10 +167,10 @@ public sealed partial class ExplorerViewModel
     {
         if (WorldIndex is not { } index)
             return null;
-        WorldFile? model = Rdr2WorldFiles.Locate(index, Provider.GamePath, pick.Asset.Hash, pick.Asset.Extension);
-        WorldFile? map = Rdr2WorldFiles.Locate(index, Provider.GamePath, pick.Node.Id.Map, 73);
-        string name = pick.Asset.Member != 0 ? Rdr2WorldFiles.NameOf(pick.Asset.Member) : model?.Title ?? Rdr2WorldFiles.NameOf(pick.Asset.Hash);
-        string where = map?.Name ?? $"{Rdr2WorldFiles.NameOf(pick.Node.Id.Map)}.ymap";
+        WorldFile? model = index.Locate(pick.Asset.Hash, pick.Asset.Extension);
+        WorldFile? map = index.Locate(pick.Node.Id.Map, 73);
+        string name = pick.Asset.Member != 0 ? index.NameOf(pick.Asset.Member) : model?.Title ?? index.NameOf(pick.Asset.Hash);
+        string where = map?.Name ?? $"{index.NameOf(pick.Node.Id.Map)}.ymap";
         string detail = pick.Instance >= 0
             ? $"{where} · entity {pick.Node.Id.Index} · instance {pick.Instance}"
             : $"{where} · entity {pick.Node.Id.Index}";

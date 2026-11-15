@@ -34,14 +34,15 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [Fact]
-    public void Only_a_game_whose_world_is_shown_has_a_World_side()
+    public void Each_game_has_a_World_side_that_starts_at_its_own_landmark()
     {
         var gta = new ExplorerViewModel();
         gta.OpenGame(MakeGame());
         Settle([gta]);
-        Assert.False(gta.HasWorld);
+        Assert.True(gta.HasWorld);
+        Assert.Equal("Legion Square", gta.WorldLandmark!.Name);
         gta.ShowWorld();
-        Assert.False(gta.InWorld);
+        Assert.True(gta.InWorld);
 
         ExplorerViewModel rdr2 = OpenRdr2();
         Assert.True(rdr2.HasWorld);
@@ -213,11 +214,13 @@ public sealed class WorldFaceTests : ExplorerTestBase
         window.Show();
         TestWait.Pump(100);
         LauncherRow[] rows = [.. window.GetVisualDescendants().OfType<LauncherRow>()];
+        // Both games' set-up rows have it.
         LauncherRow red = rows.Single(row => row.Entry.Game.Id == GameCatalog.Rdr2);
-        Assert.All(rows.Where(row => row.Entry.Game.Id == GameCatalog.GtaV), row => Assert.Null(row.WorldButton));
+        LauncherRow legacy = rows.Single(row => row.Entry.Game.Id == GameCatalog.GtaV && row.Entry.SetUp);
         Assert.NotNull(red.WorldButton);
+        Assert.NotNull(legacy.WorldButton);
 
-        red.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
         TestWait.Until(() => tab.HasGame && !tab.GameLoading, "the game to load");
         TestWait.Pump(100);
@@ -233,11 +236,11 @@ public sealed class WorldFaceTests : ExplorerTestBase
     public void Until_its_index_is_ready_the_world_shows_its_loading_screen_and_opens_by_itself()
     {
         using var release = new ManualResetEventSlim();
-        Rdr2World.Builder = (_, crypto, report, _) =>
+        GameWorld.Builder = (root, _, report, _) =>
         {
-            report(new Rdr2WorldProgress("Reading the maps", .42));
+            report(new WorldProgress("Reading the maps", .42));
             release.Wait(TimeSpan.FromSeconds(20));
-            return EmptyWorld(crypto);
+            return EmptyWorld(root);
         };
         var (window, session) = OpenWindow();
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
@@ -372,7 +375,7 @@ public sealed class WorldFaceTests : ExplorerTestBase
     [AvaloniaFact]
     public void A_world_that_cant_be_prepared_says_why()
     {
-        Rdr2World.Builder = (_, _, _, _) => throw new InvalidDataException("The game's content files couldn't be read");
+        GameWorld.Builder = (_, _, _, _) => throw new InvalidDataException("The game's content files couldn't be read");
         var (window, session) = OpenWindow();
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
         TestWait.Until(() => tab.WorldFailure is not null, "the world's index to fail");

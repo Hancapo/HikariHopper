@@ -40,7 +40,7 @@ internal sealed class WorldView : UserControl
     private TopLevel? top;
     private int shownRequest;
     private WorldStreamer? streamer;
-    private Rdr2WorldIndex? streamed;
+    private WorldIndex? streamed;
 
     public WorldView()
     {
@@ -279,7 +279,7 @@ internal sealed class WorldView : UserControl
     /// Streams the world whose index this is, or none: what another world streamed goes. Tabs of the same game share
     /// one index, and what it streamed.
     /// </summary>
-    private void Stream(Rdr2WorldIndex? index)
+    private void Stream(WorldIndex? index)
     {
         if (ReferenceEquals(index, streamed))
             return;

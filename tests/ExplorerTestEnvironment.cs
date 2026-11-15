@@ -33,7 +33,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly Func<string, GameTarget, GameCrypto, GameTextures.Tables> previousTableBuilder;
     private readonly TimeSpan previousFade;
     private readonly Func<string, string, long, long, GameTarget, GameCrypto?, GameTextureDirectory.Part> previousScanner;
-    private readonly Func<string, RedFury.Rpf.Rdr2Crypto, Action<Rdr2WorldProgress>, CancellationToken, Rdr2WorldIndex> previousWorldBuilder;
+    private readonly Func<string, ArchiveKeys, Action<WorldProgress>, CancellationToken, WorldIndex> previousWorldBuilder;
     private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
@@ -71,9 +71,9 @@ public abstract class ExplorerTestBase : IDisposable
         GameTextureDirectory.Scanner = (_, archive, length, written, _, _) => new GameTextureDirectory.Part(archive, length, written, []);
         GameTextureDirectory.ForgetAll();
         // Nor RDR2's world, whose index would be made from a whole game: an empty world, at once, unless a test says.
-        previousWorldBuilder = Rdr2World.Builder;
-        Rdr2World.Builder = (_, crypto, _, _) => EmptyWorld(crypto);
-        Rdr2World.ForgetAll();
+        previousWorldBuilder = GameWorld.Builder;
+        GameWorld.Builder = (root, _, _, _) => EmptyWorld(root);
+        GameWorld.ForgetAll();
         // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
         Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
         Infrastructure.ChangelogSource.Download = _ => Task.FromResult<string?>(null);
@@ -105,8 +105,9 @@ public abstract class ExplorerTestBase : IDisposable
     public static GameCrypto FakeCrypto { get; } = new(new byte[32]);
 
     /// <summary>A world with no maps: what a test's RDR2 game has.</summary>
-    private protected static Rdr2WorldIndex EmptyWorld(RedFury.Rpf.Rdr2Crypto crypto) =>
-        new(0, new RedFury.World.WorldLodGraph([]), new RedFury.Textures.RpfTextureCatalog([]), new RedFury.Rpf.RpfReadSession(crypto), crypto);
+    private protected static WorldIndex EmptyWorld(string root) =>
+        new Rdr2WorldIndex(root, 0, new RedFury.World.WorldLodGraph([]), new RedFury.Textures.RpfTextureCatalog([]),
+            new RedFury.Rpf.RpfReadSession(Rdr2Keys.Bundled.Crypto), Rdr2Keys.Bundled.Crypto);
 
     public void Dispose()
     {
@@ -118,8 +119,8 @@ public abstract class ExplorerTestBase : IDisposable
         Views.GameLoadingView.FadeDuration = previousFade;
         GameTextureDirectory.Scanner = previousScanner;
         GameTextureDirectory.ForgetAll();
-        Rdr2World.Builder = previousWorldBuilder;
-        Rdr2World.ForgetAll();
+        GameWorld.Builder = previousWorldBuilder;
+        GameWorld.ForgetAll();
         ExplorerViewModel.SearchDelay = previousSearchDelay;
         GameKeys.CachePath = previousKeyCache;
         AppSettings.RegistryPath = previousRegistryPath;
