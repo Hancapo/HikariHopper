@@ -74,13 +74,6 @@ public partial class NavigationBar : UserControl
             new WindowShortcut("Alt+Right", () => Bridge?.GoForward()),
             new WindowShortcut("Back", () => Bridge?.InWorld != true, () => Bridge?.GoUp()));
 
-        // The World side's time of day, on a dial of the day under its button.
-        TimeButton.Click += (_, _) => ToggleTime();
-        ThemedToolTip.Set(TimeButton, "Time of day");
-        Dial.Moved += hours => Bridge?.SetWorldHours(hours);
-        timeBody = new Border { Padding = new Thickness(12, 10, 12, 12), Child = Dial };
-        AutomationProperties.SetName(Dial, "Time of day");
-        RefreshTime();
 
         // Esc ends a search wherever the focus is, once nothing on the way (a menu, a field being edited) took it.
         TopLevel? host = null;
@@ -119,69 +112,23 @@ public partial class NavigationBar : UserControl
     // A workspace on its Files side: what the files' shortcuts need.
     private bool FilesShown => Bridge is { HasWorkspace: true, InWorld: false };
 
-    /// <summary>The World side's time of day, in its dropdown: a dial of the day, the sun or moon on it.</summary>
-    internal TimeDial Dial { get; } = new() { Width = 152, Height = 152 };
-
-    private readonly Control timeBody;
-    private DropdownWindow? timeDropdown;
-    private long timeClosedAt;
-
-    /// <summary>Whether the time of day's dropdown is open.</summary>
-    internal bool TimeOpen => timeDropdown is not null;
-
     /// <summary>
-    /// Opens the time of day's dial under its button, a window of its own so the world's viewport doesn't cover it, or
-    /// closes it; the button sits sunken while it is open, and the dial takes the keyboard.
-    /// </summary>
-    internal void ToggleTime()
-    {
-        if (timeDropdown is not null)
-        {
-            timeDropdown.Close();
-            return;
-        }
-        // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
-        if (Environment.TickCount64 - timeClosedAt < 400)
-            return;
-        timeDropdown = DropdownWindow.OpenUnder(TimeWell, timeBody, 4);
-        if (timeDropdown is null)
-            return;
-        TimeButton.Sunken = true;
-        Dial.Focus();
-        timeDropdown.Closed += (_, _) =>
-        {
-            timeDropdown = null;
-            timeClosedAt = Environment.TickCount64;
-            TimeButton.Sunken = false;
-        };
-    }
-
-    private void RefreshTime()
-    {
-        float hours = Bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours;
-        TimeButton.Text = TimeDial.Clock(hours);
-        Dial.Hours = TimeGlyph.Hours = hours;
-    }
-
-    /// <summary>
-    /// On the World side, the world's address: Back and Forward (nothing is above a place in the world), where the camera
-    /// is, and the time of day, in the path's and the search's places; on the Files side, those.
+    /// On the World side, the world's address: Back and Forward (nothing is above a place in the world), and where the
+    /// camera is, in the path's and the search's places; on the Files side, those.
     /// </summary>
     private void RefreshFace()
     {
         bool world = Bridge?.InWorld == true;
         UpButton.IsVisible = !world;
-        CoordinatesBar.IsVisible = TimeWell.IsVisible = world;
+        CoordinatesBar.IsVisible = world;
         ViewModeSlot.IsVisible = !world;
         if (world)
         {
             EndAddressEdit();
             AddressBar.IsVisible = AddressField.IsVisible = SearchRow.IsVisible = SearchBox.IsVisible = false;
-            timeDropdown?.Close();
         }
         else
         {
-            timeDropdown?.Close();
             RefreshSearchRow();
         }
     }
@@ -213,7 +160,6 @@ public partial class NavigationBar : UserControl
         RefreshViewMode();
         RefreshSearchRow();
         RefreshFace();
-        RefreshTime();
     }
 
     private void OnSearchFocusRequested(object? sender, EventArgs e) => FocusSearch();
@@ -237,9 +183,6 @@ public partial class NavigationBar : UserControl
                 break;
             case nameof(ExplorerViewModel.InWorld):
                 RefreshFace();
-                break;
-            case nameof(ExplorerViewModel.WorldHours):
-                RefreshTime();
                 break;
             case nameof(ExplorerViewModel.IsSearching):
             case nameof(ExplorerViewModel.SearchScopeValue):

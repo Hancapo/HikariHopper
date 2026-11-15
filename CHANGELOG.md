@@ -18,7 +18,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Open Red Dead Redemption 2's collisions and navmeshes in the 3D viewer, collisions by material as the game names them. ([#245](https://github.com/Hancapo/HikariHopper/pull/245))
 - Open and extract the textures a Red Dead Redemption 2 model carries, from its 3D viewer. ([#246](https://github.com/Hancapo/HikariHopper/pull/246))
 - List a Red Dead Redemption 2 fragment's parts by physics group, and show its damaged state with only its breaking pieces swapped. ([#247](https://github.com/Hancapo/HikariHopper/pull/247))
-- Flip a Red Dead Redemption 2 tab between its files and its world with the status bar's switch or F6: the world flown through with W A S D, its coordinates in the address row, its time of day beside them, and Back and Forward through both. ([#248](https://github.com/Hancapo/HikariHopper/pull/248))
+- Flip a Red Dead Redemption 2 tab between its files and its world with the status bar's switch or F6: the world flown through with W A S D, its coordinates in the address row, its time of day at the status bar's end as in the 3D viewer, and Back and Forward through both. ([#248](https://github.com/Hancapo/HikariHopper/pull/248))
 - Open Red Dead Redemption 2 straight on its world from the globe at the end of its start page row. ([#249](https://github.com/Hancapo/HikariHopper/pull/249))
 
 ### Changed

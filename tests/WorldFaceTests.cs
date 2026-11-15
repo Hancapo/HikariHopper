@@ -146,7 +146,8 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.False(navigation.SearchBox.IsVisible);
         Assert.False(navigation.ViewModeSlot.IsVisible);
         Assert.True(navigation.CoordinatesBar.IsVisible);
-        Assert.True(navigation.TimeWell.IsVisible);
+        // The time of day at the status bar's end, as the model viewer's footer has it.
+        Assert.True(status.TimeWell.IsVisible);
         Assert.Equal(tab.WorldCoordinates, navigation.CoordinatesText.Text);
         Assert.True(status.WorldText.IsVisible);
         Assert.False(status.ItemCountText.IsVisible);
@@ -162,6 +163,7 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.True(navigation.AddressBar.IsVisible);
         Assert.True(navigation.SearchBox.IsVisible);
         Assert.False(navigation.CoordinatesBar.IsVisible);
+        Assert.False(status.TimeWell.IsVisible);
         window.Close();
     }
 
@@ -172,11 +174,12 @@ public sealed class WorldFaceTests : ExplorerTestBase
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
         tab.ShowWorld();
         TestWait.Pump(100);
-        NavigationBar navigation = Find<NavigationBar>(window);
-        navigation.Dial.Hours = 21;
+        StatusBar status = Find<StatusBar>(window);
+        status.Dial.Hours = 21;
         tab.SetWorldHours(21);
         TestWait.Pump(50);
-        Assert.Equal(TimeDial.Clock(21), navigation.TimeButton.Text);
+        Assert.Equal(TimeDial.Clock(21), status.TimeButton.Text);
+        Assert.Equal(21, status.TimeGlyph.Hours);
         WorldView world = Find<WorkspaceView>(window).World!;
         Assert.Equal(21, world.Viewport.Hours);
 
