@@ -688,6 +688,19 @@ internal sealed unsafe partial class ViewportRenderer
 
     private TextureView? Upload(GameTexture source)
     {
+        if (CreateTexture(source) is not var (texture, block))
+            return null;
+        for (int level = 0; level < source.MipCount; level++)
+            WriteLevel(source, texture, block, level);
+        return Register(source, texture);
+    }
+
+    /// <summary>
+    /// A game texture's GPU texture, made but not written, and its formats' block size; null when its format or shape
+    /// can't be drawn.
+    /// </summary>
+    private (WebGpuSharp.Texture Texture, int Block)? CreateTexture(GameTexture source)
+    {
         // The shaders read texels as stored (albedo is squared by the lighting, as in the game), so sRGB formats are
         // read through their plain counterparts.
         (TextureFormat format, int block)? mapped = source.Format switch
@@ -719,18 +732,46 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
             ViewFormats = srgb is { } variant ? [variant] : [],
         });
+        return (texture, block);
+    }
+
+    /// <summary>One mip level of a game texture into its GPU texture; how many bytes that was.</summary>
+    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level) =>
+        WriteRows(source, texture, block, level, 0, int.MaxValue).Bytes;
+
+    /// <summary>
+    /// Rows of one mip level (rows of blocks, for a compressed format) into its GPU texture, from <paramref name="first"/>
+    /// at most <paramref name="rows"/>: how many bytes that was, and whether the level is done.
+    /// </summary>
+    private (long Bytes, bool Done) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
+    {
+        CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
+        // A mip smaller than a block is still a whole block.
+        uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
+        int total = (int)height / block, pitch = part.Mip.RowPitch;
+        int count = Math.Min(rows, total - first);
+        var copy = new TexelCopyTextureInfo
+        {
+            Texture = texture,
+            MipLevel = (uint)level,
+            Origin = new Origin3D(0, (uint)(first * block), 0),
+            Aspect = TextureAspect.All,
+        };
+        var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)pitch, RowsPerImage = (uint)count };
+        var size = new Extent3D(width, (uint)(count * block), 1);
+        ReadOnlySpan<byte> data = source.GetEncodedSlice(level).Slice(first * pitch, count * pitch);
+        queue.WriteTexture(copy, data, layout, size);
+        return (data.Length, first + count == total);
+    }
+
+    /// <summary>The bytes a row of a game texture's mip level holds (a row of blocks, for a compressed format).</summary>
+    private static int RowBytes(GameTexture source, int level) => source.GetSubresource(level).Mip.RowPitch;
+
+    /// <summary>A written texture, kept for the scene (or the world) and viewed.</summary>
+    private TextureView Register(GameTexture source, WebGpuSharp.Texture texture)
+    {
         uploaded.Add(texture);
         uploadedOf[source] = texture;
-        for (int level = 0; level < source.MipCount; level++)
-        {
-            CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
-            // A mip smaller than a block is still a whole block.
-            uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
-            var copy = new TexelCopyTextureInfo { Texture = texture, MipLevel = (uint)level, Aspect = TextureAspect.All };
-            var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)part.Mip.RowPitch, RowsPerImage = height / (uint)block };
-            var size = new Extent3D(width, height, 1);
-            queue.WriteTexture(copy, source.GetEncodedSlice(level), layout, size);
-        }
         return texture.CreateView();
     }
 }

@@ -415,6 +415,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         if (worldShown)
         {
             worldShadowDraws = worldViewDraws = 0;
+            recordsThisFrame = 0;
             if (!worldShadows)
                 SkipWorldShadows();
             UpdateWorldVisibility(worldCascades, worldShadows);

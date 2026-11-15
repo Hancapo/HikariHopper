@@ -30,7 +30,11 @@ internal sealed partial class ViewportHost : NativeControlHost
     private nint hwnd;
     private nint previousProcedure;
     private volatile bool chained;
-    private bool drawing;
+    // Read by the pacer's thread too.
+    private volatile bool drawing;
+
+    // Whether a vertical blank went by while a frame was drawn.
+    private volatile bool blankWhileDrawing;
     private bool stopped;
     private bool dragging;
     private int mouseX;
@@ -395,13 +399,24 @@ internal sealed partial class ViewportHost : NativeControlHost
     // On the pacer's thread, once per vertical blank, unless frames take longer than that and already chain.
     private void RequestFrame()
     {
-        if (!stopped && !chained)
+        if (stopped)
+            return;
+        // A blank while a frame is drawn: its paint would be dropped (left to that frame), so the frame asks for the
+        // next itself when it ends. Without this, a frame that started late and straddled a blank waited for the one
+        // after: 30 frames a second from frames well under a refresh.
+        if (drawing)
+        {
+            blankWhileDrawing = true;
+            return;
+        }
+        if (!chained)
             InvalidateRect(hwnd, 0, 0);
     }
 
     private void Draw()
     {
         long start = Stopwatch.GetTimestamp();
+        blankWhileDrawing = false;
         drawing = true;
         try
         {
@@ -437,7 +452,7 @@ internal sealed partial class ViewportHost : NativeControlHost
         }
         // A frame slower than the display asks for the next at once rather than sleeping until a vertical blank;
         // input still comes first, as WM_PAINT waits for the message queue to drain.
-        chained = !stopped && pacer is { } p && Stopwatch.GetElapsedTime(start).TotalSeconds >= p.Period;
+        chained = !stopped && pacer is { } p && (Stopwatch.GetElapsedTime(start).TotalSeconds >= p.Period || blankWhileDrawing);
         if (chained)
             InvalidateRect(hwnd, 0, 0);
     }

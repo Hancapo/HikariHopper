@@ -59,7 +59,9 @@ internal sealed class WorldStreamer : IDisposable
     private HashSet<WorldAssetKey> selectedReady = [];
     private int selectedFailures = -1;
     private int? selectedHour;
-    private bool selectionPending = true;
+    private bool selectionPending = true, firstSelection = true;
+    private volatile bool uploadPending;
+    private (WorldSelection Display, Vector3 Eye, int Hour)? applying;
     private bool closing;
     private WorldSelection selected = new([], []);
     private ViewportRenderer? renderer;
@@ -87,6 +89,7 @@ internal sealed class WorldStreamer : IDisposable
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
     public int LightCount { get; private set; }
 
+
     /// <summary>The plants expanded and shown.</summary>
     public int GrassInstances { get; private set; }
 
@@ -99,7 +102,7 @@ internal sealed class WorldStreamer : IDisposable
         get
         {
             lock (gate)
-                return planning is not null || loading is not null || loadingGrass is not null || !prepared.IsEmpty
+                return planning is not null || loading is not null || loadingGrass is not null || !prepared.IsEmpty || uploadPending
                     || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key))
                     || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
         }
@@ -232,10 +235,14 @@ internal sealed class WorldStreamer : IDisposable
             // Another viewport (the native view was made again): it holds nothing yet.
             renderer = viewport;
             selectionPending = true;
+            firstSelection = true;
             selectedReady = [];
         }
+        Apply(viewport);
         selectionTime += seconds;
-        bool selectionDue = selectionTime >= .1f || selectionPending;
+        // Ten times a second, as RedFury's session has it (and at once for a new viewport); the uploads go on every frame.
+        bool selectionDue = selectionTime >= .1f || firstSelection;
+        firstSelection = false;
         if (selectionDue)
         {
             float elapsed = selectionTime;
@@ -243,6 +250,7 @@ internal sealed class WorldStreamer : IDisposable
             UpdateSelection(viewport, elapsed, Math.Clamp((int)hours, 0, 23));
         }
         UploadPrepared(viewport);
+        uploadPending = viewport.HasPendingWorldUpload;
         if (selectionDue)
             Status = string.Create(System.Globalization.CultureInfo.CurrentCulture,
                 $"{viewport.WorldDrawnCount:N0} entities · {viewport.WorldBytes / 1048576:N0} MB streamed");
@@ -326,24 +334,8 @@ internal sealed class WorldStreamer : IDisposable
                 GrassInstances = wantedGrass.Where(node => readyGrass.ContainsKey(node.Id)).Sum(node => readyGrass[node.Id].Ready.Instances.Count);
                 display = selected with { Visible = coverage, Coverage = coverage };
             }
-            viewport.SetWorldSelection(display);
-            // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
-            HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];
-            if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || !lightReady.SetEquals(ready)
-                || lightsTruncated && lightEye != eye || lightHour != hour)
-            {
-                WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour);
-                viewport.SetLocalLights(lighting.Lights);
-                LightCount = lighting.Lights.Count;
-                lightsTruncated = lighting.IsTruncated;
-                lightEye = eye;
-                lightHour = hour;
-                lightCoverage = display.Coverage;
-                lightReady = ready;
-                lock (gate)
-                    foreach (string message in lighting.Diagnostics)
-                        Note(message);
-            }
+            // Applied on the next frame, so this one carries the selection and the next the coverage's new storage.
+            applying = (display, eye, hour);
         }
         lock (gate)
         {
@@ -358,9 +350,44 @@ internal sealed class WorldStreamer : IDisposable
         }
     }
 
-    // One asset read up to the GPU, if one's waiting and still wanted.
+    // The selection made last frame, applied: the renderer's coverage, and the lights bound again when the cut or its
+    // uploads changed, the hour did, or the camera moved and some were left out.
+    private void Apply(ViewportRenderer viewport)
+    {
+        if (applying is not var (display, eye, hour))
+            return;
+        applying = null;
+        viewport.SetWorldSelection(display);
+        // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
+        HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];
+        if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || !lightReady.SetEquals(ready)
+            || lightsTruncated && lightEye != eye || lightHour != hour)
+        {
+            WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour);
+            viewport.SetLocalLights(lighting.Lights);
+            LightCount = lighting.Lights.Count;
+            lightsTruncated = lighting.IsTruncated;
+            lightEye = eye;
+            lightHour = hour;
+            lightCoverage = display.Coverage;
+            lightReady = ready;
+            lock (gate)
+                foreach (string message in lighting.Diagnostics)
+                    Note(message);
+        }
+    }
+
+    // The asset on its way up a frame's step further (let go when it's no longer wanted); when none is, the next one
+    // read, if it's still wanted, on its way.
     private void UploadPrepared(ViewportRenderer viewport)
     {
+        if (viewport.WorldUploadKey is { } uploading && !selected.Requested.Contains(uploading))
+            viewport.CancelWorldUpload();
+        if (viewport.HasPendingWorldUpload)
+        {
+            Step(viewport);
+            return;
+        }
         if (!prepared.TryDequeue(out WorldAsset? asset))
             return;
         if (selected.Requested.Contains(asset.Key))
@@ -385,6 +412,28 @@ internal sealed class WorldStreamer : IDisposable
             preparedBytes -= asset.Bytes;
             SignalWorker();
         }
+        if (viewport.HasPendingWorldUpload)
+            Step(viewport);
+    }
+
+    // A frame's step of the asset on its way up.
+    private void Step(ViewportRenderer viewport)
+    {
+        WorldAssetKey key = viewport.WorldUploadKey!.Value;
+        try
+        {
+            viewport.ProcessWorldUploads();
+        }
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
+        {
+            MarkFailed(key, error);
+        }
+        if (!viewport.HasPendingWorldUpload)
+            lock (gate)
+            {
+                resident = [.. viewport.WorldResident];
+                SignalWorker();
+            }
     }
 
     // Under the lock: the worker looks again. Signals coalesce, and it checks after every wake.

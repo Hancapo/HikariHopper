@@ -23,8 +23,6 @@ internal sealed unsafe partial class ViewportRenderer
         internal readonly WorldLightBones LightBones = source.LightBones;
         internal readonly float[] LodReach2 = source.LodReach2;
 
-        // Where the asset's vertices are from: each placement's matrix is moved by it.
-        internal readonly Matrix4x4 Local = Matrix4x4.CreateTranslation(source.Scene.Origin);
         internal Buffer? Vertices, Indices;
 
         // Its surfaces, laid out by level of detail with each level's solid ones together, and those runs of solid
@@ -42,6 +40,10 @@ internal sealed unsafe partial class ViewportRenderer
 
         // Which placement each of Sources is: its node, and which of its instances (-1 for a node without any).
         internal readonly List<(WorldLodNode Node, int Instance)> Placements = [];
+
+        // The nodes its storage holds, in order, and this coverage's (by their index in the cull set).
+        internal readonly List<WorldLodNode> SourceNodes = [];
+        internal readonly List<int> NextNodes = [];
 
         // Its number in the picking pass, from 1.
         internal int Id;
@@ -112,7 +114,7 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly List<int>[] worldVisible = [.. Enumerable.Range(0, 1 + WorldShadowCascades.Count).Select(_ => new List<int>())];
     private readonly List<WorldGpuAsset> listedAssets = [], gatheredAssets = [];
     private bool worldSourcesDirty = true, worldNodeAssetsDirty = true, worldVisibilityDirty = true;
-    private long worldSourceRevision, worldClock;
+    private long worldSourceBuilds, worldClock;
     private (Vector3 Eye, Vector3 Forward, int Width, int Height, Vector3 Sun, bool Shadows) worldView;
     private BindGroupLayout? worldInstanceLayout, worldEmptyLayout;
     private BindGroup? worldEmptyGroup;
@@ -136,8 +138,9 @@ internal sealed unsafe partial class ViewportRenderer
         }
     }
 
-    /// <summary>The assets uploaded.</summary>
-    public IReadOnlySet<WorldAssetKey> WorldResident => worldAssets.Keys.ToHashSet();
+    /// <summary>The assets uploaded, and the one on its way up.</summary>
+    public IReadOnlySet<WorldAssetKey> WorldResident => pendingWorld is { } pending
+        ? worldAssets.Keys.Append(pending.Source.Key).ToHashSet() : worldAssets.Keys.ToHashSet();
 
     /// <summary>Whether an asset is uploaded and can be drawn.</summary>
     public bool IsWorldReady(WorldAssetKey key) => worldAssets.ContainsKey(key);
@@ -146,7 +149,8 @@ internal sealed unsafe partial class ViewportRenderer
     public WorldLightBones? WorldAssetLightBones(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.LightBones : null;
 
     /// <summary>What an uploaded asset costs to keep, with its placements' storage; null when it isn't.</summary>
-    public WorldMemoryCost? WorldAssetMemory(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.MemoryCost : null;
+    public WorldMemoryCost? WorldAssetMemory(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.MemoryCost
+        : pendingWorld?.Source.Key == key ? pendingWorld.Source.MemoryCost : null;
 
     // Running totals (RedFury's WorldMemory, copied), so the budget's checks never add up every asset: shared textures
     // are counted once, at the largest size any holder said, for as long as one holds them.
@@ -206,15 +210,16 @@ internal sealed unsafe partial class ViewportRenderer
     private static long InstanceBytes(WorldGpuAsset asset) => asset.Capacity * 132L + asset.ShadowCapacity * 4L;
 
     /// <summary>
-    /// Uploads an asset the streamer read, within <paramref name="budget"/>: the least recently covered assets not in
-    /// <paramref name="protectedAssets"/> go to make room. False when there isn't room even so.
+    /// Puts an asset the streamer read on its way to the GPU, within <paramref name="budget"/>: the least recently
+    /// covered assets not in <paramref name="protectedAssets"/> go to make room. False when there isn't room even so,
+    /// or another asset is on its way (<see cref="ProcessWorldUploads"/> takes it the rest of the way).
     /// </summary>
     /// <exception cref="NotSupportedException">The GPU can't bind as many textures as RDR2's material reads.</exception>
     public bool AddWorldAsset(WorldAsset asset, IReadOnlySet<WorldAssetKey> protectedAssets, long budget)
     {
-        if (worldAssets.ContainsKey(asset.Key))
+        if (worldAssets.ContainsKey(asset.Key) || pendingWorld?.Source.Key == asset.Key)
             return true;
-        if (asset.Bytes > budget)
+        if (pendingWorld is not null || asset.Bytes > budget)
             return false;
         if (ProposedWorldBytes(asset) > budget)
             foreach (var pair in worldAssets.Where(p => !protectedAssets.Contains(p.Key)).OrderBy(p => p.Value.Used).ToArray())
@@ -228,67 +233,8 @@ internal sealed unsafe partial class ViewportRenderer
         if (!Rdr2Supported)
             throw new NotSupportedException("This GPU can't bind as many textures as Red Dead Redemption 2's material reads.");
         CreateWorldPipelines();
-        var uploaded = new WorldGpuAsset(asset);
-        DrawableScene scene = asset.Scene;
-        // The world's surfaces of the scene: RDR2's materials (water waits for the scene behind it to be copied).
-        var kept = new List<(SurfacePart Part, SurfaceMaterial Material, Rdr2Material Rdr2)>();
-        foreach (SurfacePart part in scene.Parts)
-            if (scene.Materials[part.Material] is { Rdr2: { Water: false } rdr2 } material && part.IndexCount > 0)
-                kept.Add((part, material, rdr2));
-        if (kept.Count > 0 && scene.Vertices.Length > 0)
-        {
-            // Laid out by level of detail, each level's casters first (RedFury's BufferLayout), the indexes made the
-            // vertices' own, so adjacent casters of a level draw as one.
-            static int Key(SurfaceMaterial material, Rdr2Material rdr2) => material.AlphaMode == AlphaMode.Opaque && !material.Decal ? 0 : 1;
-            var order = kept.Select((item, i) => i).OrderBy(i => kept[i].Part.Lod).ThenBy(i => Key(kept[i].Material, kept[i].Rdr2)).ToArray();
-            uint[] indices = new uint[kept.Sum(item => (long)item.Part.IndexCount)];
-            uint next = 0;
-            var placed = new SurfacePart[kept.Count];
-            foreach (int i in order)
-            {
-                SurfacePart part = kept[i].Part;
-                for (uint c = 0; c < part.IndexCount; c++)
-                    indices[next + c] = scene.Indices[part.FirstIndex + c] + (uint)part.BaseVertex;
-                placed[i] = part with { FirstIndex = next, BaseVertex = 0 };
-                next += part.IndexCount;
-            }
-            uploaded.Vertices = Upload((ReadOnlySpan<SurfaceVertex>)scene.Vertices, SurfaceVertex.Size);
-            uploaded.Indices = Upload((ReadOnlySpan<uint>)indices, sizeof(uint), BufferUsage.Index);
-            var groups = new Dictionary<int, (BindGroup Group, Buffer Uniforms)>();
-            foreach (int i in order)
-            {
-                var (part, material, rdr2) = kept[i];
-                if (!groups.TryGetValue(part.Material, out var group))
-                {
-                    Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-                    queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
-                    group = (Rdr2Group(rdr2, uniforms), uniforms);
-                    groups.Add(part.Material, group);
-                    foreach (GameTexture? texture in rdr2.Textures)
-                        if (texture is not null && !uploaded.Textures.Contains(texture))
-                            uploaded.Textures.Add(texture);
-                }
-                uploaded.Meshes.Add(new WorldMesh(placed[i], group.Group, group.Uniforms, material.Decal ? AlphaMode.Blend : material.AlphaMode,
-                    rdr2.DoubleSided, material.Decal));
-            }
-            // RedFury's depth runs: adjacent casters of a level, one draw each.
-            foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
-            {
-                int last = uploaded.DepthRuns.Count - 1;
-                if (last >= 0 && uploaded.DepthRuns[last] is var run && run.Level == mesh.Level && run.FirstIndex + run.IndexCount == mesh.Part.FirstIndex)
-                    uploaded.DepthRuns[last] = run with { IndexCount = run.IndexCount + mesh.Part.IndexCount };
-                else
-                    uploaded.DepthRuns.Add(new WorldDepthRun(mesh.Level, mesh.Part.FirstIndex, mesh.Part.IndexCount));
-            }
-            uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.Mode == AlphaMode.Mask);
-        }
-        foreach (GameTexture texture in uploaded.Textures)
-            worldTextureUsers[texture] = worldTextureUsers.GetValueOrDefault(texture) + 1;
-        uploaded.Used = worldClock;
-        uploaded.Id = ++worldAssetIds;
-        ChargeWorldMemory(uploaded.MemoryCost);
-        worldAssets.Add(asset.Key, uploaded);
-        worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
+        ChargeWorldMemory(asset.MemoryCost);
+        BeginWorldUpload(asset);
         return true;
     }
 
@@ -303,7 +249,6 @@ internal sealed unsafe partial class ViewportRenderer
         if (!worldSelection.Coverage.SequenceEqual(selection.Coverage, ReferenceEqualityComparer.Instance))
         {
             worldVisibilityDirty = worldSourcesDirty = worldNodeAssetsDirty = true;
-            worldSourceRevision++;
             worldCull.Update(selection.Coverage);
         }
         worldSelection = selection;
@@ -315,6 +260,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>Lets go of every asset: another world, or none.</summary>
     public void ClearWorld()
     {
+        CancelWorldUpload();
         foreach (WorldAssetKey key in worldAssets.Keys.ToArray())
             RemoveWorldAsset(key);
         worldSelection = new WorldSelection([], []);
@@ -369,34 +315,44 @@ internal sealed unsafe partial class ViewportRenderer
         }
     }
 
-    // The covered placements' matrices into each asset's storage, when the coverage or the assets changed: an asset
-    // whose placements are as they were writes nothing.
+    // The covered placements' matrices into each asset's storage, when the coverage or the assets changed. An asset
+    // whose nodes came back as they were, in the same order, keeps its storage and only maps the entries to it again:
+    // a coverage change touches only the assets whose placements changed.
     private void UpdateWorldSources()
     {
         WorldCullSet set = worldCull;
-        if (worldSourceIndex.Length < set.Pairs.Length / 2)
-            worldSourceIndex = new uint[set.Pairs.Length / 2];
+        if (worldSourceIndex.Length < set.X.Length)
+            worldSourceIndex = new uint[set.X.Length];
         foreach (WorldGpuAsset asset in worldAssets.Values)
-            if (asset.SourceRevision != worldSourceRevision)
-            {
-                asset.Sources.Begin();
-                asset.Placements.Clear();
-            }
+            asset.NextNodes.Clear();
         for (int n = 0; n < set.Nodes.Length; n++)
-        {
-            if (!worldAssets.TryGetValue(set.Nodes[n].Asset, out WorldGpuAsset? asset) || asset.SourceRevision == worldSourceRevision)
-                continue;
-            for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
-            {
-                worldSourceIndex[entry] = (uint)asset.Sources.Count;
-                asset.Sources.Add(set.Pairs, entry, asset.Local);
-                asset.Placements.Add((set.Nodes[n], set.Instance[entry]));
-            }
-        }
+            if (worldAssets.TryGetValue(set.Nodes[n].Asset, out WorldGpuAsset? asset))
+                asset.NextNodes.Add(n);
         foreach (WorldGpuAsset asset in worldAssets.Values)
         {
-            if (asset.SourceRevision == worldSourceRevision)
+            if (asset.SourceRevision >= 0 && SameNodes(asset))
+            {
+                uint next = 0;
+                foreach (int n in asset.NextNodes)
+                    for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
+                        worldSourceIndex[entry] = next++;
                 continue;
+            }
+            asset.Sources.Begin();
+            asset.Placements.Clear();
+            asset.SourceNodes.Clear();
+            foreach (int n in asset.NextNodes)
+            {
+                WorldLodNode node = set.Nodes[n];
+                WorldCullSet.PreparedNode block = set.Blocks[n];
+                asset.SourceNodes.Add(node);
+                for (int i = 0, entry = set.First[n]; i < block.Count; i++, entry++)
+                {
+                    worldSourceIndex[entry] = (uint)asset.Sources.Count;
+                    asset.Sources.Add(block.World[i], block.Normal[i]);
+                    asset.Placements.Add((node, block.Index[i]));
+                }
+            }
             int count = asset.Sources.Count;
             bool replaced = count > asset.Capacity;
             if (replaced)
@@ -432,9 +388,20 @@ internal sealed unsafe partial class ViewportRenderer
                 asset.Reflected = reflected;
                 ReleaseAssetBundles(asset);
             }
-            asset.SourceRevision = worldSourceRevision;
+            asset.SourceRevision = ++worldSourceBuilds;
         }
         worldSourcesDirty = false;
+
+        // Whether an asset's nodes this time are the ones its storage holds, in its order.
+        bool SameNodes(WorldGpuAsset asset)
+        {
+            if (asset.NextNodes.Count != asset.SourceNodes.Count)
+                return false;
+            for (int i = 0; i < asset.NextNodes.Count; i++)
+                if (!ReferenceEquals(set.Nodes[asset.NextNodes[i]], asset.SourceNodes[i]))
+                    return false;
+            return true;
+        }
     }
 
     // An asset's charge with its placements' storage at these capacities.
@@ -452,6 +419,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     // Which covered placements the camera and each due cascade see, by asset and level of detail: only when the view,
     // the coverage, the assets or the cascades changed.
+
     private void UpdateWorldVisibility(ShadowCascade[] cascades, bool shadows)
     {
         if (worldSourcesDirty)

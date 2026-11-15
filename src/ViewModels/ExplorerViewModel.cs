@@ -385,8 +385,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private void PublishWorkspace()
     {
-        // Another game or archive: back to its files, its world (if it has one) where it was left.
-        LeaveWorld();
+        // One of the game's own RPFs: its files, the game's world kept as it is (it's the game's, not the folder's).
+        // Another game, an archive on its own, or none: back to its files, the world forgotten.
+        if (KeepsWorld())
+            FacesFiles();
+        else
+            LeaveWorld();
         // Another game or archive: whatever was being searched is not there any more.
         EndSearch();
         RaiseAll(WorkspaceProperties);

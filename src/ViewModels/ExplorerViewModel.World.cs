@@ -186,8 +186,18 @@ public sealed partial class ExplorerViewModel
     /// </summary>
     internal void ShowWorldFile(WorldFile file)
     {
-        if (GoToAddress(file.Path) && InWorld)
+        HistoryStop? from = InWorld && historyIndex >= 0 && historyIndex < history.Count ? history[historyIndex] : null;
+        if (!GoToAddress(file.Path))
+            return;
+        if (InWorld)
             SetFace(TabFace.Files);
+        // Entering an RPF starts the history again: the world stays the stop before it, where Back returns.
+        if (from is { World: not null } world && !history.Any(stop => stop.World is not null))
+        {
+            history = [world with { Path = currentPath }, history[historyIndex]];
+            historyIndex = 1;
+            RaiseAll(FaceProperties);
+        }
     }
 
     /// <summary>Copies a placement's name or coordinates, saying so.</summary>
@@ -318,6 +328,17 @@ public sealed partial class ExplorerViewModel
         SetFace(TabFace.Files);
         ExpandCurrentBranch();
         PublishNavigation();
+    }
+
+    // Whether the tab still shows the game its world is: entering one of its RPFs keeps the world.
+    private bool KeepsWorld() => world is not null && Provider.HasGame
+        && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.GamePath)), world.Root, StringComparison.OrdinalIgnoreCase);
+
+    // On the Files side, without a stop of its own: the caller's navigation makes it.
+    private void FacesFiles()
+    {
+        if (face == TabFace.World)
+            SetFace(TabFace.Files);
     }
 
     /// <summary>Back to the files, the world forgotten: another game, an archive on its own, or none.</summary>

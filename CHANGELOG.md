@@ -30,6 +30,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
+
 ### Removed
 
 ## [0.2.1] - 2026-11-14

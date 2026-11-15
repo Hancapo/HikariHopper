@@ -23,6 +23,12 @@ internal sealed unsafe partial class ViewportRenderer
     private WorldDrawArguments[] worldArguments = [];
     private readonly WorldArgumentAllocator worldArgumentAllocator = new();
     private readonly List<RenderBundle> executableBundles = [];
+    private readonly List<WorldGpuAsset> directAssets = [];
+
+    // Bundles recorded a frame at most: a burst of new assets or levels of detail is recorded over a few frames, the
+    // assets waiting their turn drawn directly meanwhile, from the same counts.
+    private const int RecordsPerFrame = 12;
+    private int recordsThisFrame;
 
     // The light group the colour bundles were recorded with: a new one (a new shadow map) records them again.
     private BindGroup? bundledLightGroup;
@@ -433,12 +439,21 @@ internal sealed unsafe partial class ViewportRenderer
             bundledLightGroup = lightGroup;
         }
         executableBundles.Clear();
+        directAssets.Clear();
         foreach (WorldGpuAsset asset in listedAssets)
         {
             if (!HasPassInstances(asset, bundle))
                 continue;
             if (asset.Bundles[bundle] is null && asset.BundleLods[bundle] == 0)
+            {
+                if (recordsThisFrame >= RecordsPerFrame)
+                {
+                    directAssets.Add(asset);
+                    continue;
+                }
                 asset.Bundles[bundle] = RecordWorldBundle(asset, bundle);
+                recordsThisFrame++;
+            }
             if (asset.Bundles[bundle] is { } recorded)
             {
                 executableBundles.Add(recorded);
@@ -450,6 +465,22 @@ internal sealed unsafe partial class ViewportRenderer
         }
         if (executableBundles.Count != 0)
             pass.ExecuteBundles(CollectionsMarshal.AsSpan(executableBundles));
+        if (directAssets.Count == 0)
+            return;
+        // Bundles leave the pass's bindings cleared.
+        if (bundle >= ShadowBundle)
+        {
+            pass.SetBindGroup(0, shadowGroups[bundle - ShadowBundle]);
+            pass.SetBindGroup(2, worldEmptyGroup!);
+        }
+        else
+        {
+            pass.SetBindGroup(0, sceneGroup);
+            pass.SetBindGroup(2, lightGroup!);
+        }
+        var waiting = new PassTarget(pass, worldArguments);
+        foreach (WorldGpuAsset asset in directAssets)
+            EncodeWorldAsset(waiting, asset, bundle, 0xF);
     }
 
     /// <summary>

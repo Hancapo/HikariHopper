@@ -7,16 +7,19 @@ using RedFury.World;
 namespace HikariHopper.Rendering.World;
 
 /// <summary>
-/// The world's covered placements flattened for culling, rebuilt only when the coverage changes (RedFury's, copied). A
-/// covered node's placements don't move: their transforms are prepared once and copied into storage that's reused.
+/// The world's covered placements flattened for culling, rebuilt only when the coverage changes (RedFury's, copied).
+/// A covered node's placements don't move: they're prepared once, into a block of their own, and an update copies the
+/// blocks' spheres and reaches into storage that's reused. Their matrices stay in the blocks, where the renderer reads
+/// them only for the assets whose placements changed.
 /// </summary>
 internal sealed class WorldCullSet
 {
     internal WorldLodNode[] Nodes = [];
 
-    // Per node: its first entry and how many. A node without instances is one entry.
+    // Per node: its first entry and how many (a node without instances is one entry), and its prepared block.
     internal int[] First = [], Count = [];
     internal WorldRenderPass[] Passes = [];
+    internal PreparedNode[] Blocks = [];
 
     // Per entry, as arrays for SIMD: its bounding sphere and its squared draw reach (the node's distance and radius).
     internal float[] X = [], Y = [], Z = [], R = [], Reach2 = [];
@@ -25,38 +28,44 @@ internal sealed class WorldCullSet
     // Per entry: which of its node's instances it is; -1 for a node without instances.
     internal int[] Instance = [];
 
-    // Per entry: its world matrix, then its inverse transpose, as rdr2_world.wgsl reads them.
-    internal Matrix4x4[] Pairs = [];
-
     // Only the current coverage keeps its prepared placements; the arrays keep their largest size.
     private Dictionary<WorldLodNode, PreparedNode> prepared = new(ReferenceEqualityComparer.Instance);
     private Dictionary<WorldLodNode, PreparedNode> nextPrepared = new(ReferenceEqualityComparer.Instance);
 
-    private readonly record struct PreparedInstance(Matrix4x4 World, Matrix4x4 Normal, Vector3 Center, float Radius, float Reach2, int Index);
-
-    private sealed class PreparedNode
+    /// <summary>
+    /// A node's placements, prepared once: each one's world matrix and its inverse transpose (as rdr2_world.wgsl reads
+    /// them), its sphere, its squared reach and which instance it is, a field to an array.
+    /// </summary>
+    internal sealed class PreparedNode
     {
-        internal readonly PreparedInstance[] Entries;
+        internal readonly Matrix4x4[] World, Normal;
+        internal readonly float[] X, Y, Z, R, Reach2;
+        internal readonly int[] Index;
         internal int Count;
 
         internal PreparedNode(WorldLodNode node)
         {
+            int capacity = node.Instances.Count == 0 ? (node.Grass is null ? 1 : 0) : node.Instances.Count;
+            World = new Matrix4x4[capacity];
+            Normal = new Matrix4x4[capacity];
+            X = new float[capacity];
+            Y = new float[capacity];
+            Z = new float[capacity];
+            R = new float[capacity];
+            Reach2 = new float[capacity];
+            Index = new int[capacity];
             if (node.Instances.Count == 0)
             {
-                Entries = node.Grass is null ? new PreparedInstance[1] : [];
                 if (node.Grass is null)
                     Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue, -1);
             }
             else
-            {
-                Entries = new PreparedInstance[node.Instances.Count];
                 for (int i = 0; i < node.Instances.Count; i++)
                 {
                     WorldInstance instance = node.Instances[i];
                     float reach = node.Distance + instance.Radius;
                     Add(instance.Transform, instance.Center, instance.Radius, reach * reach, instance.Grass, 0, i);
                 }
-            }
         }
 
         private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint, int index)
@@ -80,7 +89,15 @@ internal sealed class WorldCullSet
             // placement's tint palette row rides there (0 keeps the material's).
             else
                 normal.M41 = tint;
-            Entries[Count++] = new PreparedInstance(transform, normal, center, radius, reach2, index);
+            World[Count] = transform;
+            Normal[Count] = normal;
+            X[Count] = center.X;
+            Y[Count] = center.Y;
+            Z[Count] = center.Z;
+            R[Count] = radius;
+            Reach2[Count] = reach2;
+            Index[Count] = index;
+            Count++;
         }
     }
 
@@ -90,6 +107,14 @@ internal sealed class WorldCullSet
 
     internal WorldCullSet(IReadOnlyList<WorldLodNode> coverage) => Update(coverage);
 
+    /// <summary>An entry's world matrix (an even <paramref name="pair"/>) or its inverse transpose (odd), from its block.</summary>
+    internal Matrix4x4 Pair(int pair)
+    {
+        int entry = pair / 2, node = Node[entry];
+        PreparedNode block = Blocks[node];
+        return pair % 2 == 0 ? block.World[entry - First[node]] : block.Normal[entry - First[node]];
+    }
+
     internal void Update(IReadOnlyList<WorldLodNode> coverage)
     {
         if (Nodes.Length != coverage.Count)
@@ -98,6 +123,7 @@ internal sealed class WorldCullSet
             First = new int[coverage.Count];
             Count = new int[coverage.Count];
             Passes = new WorldRenderPass[coverage.Count];
+            Blocks = new PreparedNode[coverage.Count];
         }
         int capacity = 0;
         foreach (WorldLodNode node in coverage)
@@ -113,7 +139,6 @@ internal sealed class WorldCullSet
             Reach2 = new float[capacity];
             Node = new int[capacity];
             Instance = new int[capacity];
-            Pairs = new Matrix4x4[checked(capacity * 2)];
         }
         int entry = 0;
         for (int n = 0; n < Nodes.Length; n++)
@@ -124,21 +149,19 @@ internal sealed class WorldCullSet
             if (!prepared.TryGetValue(node, out PreparedNode? block) && !nextPrepared.TryGetValue(node, out block))
                 block = new PreparedNode(node);
             nextPrepared[node] = block;
+            Blocks[n] = block;
+            int count = block.Count;
             First[n] = entry;
-            Count[n] = block.Count;
-            for (int i = 0; i < block.Count; i++, entry++)
-            {
-                ref readonly PreparedInstance value = ref block.Entries[i];
-                X[entry] = value.Center.X;
-                Y[entry] = value.Center.Y;
-                Z[entry] = value.Center.Z;
-                R[entry] = value.Radius;
-                Reach2[entry] = value.Reach2;
-                Node[entry] = n;
-                Instance[entry] = value.Index;
-                Pairs[entry * 2] = value.World;
-                Pairs[entry * 2 + 1] = value.Normal;
-            }
+            Count[n] = count;
+            // A block at a time.
+            Array.Copy(block.X, 0, X, entry, count);
+            Array.Copy(block.Y, 0, Y, entry, count);
+            Array.Copy(block.Z, 0, Z, entry, count);
+            Array.Copy(block.R, 0, R, entry, count);
+            Array.Copy(block.Reach2, 0, Reach2, entry, count);
+            Array.Copy(block.Index, 0, Instance, entry, count);
+            Node.AsSpan(entry, count).Fill(n);
+            entry += count;
         }
         (prepared, nextPrepared) = (nextPrepared, prepared);
         // The nodes no longer covered, and their prepared arrays, go now.
