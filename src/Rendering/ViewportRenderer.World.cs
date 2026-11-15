@@ -84,7 +84,8 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // A surface of an asset: its part (with indexes into the asset's vertices as they are), and how it's drawn.
-    private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, Buffer Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal)
+    private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, Buffer Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
+        WorldFamily Family)
     {
         internal int Level => Part.Lod is >= 0 and < WorldAsset.Lods ? Part.Lod : 0;
 
@@ -118,7 +119,13 @@ internal sealed unsafe partial class ViewportRenderer
     private (Vector3 Eye, Vector3 Forward, int Width, int Height, Vector3 Sun, bool Shadows) worldView;
     private BindGroupLayout? worldInstanceLayout, worldEmptyLayout;
     private BindGroup? worldEmptyGroup;
-    private RenderPipeline? worldSolid, worldUnculled, worldBlended, worldDecal, worldShadow, worldMaskedShadow;
+    private RenderPipeline? worldShadow;
+
+    // Each family's pipelines (see WorldFamily).
+    private const int WorldFamilies = 3;
+    private readonly RenderPipeline?[] worldSolid = new RenderPipeline?[WorldFamilies], worldUnculled = new RenderPipeline?[WorldFamilies],
+        worldBlended = new RenderPipeline?[WorldFamilies], worldDecal = new RenderPipeline?[WorldFamilies],
+        worldMaskedShadow = new RenderPipeline?[WorldFamilies];
     private readonly List<WorldBlendedDraw> worldBlendedDraws = [];
     private bool worldShown;
     private int worldAssetIds;
@@ -230,7 +237,7 @@ internal sealed unsafe partial class ViewportRenderer
             }
         if (ProposedWorldBytes(asset) > budget)
             return false;
-        if (!Rdr2Supported)
+        if (asset.Layout.Kept.Exists(kept => kept.Rdr2 is not null) && !Rdr2Supported)
             throw new NotSupportedException("This GPU can't bind as many textures as Red Dead Redemption 2's material reads.");
         CreateWorldPipelines();
         ChargeWorldMemory(asset.MemoryCost);
@@ -585,4 +592,12 @@ internal sealed unsafe partial class ViewportRenderer
             }
         }
     }
+}
+
+/// <summary>Which world shaders draw a surface: RDR2's material, or GTA V's surface.wgsl or terrain.wgsl.</summary>
+internal enum WorldFamily
+{
+    Rdr2,
+    Gta,
+    GtaTerrain,
 }

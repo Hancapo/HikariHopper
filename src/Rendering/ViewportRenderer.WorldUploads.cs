@@ -51,8 +51,8 @@ internal sealed unsafe partial class ViewportRenderer
     {
         var pending = new PendingWorldUpload(asset);
         var queued = new HashSet<GameTexture>(ReferenceEqualityComparer.Instance);
-        foreach (var (_, _, rdr2) in asset.Layout.Kept)
-            foreach (GameTexture? texture in rdr2.Textures)
+        foreach (var (_, material, rdr2) in asset.Layout.Kept)
+            foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
                 if (texture is not null && !textures.ContainsKey(texture) && queued.Add(texture))
                     pending.Textures.Enqueue(texture);
         pendingWorld = pending;
@@ -161,18 +161,32 @@ internal sealed unsafe partial class ViewportRenderer
             foreach (int i in pending.Layout.Order)
             {
                 var (part, material, rdr2) = pending.Layout.Kept[i];
+                WorldFamily family = rdr2 is not null ? WorldFamily.Rdr2 : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
                 if (!groups.TryGetValue(part.Material, out var group))
                 {
-                    Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-                    queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
-                    group = (Rdr2Group(rdr2, uniforms), uniforms);
+                    CreateWorldFamily(family);
+                    Buffer uniforms;
+                    if (rdr2 is not null)
+                    {
+                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
+                        group = (Rdr2Group(rdr2, uniforms), uniforms);
+                    }
+                    else
+                    {
+                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
+                        group = (material.Terrain ? TerrainGroup(material, uniforms) : MaterialGroup(material, material.Uniforms, uniforms), uniforms);
+                    }
                     groups.Add(part.Material, group);
-                    foreach (GameTexture? texture in rdr2.Textures)
+                    foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
                         if (texture is not null && !uploaded.Textures.Contains(texture))
                             uploaded.Textures.Add(texture);
                 }
-                uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, material.Decal ? AlphaMode.Blend : material.AlphaMode,
-                    rdr2.DoubleSided, material.Decal));
+                // Terrain is solid ground, as the model viewer draws it.
+                AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
+                uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
+                    material.Decal, family));
             }
             // RedFury's depth runs: adjacent casters of a level, one draw each.
             foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))

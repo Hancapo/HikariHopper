@@ -50,6 +50,15 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.NotNull(index.Locate(placed.Asset.Hash, placed.Asset.Extension));
             Assert.EndsWith(".ymap", index.Locate(placed.Id.Map, 73)!.Name);
             Assert.DoesNotContain("0x", index.NameOf(placed.Id.Map));
+            // Its roads: their own dictionary holds only some of their textures, the rest are its gtxd parents'
+            // (downtownrd, then globalroads); all of them are found, and the surfaces are drawn.
+            WorldLodNode road = near.First(node => node.Asset.TextureDictionary == new CommonFury.Hashing.Hash32("dt1_rd1_1").Value);
+            Rendering.World.WorldAsset asset;
+            lock (index.Gate)
+                asset = index.LoadAsset(road.Asset);
+            Assert.NotEmpty(asset.Layout.Kept);
+            Assert.DoesNotContain(asset.Diagnostics, line => line.StartsWith("Texture not found", StringComparison.Ordinal));
+            Assert.All(asset.Layout.Kept, kept => Assert.Null(kept.Rdr2));
         }
         finally
         {

@@ -88,6 +88,14 @@ internal sealed partial class SurfaceMaterial
     public AlphaMode AlphaMode { get; private init; }
 
     /// <summary>
+    /// The textures its group binds, as surface.wgsl or terrain.wgsl read them (fur's and cables' aside): what the
+    /// world puts up before it draws the material.
+    /// </summary>
+    internal IEnumerable<Texture?> BoundTextures() => Terrain
+        ? [.. Layers, Lookup, TintPalette]
+        : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask];
+
+    /// <summary>
     /// Ped hair, which covers each pixel by its alpha. Enhanced draws it with deferredsubsamplealpha: it drops pixels by
     /// a noise where the alpha is low and lets its TAA average them, with no cutoff. Without TAA, the viewer draws it
     /// twice to the same end: solid where it is all but opaque, then the rest blended over that by its alpha.
