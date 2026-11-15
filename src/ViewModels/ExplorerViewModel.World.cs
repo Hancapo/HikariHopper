@@ -41,6 +41,16 @@ public readonly record struct WorldSpot(Vector3 Eye, float Yaw, float Pitch)
 }
 
 /// <summary>
+/// A placement picked in the world, as its menu shows it: its archetype's name, its map file and entity, the files of
+/// its model and its map (null where they aren't found), and where it stands.
+/// </summary>
+internal sealed record WorldPlacement(string Name, string Detail, WorldFile? Model, WorldFile? Map, Vector3 Position)
+{
+    /// <summary>Where it stands, as the address row writes coordinates.</summary>
+    public string Coordinates => string.Create(CultureInfo.InvariantCulture, $"{Position.X:F2}, {Position.Y:F2}, {Position.Z:F2}");
+}
+
+/// <summary>
 /// A stop in a tab's Back and Forward history: a folder of its files (<paramref name="Path"/>, as the tab names it), or
 /// its world at a camera spot, with the folder the files are left at.
 /// </summary>
@@ -147,6 +157,44 @@ public sealed partial class ExplorerViewModel
         else if (world is not null)
             worldStatus = "Preparing the world";
         RaiseAll(WorldIndexProperties);
+    }
+
+    /// <summary>
+    /// A picked placement as its menu shows it: its archetype's name (its model's file's, or its dictionary member's),
+    /// "&lt;map file&gt; · entity N" (and which instance, for a batch's), and the files of its model and map.
+    /// </summary>
+    internal WorldPlacement? DescribePlacement(Rendering.WorldPick pick)
+    {
+        if (WorldIndex is not { } index)
+            return null;
+        WorldFile? model = Rdr2WorldFiles.Locate(index, Provider.GamePath, pick.Asset.Hash, pick.Asset.Extension);
+        WorldFile? map = Rdr2WorldFiles.Locate(index, Provider.GamePath, pick.Node.Id.Map, 73);
+        string name = pick.Asset.Member != 0 ? Rdr2WorldFiles.NameOf(pick.Asset.Member) : model?.Title ?? Rdr2WorldFiles.NameOf(pick.Asset.Hash);
+        string where = map?.Name ?? $"{Rdr2WorldFiles.NameOf(pick.Node.Id.Map)}.ymap";
+        string detail = pick.Instance >= 0
+            ? $"{where} · entity {pick.Node.Id.Index} · instance {pick.Instance}"
+            : $"{where} · entity {pick.Node.Id.Index}";
+        return new WorldPlacement(name, detail, model, map, pick.Position);
+    }
+
+    /// <summary>Opens a placement's model in the 3D viewer, its textures found as from its folder.</summary>
+    internal void OpenWorldModel(WorldFile model) => OpenHit(new Core.Search.SearchHit(model.Path, model.Size, []), open: true);
+
+    /// <summary>
+    /// Shows one of the world's files in its folder, selected, on the Files side: one more stop in Back and Forward,
+    /// which returns to the world where its camera was.
+    /// </summary>
+    internal void ShowWorldFile(WorldFile file)
+    {
+        if (GoToAddress(file.Path) && InWorld)
+            SetFace(TabFace.Files);
+    }
+
+    /// <summary>Copies a placement's name or coordinates, saying so.</summary>
+    internal void CopyWorldText(string text, string what)
+    {
+        _ = Infrastructure.AppServices.Clipboard.SetTextAsync(text);
+        SetStatus($"Copied {what}");
     }
 
     private float worldHours = Rendering.DayCycle.DefaultHours;

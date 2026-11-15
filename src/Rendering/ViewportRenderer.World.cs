@@ -39,6 +39,12 @@ internal sealed unsafe partial class ViewportRenderer
         internal Buffer? SourceInstances, Instances, ShadowInstances;
         internal BindGroup? SourceGroup;
         internal readonly WorldInstanceBuffer Sources = new();
+
+        // Which placement each of Sources is: its node, and which of its instances (-1 for a node without any).
+        internal readonly List<(WorldLodNode Node, int Instance)> Placements = [];
+
+        // Its number in the picking pass, from 1.
+        internal int Id;
         internal long SourceRevision = -1;
         internal int Capacity, ShadowCapacity;
         internal bool Reflected;
@@ -113,6 +119,7 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? worldSolid, worldUnculled, worldBlended, worldDecal, worldShadow, worldMaskedShadow;
     private readonly List<WorldBlendedDraw> worldBlendedDraws = [];
     private bool worldShown;
+    private int worldAssetIds;
 
     /// <summary>
     /// Whether this view shows a world: the scene is then drawn relative to the camera, the backdrop's grid and floor
@@ -278,6 +285,7 @@ internal sealed unsafe partial class ViewportRenderer
         foreach (GameTexture texture in uploaded.Textures)
             worldTextureUsers[texture] = worldTextureUsers.GetValueOrDefault(texture) + 1;
         uploaded.Used = worldClock;
+        uploaded.Id = ++worldAssetIds;
         ChargeWorldMemory(uploaded.MemoryCost);
         worldAssets.Add(asset.Key, uploaded);
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
@@ -313,6 +321,7 @@ internal sealed unsafe partial class ViewportRenderer
         worldCull.Update([]);
         listedAssets.Clear();
         worldBlendedDraws.Clear();
+        worldPicked = null;
         WorldDrawnCount = 0;
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
     }
@@ -369,7 +378,10 @@ internal sealed unsafe partial class ViewportRenderer
             worldSourceIndex = new uint[set.Pairs.Length / 2];
         foreach (WorldGpuAsset asset in worldAssets.Values)
             if (asset.SourceRevision != worldSourceRevision)
+            {
                 asset.Sources.Begin();
+                asset.Placements.Clear();
+            }
         for (int n = 0; n < set.Nodes.Length; n++)
         {
             if (!worldAssets.TryGetValue(set.Nodes[n].Asset, out WorldGpuAsset? asset) || asset.SourceRevision == worldSourceRevision)
@@ -378,6 +390,7 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 worldSourceIndex[entry] = (uint)asset.Sources.Count;
                 asset.Sources.Add(set.Pairs, entry, asset.Local);
+                asset.Placements.Add((set.Nodes[n], set.Instance[entry]));
             }
         }
         foreach (WorldGpuAsset asset in worldAssets.Values)

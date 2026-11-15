@@ -500,6 +500,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.Draw(3);
             mapped.End();
             DrawOutline(encoder);
+            if (worldShown)
+                DrawWorldOutline(encoder);
             // The solid collision over the model, its nearest surface only, then the lines over everything.
             if (solidBuffer is not null)
             {

@@ -182,6 +182,12 @@ internal sealed partial class ViewportHost : NativeControlHost
     /// <summary>Raised when the view is clicked without dragging, with the ray from the eye through the pointer, in the world.</summary>
     public event Action<System.Numerics.Vector3, System.Numerics.Vector3>? Clicked;
 
+    /// <summary>
+    /// A click that didn't drag, at a pixel of the view (as the renderer's frame has them), and whether it was the
+    /// right button's: the world picks there.
+    /// </summary>
+    internal event Action<int, int, bool>? PixelClicked;
+
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
     internal void ShowParts(bool[] shown)
     {
@@ -534,8 +540,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             case LeftDown:
             case RightDown when r.Camera.Free:
                 (mouseX, mouseY) = Point(lParam);
-                if (message == LeftDown)
-                    (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
+                (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
                 dragging = true;
                 SetFocus(window);
                 SetCapture(window);
@@ -551,11 +556,16 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case LeftUp:
             case RightUp when dragging:
-                if (message == LeftUp && dragging && !pressMoved)
+                if (dragging && !pressMoved)
                 {
                     (int clickX, int clickY) = Point(lParam);
-                    (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
-                    Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                    bool right = message == RightUp;
+                    if (!right)
+                    {
+                        (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
+                        Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                    }
+                    Dispatcher.UIThread.Post(() => PixelClicked?.Invoke(clickX, clickY, right));
                 }
                 dragging = false;
                 ReleaseCapture();

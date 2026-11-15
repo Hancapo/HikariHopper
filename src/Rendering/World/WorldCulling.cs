@@ -22,6 +22,9 @@ internal sealed class WorldCullSet
     internal float[] X = [], Y = [], Z = [], R = [], Reach2 = [];
     internal int[] Node = [];
 
+    // Per entry: which of its node's instances it is; -1 for a node without instances.
+    internal int[] Instance = [];
+
     // Per entry: its world matrix, then its inverse transpose, as rdr2_world.wgsl reads them.
     internal Matrix4x4[] Pairs = [];
 
@@ -29,7 +32,7 @@ internal sealed class WorldCullSet
     private Dictionary<WorldLodNode, PreparedNode> prepared = new(ReferenceEqualityComparer.Instance);
     private Dictionary<WorldLodNode, PreparedNode> nextPrepared = new(ReferenceEqualityComparer.Instance);
 
-    private readonly record struct PreparedInstance(Matrix4x4 World, Matrix4x4 Normal, Vector3 Center, float Radius, float Reach2);
+    private readonly record struct PreparedInstance(Matrix4x4 World, Matrix4x4 Normal, Vector3 Center, float Radius, float Reach2, int Index);
 
     private sealed class PreparedNode
     {
@@ -42,20 +45,21 @@ internal sealed class WorldCullSet
             {
                 Entries = node.Grass is null ? new PreparedInstance[1] : [];
                 if (node.Grass is null)
-                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue);
+                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue, -1);
             }
             else
             {
                 Entries = new PreparedInstance[node.Instances.Count];
-                foreach (WorldInstance instance in node.Instances)
+                for (int i = 0; i < node.Instances.Count; i++)
                 {
+                    WorldInstance instance = node.Instances[i];
                     float reach = node.Distance + instance.Radius;
-                    Add(instance.Transform, instance.Center, instance.Radius, reach * reach, instance.Grass, 0);
+                    Add(instance.Transform, instance.Center, instance.Radius, reach * reach, instance.Grass, 0, i);
                 }
             }
         }
 
-        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint)
+        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint, int index)
         {
             // Degenerate or non-invertible transforms were never drawn.
             if (transform == default || !Matrix4x4.Invert(transform, out Matrix4x4 inverse))
@@ -76,7 +80,7 @@ internal sealed class WorldCullSet
             // placement's tint palette row rides there (0 keeps the material's).
             else
                 normal.M41 = tint;
-            Entries[Count++] = new PreparedInstance(transform, normal, center, radius, reach2);
+            Entries[Count++] = new PreparedInstance(transform, normal, center, radius, reach2, index);
         }
     }
 
@@ -108,6 +112,7 @@ internal sealed class WorldCullSet
             R = new float[capacity];
             Reach2 = new float[capacity];
             Node = new int[capacity];
+            Instance = new int[capacity];
             Pairs = new Matrix4x4[checked(capacity * 2)];
         }
         int entry = 0;
@@ -130,6 +135,7 @@ internal sealed class WorldCullSet
                 R[entry] = value.Radius;
                 Reach2[entry] = value.Reach2;
                 Node[entry] = n;
+                Instance[entry] = value.Index;
                 Pairs[entry * 2] = value.World;
                 Pairs[entry * 2 + 1] = value.Normal;
             }

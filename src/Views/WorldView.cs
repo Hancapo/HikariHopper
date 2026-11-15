@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using HikariHopper.Core;
+using HikariHopper.Views.Controls;
 using HikariHopper.Rendering.World;
 using HikariHopper.ViewModels;
 
@@ -45,6 +46,7 @@ internal sealed class WorldView : UserControl
     {
         Viewport = new ViewportHost { FreeCamera = true, World = true };
         Viewport.Drawing += (renderer, seconds) => streamer?.Update(renderer, seconds, bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours);
+        Viewport.PixelClicked += PickAt;
         Pattern = new RailPattern { IsRunning = false };
         Loading = new LoadingOverlay { Background = Avalonia.Media.Brushes.Transparent, Detail = "Preparing the world" };
         Cover = new Panel
@@ -117,6 +119,83 @@ internal sealed class WorldView : UserControl
     internal LoadingOverlay Loading { get; }
 
     private RailPattern Pattern { get; }
+
+    private DropdownWindow? menu;
+
+    /// <summary>The right click's menu, while it's open.</summary>
+    internal DropdownWindow? Menu => menu;
+
+    /// <summary>
+    /// Picks the placement under a pixel of the view and outlines it (nothing there outlines nothing); a right click
+    /// opens its menu there.
+    /// </summary>
+    private void PickAt(int x, int y, bool right)
+    {
+        if (bridge is not { InWorld: true } model || Viewport.Renderer is not { } renderer)
+            return;
+        Rendering.WorldPick? pick = renderer.PickWorldAt(x, y);
+        renderer.PickWorld(pick);
+        if (right && pick is not null && model.DescribePlacement(pick) is { } placement)
+        {
+            double scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
+            OpenMenu(placement, new Point(x / scale, y / scale));
+        }
+    }
+
+    /// <summary>
+    /// A picked placement's menu at a point of the view (mockup 5A), over the viewport: its name and where it's from,
+    /// then opening its model, its model's and map's files, and copying its name and coordinates.
+    /// </summary>
+    internal void OpenMenu(WorldPlacement placement, Point at)
+    {
+        menu?.Close();
+        if (bridge is not { } model)
+            return;
+        var items = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 280 };
+        items.Children.Add(new StackPanel
+        {
+            Margin = new Thickness(10, 6, 10, 6),
+            Spacing = 2,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = placement.Name,
+                    FontFamily = Ui.Theme.UiFont,
+                    FontSize = Ui.Theme.FontSize,
+                    FontWeight = Avalonia.Media.FontWeight.SemiBold,
+                    Foreground = Ui.Theme.Text,
+                },
+                new TextBlock
+                {
+                    Text = placement.Detail,
+                    FontFamily = Ui.Theme.MonoFont,
+                    FontSize = Ui.Theme.SmallFontSize,
+                    Foreground = Ui.Theme.TextDim,
+                },
+            },
+        });
+        items.Children.Add(new RetroMenuSeparator());
+        void Item(string icon, string text, Action action, bool enabled = true)
+        {
+            var row = new PartsPanel.MenuRowItem(icon, text, "") { IsEnabled = enabled };
+            row.Triggered += () =>
+            {
+                menu?.Close();
+                action();
+            };
+            items.Children.Add(row);
+        }
+        Item("box", "Open model", () => model.OpenWorldModel(placement.Model!), placement.Model is not null);
+        Item("folder", "Show model in Files", () => model.ShowWorldFile(placement.Model!), placement.Model is not null);
+        Item("map", "Show map file in Files", () => model.ShowWorldFile(placement.Map!), placement.Map is not null);
+        items.Children.Add(new RetroMenuSeparator());
+        Item("copy", "Copy name", () => model.CopyWorldText(placement.Name, "name"));
+        Item("copy", "Copy coordinates", () => model.CopyWorldText(placement.Coordinates, "coordinates"));
+        menu = DropdownWindow.OpenAt(this, at, items);
+        if (menu is not null)
+            menu.Closed += (_, _) => menu = null;
+    }
 
     /// <summary>What streams the world in, once its index is ready; none before, or without a world.</summary>
     internal WorldStreamer? Streamer => streamer;
