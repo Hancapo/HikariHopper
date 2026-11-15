@@ -7,5 +7,10 @@
     <!-- FiveFury.NET checkout: a sibling folder by default, or FIVEFURY_ROOT / -p:FiveFuryRoot=... -->
     <FiveFuryRoot Condition="'$(FiveFuryRoot)' == '' and '$(FIVEFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(FIVEFURY_ROOT)'))</FiveFuryRoot>
     <FiveFuryRoot Condition="'$(FiveFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../FiveFury.NET/</FiveFuryRoot>
+    <!-- RedFury.NET checkout, for Red Dead Redemption 2: a sibling folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
+    <RedFuryRoot Condition="'$(RedFuryRoot)' == '' and '$(REDFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(REDFURY_ROOT)'))</RedFuryRoot>
+    <RedFuryRoot Condition="'$(RedFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../RedFury.NET/</RedFuryRoot>
+    <!-- Both libraries build on CommonFury; they share FiveFury's checkout of it, so the app has one. -->
+    <CommonFuryRoot>$(FiveFuryRoot)external/CommonFury/</CommonFuryRoot>
   </PropertyGroup>
 </Project>
