@@ -1,0 +1,79 @@
+using System.Numerics;
+
+namespace HikariHopper.Rendering.World;
+
+/// <summary>
+/// An asset's placements as rdr2_world.wgsl reads them, each its world matrix (from the asset's own vertices) and its
+/// inverse transpose (RedFury's WorldInstanceBuffer, copied). Kept while the coverage stays; whether it changed is
+/// known, so only changed ones are written to the GPU.
+/// </summary>
+internal sealed class WorldInstanceBuffer
+{
+    internal Matrix4x4[] Matrices { get; private set; } = [];
+    internal int Count { get; private set; }
+    internal bool Changed { get; private set; }
+
+    internal void Begin()
+    {
+        Count = 0;
+        Changed = false;
+    }
+
+    /// <summary>A pair from <see cref="WorldCullSet.Pairs"/>, the world matrix after <paramref name="local"/>, where the asset's vertices are from.</summary>
+    internal void Add(Matrix4x4[] pairs, int entry, Matrix4x4 local)
+    {
+        int offset = Count * 2;
+        if (offset + 2 > Matrices.Length)
+        {
+            Matrix4x4[] grown = Matrices;
+            Array.Resize(ref grown, Math.Max(32, offset * 2));
+            Matrices = grown;
+        }
+        Matrix4x4 world = local * pairs[entry * 2];
+        if (Matrices[offset] != world || Matrices[offset + 1] != pairs[entry * 2 + 1])
+        {
+            Matrices[offset] = world;
+            Matrices[offset + 1] = pairs[entry * 2 + 1];
+            Changed = true;
+        }
+        Count++;
+    }
+}
+
+/// <summary>
+/// The indexes of an asset's placements in view (RedFury's WorldInstanceIndices, copied): what moves each frame, four
+/// bytes a placement. The count says which are live; old tails are reused.
+/// </summary>
+internal sealed class WorldInstanceIndices
+{
+    internal uint[] Values { get; private set; } = [];
+    internal int Count { get; private set; }
+    internal bool Changed { get; private set; }
+
+    internal void Reserve(int count)
+    {
+        if (count <= Values.Length)
+            return;
+        uint[] values = Values;
+        Array.Resize(ref values, count);
+        Values = values;
+    }
+
+    internal void Begin()
+    {
+        Count = 0;
+        Changed = false;
+    }
+
+    internal void Add(uint source)
+    {
+        if (Count == Values.Length)
+            Reserve(Math.Max(16, checked(Count * 2)));
+        if (Values[Count] != source)
+        {
+            Values[Count] = source;
+            Changed = true;
+        }
+        Count++;
+    }
+}

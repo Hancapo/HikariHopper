@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using HikariHopper.Core;
+using HikariHopper.Rendering.World;
 using HikariHopper.ViewModels;
 using HikariHopper.Views;
 
@@ -266,6 +267,28 @@ public sealed class WorldFaceTests : ExplorerTestBase
         TestWait.Pump(100);
         Assert.False(world.Cover.IsVisible);
         Assert.Equal("0 maps · 0 placements", tab.WorldStatus);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Once_its_index_is_ready_the_world_streams_into_its_view_until_the_game_closes()
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady || tab.WorldFailure is not null, "the world's index");
+        tab.ShowWorld();
+        TestWait.Pump(50);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Viewport.World);
+        Assert.NotNull(world.Streamer);
+        WorldStreamer streamer = world.Streamer!;
+        // The files side pauses it, keeping what it streamed.
+        tab.ShowFiles();
+        TestWait.Pump(50);
+        Assert.Same(streamer, world.Streamer);
+        tab.CloseWorkspace();
+        TestWait.Pump(50);
+        Assert.Null(world.Streamer);
         window.Close();
     }
 

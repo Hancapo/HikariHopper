@@ -21,6 +21,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Flip a Red Dead Redemption 2 tab between its files and its world with the status bar's switch or F6: the world flown through with W A S D, its coordinates in the address row, its time of day at the status bar's end as in the 3D viewer, and Back and Forward through both. ([#248](https://github.com/Hancapo/HikariHopper/pull/248))
 - Open Red Dead Redemption 2 straight on its world from the globe at the end of its start page row. ([#249](https://github.com/Hancapo/HikariHopper/pull/249))
 - Prepare Red Dead Redemption 2's world in the background as the game opens, cached until the game's archives change, with a loading screen saying how far it has got when the world is shown before it's ready. ([#250](https://github.com/Hancapo/HikariHopper/pull/250))
+- Fly through Red Dead Redemption 2's world: the whole map through the game's own levels of detail, with full detail streamed in around the camera within a 4 GB budget. ([#251](https://github.com/Hancapo/HikariHopper/pull/251))
 
 ### Changed
 

@@ -166,8 +166,22 @@ internal static class Rdr2Scene
         return groups;
     }
 
+    // The game's main view's render mask bit, and grass_imposter_slod's shader.
+    private const byte MainViewRenderMask = 1;
+    private const uint GrassImposterShader = 0x6E5234A1;
+
     /// <summary>Builds one scene of placed RDR2 drawables, as <see cref="DrawableScene.Build"/> does GTA V's.</summary>
-    internal static DrawableScene Build(IReadOnlyList<Placed> models, TextureLookup lookup)
+    internal static DrawableScene Build(IReadOnlyList<Placed> models, TextureLookup lookup) =>
+        Build(models, reference => reference.Name.Length > 0 ? lookup.Find(reference.Name) : null, lookup, viewer: true);
+
+    /// <summary>
+    /// One of the world's assets as a scene: its textures found by <paramref name="find"/> when the drawables don't carry
+    /// them (the world's bindings, by hash), and nothing the model viewer alone shows (its skeleton's lines, its edges).
+    /// </summary>
+    internal static DrawableScene BuildWorld(IReadOnlyList<Placed> models, Func<RedReference, Texture?> find) =>
+        Build(models, find, TextureLookup.None, viewer: false);
+
+    private static DrawableScene Build(IReadOnlyList<Placed> models, Func<RedReference, Texture?> find, TextureLookup lookup, bool viewer)
     {
         // Every drawable's own textures, for all of them: a fragment's extra drawables use its main drawable's materials,
         // and its textures, without a dictionary of their own.
@@ -182,10 +196,11 @@ internal static class Rdr2Scene
             foreach (RedYtd dictionary in own)
                 if (((reference.Name.Length > 0 ? dictionary.Find(reference.Name) : null) ?? dictionary.Find(reference.NameHash)) is { } found)
                     return Rdr2Textures.Of(found);
-            return reference.Name.Length > 0 ? lookup.Find(reference.Name) : null;
+            return find(reference);
         }
 
         var diagnostics = new List<string>();
+        int omitted = 0;
         var materials = new List<SurfaceMaterial>();
         var firstMaterial = new Dictionary<IReadOnlyList<RedFury.Drawables.Material>, int>(ReferenceEqualityComparer.Instance);
         var placed = new List<(RedGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary, RedModel Source)>();
@@ -208,6 +223,14 @@ internal static class Rdr2Scene
                 var transforms = new Dictionary<RedModel, Matrix4x4>(ReferenceEqualityComparer.Instance);
                 foreach (var (_, geometry, model) in TreeModels(level))
                 {
+                    // In the world, as RedFury's world viewer has it: a model draws only where its render mask has the
+                    // main view's bit (shadow proxies, water helper volumes and trees' shadow copies don't), and grass's
+                    // distant impostor proxy needs instance buffers of its own.
+                    if (!viewer && ((model.RenderMask & MainViewRenderMask) == 0 || geometry.Material?.ShaderNameHash == GrassImposterShader))
+                    {
+                        omitted++;
+                        continue;
+                    }
                     if (!transforms.TryGetValue(model, out Matrix4x4 transform))
                     {
                         transform = scene.Transform;
@@ -233,6 +256,8 @@ internal static class Rdr2Scene
             diagnostics.Add($"Water drawn with the generic material, until the viewer copies the scene behind it: {shader}");
         if (skinned)
             diagnostics.Add("Skinned parts are shown in their authored pose.");
+        if (omitted != 0 && placed.Count == 0)
+            throw new NotSupportedException("No geometry is drawn in the main view: every model's render mask leaves it out.");
         diagnostics.AddRange(lookup.Diagnostics);
 
         // Each geometry's vertices, decoded once: the box needs the primary levels' before anything is placed.
@@ -297,7 +322,7 @@ internal static class Rdr2Scene
                 foreach (uint corner in used)
                     sum += vertices[baseVertex + (int)corner].Position;
                 parts.Add(new SurfacePart(material, first, (uint)piece.Count, baseVertex, sum / used.Count, model, lod, name, primary,
-                    used.Count, DrawableScene.CountEdges(indices, (int)first, piece.Count)));
+                    used.Count, viewer ? DrawableScene.CountEdges(indices, (int)first, piece.Count) : 0));
             }
         }
         return new DrawableScene
@@ -310,7 +335,7 @@ internal static class Rdr2Scene
             Materials = materials,
             Models = [.. models.Select(m => (m.Name, (string?)null))],
             Variants = [.. models.Select(m => m.Variant)],
-            Overlays = Overlays(models, origin, box.IsEmpty ? 1 : box.Size.Length() / 2),
+            Overlays = viewer ? Overlays(models, origin, box.IsEmpty ? 1 : box.Size.Length() / 2) : DrawableOverlays.None,
             EmbeddedTextureCount = own.SelectMany(dictionary => dictionary.Textures).Select(texture => texture.Name)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             Diagnostics = diagnostics,

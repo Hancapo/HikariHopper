@@ -296,6 +296,12 @@ internal sealed unsafe partial class ViewportRenderer
             new TexelCopyTextureInfo { Texture = skyMap!.Texture, MipLevel = 0, Aspect = TextureAspect.All },
             new TexelCopyTextureInfo { Texture = sceneMap!.Texture, MipLevel = 0, Aspect = TextureAspect.All },
             whole);
+        // A world reflects its sky alone for now: no floor, and not itself yet.
+        if (worldShown)
+        {
+            DrawMips(encoder, sceneMap);
+            return;
+        }
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
             ColorAttachments = [new RenderPassColorAttachment { View = sceneMap.Mips[0], LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
