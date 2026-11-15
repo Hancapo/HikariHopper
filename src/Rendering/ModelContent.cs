@@ -69,6 +69,12 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
         Func<string, IReadOnlyList<NearbyDictionary>?>? elsewhere = null, IReadOnlyList<NearbyDictionary>? beside = null)
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
+        // Red Dead Redemption 2's, read through RedFury: its textures from the dictionaries named for it and beside it.
+        if (Textures.Rdr2TextureSource.IsRdr2(data))
+        {
+            DrawableScene rdr2 = Rdr2Scene.Read(name, data, new TextureLookup(Parsed(dictionaries), [], overrides, null, beside));
+            return new ModelContent(rdr2.Box, new ViewportMesh(rdr2.Origin), rdr2);
+        }
         Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
         Ydr? drawable = extension == ".ydr" ? Ydr.Read(data) : null;
         Ydd? drawables = extension == ".ydd" ? Ydd.Read(data) : null;
@@ -84,18 +90,7 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
             : fragment is not null ? () => fragment.Write() : null;
         if (models is not null)
         {
-            var named = new List<TextureDictionary>();
-            foreach (byte[] dictionary in dictionaries ?? [])
-            {
-                try
-                {
-                    named.Add(Ytd.Read(dictionary).Dictionary);
-                }
-                catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException)
-                {
-                }
-            }
-            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(named, nearby ?? [], overrides, elsewhere, beside),
+            DrawableScene scene = DrawableScene.Build(models, new TextureLookup(Parsed(dictionaries), nearby ?? [], overrides, elsewhere, beside),
                 fragment?.PhysicsLods.FirstOrDefault(lod => lod is not null)?.CompositeBound, fragment?.Lights);
             scene.Writer = writer;
             return new ModelContent(scene.Box, new ViewportMesh(scene.Origin), scene);
@@ -122,6 +117,23 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
             return new ModelContent(box, NavmeshMesh.Build(navmesh, box.Center));
         }
         throw new InvalidDataException($"{name} isn't a collision, navmesh, drawable or fragment file.");
+    }
+
+    // The dictionaries named for a model, as the viewer reads them; those that can't be read left out.
+    private static List<TextureDictionary> Parsed(IReadOnlyList<byte[]>? dictionaries)
+    {
+        var named = new List<TextureDictionary>();
+        foreach (byte[] dictionary in dictionaries ?? [])
+        {
+            try
+            {
+                named.Add(Rdr2Textures.Parse(dictionary));
+            }
+            catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException)
+            {
+            }
+        }
+        return named;
     }
 
     /// <summary>A drawable's name as shown: without the .#dr its resource name ends in.</summary>

@@ -12,6 +12,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
 - Browse, search and extract from Red Dead Redemption 2's archives, their folders and file names rebuilt from the names the game is known to use. ([#238](https://github.com/Hancapo/HikariHopper/pull/238), [#239](https://github.com/Hancapo/HikariHopper/pull/239))
 - Open, edit and save Red Dead Redemption 2's texture dictionaries in the texture editor. ([#240](https://github.com/Hancapo/HikariHopper/pull/240), [#241](https://github.com/Hancapo/HikariHopper/pull/241))
+- Open Red Dead Redemption 2's models in the 3D viewer, with the textures they carry or that sit beside them. ([#242](https://github.com/Hancapo/HikariHopper/pull/242))
 
 ### Changed
 

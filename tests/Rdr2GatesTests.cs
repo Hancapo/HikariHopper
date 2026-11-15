@@ -10,12 +10,13 @@ namespace HikariHopper.Tests;
 [Collection(ExplorerCollection.Name)]
 public sealed class Rdr2GatesTests : ExplorerTestBase
 {
-    // An RPF8 holding a drawable and a binary file, opened on its own in a tab.
+    // An RPF8 holding a drawable, a collision and a binary file, opened on its own in a tab.
     private ExplorerViewModel OpenRpf8()
     {
         var archive = new RpfBuilder();
         archive.Files.Add(RpfFile.FromBytes(new Hash32(0x12345678), "hello"u8));
         archive.Files.Add(RpfFile.FromResource(new Hash32(0x00C0FFEE), new Rsc8Resource(new Rsc8Header(0xA2, 0, 255, 0, 0x1A, 0x12), new byte[32]), 2));
+        archive.Files.Add(RpfFile.FromResource(new Hash32(0x00B0B0B0), new Rsc8Resource(new Rsc8Header(0xA2, 0, 255, 0, 0x1A, 0x12), new byte[32]), 6));
         string path = Path.Combine(Work, "x.rpf");
         File.WriteAllBytes(path, archive.Write());
         var tab = new ExplorerViewModel();
@@ -48,17 +49,26 @@ public sealed class Rdr2GatesTests : ExplorerTestBase
     }
 
     [Fact]
-    public void Its_textures_and_models_say_they_dont_open_yet()
+    public void Its_drawables_open_in_the_3D_viewer_and_its_collisions_say_they_dont_yet()
     {
         ExplorerViewModel tab = OpenRpf8();
         ModelFile? opened = null;
         tab.ModelFileOpened += (_, file) => opened = file;
         int row = RowOf(tab, "0x00C0FFEE.ydr");
         tab.SelectEntry(row);
+        Assert.True(tab.CanOpenSelection);
+        tab.ActivateEntry(row);
+        Assert.Equal("0x00C0FFEE.ydr", opened?.Name);
+        // Read only: nothing to save it back to.
+        Assert.Null(opened!.SaveTarget);
+
+        opened = null;
+        row = RowOf(tab, "0x00B0B0B0.ybn");
+        tab.SelectEntry(row);
         Assert.False(tab.CanOpenSelection);
         tab.ActivateEntry(row);
         Assert.Null(opened);
-        Assert.Equal("0x00C0FFEE.ydr: Red Dead Redemption 2's models don't open in HikariHopper yet", tab.Status);
+        Assert.Equal("0x00B0B0B0.ybn: Red Dead Redemption 2's collisions and navmeshes don't open in HikariHopper yet", tab.Status);
     }
 
     [Fact]

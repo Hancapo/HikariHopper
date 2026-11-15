@@ -69,6 +69,23 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
         return new(skeleton.SegmentArray(), lights.SegmentArray()) { Solid = [.. solid] };
     }
 
+    /// <summary>
+    /// A skeleton given as its joints, each with its parent's, if it has one: a cross at each, a line to its parent,
+    /// sized for a scene of <paramref name="radius"/>.
+    /// </summary>
+    public static DrawableOverlays Bones(IEnumerable<(Vector3 Joint, Vector3? Parent)> bones, Vector3 origin, float radius)
+    {
+        var skeleton = new ViewportMesh(origin);
+        float joint = Math.Max(radius, .1f) * .012f;
+        foreach (var (at, parent) in bones)
+        {
+            Cross(skeleton, at, joint, BoneColour);
+            if (parent is { } to)
+                skeleton.Line(to, at, BoneColour, Width);
+        }
+        return new(skeleton.SegmentArray(), []);
+    }
+
     /// <summary>Where the bone tagged <paramref name="tag"/> is, which a light moves with; the drawable's origin without one.</summary>
     private static Matrix4x4 BoneOf(Drawable drawable, Matrix4x4[]? bones, short tag) =>
         drawable.Skeleton?.FindBone((ushort)tag) is { } bone && bones is not null && bone.Index < bones.Length ? bones[bone.Index] : Matrix4x4.Identity;

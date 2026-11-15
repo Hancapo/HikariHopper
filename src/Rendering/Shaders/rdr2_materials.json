@@ -1,0 +1,753 @@
+{
+  "defaults": {
+    "constants": {
+      "water_colour": ["FogColor"],
+      "water_ripple_power": ["RippleBumpiness"],
+      "water_ripple_scale": ["RippleScale"],
+      "water_foam_scale": ["RiverFoamTextureScale"],
+      "water_opacity_override": ["FogAndOpacityOverride"],
+      "dirt_blend": [
+        "DirtBlend"
+      ],
+      "dirt_factor": [
+        "dirtFactor"
+      ],
+      "emissive_multiplier": [
+        "emissiveMultiplier",
+        "intensity"
+      ],
+      "layer0_bumpiness": [
+        "lyr0Bumpiness"
+      ],
+      "layer0_detail_settings": [
+        "lyr0DetailSettings",
+        "detailSettings0"
+      ],
+      "layer0_fresnel": [
+        "lyr0Fresnel"
+      ],
+      "layer0_porosity": [
+        "lyr0Porosity"
+      ],
+      "layer0_tint": [
+        "lyr0Tint"
+      ],
+      "layer0_translucency": [
+        "lyr0Translucency"
+      ],
+      "layer0_uv_scale": [
+        "lyr0UVScale"
+      ],
+      "layer0_uv_set": [
+        "lyr0UVSet"
+      ],
+      "layer1_bumpiness": [
+        "lyr1Bumpiness"
+      ],
+      "layer1_detail_settings": [
+        "lyr1DetailSettings",
+        "detailSettings1"
+      ],
+      "layer1_fresnel": [
+        "lyr1Fresnel"
+      ],
+      "layer1_porosity": [
+        "lyr1Porosity"
+      ],
+      "layer1_tint": [
+        "lyr1Tint"
+      ],
+      "layer1_translucency": [
+        "lyr1Translucency"
+      ],
+      "layer1_uv_scale": [
+        "lyr1UVScale"
+      ],
+      "layer1_uv_set": [
+        "lyr1UVSet"
+      ],
+      "layer2_bumpiness": [
+        "lyr2Bumpiness"
+      ],
+      "layer2_detail_settings": [
+        "lyr2DetailSettings",
+        "detailSettings2"
+      ],
+      "layer2_fresnel": [
+        "lyr2Fresnel"
+      ],
+      "layer2_porosity": [
+        "lyr2Porosity"
+      ],
+      "layer2_tint": [
+        "lyr2Tint"
+      ],
+      "layer2_translucency": [
+        "lyr2Translucency"
+      ],
+      "layer2_uv_scale": [
+        "lyr2UVScale"
+      ],
+      "layer2_uv_set": [
+        "lyr2UVSet"
+      ],
+      "layer3_bumpiness": [
+        "lyr3Bumpiness"
+      ],
+      "layer3_detail_settings": [
+        "lyr3DetailSettings",
+        "detailSettings3"
+      ],
+      "layer3_fresnel": [
+        "lyr3Fresnel"
+      ],
+      "layer3_porosity": [
+        "lyr3Porosity"
+      ],
+      "layer3_tint": [
+        "lyr3Tint"
+      ],
+      "layer3_translucency": [
+        "lyr3Translucency"
+      ],
+      "layer3_uv_scale": [
+        "lyr3UVScale"
+      ],
+      "layer3_uv_set": [
+        "lyr3UVSet"
+      ],
+      "porosity": [
+        "Porosity"
+      ],
+      "specular_intensity_mask": [
+        "specMapIntMask"
+      ],
+      "terrain_blend_softness": [
+        "blendSoftness"
+      ],
+      "decal_height_filter": ["heightFilter"],
+      "decal_height_uv_set": ["heightUVSet"],
+      "decal_fake_cutout": ["useFakeCutout"],
+      "terrain_bumpiness": [
+        "bumpiness"
+      ],
+      "terrain_clamp_lookup": [
+        "clampLookupTexture"
+      ],
+      "terrain_fresnel": [
+        "TerrainFresnel"
+      ],
+      "terrain_hbb_bias": [
+        "HBBRangeBias1234"
+      ],
+      "terrain_hbb_scale": [
+        "HBBRangeScale1234"
+      ],
+      "terrain_height_bias": [
+        "heightBias"
+      ],
+      "terrain_height_scale": [
+        "heightScale"
+      ],
+      "terrain_layer_uv_sets": [
+        "uvSet"
+      ],
+      "terrain_lookup_uv_set": [
+        "lookupUVSet"
+      ],
+      "terrain_puddle_height_bias": [
+        "puddleHeightBias"
+      ],
+      "terrain_puddle_mask_scale": [
+        "puddleMaskScale"
+      ],
+      "terrain_pxm_bias": [
+        "PxmBiases1234"
+      ],
+      "terrain_pxm_enabled": [
+        "PxmEnabled"
+      ],
+      "terrain_pxm_scale": [
+        "PxmScales1234"
+      ],
+      "terrain_tint_blend": [
+        "TintBlendAmount"
+      ],
+      "terrain_tint_intensity": [
+        "tintIntensity"
+      ],
+      "terrain_use_tessellation": [
+        "useTessellation"
+      ],
+      "terrain_uv_scale_bias": [
+        "UVScaleBias"
+      ],
+      "tint_override": [
+        "TintOverride"
+      ],
+      "tint_palette_selector": [
+        "tintPaletteSelector"
+      ],
+      "wetness": [
+        "Wetness",
+        "wetnessMultiplier"
+      ]
+    },
+    "scalars": {
+      "alpha_scale": [
+        "alphaScale"
+      ],
+      "ambient_occlusion_tweak": [
+        "PBRTweak_AO"
+      ],
+      "bumpiness": [
+        "bumpiness"
+      ],
+      "decal_gbuffer0_opacity": [
+        "DecalBlendOpacityGBuffer0"
+      ],
+      "decal_gbuffer1_opacity": [
+        "DecalBlendOpacityGBuffer1"
+      ],
+      "decal_gbuffer2_opacity": [
+        "DecalBlendOpacityGBuffer2"
+      ],
+      "decal_gbuffer3_opacity": [
+        "DecalBlendOpacityGBuffer3"
+      ],
+      "fresnel": [
+        "Fresnel"
+      ],
+      "fresnel_tweak": [
+        "PBRTweak_fresnel"
+      ],
+      "metallic_tweak": [
+        "PBRTweak_metallic"
+      ],
+      "opacity": [
+        "opacity"
+      ],
+      "roughness": [
+        "Roughness"
+      ],
+      "roughness_tweak": [
+        "PBRTweak_roughness"
+      ],
+      "specular_intensity": [
+        "SpecularColor"
+      ],
+      "specular_power": [
+        "specular"
+      ]
+    },
+    "textures": {
+      "water_flow": ["FlowTexture"],
+      "water_fog": ["FogTexture"],
+      "water_foam": ["FoamTexture"],
+      "control": [
+        "controlTextureTex",
+        "lookupTexture"
+      ],
+      "detail_normal": [
+        "DetailTexArrayN"
+      ],
+      "diffuse": [
+        "DiffuseTex",
+        "lyr0DiffuseTex",
+        "diffuseTexture_layer0",
+        "DiffuseTex2",
+        "dirtDiffuseTex"
+      ],
+      "dirt_diffuse": [
+        "DiffuseTex2",
+        "dirtDiffuseTex"
+      ],
+      "flow": [
+        "FlowTexture"
+      ],
+      "foam": [
+        "FoamTexture"
+      ],
+      "fog": [
+        "FogTexture"
+      ],
+      "height": [
+        "heightTextureX",
+        "heightTexture"
+      ],
+      "layer0_diffuse": [
+        "lyr0DiffuseTex",
+        "diffuseTexture_layer0",
+        "DiffuseTexture_layer0"
+      ],
+      "layer0_material_a": [
+        "lyr0MaterialATex",
+        "MaterialMapATexture_layer0"
+      ],
+      "layer0_material_b": [
+        "lyr0MaterialBTex"
+      ],
+      "layer0_normal": [
+        "lyr0NormalTex",
+        "bumpTexture_layer0",
+        "BumpTexture_layer0"
+      ],
+      "layer1_diffuse": [
+        "lyr1DiffuseTex",
+        "diffuseTexture_layer1",
+        "DiffuseTexture_layer1"
+      ],
+      "layer1_material_a": [
+        "lyr1MaterialATex",
+        "MaterialMapATexture_layer1"
+      ],
+      "layer1_material_b": [
+        "lyr1MaterialBTex"
+      ],
+      "layer1_normal": [
+        "lyr1NormalTex",
+        "bumpTexture_layer1",
+        "BumpTexture_layer1"
+      ],
+      "layer2_diffuse": [
+        "lyr2DiffuseTex",
+        "diffuseTexture_layer2",
+        "DiffuseTexture_layer2"
+      ],
+      "layer2_material_a": [
+        "lyr2MaterialATex",
+        "MaterialMapATexture_layer2"
+      ],
+      "layer2_material_b": [
+        "lyr2MaterialBTex"
+      ],
+      "layer2_normal": [
+        "lyr2NormalTex",
+        "bumpTexture_layer2",
+        "BumpTexture_layer2"
+      ],
+      "layer3_diffuse": [
+        "lyr3DiffuseTex",
+        "diffuseTexture_layer3",
+        "DiffuseTexture_layer3"
+      ],
+      "layer3_material_a": [
+        "lyr3MaterialATex",
+        "MaterialMapATexture_layer3"
+      ],
+      "layer3_material_b": [
+        "lyr3MaterialBTex"
+      ],
+      "layer3_normal": [
+        "lyr3NormalTex",
+        "bumpTexture_layer3",
+        "BumpTexture_layer3"
+      ],
+      "lookup": [
+        "lookupTexture"
+      ],
+      "material": [
+        "SpecularTex",
+        "lyr0MaterialATex",
+        "MaterialMapATexture_layer0"
+      ],
+      "material_2": [
+        "SpecularTex2",
+        "lyr0MaterialBTex"
+      ],
+      "normal": [
+        "BumpTex",
+        "lyr0NormalTex",
+        "bumpTexture_layer0",
+        "bumpTexture"
+      ],
+      "occlusion": [
+        "OcclusionTex",
+        "aoTextureTex"
+      ],
+      "secondary_specular": [
+        "SpecularTex2",
+        "SpecularTexture2"
+      ],
+      "specular": [
+        "SpecularTex",
+        "SpecularTexture"
+      ],
+      "tint": [
+        "tintTexture"
+      ],
+      "tint_normal": [
+        "tintBumpTexture"
+      ],
+      "tint_palette": [
+        "TintPaletteTex"
+      ]
+    }
+  },
+  "patterns": [
+    {
+      "contains": "standard",
+      "tint_colour_set": 0
+    },
+    {
+      "contains": "standard_decal",
+      "vertex_colour_mode": "NONE"
+    },
+    {
+      "contains": "standard_vehicle_decal",
+      "vertex_colour_mode": "NONE"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "contains": "decal",
+      "decal_mode": "COLOUR",
+      "depth_bias": -2,
+      "depth_bias_slope_scale": -1,
+      "depth_write": false,
+      "render_pass": "DECAL",
+      "vertex_colour_mode": "ALPHA"
+    },
+    {
+      "contains": "dirt",
+      "vertex_colour_mode": "DIRT"
+    },
+    {
+      "contains": "_tnt",
+      "tint_colour_set": 0
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_decal_blend"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_decal_blend_ground"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_alpha"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_alpha_flipbook"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_alpha_flipbook_fp"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_glass"
+    },
+    {
+      "alpha_mode": "BLEND",
+      "suffix": "_glass_fp"
+    },
+    {
+      "alpha_mode": "MASK",
+      "suffix": "_cutout"
+    },
+    {
+      "alpha_mode": "MASK",
+      "suffix": "_cutout_hbb"
+    }
+  ],
+  "shaders": {
+    "water_bucket": { "water_kind": "STILL" },
+    "water_bath": { "water_kind": "STILL" },
+    "water_fountain": { "water_kind": "STILL" },
+    "water_poolenv": { "water_kind": "STILL" },
+    "water_river": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_river_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_riverwithfoam": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_riverwithfoam_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_river_alpha_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_river_cave_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_river_oilfilm_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_riverwithpollenlayer_highlod": { "water_kind": "RIVER", "water_vertex_flow": "true" },
+    "water_riverlod": { "water_kind": "RIVER" },
+    "water_river_slod1": { "water_kind": "RIVER" },
+    "water_river_slod2": { "water_kind": "RIVER" },
+    "water_river_slod3": { "water_kind": "RIVER" },
+    "water_waterfall_highlod": { "water_kind": "FALL" },
+    "terrain_uber_2lyr_pxm_hbb": { "terrain_blend": "HEIGHT_VERTEX_2" },
+    "terrain_uber_4lyr": { "terrain_blend": "LINEAR_VERTEX" },
+    "terrain_uber_4lyr_dpm": { "terrain_blend": "LINEAR_VERTEX" },
+    "terrain_uber_4lyr_mud": { "terrain_blend": "LINEAR_VERTEX" },
+    "terrain_uber_4lyr_pxm": { "terrain_blend": "LINEAR_VERTEX" },
+    "terrain_uber_4lyr_pxm_dm_1222": { "terrain_blend": "LINEAR_VERTEX", "terrain_uv_layout": "1222" },
+    "terrain_uber_4lyr_pxm_dm_2222": { "terrain_blend": "LINEAR_VERTEX", "terrain_uv_layout": "2222" },
+    "terrain_uber_4lyr_snow": { "terrain_blend": "LINEAR_VERTEX" },
+    "terrain_uber_4lyr_hbb": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1111" },
+    "terrain_uber_4lyr_dpm_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "terrain_uber_4lyr_pxm_hbb": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1111" },
+    "terrain_uber_4lyr_quicksand_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "terrain_uber_4lyr_snow_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "terrain_uber_4lyr_snowglt_pxm_hbb": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1111" },
+    "terrain_uber_4lyr_snowglt_spx_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "terrain_uber_4lyr_spx_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "terrain_uber_4lyr_spx_dm_hbb_1111": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1111" },
+    "terrain_uber_4lyr_spx_dm_hbb_2111": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "2111" },
+    "terrain_uber_4lyr_spx_dm_hbb_1121": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1121" },
+    "terrain_uber_4lyr_spx_dm_hbb_1221": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "1221" },
+    "terrain_uber_4lyr_spx_dm_hbb_2221": { "terrain_blend": "HEIGHT_VERTEX", "terrain_uv_layout": "2221" },
+    "terrain_uber_4lyr_mud_dm_hbb": { "terrain_blend": "HEIGHT_VERTEX" },
+    "Cable": {
+      "hash": 23089171,
+      "textures": {
+        "diffuse": [
+          "textureCable",
+          "DiffuseTex"
+        ]
+      }
+    },
+    "NORMAL": {
+      "hash": 1330140418
+    },
+    "Trees": {
+      "hash": 1469151247
+    },
+    "cpv_only": {
+      "hash": 3856117637
+    },
+    "default": {
+      "hash": 3839837909
+    },
+    "default_spec": {
+      "hash": 793475536
+    },
+    "normal_spec": {
+      "hash": 954007775
+    },
+    "standard": {
+      "hash": 3169861569
+    },
+    "standard_2lyr": {
+      "hash": 2010688295,
+      "textures": {
+        "diffuse": [
+          "lyr0DiffuseTex",
+          "DiffuseTex",
+          "DiffuseTex2",
+          "dirtDiffuseTex"
+        ],
+        "normal": [
+          "lyr0NormalTex",
+          "BumpTex"
+        ],
+        "occlusion": [
+          "aoTextureTex",
+          "OcclusionTex"
+        ]
+      }
+    },
+    "standard_2lyr_procedural": {
+      "hash": 3981724743,
+      "textures": {
+        "diffuse": [
+          "lyr0DiffuseTex",
+          "DiffuseTex",
+          "DiffuseTex2",
+          "dirtDiffuseTex"
+        ],
+        "normal": [
+          "lyr0NormalTex",
+          "BumpTex"
+        ],
+        "occlusion": [
+          "aoTextureTex",
+          "OcclusionTex"
+        ]
+      }
+    },
+    "standard_2lyr_pxm": {
+      "hash": 2987897443,
+      "textures": {
+        "diffuse": [
+          "lyr0DiffuseTex",
+          "DiffuseTex",
+          "DiffuseTex2",
+          "dirtDiffuseTex"
+        ],
+        "normal": [
+          "lyr0NormalTex",
+          "BumpTex"
+        ],
+        "occlusion": [
+          "aoTextureTex",
+          "OcclusionTex"
+        ]
+      }
+    },
+    "standard_alpha": {
+      "alpha_mode": "BLEND",
+      "hash": 3820630313,
+      "vertex_colour_mode": "NONE"
+    },
+    "standard_decal": {
+      "vertex_colour_mode": "ALPHA",
+      "hash": 3769943411
+    },
+    "standard_decal_blend": {
+      "alpha_mode": "BLEND",
+      "vertex_colour_mode": "ALPHA",
+      "hash": 3558726851
+    },
+    "standard_decal_hbb": {
+      "coverage": "HEIGHT_VERTEX",
+      "hash": 57804526
+    },
+    "standard_decal_normal_only": {
+      "decal_mode": "NORMAL_ONLY",
+      "hash": 1586656791
+    },
+    "standard_dirt": {
+      "hash": 1361655733,
+      "vertex_colour_mode": "DIRT"
+    },
+    "standard_dirt_alpha": {
+      "alpha_mode": "BLEND",
+      "vertex_colour_mode": "DIRT"
+    },
+    "standard_dirt_pxm": {
+      "hash": 2944653254
+    },
+    "standard_emissive": {
+      "alpha_mode": "BLEND",
+      "hash": 11660460,
+      "vertex_colour_mode": "NONE"
+    },
+    "standard_glass": {
+      "alpha_mode": "BLEND",
+      "hash": 1552436057
+    },
+    "standard_pxm": {
+      "hash": 2052043162
+    },
+    "standard_pxm_decal": {
+      "hash": 3936144954
+    },
+    "terrain_decal": {
+      "hash": 1781984010,
+      "tint_colour_set": 0
+    },
+    "terrain_lod_2lyr": {
+      "terrain_blend": "LOD_VERTEX",
+      "terrain_uv_layout": "1211",
+      "textures": {
+        "layer0_diffuse": [
+          "DiffuseTex"
+        ],
+        "layer0_material_a": [
+          "SpecularTexture"
+        ],
+        "layer0_material_b": [
+          "MaterialBTexture"
+        ],
+        "layer0_normal": [
+          "bumpTexture"
+        ],
+        "layer1_diffuse": [
+          "DiffuseTex2"
+        ],
+        "layer1_material_a": [
+          "SpecularTexture2"
+        ],
+        "layer1_material_b": [
+          "MaterialBTexture2"
+        ],
+        "layer1_normal": [
+          "bumpTexture2"
+        ]
+      }
+    },
+    "terrain_lod_2lyr_grass_wetness": {
+      "terrain_blend": "LOD_VERTEX",
+      "terrain_uv_layout": "1211",
+      "textures": {
+        "layer0_diffuse": [
+          "DiffuseTex"
+        ],
+        "layer0_material_a": [
+          "SpecularTexture"
+        ],
+        "layer0_material_b": [
+          "MaterialBTexture"
+        ],
+        "layer0_normal": [
+          "bumpTexture"
+        ],
+        "layer1_diffuse": [
+          "DiffuseTex2"
+        ],
+        "layer1_material_a": [
+          "SpecularTexture2"
+        ],
+        "layer1_material_b": [
+          "MaterialBTexture2"
+        ],
+        "layer1_normal": [
+          "bumpTexture2"
+        ]
+      }
+    },
+    "terrain_lod_grass_wetness": {
+      "textures": {
+        "layer0_diffuse": [
+          "DiffuseTex"
+        ],
+        "layer0_material_a": [
+          "SpecularTexture"
+        ],
+        "layer0_material_b": [
+          "MaterialBTexture"
+        ],
+        "layer0_normal": [
+          "bumpTexture"
+        ]
+      }
+    },
+    "terrain_slod": {
+      "material_encoding": "SPECULAR_ONLY",
+      "textures": {
+        "layer0_diffuse": [
+          "DiffuseTex"
+        ],
+        "layer0_material_a": [
+          "SpecularTexture"
+        ],
+        "layer0_normal": [
+          "bumpTexture"
+        ]
+      }
+    },
+    "trees_lod": {
+      "hash": 2706862382
+    },
+    "trees_normal": {
+      "hash": 3810197176
+    },
+    "trees_normal_spec": {
+      "hash": 2534069932
+    },
+    "trees_standard": {
+      "hash": 994063129
+    },
+    "trees_standard_frag": {
+      "hash": 3936420582
+    },
+    "trunk_nodpm": {
+      "hash": 2321676383
+    },
+    "trunk_nodpm_decal_blend": {
+      "hash": 559978792
+    },
+    "trunk_nodpm_decal_tnt": {
+      "hash": 637287822
+    },
+    "trunk_nodpm_frag": {
+      "hash": 1656801224
+    }
+  },
+  "version": 1
+}

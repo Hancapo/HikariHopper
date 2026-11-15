@@ -681,7 +681,7 @@ internal sealed unsafe partial class ViewportRenderer
             GameFormat.BC3Unorm or GameFormat.BC3UnormSrgb => (TextureFormat.BC3RGBAUnorm, 4),
             GameFormat.BC4Unorm => (TextureFormat.BC4RUnorm, 4),
             GameFormat.BC5Unorm => (TextureFormat.BC5RGUnorm, 4),
-            GameFormat.BC7Unorm => (TextureFormat.BC7RGBAUnorm, 4),
+            GameFormat.BC7Unorm or GameFormat.BC7UnormSrgb => (TextureFormat.BC7RGBAUnorm, 4),
             GameFormat.R8G8B8A8Unorm or GameFormat.R8G8B8A8UnormSrgb => (TextureFormat.RGBA8Unorm, 1),
             GameFormat.B8G8R8A8Unorm or GameFormat.B8G8R8A8UnormSrgb or GameFormat.B8G8R8X8Unorm or GameFormat.B8G8R8X8UnormSrgb => (TextureFormat.BGRA8Unorm, 1),
             GameFormat.R8G8Unorm => (TextureFormat.RG8Unorm, 1),
