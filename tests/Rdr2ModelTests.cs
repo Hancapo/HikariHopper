@@ -11,10 +11,11 @@ public sealed class Rdr2ModelTests
     private static readonly string[] Archives = ["levels_0.rpf", "levels_1.rpf", "content_0.rpf", "update_1.rpf"];
 
     /// <summary>The first file of an extension the archives hold under a size, with its bytes; null when none does.</summary>
-    internal static (string Name, byte[] Data)? Find(string extension, Func<string, byte[], bool>? wanted = null, long below = 6_000_000)
+    internal static (string Name, byte[] Data)? Find(string extension, Func<string, byte[], bool>? wanted = null, long below = 6_000_000,
+        IEnumerable<string>? archives = null)
     {
         string game = TestGames.Rdr2();
-        foreach (string archive in Archives)
+        foreach (string archive in archives ?? Archives)
         {
             string path = Path.Combine(game, archive);
             if (!File.Exists(path))
