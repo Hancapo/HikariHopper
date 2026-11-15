@@ -28,17 +28,45 @@ internal static class Rdr2Scene
     /// <paramref name="lookup"/>'s (the dictionaries named for it, then the ones beside it).
     /// </summary>
     /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
-    public static DrawableScene Read(string name, ReadOnlySpan<byte> data, TextureLookup lookup)
+    public static DrawableScene Read(string name, ReadOnlySpan<byte> data, TextureLookup lookup) => Build(Models(name, data), lookup);
+
+    // The drawables of an RDR2 drawable, drawable dictionary or fragment, placed.
+    private static IReadOnlyList<Placed> Models(string name, ReadOnlySpan<byte> data)
     {
         string title = Path.GetFileNameWithoutExtension(name);
-        IReadOnlyList<Placed> models = Path.GetExtension(name).ToLowerInvariant() switch
+        return Path.GetExtension(name).ToLowerInvariant() switch
         {
             ".ydr" => [new Placed(title, RedFury.Ydr.Ydr.Read(data).Drawable, Matrix4x4.Identity)],
             ".ydd" => [.. RedFury.Ydd.Ydd.Read(data).Drawables.Select(member => new Placed(member.Label, member.Drawable, Matrix4x4.Identity))],
             ".yft" => Fragment(RedFury.Yft.Yft.Read(data), title),
             _ => throw new InvalidDataException($"{name} isn't a drawable."),
         };
-        return Build(models, lookup);
+    }
+
+    /// <summary>
+    /// The textures an RDR2 drawable, drawable dictionary or fragment carries in its drawables' own dictionaries, each
+    /// name once, as a standalone RDR2 texture dictionary: each texture as the game stores it. What its viewer's textures
+    /// button opens, to look at and save elsewhere, as they can't be written back into it yet.
+    /// </summary>
+    /// <exception cref="InvalidDataException">The file isn't one this can read.</exception>
+    /// <exception cref="NotSupportedException">A texture RedFury can't write back as it is (a CPU-side texture, say).</exception>
+    public static byte[] EmbeddedDictionary(string name, ReadOnlySpan<byte> data) =>
+        RedYtd.Create(Embedded(name, data).Select(RedFury.Textures.TextureImage.FromTexture)).Write();
+
+    /// <summary>The same textures, as the viewer's texture model has them (what Extract writes as DDS); volume textures left out.</summary>
+    public static IReadOnlyList<Texture> EmbeddedTextures(string name, ReadOnlySpan<byte> data) =>
+        [.. Embedded(name, data).Select(Rdr2Textures.Of).OfType<Texture>()];
+
+    // The drawables' own textures, each name once.
+    private static List<RedTexture> Embedded(string name, ReadOnlySpan<byte> data)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var textures = new List<RedTexture>();
+        foreach (RedYtd dictionary in Models(name, data).Select(model => model.Drawable.EmbeddedTextures).OfType<RedYtd>().Distinct())
+            foreach (RedTexture texture in dictionary.Textures)
+                if (seen.Add(texture.Name))
+                    textures.Add(texture);
+        return textures;
     }
 
     // A fragment's main drawable and its extra ones, each where the fragment places it; the damaged one only damaged.
@@ -187,6 +215,8 @@ internal static class Rdr2Scene
             Models = [.. models.Select(m => (m.Name, (string?)null))],
             Variants = [.. models.Select(m => m.Variant)],
             Overlays = Overlays(models, origin, box.IsEmpty ? 1 : box.Size.Length() / 2),
+            EmbeddedTextureCount = own.SelectMany(dictionary => dictionary.Textures).Select(texture => texture.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             Diagnostics = diagnostics,
         };
     }

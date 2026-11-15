@@ -114,6 +114,24 @@ public sealed class Rdr2ModelTests
     }
 
     [Fact]
+    public void The_textures_a_drawable_carries_open_as_an_RDR2_dictionary_of_their_own()
+    {
+        (string name, byte[] data) = Find(".ydr", (_, data) => RedFury.Ydr.Ydr.Read(data).Drawable.EmbeddedTextures is { Textures.Count: > 1 })
+            ?? throw new InvalidOperationException("None of the archives searched holds a drawable with textures of its own");
+        DrawableScene scene = ModelContent.Read(name, data).Surfaces!;
+        // The viewer's textures button counts them.
+        Assert.True(scene.EmbeddedTextureCount > 1);
+        HikariHopper.Textures.TextureSet set = HikariHopper.Textures.YtdSaving.Read(Rdr2Scene.EmbeddedDictionary(name, data));
+        Assert.True(set.IsRdr2);
+        Assert.Equal(scene.EmbeddedTextureCount, set.Textures.Length);
+        // As the drawable stores them.
+        RedFury.Ytd.Ytd own = RedFury.Ydr.Ydr.Read(data).Drawable.EmbeddedTextures!;
+        Assert.All(set.Textures, texture => Assert.True(own.Find(texture.Name!)!.Data.Span.SequenceEqual(texture.Data)));
+        // And what Extract writes: the same textures.
+        Assert.Equal(set.Names.Order(), ModelContent.EmbeddedTextures(name, data).Textures.Select(texture => texture.Name!).Order());
+    }
+
+    [Fact]
     public void Its_textures_are_found_in_the_dictionary_named_for_it()
     {
         // A drawable that carries none of its own: given the dictionary that holds them, they're found in it.

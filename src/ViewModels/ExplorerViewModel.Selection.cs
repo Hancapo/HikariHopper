@@ -624,12 +624,13 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>
     /// A drawable's embedded textures in the texture viewer: a .ydr as it opens from the explorer, edited and saved back
-    /// into it; a .yft's or .ydd's as a dictionary of their own, to look at and save elsewhere, as their textures can't
-    /// be written back yet.
+    /// into it; a .yft's or .ydd's, and any of Red Dead Redemption 2's, as a dictionary of their own, to look at and save
+    /// elsewhere, as their textures can't be written back yet.
     /// </summary>
     internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? closedAfterSave = null)
     {
-        if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // An RDR2 drawable's, as a dictionary of their own: they can't be written back into it yet.
+        if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
         {
             OpenTextureDictionary(entry, closedAfterSave);
             return;
@@ -646,7 +647,8 @@ public sealed partial class ExplorerViewModel
     {
         ArchiveEntryTarget? where = null;
         string source = "";
-        if (Provider.InArchive && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // In an archive that can be changed: an RDR2 archive's drawable opens its textures as a dictionary of their own.
+        if (Provider.InArchive && Provider.ArchiveWritable && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
@@ -707,10 +709,16 @@ public sealed partial class ExplorerViewModel
         byte[] dictionary;
         try
         {
-            (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(name, data);
-            var own = new FiveFury.Textures.TextureDictionary();
-            own.Textures.AddRange(textures);
-            dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
+            if (Textures.Rdr2TextureSource.IsRdr2(data))
+                // RDR2's: a standalone RDR2 dictionary, which the editor opens as one.
+                dictionary = Rendering.Rdr2Scene.EmbeddedDictionary(name, data);
+            else
+            {
+                (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(name, data);
+                var own = new FiveFury.Textures.TextureDictionary();
+                own.Textures.AddRange(textures);
+                dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
+            }
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException or InvalidOperationException)
         {
