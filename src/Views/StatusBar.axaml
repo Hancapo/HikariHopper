@@ -24,6 +24,21 @@
     </Style>
   </UserControl.Styles>
   <DockPanel Margin="8,0,14,0">
+    <!-- On the World side, at the end, where the model viewer's footer has it: the time of day the world is lit at, on a
+         small dial of the day, which opens the dial above it. -->
+    <Border Name="TimeWell" DockPanel.Dock="Right" Margin="14,0,-6,0" Padding="2" VerticalAlignment="Center" IsVisible="False"
+            Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+      <Panel>
+        <c:ChromeToolButton Name="TimeButton" Width="80" Height="18" Padding="14,0,10,0" Bordered="False" InWell="True"
+                            CornerRadius="{x:Static ui:Theme.InnerCorner}" AutomationProperties.Name="Time of day" />
+        <v:TimeDial Name="TimeGlyph" Compact="True" Width="13" Height="13" Margin="8,0,0,0" Focusable="False"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+        <c:LucideIcon IconName="chevron-up" Width="9" Height="9" Margin="0,0,8,0" Weight="1.6"
+                      HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                      Stroke="{x:Static ui:Theme.TextDim}" />
+      </Panel>
+    </Border>
+
     <!-- What is selected: how many, and how big. -->
     <TextBlock Name="SelectionText" DockPanel.Dock="Right" Margin="14,0,0,0" />
 
