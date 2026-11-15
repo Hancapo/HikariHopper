@@ -69,10 +69,11 @@ internal sealed record ModelContent(Aabb3 Box, ViewportMesh Mesh, DrawableScene?
         Func<string, IReadOnlyList<NearbyDictionary>?>? elsewhere = null, IReadOnlyList<NearbyDictionary>? beside = null)
     {
         string extension = Path.GetExtension(name).ToLowerInvariant();
-        // Red Dead Redemption 2's, read through RedFury: its textures from the dictionaries named for it and beside it.
+        // Red Dead Redemption 2's, read through RedFury: its textures from the dictionaries named for it, the game's for it
+        // (Rdr2TextureIndex), and the ones beside it.
         if (Textures.Rdr2TextureSource.IsRdr2(data))
         {
-            DrawableScene rdr2 = Rdr2Scene.Read(name, data, new TextureLookup(Parsed(dictionaries), [], overrides, null, beside));
+            DrawableScene rdr2 = Rdr2Scene.Read(name, data, new TextureLookup(Parsed(dictionaries), nearby ?? [], overrides, null, beside));
             return new ModelContent(rdr2.Box, new ViewportMesh(rdr2.Origin), rdr2);
         }
         Yft? fragment = extension == ".yft" ? Yft.Read(data) : null;
