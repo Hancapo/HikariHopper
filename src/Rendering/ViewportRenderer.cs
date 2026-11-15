@@ -401,18 +401,26 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     internal void Render(TextureView target)
     {
         CommandEncoder encoder = device.CreateCommandEncoder();
-        // A drawable's shadow first: the ground under it and the drawable itself both read it. A world is lit without
-        // shadows for now.
+        // A drawable's shadow first: the ground under it and the drawable itself both read it. A world's casters into
+        // the cascades due this frame, once its visibility has culled them.
         bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
         bool lit = drawable || worldShown;
+        bool worldShadows = worldShown && Shadows && key.Direction.Z > 0;
         if (lit)
         {
-            WriteLight(drawable && Shadows);
+            WriteLight(drawable ? Shadows : worldShadows);
             if (drawable && Shadows)
                 DrawShadow(encoder);
         }
         if (worldShown)
-            UpdateWorldVisibility();
+        {
+            worldShadowDraws = worldViewDraws = 0;
+            if (!worldShadows)
+                SkipWorldShadows();
+            UpdateWorldVisibility(worldCascades, worldShadows);
+            if (worldShadows)
+                DrawWorldShadows(encoder);
+        }
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
             ColorAttachments =

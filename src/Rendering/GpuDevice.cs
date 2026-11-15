@@ -34,6 +34,12 @@ internal sealed class GpuDevice
     /// <summary>Whether block-compressed (BC) textures can be sampled; game textures are drawn white without it.</summary>
     internal bool CompressedTextures { get; }
 
+    /// <summary>
+    /// Whether indirect draws can start past the first instance: the world's render bundles then read each frame's
+    /// counts from one buffer instead of being recorded again (RedFury's indirect path).
+    /// </summary>
+    internal bool IndirectFirstInstance { get; }
+
     private GpuDevice()
     {
         Instance = WebGPU.CreateInstance() ?? throw new InvalidOperationException("WebGPU is unavailable.");
@@ -45,7 +51,8 @@ internal sealed class GpuDevice
             PowerPreference = PowerPreference.HighPerformance,
         }) ?? throw new NotSupportedException("No Direct3D 12 GPU is available.");
         CompressedTextures = Adapter.HasFeature(FeatureName.TextureCompressionBC);
-        Device = RequestDevice(Adapter, CompressedTextures, Report);
+        IndirectFirstInstance = Adapter.HasFeature(FeatureName.IndirectFirstInstance);
+        Device = RequestDevice(Adapter, CompressedTextures, IndirectFirstInstance, Report);
         Queue = Device.GetQueue();
     }
 
@@ -119,7 +126,7 @@ internal sealed class GpuDevice
 
     private const string LostPrefix = "WebGPU device lost";
 
-    private static Device RequestDevice(Adapter adapter, bool compressedTextures, Action<string> failed)
+    private static Device RequestDevice(Adapter adapter, bool compressedTextures, bool indirectFirstInstance, Action<string> failed)
     {
         // What the adapter allows, asked for whole: Red Dead Redemption 2's material reads more textures at once than
         // WebGPU's defaults let a shader (rdr2.wgsl, Rdr2TextureSlots).
@@ -128,7 +135,8 @@ internal sealed class GpuDevice
         return Task.Run(() => adapter.RequestDeviceAsync(new DeviceDescriptor
         {
             RequiredLimits = limits,
-            RequiredFeatures = compressedTextures ? new[] { FeatureName.TextureCompressionBC } : [],
+            RequiredFeatures = [.. compressedTextures ? [FeatureName.TextureCompressionBC] : Array.Empty<FeatureName>(),
+                .. indirectFirstInstance ? [FeatureName.IndirectFirstInstance] : Array.Empty<FeatureName>()],
             UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {Encoding.UTF8.GetString(message)}"),
             DeviceLostCallback = (reason, message) =>
             {

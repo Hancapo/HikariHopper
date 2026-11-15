@@ -194,6 +194,83 @@ internal static class WorldCulling
         }
     }
 
+    /// <summary>
+    /// A caster narrower than this many of a cascade's texels covers a texel or two of its map at most: skipping it
+    /// leaves most small props out of the wide far cascades, where drawing them costs most.
+    /// </summary>
+    internal const float MinimumCasterTexels = 1;
+
+    /// <summary>
+    /// Adds the entries of [first, first + count) that may cast into the cascade, within their node's draw reach and at
+    /// least <see cref="MinimumCasterTexels"/> across.
+    /// </summary>
+    internal static void Cascade(WorldCullSet set, int first, int count, Vector3 eye, in ShadowCascade cascade, List<int> output)
+    {
+        int end = first + count;
+        // Whole authored batches are skipped before their spheres are tested: the flags are each placement's.
+        while (first < end)
+        {
+            int node = set.Node[first];
+            int next = Math.Min(end, set.First[node] + set.Count[node]);
+            if ((set.Passes[node] & WorldRenderPass.Shadows) != 0)
+                CascadeRange(set, first, next - first, eye, cascade, output);
+            first = next;
+        }
+    }
+
+    private static void CascadeRange(WorldCullSet set, int first, int count, Vector3 eye, in ShadowCascade cascade, List<int> output)
+    {
+        int i = first, end = first + count;
+        if (Vector256.IsHardwareAccelerated && count >= Vector256<float>.Count)
+        {
+            Matrix4x4 m = cascade.View;
+            var ex = Vector256.Create(eye.X);
+            var ey = Vector256.Create(eye.Y);
+            var ez = Vector256.Create(eye.Z);
+            var m11 = Vector256.Create(m.M11);
+            var m21 = Vector256.Create(m.M21);
+            var m31 = Vector256.Create(m.M31);
+            var m41 = Vector256.Create(m.M41);
+            var m12 = Vector256.Create(m.M12);
+            var m22 = Vector256.Create(m.M22);
+            var m32 = Vector256.Create(m.M32);
+            var m42 = Vector256.Create(m.M42);
+            var m13 = Vector256.Create(m.M13);
+            var m23 = Vector256.Create(m.M23);
+            var m33 = Vector256.Create(m.M33);
+            var m43 = Vector256.Create(m.M43);
+            var radius = Vector256.Create(cascade.Radius);
+            var depthLimit = Vector256.Create(cascade.Depth);
+            var minimum = Vector256.Create(cascade.TexelSize * MinimumCasterTexels);
+            for (; i + Vector256<float>.Count <= end; i += Vector256<float>.Count)
+            {
+                // Cascades are in render space (the world less the camera), as ShadowCascade.Intersects has them.
+                var dx = Load(set.X, i) - ex;
+                var dy = Load(set.Y, i) - ey;
+                var dz = Load(set.Z, i) - ez;
+                var r = Load(set.R, i);
+                var px = dx * m11 + dy * m21 + dz * m31 + m41;
+                var py = dx * m12 + dy * m22 + dz * m32 + m42;
+                var pz = dx * m13 + dy * m23 + dz * m33 + m43;
+                var extent = radius + r;
+                var mask = Vector256.LessThanOrEqual(dx * dx + dy * dy + dz * dz, Load(set.Reach2, i))
+                    & Vector256.GreaterThanOrEqual(r, minimum)
+                    & Vector256.LessThanOrEqual(Vector256.Abs(px), extent)
+                    & Vector256.LessThanOrEqual(Vector256.Abs(py), extent)
+                    & Vector256.GreaterThanOrEqual(r - pz, Vector256<float>.Zero)
+                    & Vector256.LessThanOrEqual(-pz - r, depthLimit);
+                Emit(mask.ExtractMostSignificantBits(), i, output);
+            }
+        }
+        for (; i < end; i++)
+        {
+            var center = new Vector3(set.X[i], set.Y[i], set.Z[i]);
+            if (Vector3.DistanceSquared(eye, center) <= set.Reach2[i] && set.R[i] >= cascade.TexelSize * MinimumCasterTexels
+                && cascade.Intersects(center - eye, set.R[i]))
+                output.Add(i);
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector256<float> Load(float[] values, int index) =>
         Vector256.LoadUnsafe(ref MemoryMarshal.GetArrayDataReference(values), (nuint)index);
