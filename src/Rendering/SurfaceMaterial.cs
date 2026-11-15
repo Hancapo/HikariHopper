@@ -23,7 +23,7 @@ internal enum AlphaMode
 /// Which parameter fills which role is in materials.json, by Legacy name; Enhanced materials reach those names through
 /// FiveFury's shader catalogue, and a value a material leaves out is its shader's default from the same catalogue.
 /// </summary>
-internal sealed class SurfaceMaterial
+internal sealed partial class SurfaceMaterial
 {
     /// <summary>
     /// The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112, fur.wgsl's Fur its

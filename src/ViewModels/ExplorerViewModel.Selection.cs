@@ -335,15 +335,17 @@ public sealed partial class ExplorerViewModel
     public bool CanOpenSelection => SelectedEntries() is [var entry] && Opens(entry) && !GtaViewerOnly(entry.Name);
 
     /// <summary>
-    /// Whether <paramref name="name"/> opens only in a viewer that's GTA V's so far (the 3D viewer) while what's open is
-    /// Red Dead Redemption 2's: its game folder, or one of its RPF8 archives. Its texture dictionaries open in the editor.
+    /// Whether <paramref name="name"/> opens only in a viewer that's GTA V's so far (the collision and navmesh views)
+    /// while what's open is Red Dead Redemption 2's: its game folder, or one of its RPF8 archives. Its texture
+    /// dictionaries open in the editor, and its drawables in the 3D viewer.
     /// </summary>
     private bool GtaViewerOnly(string name) =>
-        IsModelName(name) && (Provider.GameEditionId == GameSettings.Rdr2Edition || !Provider.ArchiveWritable);
+        IsModelName(name) && !ModelFile.IsDrawableName(name)
+        && (Provider.GameEditionId == GameSettings.Rdr2Edition || !Provider.ArchiveWritable);
 
     // Said in place of opening a file only GTA V's viewers open.
     private void SayGtaViewerOnly(string name) =>
-        SetStatus($"{name}: Red Dead Redemption 2's models don't open in HikariHopper yet");
+        SetStatus($"{name}: Red Dead Redemption 2's collisions and navmeshes don't open in HikariHopper yet");
 
     /// <summary>
     /// What <see cref="ActivateEntry"/> opens: folders, RPFs, YTD texture dictionaries, text files, images, and the 3D

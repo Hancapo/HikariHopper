@@ -1,6 +1,5 @@
 using CommonFury.Textures;
 using FiveFury.Textures;
-using FiveFury.Ytd;
 
 namespace HikariHopper.Rendering;
 
@@ -150,9 +149,9 @@ internal sealed class TextureLookup
         read.Add(dictionary.Key ?? dictionary.Name);
         try
         {
-            // Parsed once for every model that reads it, when it says what it holds.
-            Add(dictionary.Key is { } key ? ParsedDictionaries.Get(key, () => Ytd.Read(dictionary.Read()).Dictionary)
-                : Ytd.Read(dictionary.Read()).Dictionary);
+            // Parsed once for every model that reads it, when it says what it holds; either game's.
+            Add(dictionary.Key is { } key ? ParsedDictionaries.Get(key, () => Rdr2Textures.Parse(dictionary.Read()))
+                : Rdr2Textures.Parse(dictionary.Read()));
             return true;
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
