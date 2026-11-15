@@ -24,8 +24,9 @@ public static class YtdSaving
     /// <summary>Builds and verifies YTD bytes before any destination is touched.</summary>
     public static byte[] Serialize(TextureSet dictionary)
     {
-        if (dictionary.IsRdr2)
-            throw new NotSupportedException("Red Dead Redemption 2 texture dictionaries can't be saved yet");
+        // RDR2's, written through RedFury.
+        if (dictionary.Rdr2 is { } rdr2)
+            return rdr2.Write(dictionary);
         Ytd model = dictionary.ToYtd();
         if (dictionary.Textures.IsEmpty)
             return model.Write(allowEmpty: true);
