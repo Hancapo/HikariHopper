@@ -195,7 +195,8 @@ public partial class SettingsDialog : ModalSheet
             {
                 var row = new GamePathRow
                 {
-                    Title = edition.Title,
+                    // A game with one edition: the row is the game's.
+                    Title = edition.Title.Length > 0 ? edition.Title : edition.Game.Title,
                     Edition = edition.Id,
                     ExpectedExecutable = GameSettings.GameExecutable(edition.Id),
                 };
@@ -315,6 +316,7 @@ public partial class SettingsDialog : ModalSheet
         {
             row.GamePath = GamePaths.PathFor(row.Edition);
             row.PathValid = GamePaths.IsValid(row.Edition);
+            row.Problem = row.PathValid ? GameSettings.InstallationProblem(row.GamePath, row.Edition) ?? "" : "";
         }
     }
 

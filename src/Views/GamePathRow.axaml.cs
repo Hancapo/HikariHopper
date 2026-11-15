@@ -30,6 +30,9 @@ public partial class GamePathRow : UserControl
     public static readonly StyledProperty<bool> PathValidProperty =
         AvaloniaProperty.Register<GamePathRow, bool>(nameof(PathValid));
 
+    public static readonly StyledProperty<string> ProblemProperty =
+        AvaloniaProperty.Register<GamePathRow, string>(nameof(Problem), "");
+
     private readonly Run titleRun = new();
     private readonly Run gap = new("   ");
 
@@ -84,6 +87,16 @@ public partial class GamePathRow : UserControl
         set => SetValue(PathValidProperty, value);
     }
 
+    /// <summary>
+    /// What stops the game in the folder opening although its executable is there (an RDR2 build the shipped keys
+    /// don't open), said in place of the check; "" when nothing does.
+    /// </summary>
+    public string Problem
+    {
+        get => GetValue(ProblemProperty);
+        set => SetValue(ProblemProperty, value);
+    }
+
     /// <summary>Whether the executable is in the folder, after the edition's name.</summary>
     internal Run StatusText { get; } = new();
 
@@ -93,13 +106,16 @@ public partial class GamePathRow : UserControl
     /// <summary>What the row says about the folder: "Not set" in place of it, or the check after the name.</summary>
     public string StatusMessage => GamePath.Length == 0
         ? "Not set"
-        : PathValid ? $"✓ {ExpectedExecutable} found" : $"{ExpectedExecutable} isn't in this folder";
+        : !PathValid ? $"{ExpectedExecutable} isn't in this folder"
+        : Problem.Length > 0 ? $"! {Problem}"
+        : $"✓ {ExpectedExecutable} found";
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         if (change.Property == TitleProperty || change.Property == EditionProperty || change.Property == GamePathProperty
-            || change.Property == ExpectedExecutableProperty || change.Property == PathValidProperty)
+            || change.Property == ExpectedExecutableProperty || change.Property == PathValidProperty
+            || change.Property == ProblemProperty)
             Refresh();
     }
 
@@ -108,11 +124,11 @@ public partial class GamePathRow : UserControl
         if (DetailText is null)
             return;
         bool set = GamePath.Length > 0;
-        Mark.Enhanced = Edition == GameSettings.EnhancedEdition;
+        Mark.Edition = Edition;
         titleRun.Text = Title;
         gap.Text = set ? "   " : "";
         StatusText.Text = set ? StatusMessage : "";
-        StatusText.Foreground = !set ? Ui.Theme.TextFaint : PathValid ? Ui.Theme.Ok : Ui.Theme.Warning;
+        StatusText.Foreground = !set ? Ui.Theme.TextFaint : PathValid && Problem.Length == 0 ? Ui.Theme.Ok : Ui.Theme.Warning;
         DetailText.Text = set ? GamePath : StatusMessage;
         DetailText.Foreground = set ? Ui.Theme.TextRow : Ui.Theme.TextFaint;
         ToolTip.SetTip(BrowseButton, BrowseLabel);

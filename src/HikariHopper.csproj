@@ -23,6 +23,8 @@
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
+    <!-- RDR2's RPF8 tables (RedFury's RF8C format), for game build 1.0.1491.50. -->
+    <EmbeddedResource Include="Assets/Keys/rpf8.dat" LogicalName="HikariHopper.rpf8.dat" />
     <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>

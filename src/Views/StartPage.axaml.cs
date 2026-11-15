@@ -190,14 +190,13 @@ public sealed class LauncherRow : Border
     public TextBlock Detail { get; }
 
     /// <summary>
-    /// The mark of <paramref name="entry"/>'s game. GTA V is the only game so far; another game
-    /// brings its own mark here, tinted the same way by edition.
+    /// The mark of <paramref name="entry"/>'s edition; for a game not set up, its first edition's, faded.
     /// </summary>
     private static Control GameMark(LauncherEntry entry) => new EditionMark
     {
         Width = 18,
         Height = 18,
-        Enhanced = entry.Edition == GameSettings.EnhancedEdition,
+        Edition = entry.Edition.Length > 0 ? entry.Edition : entry.Game.Editions[^1].Id,
         Opacity = entry.SetUp ? 1 : 0.45,
         VerticalAlignment = VerticalAlignment.Center,
     };
