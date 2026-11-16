@@ -186,9 +186,10 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>
     /// A family's pipelines, made the first time one of its surfaces comes in: its surfaces drawn solid (back faces
-    /// culled), unculled, blended and as decals, and its cut-outs into the shadow.
+    /// culled), unculled, blended and as decals, and its cut-outs into the shadow. With <paramref name="prepare"/>, they
+    /// only start compiling in the background (GpuDevice.Prepare), for when the family's first surface comes in.
     /// </summary>
-    internal void CreateWorldFamily(WorldFamily family)
+    internal void CreateWorldFamily(WorldFamily family, bool prepare = false)
     {
         int f = (int)family;
         if (worldSolid[f] is not null)
@@ -222,10 +223,11 @@ internal sealed unsafe partial class ViewportRenderer
             _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + Read("gta_world.wgsl"),
         };
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Code() }));
-        // Decals are pulled towards the camera a little, as RedFury's are, over the surface they lie on.
         RenderPipeline Pipeline(CullMode cull, bool blend, bool decal = false) =>
-            gpu.Pipeline($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
-            {
+            Compile($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => Describe(cull, blend, decal), prepare);
+        // Decals are pulled towards the camera a little, as RedFury's are, over the surface they lie on.
+        RenderPipelineDescriptor Describe(CullMode cull, bool blend, bool decal) => new()
+        {
                 Layout = layout,
                 Vertex = new VertexState { Module = shader.Value, EntryPoint = vertex, Buffers = [SurfaceVertexLayout(), WorldInstanceLayout()] },
                 // Both games' triangles face the camera when wound counter-clockwise.
@@ -256,7 +258,7 @@ internal sealed unsafe partial class ViewportRenderer
                     DepthBias = decal ? 2 : 0,
                     DepthBiasSlopeScale = decal ? 1 : 0,
                 },
-            }));
+            };
         // Water is only ever blended over the copy of what's behind it.
         if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater)
         {
@@ -272,10 +274,10 @@ internal sealed unsafe partial class ViewportRenderer
         if (family == WorldFamily.GtaTerrain)
             return;
         string test = family == WorldFamily.Rdr2 ? "rdr2_world_shadow.wgsl" : "gta_world_shadow.wgsl";
-        worldMaskedShadow[f] = gpu.Pipeline($"{name}-shadow-masked", () =>
+        worldMaskedShadow[f] = Compile($"{name}-shadow-masked", () =>
         {
             ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("world_shadow.wgsl") + "\n" + Read(test) });
-            return device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+            return new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, material, worldEmptyLayout!, worldInstanceLayout!] }),
                 Vertex = new VertexState
@@ -300,8 +302,28 @@ internal sealed unsafe partial class ViewportRenderer
                 Fragment = new FragmentState { Module = module, EntryPoint = "fs_world_shadow_masked", Targets = [] },
                 Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
                 DepthStencil = CasterDepth(),
-            });
-        });
+            };
+        }, prepare);
+    }
+
+    // A pipeline from the shared ones, compiled now if it isn't (or waited for if it's compiling); or, preparing, only
+    // started compiling in the background, null until it's asked for.
+    private RenderPipeline Compile(string key, Func<RenderPipelineDescriptor> describe, bool prepare)
+    {
+        if (!prepare)
+            return gpu.Pipeline(key, () => device.CreateRenderPipelineSync(describe()));
+        gpu.Prepare(key, () => device.CreateRenderPipelineAsync(describe()));
+        return null!;
+    }
+
+    /// <summary>
+    /// Starts compiling a game's world pipelines in the background as its world is shown, so the first assets in don't
+    /// wait for them on the UI thread (about two seconds for GTA V's, compiled one after another).
+    /// </summary>
+    internal void PrepareWorldFamilies(IEnumerable<WorldFamily> families)
+    {
+        foreach (WorldFamily family in families)
+            CreateWorldFamily(family, prepare: true);
     }
 
     // RedFury's casters' depth: less or equal, pushed back by 2 and 2.5 times the slope, so surfaces don't shadow

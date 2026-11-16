@@ -138,6 +138,9 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// </summary>
     public virtual bool LoadsConcurrently => false;
 
+    /// <summary>The kinds of surface its assets are drawn with, whose pipelines are compiled as its world is shown.</summary>
+    public abstract IReadOnlyList<Rendering.WorldFamily> Families { get; }
+
     /// <summary>
     /// Reads an asset the LOD graph names and makes it ready for the GPU. Under <see cref="Gate"/>, unless
     /// <see cref="LoadsConcurrently"/>.
@@ -172,6 +175,8 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
 internal sealed class Rdr2WorldIndex(string root, int mapCount, WorldLodGraph lod, RpfTextureCatalog assets, RpfReadSession reads, Rdr2Crypto crypto)
     : WorldIndex(root, mapCount, lod)
 {
+    public override IReadOnlyList<Rendering.WorldFamily> Families { get; } = [Rendering.WorldFamily.Rdr2, Rendering.WorldFamily.Rdr2Water];
+
     public RpfTextureCatalog Assets { get; } = assets;
 
     public RpfReadSession Reads { get; } = reads;
