@@ -339,6 +339,37 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void A_file_shown_inside_one_of_the_games_RPFs_keeps_its_world_and_Back_returns_to_it()
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady || tab.WorldFailure is not null, "the world's index");
+        SaveArchive(Path.Combine(tab.Provider.GamePath, "x64", "levels.rpf"), ("maps/val_02__strm_0.ymap", Bytes("map")));
+        tab.ShowWorld();
+        TestWait.Pump(50);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        WorldStreamer streamer = world.Streamer!;
+        tab.ShowWorldFile(new WorldFile("x64/levels.rpf/maps/val_02__strm_0.ymap", 3));
+        Settle([tab]);
+        TestWait.Pump(50);
+        Assert.False(tab.InWorld);
+        Assert.Equal(["val_02__strm_0.ymap"], tab.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
+        // The world is the game's, not the folder's: it stays, streamed as it was.
+        Assert.True(tab.WorldReady);
+        Assert.Same(streamer, world.Streamer);
+        tab.GoBack();
+        TestWait.Pump(50);
+        Assert.True(tab.InWorld);
+        Assert.True(tab.WorldReady);
+        Assert.Same(streamer, world.Streamer);
+        // And the files again where they were left.
+        tab.ShowFiles();
+        Settle([tab]);
+        Assert.Contains("val_02__strm_0.ymap", ListedNames(tab));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_world_that_cant_be_prepared_says_why()
     {
         Rdr2World.Builder = (_, _, _, _) => throw new InvalidDataException("The game's content files couldn't be read");

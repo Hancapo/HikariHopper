@@ -82,8 +82,8 @@ public sealed class WorldCullingTests
         var set = new WorldCullSet([node]);
         Assert.Equal(1, set.Count[0]);
         Assert.True(Matrix4x4.Invert(good.Transform, out Matrix4x4 inverse));
-        Assert.Equal(good.Transform, set.Pairs[0]);
-        Assert.Equal(Matrix4x4.Transpose(inverse), set.Pairs[1]);
+        Assert.Equal(good.Transform, set.Pair(0));
+        Assert.Equal(Matrix4x4.Transpose(inverse), set.Pair(1));
         Assert.Equal(101f * 101f, set.Reach2[0]);
     }
 
@@ -91,7 +91,7 @@ public sealed class WorldCullingTests
     public void A_single_placement_carries_its_tint_palette_row()
     {
         var set = new WorldCullSet([Node(1) with { TintValue = 3 }]);
-        Assert.Equal(3, set.Pairs[1].M41);
+        Assert.Equal(3, set.Pair(1).M41);
     }
 
     [Fact]
@@ -102,19 +102,19 @@ public sealed class WorldCullingTests
         WorldLodNode b = Node(2) with { Transform = Matrix4x4.CreateTranslation(30, 0, 0), Center = new(30, 0, 0) };
         var set = new WorldCullSet([a, b]);
         float[] positions = set.X;
-        Matrix4x4[] pairs = set.Pairs;
+        float[] spheres = set.Y;
         int reads = placements.Reads;
         set.Update([b, a]);
         Assert.Same(positions, set.X);
-        Assert.Same(pairs, set.Pairs);
+        Assert.Same(spheres, set.Y);
         Assert.Equal(reads, placements.Reads);
         Assert.Equal([b, a], set.Nodes);
         Assert.Equal([0, 1], set.First);
         Assert.Equal([1, 2], set.Count);
         Assert.Equal([30f, 10f, 20f], set.X.AsSpan(0, 3).ToArray());
         Assert.Equal([0, 1, 1], set.Node.AsSpan(0, 3).ToArray());
-        Assert.Equal(30f, set.Pairs[0].M41);
-        Assert.Equal(10f, set.Pairs[2].M41);
+        Assert.Equal(30f, set.Pair(0).M41);
+        Assert.Equal(10f, set.Pair(2).M41);
     }
 
     [Fact]
@@ -124,19 +124,19 @@ public sealed class WorldCullingTests
         WorldLodNode a = Node(1) with { Instances = placements };
         WorldLodNode b = Node(2);
         var set = new WorldCullSet([a, b]);
-        Matrix4x4[] storage = set.Pairs;
+        float[] storage = set.Y;
         int reads = placements.Reads;
         set.Update([b]);
-        Assert.Same(storage, set.Pairs);
+        Assert.Same(storage, set.Y);
         Assert.Single(set.Nodes);
         Assert.Equal(1, set.Count[0]);
         set.Update([a, b]);
         // What left the coverage keeps nothing prepared.
         Assert.True(placements.Reads > reads);
-        Assert.Same(storage, set.Pairs);
+        Assert.Same(storage, set.Y);
         WorldLodNode replaced = a with { Instances = [Instance(40), Instance(50), Instance(60), Instance(70)] };
         set.Update([replaced]);
-        Assert.NotSame(storage, set.Pairs);
+        Assert.NotSame(storage, set.Y);
         Assert.Equal(4, set.Count[0]);
         Assert.Equal([40f, 50f, 60f, 70f], set.X.AsSpan(0, 4).ToArray());
         set.Update([]);
@@ -162,18 +162,18 @@ public sealed class WorldCullingTests
         Assert.Equal(5, set.X[1]);
         Assert.Equal(1, set.R[1]);
         Assert.Equal(101f * 101f, set.Reach2[1]);
-        Assert.Equal(grass.Transform, set.Pairs[2]);
-        Assert.True(set.Pairs[2].GetDeterminant() < 0);
-        Assert.Equal(-.5f, set.Pairs[3].M11);
-        Assert.Equal(1 / 3f, set.Pairs[3].M22);
-        Assert.Equal(.25f, set.Pairs[3].M33);
-        Assert.Equal(.2f, set.Pairs[3].M14);
-        Assert.Equal(.3f, set.Pairs[3].M24);
-        Assert.Equal(.4f, set.Pairs[3].M34);
-        Assert.Equal(30, set.Pairs[3].M41);
-        Assert.Equal(90, set.Pairs[3].M42);
-        Assert.Equal(1, set.Pairs[3].M43);
-        Assert.Equal(.75f, set.Pairs[3].M44);
+        Assert.Equal(grass.Transform, set.Pair(2));
+        Assert.True(set.Pair(2).GetDeterminant() < 0);
+        Assert.Equal(-.5f, set.Pair(3).M11);
+        Assert.Equal(1 / 3f, set.Pair(3).M22);
+        Assert.Equal(.25f, set.Pair(3).M33);
+        Assert.Equal(.2f, set.Pair(3).M14);
+        Assert.Equal(.3f, set.Pair(3).M24);
+        Assert.Equal(.4f, set.Pair(3).M34);
+        Assert.Equal(30, set.Pair(3).M41);
+        Assert.Equal(90, set.Pair(3).M42);
+        Assert.Equal(1, set.Pair(3).M43);
+        Assert.Equal(.75f, set.Pair(3).M44);
     }
 
     [Fact]

@@ -26,6 +26,7 @@ internal sealed class WorldAsset
                 LodMask |= (byte)(1 << part.Lod);
         if (LodMask == 0)
             LodMask = 1;
+        Layout = WorldLayout.Of(scene);
         WorldMemoryCost cost = Estimate(scene, textures);
         MemoryCost = new WorldMemoryCost(cost.OwnedBytes + lightBones.Bytes, cost.Shared);
         Bytes = WorldMemoryCost.Total([MemoryCost]);
@@ -38,6 +39,9 @@ internal sealed class WorldAsset
 
     /// <summary>Its vertices relative to <see cref="DrawableScene.Origin"/>, its parts and their RDR2 materials.</summary>
     public DrawableScene Scene { get; }
+
+    /// <summary>Its surfaces laid out for the GPU, on the worker that read it.</summary>
+    public WorldLayout Layout { get; }
 
     /// <summary>Its bones, where its lights are attached.</summary>
     public WorldLightBones LightBones { get; }
@@ -118,5 +122,55 @@ internal sealed class WorldAsset
             + (long)scene.Materials.Count * Rdr2Material.UniformBytes + 1024;
         var shared = textures.Distinct().Select(texture => new WorldSharedMemory(Identities.GetOrCreateValue(texture).Value, (long)texture.Data.Length * 3));
         return new WorldMemoryCost(owned, shared);
+    }
+}
+
+/// <summary>
+/// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials only
+/// (water waits for the scene behind it to be copied), by level of detail, each level's solid surfaces first so they
+/// cast as one, the indexes made the vertices' own, and the vertices in the asset's own space (the scene has them from
+/// its middle), as the placements' matrices take them.
+/// </summary>
+internal sealed class WorldLayout
+{
+    /// <summary>Its surfaces, by part, with their materials.</summary>
+    public List<(SurfacePart Part, SurfaceMaterial Material, Rdr2Material Rdr2)> Kept { get; } = [];
+
+    /// <summary>The surfaces in the order their indexes are laid out.</summary>
+    public int[] Order { get; private set; } = [];
+
+    /// <summary>Each surface's part with its indexes where they're laid out, and its middle in the asset's space.</summary>
+    public SurfacePart[] Placed { get; private set; } = [];
+
+    public SurfaceVertex[] Vertices { get; private set; } = [];
+
+    public uint[] Indices { get; private set; } = [];
+
+    public static WorldLayout Of(DrawableScene scene)
+    {
+        var layout = new WorldLayout();
+        foreach (SurfacePart part in scene.Parts)
+            if (scene.Materials[part.Material] is { Rdr2: { Water: false } rdr2 } material && part.IndexCount > 0)
+                layout.Kept.Add((part, material, rdr2));
+        if (layout.Kept.Count == 0 || scene.Vertices.Length == 0)
+            return layout;
+        var kept = layout.Kept;
+        static int Key(SurfaceMaterial material) => material.AlphaMode == AlphaMode.Opaque && !material.Decal ? 0 : 1;
+        layout.Order = [.. kept.Select((item, i) => i).OrderBy(i => kept[i].Part.Lod).ThenBy(i => Key(kept[i].Material))];
+        layout.Indices = new uint[kept.Sum(item => (long)item.Part.IndexCount)];
+        layout.Placed = new SurfacePart[kept.Count];
+        uint next = 0;
+        foreach (int i in layout.Order)
+        {
+            SurfacePart part = kept[i].Part;
+            for (uint c = 0; c < part.IndexCount; c++)
+                layout.Indices[next + c] = scene.Indices[part.FirstIndex + c] + (uint)part.BaseVertex;
+            layout.Placed[i] = part with { FirstIndex = next, BaseVertex = 0, Center = part.Center + scene.Origin };
+            next += part.IndexCount;
+        }
+        layout.Vertices = new SurfaceVertex[scene.Vertices.Length];
+        for (int v = 0; v < layout.Vertices.Length; v++)
+            layout.Vertices[v] = scene.Vertices[v] with { Position = scene.Vertices[v].Position + scene.Origin };
+        return layout;
     }
 }

@@ -19,8 +19,8 @@ internal sealed class WorldInstanceBuffer
         Changed = false;
     }
 
-    /// <summary>A pair from <see cref="WorldCullSet.Pairs"/>, the world matrix after <paramref name="local"/>, where the asset's vertices are from.</summary>
-    internal void Add(Matrix4x4[] pairs, int entry, Matrix4x4 local)
+    /// <summary>A placement's world matrix and its inverse transpose, from its prepared block.</summary>
+    internal void Add(in Matrix4x4 world, in Matrix4x4 normal)
     {
         int offset = Count * 2;
         if (offset + 2 > Matrices.Length)
@@ -29,11 +29,10 @@ internal sealed class WorldInstanceBuffer
             Array.Resize(ref grown, Math.Max(32, offset * 2));
             Matrices = grown;
         }
-        Matrix4x4 world = local * pairs[entry * 2];
-        if (Matrices[offset] != world || Matrices[offset + 1] != pairs[entry * 2 + 1])
+        if (Matrices[offset] != world || Matrices[offset + 1] != normal)
         {
             Matrices[offset] = world;
-            Matrices[offset + 1] = pairs[entry * 2 + 1];
+            Matrices[offset + 1] = normal;
             Changed = true;
         }
         Count++;

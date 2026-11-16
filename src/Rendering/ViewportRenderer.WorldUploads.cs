@@ -1,0 +1,211 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using HikariHopper.Rendering.World;
+using RedFury.World;
+using WebGpuSharp;
+using Buffer = WebGpuSharp.Buffer;
+using GameTexture = FiveFury.Textures.Texture;
+
+namespace HikariHopper.Rendering;
+
+// An admitted asset goes to the GPU over several frames (after RedFury's WebGpuRenderer.Uploads): its textures a mip
+// level at a time, its vertices and indexes in chunks, within a byte budget and a soft time limit a frame, so a big
+// asset arriving doesn't stall one. It's drawn once all of it is there; one is uploaded at a time.
+internal sealed unsafe partial class ViewportRenderer
+{
+    // A frame's upload, as RedFury's UploadBudget has it: its bytes, its writes, its soft time limit (checked after each
+    // write), and the largest write at once.
+    private const long UploadBytes = 8L * 1024 * 1024;
+    private const int UploadWrites = 64;
+    private const long ChunkBytes = 256L * 1024;
+    private static readonly long UploadTicks = Stopwatch.Frequency / 500;
+
+    private sealed class PendingWorldUpload(WorldAsset source)
+    {
+        internal readonly WorldAsset Source = source;
+
+        // Its surfaces as they'll be drawn, laid out on the worker that read it.
+        internal WorldLayout Layout => Source.Layout;
+
+        // The textures still to go up, the one going up (with its mip level), and those it put up.
+        internal readonly Queue<GameTexture> Textures = new();
+        internal GameTexture? Texture;
+        internal WebGpuSharp.Texture? GpuTexture;
+        internal int Block, Level, Row;
+        internal readonly List<GameTexture> Registered = [];
+
+        internal Buffer? VertexBuffer, IndexBuffer;
+        internal long VertexOffset, IndexOffset;
+    }
+
+    private PendingWorldUpload? pendingWorld;
+
+    /// <summary>Whether an asset is on its way to the GPU.</summary>
+    public bool HasPendingWorldUpload => pendingWorld is not null;
+
+    /// <summary>The asset on its way to the GPU.</summary>
+    public WorldAssetKey? WorldUploadKey => pendingWorld?.Source.Key;
+
+    // Puts an asset on its way up: its layout (made on the streamer's worker) and the textures not up yet.
+    private void BeginWorldUpload(WorldAsset asset)
+    {
+        var pending = new PendingWorldUpload(asset);
+        var queued = new HashSet<GameTexture>(ReferenceEqualityComparer.Instance);
+        foreach (var (_, _, rdr2) in asset.Layout.Kept)
+            foreach (GameTexture? texture in rdr2.Textures)
+                if (texture is not null && !textures.ContainsKey(texture) && queued.Add(texture))
+                    pending.Textures.Enqueue(texture);
+        pendingWorld = pending;
+    }
+
+    /// <summary>
+    /// Puts the next part of the asset on its way up within a frame's budget (its bytes and a soft two milliseconds; at
+    /// least one step, however big), and draws it once all of it is up.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The asset can't be drawn; it's let go.</exception>
+    public void ProcessWorldUploads()
+    {
+        if (pendingWorld is not { } pending)
+            return;
+        long deadline = Stopwatch.GetTimestamp() + UploadTicks;
+        long bytes = 0;
+        int writes = 0;
+        bool Spent() => bytes > 0 && (bytes >= UploadBytes || writes >= UploadWrites || Stopwatch.GetTimestamp() >= deadline);
+        try
+        {
+            while (!Spent())
+            {
+                if (pending.Texture is null && !pending.Textures.TryDequeue(out pending.Texture))
+                    break;
+                GameTexture texture = pending.Texture!;
+                if (pending.GpuTexture is null)
+                {
+                    // Another asset's upload may have put it up meanwhile; one that can't be drawn reads as missing.
+                    var made = textures.ContainsKey(texture) ? null : CreateTexture(texture);
+                    if (made is not var (created, block))
+                    {
+                        textures.TryAdd(texture, null);
+                        pending.Texture = null;
+                        continue;
+                    }
+                    (pending.GpuTexture, pending.Block, pending.Level, pending.Row) = (created, block, 0, 0);
+                }
+                // A big level a few rows at a time, a write at most ChunkBytes (a row at least).
+                int rows = (int)Math.Max(1, ChunkBytes / Math.Max(1, RowBytes(texture, pending.Level)));
+                var (written, done) = WriteRows(texture, pending.GpuTexture, pending.Block, pending.Level, pending.Row, rows);
+                bytes += Math.Max(1, written);
+                writes++;
+                pending.Row += rows;
+                if (done)
+                    (pending.Level, pending.Row) = (pending.Level + 1, 0);
+                if (pending.Level == texture.MipCount)
+                {
+                    textures[texture] = Register(texture, pending.GpuTexture);
+                    pending.Registered.Add(texture);
+                    (pending.Texture, pending.GpuTexture) = (null, null);
+                }
+            }
+            if (pending.Texture is not null || pending.Textures.Count > 0)
+                return;
+            if (pending.Layout.Vertices.Length > 0)
+            {
+                pending.VertexBuffer ??= device.CreateBuffer(new BufferDescriptor
+                {
+                    Size = ((ulong)pending.Layout.Vertices.Length * SurfaceVertex.Size + 3) & ~3UL,
+                    Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
+                });
+                pending.IndexBuffer ??= device.CreateBuffer(new BufferDescriptor
+                {
+                    Size = (ulong)pending.Layout.Indices.Length * sizeof(uint),
+                    Usage = BufferUsage.Index | BufferUsage.CopyDst,
+                });
+                ReadOnlySpan<byte> vertices = MemoryMarshal.AsBytes(pending.Layout.Vertices.AsSpan());
+                ReadOnlySpan<byte> indices = MemoryMarshal.AsBytes(pending.Layout.Indices.AsSpan());
+                // Whole vertices and indexes a chunk, as writes go in fours.
+                long vertexChunk = ChunkBytes / SurfaceVertex.Size * SurfaceVertex.Size;
+                while (pending.VertexOffset < vertices.Length && !Spent())
+                {
+                    int count = (int)Math.Min(vertexChunk, vertices.Length - pending.VertexOffset);
+                    queue.WriteBuffer(pending.VertexBuffer, (ulong)pending.VertexOffset, vertices.Slice((int)pending.VertexOffset, count));
+                    pending.VertexOffset += count;
+                    bytes += count;
+                    writes++;
+                }
+                while (pending.VertexOffset == vertices.Length && pending.IndexOffset < indices.Length && !Spent())
+                {
+                    int count = (int)Math.Min(ChunkBytes, indices.Length - pending.IndexOffset);
+                    queue.WriteBuffer(pending.IndexBuffer, (ulong)pending.IndexOffset, indices.Slice((int)pending.IndexOffset, count));
+                    pending.IndexOffset += count;
+                    bytes += count;
+                    writes++;
+                }
+                if (pending.VertexOffset < vertices.Length || pending.IndexOffset < indices.Length)
+                    return;
+            }
+            FinishWorldUpload(pending);
+        }
+        catch
+        {
+            CancelWorldUpload();
+            throw;
+        }
+    }
+
+    // All of it up: its materials and surfaces, and it's drawn from now on.
+    private void FinishWorldUpload(PendingWorldUpload pending)
+    {
+        var uploaded = new WorldGpuAsset(pending.Source) { Vertices = pending.VertexBuffer, Indices = pending.IndexBuffer };
+        if (uploaded.Vertices is not null)
+        {
+            var groups = new Dictionary<int, (BindGroup Group, Buffer Uniforms)>();
+            foreach (int i in pending.Layout.Order)
+            {
+                var (part, material, rdr2) = pending.Layout.Kept[i];
+                if (!groups.TryGetValue(part.Material, out var group))
+                {
+                    Buffer uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+                    queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
+                    group = (Rdr2Group(rdr2, uniforms), uniforms);
+                    groups.Add(part.Material, group);
+                    foreach (GameTexture? texture in rdr2.Textures)
+                        if (texture is not null && !uploaded.Textures.Contains(texture))
+                            uploaded.Textures.Add(texture);
+                }
+                uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, material.Decal ? AlphaMode.Blend : material.AlphaMode,
+                    rdr2.DoubleSided, material.Decal));
+            }
+            // RedFury's depth runs: adjacent casters of a level, one draw each.
+            foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
+            {
+                int last = uploaded.DepthRuns.Count - 1;
+                if (last >= 0 && uploaded.DepthRuns[last] is var run && run.Level == mesh.Level && run.FirstIndex + run.IndexCount == mesh.Part.FirstIndex)
+                    uploaded.DepthRuns[last] = run with { IndexCount = run.IndexCount + mesh.Part.IndexCount };
+                else
+                    uploaded.DepthRuns.Add(new WorldDepthRun(mesh.Level, mesh.Part.FirstIndex, mesh.Part.IndexCount));
+            }
+            uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.Mode == AlphaMode.Mask);
+        }
+        foreach (GameTexture texture in uploaded.Textures)
+            worldTextureUsers[texture] = worldTextureUsers.GetValueOrDefault(texture) + 1;
+        uploaded.Used = worldClock;
+        uploaded.Id = ++worldAssetIds;
+        worldAssets.Add(pending.Source.Key, uploaded);
+        pendingWorld = null;
+        worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
+    }
+
+    /// <summary>Lets go of the asset on its way up, and what it put up that nothing else uses.</summary>
+    public void CancelWorldUpload()
+    {
+        if (pendingWorld is not { } pending)
+            return;
+        pendingWorld = null;
+        pending.GpuTexture?.Destroy();
+        pending.VertexBuffer?.Destroy();
+        pending.IndexBuffer?.Destroy();
+        foreach (GameTexture texture in pending.Registered)
+            if (!worldTextureUsers.ContainsKey(texture))
+                ForgetTexture(texture);
+        ReleaseWorldMemory(pending.Source.MemoryCost);
+    }
+}
