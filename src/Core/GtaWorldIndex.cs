@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using CommonFury.Numerics;
 using FiveFury;
@@ -5,6 +6,7 @@ using FiveFury.Assets;
 using FiveFury.Authoring;
 using CommonFury.Hashing;
 using FiveFury.Numerics;
+using FiveFury.Resources;
 using FiveFury.Ymap;
 using FiveFury.Textures;
 using FiveFury.Ydd;
@@ -110,6 +112,15 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// </summary>
     internal const long DictionaryBudget = 192L * 1024 * 1024;
 
+    // An entry's stored bytes, under Gate, into a buffer lent from the pool: parsed outside Gate (the reading threads
+    // parse at once), then given back.
+    private static (byte[] Bytes, int Length) Lend(GameFile file) => file.ReadStandalone(data =>
+    {
+        byte[] bytes = ArrayPool<byte>.Shared.Rent(data.Length);
+        data.CopyTo(bytes);
+        return (bytes, data.Length);
+    });
+
     // Each dictionary's textures, named as they're read.
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<FiveFury.Textures.Texture, object> textureIds = new();
 
@@ -135,23 +146,35 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
         GameFileType type = TypeOf(key.Extension) is { } known and not GameFileType.Ymap ? known
             : throw new NotSupportedException($"Unsupported world asset {key}.");
-        byte[] data;
+        (byte[] Bytes, int Length) lent;
         string name;
         lock (Gate)
         {
             GameFile file = Game.FileSystem.ResolveRegistered(new Hash32(key.Hash), type) ?? throw new FileNotFoundException($"Asset {key} not found.");
-            data = file.ReadStandalone();
+            lent = Lend(file);
             name = Path.GetFileNameWithoutExtension(file.VirtualPath);
         }
-        // A fragment's lights are its own (a lamp post's), not its drawables'.
-        Yft? fragment = type == GameFileType.Yft ? Yft.Read(data) : null;
-        IReadOnlyList<SceneModel> models = type switch
+        Yft? fragment;
+        IReadOnlyList<SceneModel> models;
+        try
         {
-            GameFileType.Ydr => [new SceneModel(name, Ydr.Read(data).Drawable, Matrix4x4.Identity)],
-            GameFileType.Yft => [.. FragmentModels.Of(fragment!, name).Where(model => model.Variant != ModelVariant.Damaged)],
-            _ => [.. Ydd.Read(data).Drawables.Where(entry => key.Member == 0 || entry.Name.Value == key.Member)
-                .Select(entry => new SceneModel(ModelContent.EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
-        };
+            // Read for drawing only (FiveFury's transient mode): the decoded resource is lent from a pool and given back
+            // as it's parsed, instead of kept with what was read of it.
+            ReadOnlySpan<byte> data = lent.Bytes.AsSpan(0, lent.Length);
+            // A fragment's lights are its own (a lamp post's), not its drawables'.
+            fragment = type == GameFileType.Yft ? Yft.Read(data, mode: ResourceReadMode.Transient) : null;
+            models = type switch
+            {
+                GameFileType.Ydr => [new SceneModel(name, Ydr.Read(data, mode: ResourceReadMode.Transient).Drawable, Matrix4x4.Identity)],
+                GameFileType.Yft => [.. FragmentModels.Of(fragment!, name).Where(model => model.Variant != ModelVariant.Damaged)],
+                _ => [.. Ydd.Read(data, mode: ResourceReadMode.Transient).Drawables.Where(entry => key.Member == 0 || entry.Name.Value == key.Member)
+                    .Select(entry => new SceneModel(ModelContent.EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
+            };
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(lent.Bytes);
+        }
         if (models.Count == 0)
             throw new FileNotFoundException($"Asset {key} has no such drawable.");
         DrawableScene scene = DrawableScene.Build(models, new TextureLookup([.. Chain(key.TextureDictionary).Select(Dictionary).OfType<TextureDictionary>()], []),
@@ -272,13 +295,21 @@ internal sealed class GtaWorldIndex : WorldIndex
     {
         try
         {
-            byte[]? data = null;
+            (byte[] Bytes, int Length)? lent = null;
             lock (Gate)
                 if (Game.FileSystem.ResolveRegistered(new Hash32(hash), GameFileType.Ytd) is { } file)
-                    data = file.ReadStandalone();
-            if (data is null)
+                    lent = Lend(file);
+            if (lent is not { } read)
                 return (null, 0);
-            TextureDictionary dictionary = FiveFury.Ytd.Ytd.Read(data).Dictionary;
+            TextureDictionary dictionary;
+            try
+            {
+                dictionary = FiveFury.Ytd.Ytd.Read(read.Bytes.AsSpan(0, read.Length), mode: ResourceReadMode.Transient).Dictionary;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(read.Bytes);
+            }
             foreach (FiveFury.Textures.Texture texture in dictionary.Textures)
                 textureIds.AddOrUpdate(texture, new WorldTextureId(hash, new Hash32((texture.Name ?? "").ToLowerInvariant()).Value));
             return (dictionary, dictionary.Textures.Sum(texture => (long)texture.Data.Length));
