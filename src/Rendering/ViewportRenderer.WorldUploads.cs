@@ -66,11 +66,14 @@ internal sealed unsafe partial class ViewportRenderer
     /// least one step, however big), and draws it once all of it is up.
     /// </summary>
     /// <exception cref="NotSupportedException">The asset can't be drawn; it's let go.</exception>
-    public void ProcessWorldUploads()
+    public void ProcessWorldUploads() => ProcessWorldUploads(UploadTicks);
+
+    /// <summary>As <see cref="ProcessWorldUploads()"/>, within this many stopwatch ticks.</summary>
+    public void ProcessWorldUploads(long ticks)
     {
         if (pendingWorld is not { } pending)
             return;
-        long deadline = Stopwatch.GetTimestamp() + UploadTicks;
+        long deadline = Stopwatch.GetTimestamp() + ticks;
         long bytes = 0;
         int writes = 0;
         bool Spent() => bytes > 0 && (bytes >= UploadBytes || writes >= UploadWrites || Stopwatch.GetTimestamp() >= deadline);
