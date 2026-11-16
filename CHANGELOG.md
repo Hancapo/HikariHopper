@@ -42,6 +42,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw the 3D viewer and the worlds as fast as the GPU can, no longer held to the display's refresh rate: frames are presented without waiting for its vertical blank where the GPU allows, without tearing where it can. ([#264](https://github.com/Hancapo/HikariHopper/pull/264))
 - Let go of the worlds' texture pixels once they're on the GPU, and keep 192 MB of GTA V's texture dictionaries for the next models instead of 768 MB: 490 MB less memory after flying from Legion Square to Grapeseed. ([#265](https://github.com/Hancapo/HikariHopper/pull/265))
 - Compile the worlds' pipelines in the background as the app starts, on the GPU driver's threads, instead of on the first frames of a world: GTA V's world no longer stalls for over a second as its first models come in. ([#266](https://github.com/Hancapo/HikariHopper/pull/266))
+- Look around with the free camera as RedFury.World does: by the mouse's raw motion, turned once a frame, the pointer hidden and held in the view while dragging and put back after; frames drawn ahead of the streaming threads, and a slow frame no longer throws the camera forward. ([#267](https://github.com/Hancapo/HikariHopper/pull/267))
 
 ### Fixed
 
