@@ -33,8 +33,17 @@ internal sealed class FakeUpdateSource : IUpdateSource
         return CheckError is null ? Task.FromResult(Found) : Task.FromException<AvailableUpdate?>(CheckError);
     }
 
+    /// <summary>Thrown by a download, as when the connection drops.</summary>
+    public Exception? DownloadError { get; set; }
+
+    /// <summary>How many downloads were started.</summary>
+    public int Downloads { get; private set; }
+
     public async Task DownloadAsync(AvailableUpdate update, Action<int> progress, CancellationToken cancel)
     {
+        Downloads++;
+        if (DownloadError is not null)
+            throw DownloadError;
         progress(50);
         if (DownloadGate is not null)
             await DownloadGate.Task.WaitAsync(cancel);
@@ -49,6 +58,20 @@ internal sealed class FakeUpdateSource : IUpdateSource
         if (ApplyError is not null)
             throw ApplyError;
         Applied = update;
+    }
+
+    private int cleanUps;
+
+    /// <summary>How many times what updating left behind was cleaned up.</summary>
+    public int CleanUps => Volatile.Read(ref cleanUps);
+
+    /// <summary>Holds each clean-up until set, when given, as a slow one holding the packages folder's lock.</summary>
+    public ManualResetEventSlim? CleanUpGate { get; set; }
+
+    public void CleanUp()
+    {
+        CleanUpGate?.Wait();
+        Interlocked.Increment(ref cleanUps);
     }
 }
 
@@ -108,6 +131,9 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
         await Settled(off.Checked);
         Assert.Equal(0, source.Checks);
         Assert.Null(off.Sheet);
+        // What the last update left behind is cleaned up all the same.
+        await Settled(off.CleanedUp);
+        Assert.Equal(1, source.CleanUps);
         first.Close();
 
         // The version skipped, none newer, a failed check, or a copy that can't update: nothing shown.
@@ -225,11 +251,16 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
         await Settled(updates.Checked);
         UpdateSheet sheet = updates.Sheet!;
 
+        await Settled(updates.CleanedUp);
+        int cleanUps = source.CleanUps;
         Click(sheet, "Update and restart");
         Pump();
         Click(sheet, "Cancel");
         await Settled(updates.Updating);
         Assert.Equal("available", sheet.State);
+        // What it had downloaded is cleaned up.
+        await Settled(updates.CleanedUp);
+        Assert.Equal(cleanUps + 1, source.CleanUps);
 
         // Closing the sheet during the download calls it off too.
         Click(sheet, "Update and restart");
@@ -237,9 +268,112 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
         Assert.Equal("downloading", sheet.State);
         sheet.Close();
         await Settled(updates.Updating);
+        await Settled(updates.CleanedUp);
+        Assert.Equal(cleanUps + 2, source.CleanUps);
 
         Assert.Null(source.Applied);
         Assert.Equal(0, quits);
+    }
+
+    [AvaloniaFact]
+    public async Task AFailedDownloadCleansUpWhatItLeft()
+    {
+        source.Found = Version005;
+        source.DownloadError = new HttpRequestException("offline");
+        UpdateFlow updates = Open(out _);
+        await Settled(updates.Checked);
+        await Settled(updates.CleanedUp);
+        int cleanUps = source.CleanUps;
+
+        Click(updates.Sheet!, "Update and restart");
+        await Settled(updates.Updating);
+        Assert.Equal("The download failed", updates.Sheet!.Detail);
+        await Settled(updates.CleanedUp);
+        Assert.Equal(cleanUps + 1, source.CleanUps);
+    }
+
+    // An updated copy's packages folder: the package it was updated to, an older one, a download cut short, Velopack's
+    // work folder with what it unpacked, and the files Velopack keeps there.
+    private string Packages()
+    {
+        string packages = Directory.CreateDirectory(Path.Combine(Work, "app", "packages")).FullName;
+        foreach (string name in new[] { "HikariHopper-0.2.1-full.nupkg", "HikariHopper-0.2.0-full.nupkg", "HikariHopper-0.2.2-delta.nupkg.partial", ".betaId", ".velopack_lock" })
+            File.WriteAllText(Path.Combine(packages, name), name);
+        string unpacked = Directory.CreateDirectory(Path.Combine(packages, "VelopackTemp", "base", "lib")).FullName;
+        File.WriteAllText(Path.Combine(unpacked, "HikariHopper.exe"), "exe");
+        return packages;
+    }
+
+    private static string[] Left(string packages) =>
+        [.. Directory.EnumerateFileSystemEntries(packages).Select(Path.GetFileName).Order(StringComparer.OrdinalIgnoreCase)!];
+
+    [Fact]
+    public void UpdatingLeavesOnlyThePackageTheNextUpdateIsBuiltFrom()
+    {
+        string packages = Packages();
+        Assert.True(Updates.RemoveLeftovers(packages, Path.Combine(packages, "VelopackTemp"), "HikariHopper-0.2.1-full.nupkg"));
+        Assert.Equal([".betaId", ".velopack_lock", "HikariHopper-0.2.1-full.nupkg"], Left(packages));
+
+        // Nothing there to clean: nothing happens.
+        Assert.True(Updates.RemoveLeftovers(packages, Path.Combine(packages, "VelopackTemp"), "HikariHopper-0.2.1-full.nupkg"));
+        Assert.True(Updates.RemoveLeftovers(Path.Combine(Work, "none"), null, (string?)null));
+    }
+
+    [Fact]
+    public void ThePackageKeptIsTheNewestOnceTheLockIsHeld()
+    {
+        // A download finishing just before the clean-up takes the lock is the newest package then, and stays.
+        string packages = Packages();
+        Assert.True(Updates.RemoveLeftovers(packages, null, () =>
+        {
+            File.WriteAllText(Path.Combine(packages, "HikariHopper-0.2.2-full.nupkg"), "new");
+            return "HikariHopper-0.2.2-full.nupkg";
+        }));
+        Assert.Contains("HikariHopper-0.2.2-full.nupkg", Left(packages));
+        Assert.DoesNotContain("HikariHopper-0.2.1-full.nupkg", Left(packages));
+        // Nor is it asked for while another copy holds the lock.
+        bool asked = false;
+        using (new FileStream(Path.Combine(packages, ".velopack_lock"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            Assert.False(Updates.RemoveLeftovers(packages, null, () => { asked = true; return null; }));
+        Assert.False(asked);
+    }
+
+    [AvaloniaFact]
+    public async Task ADownloadWaitsForTheCleanUpStillRunning()
+    {
+        source.Found = Version005;
+        using var gate = new ManualResetEventSlim();
+        source.CleanUpGate = gate;
+        UpdateFlow updates = Open(out _);
+        await Settled(updates.Checked);
+
+        Click(updates.Sheet!, "Update and restart");
+        Pump();
+        Thread.Sleep(100);
+        Pump();
+        Assert.Equal(0, source.Downloads);
+
+        gate.Set();
+        await Settled(updates.Updating);
+        Assert.Equal(1, source.Downloads);
+        Assert.Same(source.Found, source.Applied);
+    }
+
+    [Fact]
+    public void NothingIsCleanedWhileAnotherCopyUpdatesNorOutsideThePackagesFolder()
+    {
+        // Another copy downloading holds the lock file open: everything stays.
+        string packages = Packages();
+        string[] before = Left(packages);
+        using (new FileStream(Path.Combine(packages, ".velopack_lock"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            Assert.False(Updates.RemoveLeftovers(packages, Path.Combine(packages, "VelopackTemp"), "HikariHopper-0.2.1-full.nupkg"));
+        Assert.Equal(before, Left(packages));
+
+        // A work folder outside it, as a wrong path would name, isn't touched.
+        string outside = Directory.CreateDirectory(Path.Combine(Work, "elsewhere")).FullName;
+        File.WriteAllText(Path.Combine(outside, "keep.txt"), "keep");
+        Assert.True(Updates.RemoveLeftovers(packages, outside, "HikariHopper-0.2.1-full.nupkg"));
+        Assert.True(File.Exists(Path.Combine(outside, "keep.txt")));
     }
 
     [AvaloniaFact]
