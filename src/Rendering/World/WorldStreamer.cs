@@ -6,10 +6,11 @@ using RedFury.World;
 namespace HikariHopper.Rendering.World;
 
 /// <summary>
-/// Streams a world into a viewport around its camera (after RedFury's WorldSession, without grass and lights yet). Ten
-/// times a second the LOD graph is cut where the camera is: the whole map through its lowest levels, the detail near the
-/// camera, within the memory budget. A worker reads the assets the cut asks for from the game's archives, one at a
-/// time, and the viewport uploads one of those read each frame. Only the UI thread touches the renderer.
+/// Streams a world into a viewport around its camera (after RedFury's WorldSession). Ten times a second the LOD graph is
+/// cut where the camera is: the whole map through its lowest levels, the detail near the camera, within the memory
+/// budget. A worker reads the assets the cut asks for from the game's archives, one at a time, and the grass batches
+/// nearest the camera; the viewport uploads one asset read each frame. The cut's static lights are bound to their
+/// placements when it changes. Only the UI thread touches the renderer.
 /// </summary>
 internal sealed class WorldStreamer : IDisposable
 {
@@ -25,6 +26,9 @@ internal sealed class WorldStreamer : IDisposable
 
     // The largest asset uploaded at once.
     private const long LargestAsset = 384L * 1024 * 1024;
+
+    // The plants expanded at once, nearest batches first.
+    private const int MaximumGrassInstances = 131072;
 
     private readonly Rdr2WorldIndex index;
     private readonly CancellationTokenSource stop = new();
@@ -60,11 +64,31 @@ internal sealed class WorldStreamer : IDisposable
     private WorldSelection selected = new([], []);
     private ViewportRenderer? renderer;
 
+    // The grass batches wanted, those expanded (their descriptor and the batch's plants), and those that couldn't be.
+    private WorldLodNode[] wantedGrass = [];
+    private readonly Dictionary<WorldEntityId, (WorldLodNode Source, WorldLodNode Ready)> readyGrass = [];
+    private readonly HashSet<WorldEntityId> failedGrass = [];
+    private WorldEntityId? loadingGrass;
+    private long grassRevision, selectedGrassRevision = -1;
+
+    // What the lights were last bound for.
+    private IReadOnlyList<WorldLodNode> lightCoverage = [];
+    private HashSet<WorldAssetKey> lightReady = [];
+    private bool lightsTruncated;
+    private Vector3 lightEye;
+    private int? lightHour;
+
     public WorldStreamer(Rdr2WorldIndex index)
     {
         this.index = index;
         worker = Task.Run(Work);
     }
+
+    /// <summary>The cut's lights bound to their placements, last time they were.</summary>
+    public int LightCount { get; private set; }
+
+    /// <summary>The plants expanded and shown.</summary>
+    public int GrassInstances { get; private set; }
 
     /// <summary>What it says in the status bar: the placements drawn, and what's streamed in.</summary>
     public string Status { get; private set; } = "";
@@ -75,8 +99,9 @@ internal sealed class WorldStreamer : IDisposable
         get
         {
             lock (gate)
-                return planning is not null || loading is not null || !prepared.IsEmpty
-                    || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key));
+                return planning is not null || loading is not null || loadingGrass is not null || !prepared.IsEmpty
+                    || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key))
+                    || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
         }
     }
 
@@ -90,14 +115,20 @@ internal sealed class WorldStreamer : IDisposable
         }
     }
 
-    // The worker: reads the assets wanted, one at a time, while there's room for them ahead of the uploads.
+    // The worker: reads the assets wanted, one at a time, while there's room for them ahead of the uploads, and the grass
+    // batches wanted.
     private async Task Work()
     {
         try
         {
+            var grassLoader = new WorldGrassLoader(index.Assets, index.Crypto, index.Reads);
             while (!stop.IsCancellationRequested)
-                if (!LoadNext())
+            {
+                bool loaded = LoadNext();
+                loaded = LoadGrassNext(grassLoader) || loaded;
+                if (!loaded)
                     await workAvailable.WaitAsync(stop.Token);
+            }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
@@ -144,6 +175,47 @@ internal sealed class WorldStreamer : IDisposable
         {
             lock (gate)
                 loading = null;
+        }
+        return true;
+    }
+
+    // Expands the nearest grass batch wanted and not yet expanded.
+    private bool LoadGrassNext(WorldGrassLoader loader)
+    {
+        WorldLodNode? source;
+        lock (gate)
+        {
+            source = wantedGrass.FirstOrDefault(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
+            loadingGrass = source?.Id;
+        }
+        if (source is null)
+            return false;
+        try
+        {
+            WorldLodNode expanded;
+            lock (index.Reads)
+                expanded = loader.Load(source, stop.Token);
+            lock (gate)
+                if (wantedGrass.Any(node => ReferenceEquals(node, source)))
+                {
+                    readyGrass[source.Id] = (source, expanded);
+                    grassRevision++;
+                }
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or ArgumentException
+            or OverflowException or IndexOutOfRangeException)
+        {
+            lock (gate)
+            {
+                failedGrass.Add(source.Id);
+                grassRevision++;
+                Note($"Grass {source.Id}: {error.Message}");
+            }
+        }
+        finally
+        {
+            lock (gate)
+                loadingGrass = null;
         }
         return true;
     }
@@ -206,7 +278,7 @@ internal sealed class WorldStreamer : IDisposable
             HashSet<WorldAssetKey> ready = [.. currentResident.Where(viewport.IsWorldReady)];
             selectionChanged = selectionPending || selectedPosition != eye || selectedRevision != budget.Revision
                 || !ReferenceEquals(selectedPlan, plan) || selectedFailures != failed.Count || !selectedReady.SetEquals(ready)
-                || selectedHour != hour || timeFilter.HasPendingSwitches;
+                || selectedHour != hour || timeFilter.HasPendingSwitches || selectedGrassRevision != grassRevision;
             if (selectionChanged)
             {
                 // The whole cut near the camera stays, not only what's in view.
@@ -236,10 +308,43 @@ internal sealed class WorldStreamer : IDisposable
                 selectedReady = ready;
                 selectedFailures = failed.Count;
                 selectedHour = hour;
+                selectedGrassRevision = grassRevision;
             }
         }
         if (selectionChanged)
-            viewport.SetWorldSelection(selected);
+        {
+            // The grass batches nearest the camera, expanded, in their descriptors' place; the others wait.
+            WorldSelection display;
+            lock (gate)
+            {
+                wantedGrass = WorldGrass.Limit(selected.Coverage, eye, MaximumGrassInstances);
+                foreach (var pair in readyGrass.ToArray())
+                    if (!wantedGrass.Any(node => ReferenceEquals(node, pair.Value.Source)))
+                        readyGrass.Remove(pair.Key);
+                WorldLodNode[] coverage = [.. selected.Coverage.Where(node => node.Grass is null)
+                    .Concat(wantedGrass.Where(node => readyGrass.ContainsKey(node.Id)).Select(node => readyGrass[node.Id].Ready))];
+                GrassInstances = wantedGrass.Where(node => readyGrass.ContainsKey(node.Id)).Sum(node => readyGrass[node.Id].Ready.Instances.Count);
+                display = selected with { Visible = coverage, Coverage = coverage };
+            }
+            viewport.SetWorldSelection(display);
+            // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
+            HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];
+            if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || !lightReady.SetEquals(ready)
+                || lightsTruncated && lightEye != eye || lightHour != hour)
+            {
+                WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour);
+                viewport.SetLocalLights(lighting.Lights);
+                LightCount = lighting.Lights.Count;
+                lightsTruncated = lighting.IsTruncated;
+                lightEye = eye;
+                lightHour = hour;
+                lightCoverage = display.Coverage;
+                lightReady = ready;
+                lock (gate)
+                    foreach (string message in lighting.Diagnostics)
+                        Note(message);
+            }
+        }
         lock (gate)
         {
             HashSet<WorldAssetKey> protect = [.. selected.Requested.Where(viewport.IsWorldReady)];
@@ -248,7 +353,7 @@ internal sealed class WorldStreamer : IDisposable
             bool changed = selectionChanged || !resident.SetEquals(current);
             resident = current;
             wanted = [.. selected.Requested];
-            if (changed || admissionPressure || planPressure)
+            if (changed || admissionPressure || planPressure || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id)))
                 SignalWorker();
         }
     }

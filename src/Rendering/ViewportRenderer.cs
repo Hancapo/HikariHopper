@@ -418,6 +418,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (!worldShadows)
                 SkipWorldShadows();
             UpdateWorldVisibility(worldCascades, worldShadows);
+            WriteLocalLights();
             if (worldShadows)
                 DrawWorldShadows(encoder);
         }

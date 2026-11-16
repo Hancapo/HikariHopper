@@ -6,6 +6,8 @@
 struct ShadowView {
     // From the world to the cascade's clip space: the cascade's view, after the move to the camera it was fitted for.
     matrix: mat4x4f,
+    // That camera, where a plant's fade is measured from (as rdr2_world.wgsl's grass_fade).
+    origin: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> shadow_view: ShadowView;
@@ -34,7 +36,12 @@ struct WorldInstance {
 fn caster_position(position: vec3f, source_index: u32) -> vec4f {
     let instance = world_instances[source_index];
     let model = mat4x4f(instance.m0, instance.m1, instance.m2, instance.m3);
-    return shadow_view.matrix * (model * vec4f(position, 1.0));
+    var fade = 1.0;
+    if (instance.n3.z > 0.5) {
+        let distance = length(instance.m3.xyz - shadow_view.origin.xyz);
+        fade = 1.0 - smoothstep(instance.n3.x, max(instance.n3.x + 0.01, instance.n3.y), distance);
+    }
+    return shadow_view.matrix * (model * vec4f(position * fade, 1.0));
 }
 
 // Solid casters: depth alone, no fragment stage.

@@ -210,12 +210,7 @@ fn diffuse_burley(ndotv: f32, ndotl: f32, ldoth: f32, roughness: f32) -> f32 {
     return light * view * energy_factor / PI;
 }
 
-// Unshadowed local direct lighting. The CPU's conservative screen tiles bound the light loop;
-// exact radial/cone rejection happens here, including for transparent surfaces outside the prepass.
-fn local_irradiance(pixel: vec2f, position: vec3f, n: vec3f, v: vec3f, base_colour: vec3f,
-    f0: vec3f, roughness: f32, metallic: f32, specular_scale: f32, edge_strength: f32) -> vec3f {
-    return vec3f(0.0);
-}
+// Local lights' direct light (local_irradiance) is the program's: rdr2.wgsl has none, rdr2_world.wgsl the world's.
 
 fn terrain_flags() -> u32 {
     return u32(material.terrain_uv_flags.y + 0.5);

@@ -147,6 +147,36 @@ public sealed class WorldCullingTests
     }
 
     [Fact]
+    public void A_plant_keeps_its_packed_colour_fade_and_occlusion_its_mirroring_and_its_bounds()
+    {
+        WorldInstance grass = Instance(5) with
+        {
+            TransformRows = new(new(-2, 0, 0, 5), new(0, 3, 0, 0), new(0, 0, 4, 0)),
+            Grass = new WorldGrassAttributes(new(.2f, .3f, .4f), .75f, 30, 90),
+        };
+        WorldLodNode a = Node(1) with { Instances = [grass, Instance(6) with { TransformRows = default }] };
+        WorldLodNode b = Node(2);
+        var set = new WorldCullSet([a, b]);
+        set.Update([b, a]);
+        Assert.Equal(1, set.Count[1]);
+        Assert.Equal(5, set.X[1]);
+        Assert.Equal(1, set.R[1]);
+        Assert.Equal(101f * 101f, set.Reach2[1]);
+        Assert.Equal(grass.Transform, set.Pairs[2]);
+        Assert.True(set.Pairs[2].GetDeterminant() < 0);
+        Assert.Equal(-.5f, set.Pairs[3].M11);
+        Assert.Equal(1 / 3f, set.Pairs[3].M22);
+        Assert.Equal(.25f, set.Pairs[3].M33);
+        Assert.Equal(.2f, set.Pairs[3].M14);
+        Assert.Equal(.3f, set.Pairs[3].M24);
+        Assert.Equal(.4f, set.Pairs[3].M34);
+        Assert.Equal(30, set.Pairs[3].M41);
+        Assert.Equal(90, set.Pairs[3].M42);
+        Assert.Equal(1, set.Pairs[3].M43);
+        Assert.Equal(.75f, set.Pairs[3].M44);
+    }
+
+    [Fact]
     public void Archetype_flags_change_the_passes_without_changing_the_asset()
     {
         WorldLodNode node = Node(1) with { Instances = [.. Enumerable.Range(1, 9).Select(i => Instance(i))] };

@@ -69,6 +69,8 @@ internal sealed unsafe partial class ViewportRenderer
                 // Cast from the world itself: the cascade's view after the move to the camera it was fitted for.
                 Matrix4x4 cast = Matrix4x4.CreateTranslation(-eye) * fitted[c].ViewProjection;
                 queue.WriteBuffer(shadowViewBuffers[c], 0, MemoryMarshal.AsBytes(new ReadOnlySpan<Matrix4x4>(in cast)));
+                Vector4 caster = new(eye, 0);
+                queue.WriteBuffer(shadowViewBuffers[c], 64, MemoryMarshal.AsBytes(new ReadOnlySpan<Vector4>(in caster)));
             }
             else
                 sampled = shadowRendered[c].Relocate(eye - shadowRenderedOrigin[c]);

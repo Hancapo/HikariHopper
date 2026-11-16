@@ -20,6 +20,7 @@ internal sealed unsafe partial class ViewportRenderer
         internal readonly WorldAssetKey Key = source.Key;
         internal WorldMemoryCost MemoryCost = source.MemoryCost;
         internal readonly byte LodMask = source.LodMask;
+        internal readonly WorldLightBones LightBones = source.LightBones;
         internal readonly float[] LodReach2 = source.LodReach2;
 
         // Where the asset's vertices are from: each placement's matrix is moved by it.
@@ -133,6 +134,9 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>Whether an asset is uploaded and can be drawn.</summary>
     public bool IsWorldReady(WorldAssetKey key) => worldAssets.ContainsKey(key);
+
+    /// <summary>An uploaded asset's bones, where its lights are attached; null when it isn't uploaded.</summary>
+    public WorldLightBones? WorldAssetLightBones(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.LightBones : null;
 
     /// <summary>What an uploaded asset costs to keep, with its placements' storage; null when it isn't.</summary>
     public WorldMemoryCost? WorldAssetMemory(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.MemoryCost : null;
@@ -394,7 +398,12 @@ internal sealed unsafe partial class ViewportRenderer
                 asset.SourceGroup = device.CreateBindGroup(new BindGroupDescriptor
                 {
                     Layout = worldInstanceLayout!,
-                    Entries = [new BindGroupEntry { Binding = 0, Buffer = asset.SourceInstances, Size = (ulong)capacity * 128 }],
+                    Entries =
+                    [
+                        new BindGroupEntry { Binding = 0, Buffer = asset.SourceInstances, Size = (ulong)capacity * 128 },
+                        new BindGroupEntry { Binding = 1, Buffer = localLightBuffer!, Size = LocalLightFrame.LightBytes },
+                        new BindGroupEntry { Binding = 2, Buffer = localLightTiles!, Size = LocalLightFrame.TileBytes },
+                    ],
                 });
                 asset.Instances = device.CreateBuffer(new BufferDescriptor { Size = (ulong)capacity * 4, Usage = BufferUsage.Vertex | BufferUsage.CopyDst });
                 asset.Rewrite = true;

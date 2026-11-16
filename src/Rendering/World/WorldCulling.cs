@@ -42,31 +42,40 @@ internal sealed class WorldCullSet
             {
                 Entries = node.Grass is null ? new PreparedInstance[1] : [];
                 if (node.Grass is null)
-                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, node.TintValue);
+                    Add(node.Transform, node.Center, node.Radius, float.PositiveInfinity, null, node.TintValue);
             }
             else
             {
                 Entries = new PreparedInstance[node.Instances.Count];
                 foreach (WorldInstance instance in node.Instances)
                 {
-                    // Grass is expanded and drawn later; its instances aren't placements of their own yet.
-                    if (instance.Grass is not null)
-                        continue;
                     float reach = node.Distance + instance.Radius;
-                    Add(instance.Transform, instance.Center, instance.Radius, reach * reach, 0);
+                    Add(instance.Transform, instance.Center, instance.Radius, reach * reach, instance.Grass, 0);
                 }
             }
         }
 
-        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, uint tint)
+        private void Add(Matrix4x4 transform, Vector3 center, float radius, float reach2, WorldGrassAttributes? grass, uint tint)
         {
             // Degenerate or non-invertible transforms were never drawn.
             if (transform == default || !Matrix4x4.Invert(transform, out Matrix4x4 inverse))
                 return;
             Matrix4x4 normal = Matrix4x4.Transpose(inverse);
-            // An affine inverse transpose leaves M41 to M43 at zero, which the normals never read: the placement's tint
-            // palette row rides there (0 keeps the material's).
-            normal.M41 = tint;
+            if (grass is { } attributes)
+            {
+                // A plant's colour, its fade and its occlusion, in lanes the normals never read (their input w is 0).
+                normal.M14 = attributes.Color.X;
+                normal.M24 = attributes.Color.Y;
+                normal.M34 = attributes.Color.Z;
+                normal.M41 = attributes.FadeStart;
+                normal.M42 = attributes.FadeEnd;
+                normal.M43 = 1;
+                normal.M44 = attributes.AmbientOcclusion;
+            }
+            // An affine inverse transpose leaves M41 to M43 at zero, which the normals never read: an ordinary
+            // placement's tint palette row rides there (0 keeps the material's).
+            else
+                normal.M41 = tint;
             Entries[Count++] = new PreparedInstance(transform, normal, center, radius, reach2);
         }
     }

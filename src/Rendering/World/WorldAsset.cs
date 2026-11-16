@@ -15,17 +15,19 @@ namespace HikariHopper.Rendering.World;
 /// </summary>
 internal sealed class WorldAsset
 {
-    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IReadOnlyList<RedTexture> textures)
+    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IReadOnlyList<RedTexture> textures, WorldLightBones lightBones)
     {
         Key = key;
         Scene = scene;
+        LightBones = lightBones;
         LodReach2 = [.. lodDistances.Select(d => d >= float.MaxValue ? float.MaxValue : d * d)];
         foreach (SurfacePart part in scene.Parts)
             if (part.Lod is >= 0 and < Lods)
                 LodMask |= (byte)(1 << part.Lod);
         if (LodMask == 0)
             LodMask = 1;
-        MemoryCost = Estimate(scene, textures);
+        WorldMemoryCost cost = Estimate(scene, textures);
+        MemoryCost = new WorldMemoryCost(cost.OwnedBytes + lightBones.Bytes, cost.Shared);
         Bytes = WorldMemoryCost.Total([MemoryCost]);
     }
 
@@ -36,6 +38,9 @@ internal sealed class WorldAsset
 
     /// <summary>Its vertices relative to <see cref="DrawableScene.Origin"/>, its parts and their RDR2 materials.</summary>
     public DrawableScene Scene { get; }
+
+    /// <summary>Its bones, where its lights are attached.</summary>
+    public WorldLightBones LightBones { get; }
 
     /// <summary>Its levels of detail that have parts, a bit each.</summary>
     public byte LodMask { get; }
@@ -93,7 +98,7 @@ internal sealed class WorldAsset
         for (int lod = 0; lod < Lods; lod++)
             if (distances[lod] <= 0)
                 distances[lod] = float.MaxValue;
-        return new WorldAsset(key, scene, distances, textures);
+        return new WorldAsset(key, scene, distances, textures, WorldLightBones.From(models));
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once.
