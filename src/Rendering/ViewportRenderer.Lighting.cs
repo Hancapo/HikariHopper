@@ -422,7 +422,12 @@ internal sealed unsafe partial class ViewportRenderer
     private void WriteLight(bool shadows)
     {
         if (shadows)
-            FitCascades();
+        {
+            if (worldShown)
+                FitWorldShadows();
+            else
+                FitCascades();
+        }
         Span<float> values = stackalloc float[LightBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
         vectors[0] = new Vector4(key.Direction, 0);
@@ -457,7 +462,8 @@ internal sealed unsafe partial class ViewportRenderer
         shadowMap?.Destroy();
         shadowMap = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            // Read back by the tests too.
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)ShadowResolution, (uint)ShadowResolution, ShadowCascades),
             Format = DepthFormat,
