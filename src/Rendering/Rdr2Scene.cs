@@ -286,8 +286,8 @@ internal static class Rdr2Scene
         }
         Vector3 origin = box.IsEmpty ? Vector3.Zero : box.Center;
 
-        var vertices = new List<SurfaceVertex>();
-        var indices = new List<uint>();
+        // Room for every geometry's vertices and indexes; what's left out (a part not drawn here) is cut from the end.
+        var built = new SceneGeometry(decoded.Sum(item => item.Positions.Length), decoded.Sum(item => item.Indices.Length / 3 * 3));
         var parts = new List<SurfacePart>();
         for (int i = 0; i < placed.Count; i++)
         {
@@ -307,30 +307,23 @@ internal static class Rdr2Scene
                 .ToList();
             if (split.Count == 0)
                 continue;
-            int baseVertex = vertices.Count;
-            Read(geometry, positions, transform, origin, materials[material].Rdr2, vertices);
+            int baseVertex = built.VertexCount;
+            Read(geometry, positions, transform, origin, materials[material].Rdr2, built);
             foreach (var (name, piece) in split)
             {
-                uint first = (uint)indices.Count;
-                var used = new HashSet<uint>();
-                foreach (uint corner in piece)
-                {
-                    indices.Add(corner);
-                    used.Add(corner);
-                }
-                Vector3 sum = Vector3.Zero;
-                foreach (uint corner in used)
-                    sum += vertices[baseVertex + (int)corner].Position;
-                parts.Add(new SurfacePart(material, first, (uint)piece.Count, baseVertex, sum / used.Count, model, lod, name, primary,
-                    used.Count, viewer ? DrawableScene.CountEdges(indices, (int)first, piece.Count) : 0));
+                int first = built.IndexCount;
+                piece.CopyTo(built.AddIndices(piece.Count));
+                (int used, Vector3 middle) = built.Used(first, piece.Count, baseVertex, positions.Length);
+                parts.Add(new SurfacePart(material, (uint)first, (uint)piece.Count, baseVertex, middle, model, lod, name, primary,
+                    used, viewer ? DrawableScene.CountEdges(built.Indices(first, piece.Count)) : 0));
             }
         }
         return new DrawableScene
         {
             Box = box,
             Origin = origin,
-            Vertices = [.. vertices],
-            Indices = [.. indices],
+            Vertices = built.Vertices(),
+            Indices = built.AllIndices(),
             Parts = parts,
             Materials = materials,
             Models = [.. models.Select(m => (m.Name, (string?)null))],
@@ -428,7 +421,7 @@ internal static class Rdr2Scene
     /// nothing without one); river water's COLOR1 rides in the second and third UV sets, as RedFury's viewer has it.
     /// </summary>
     private static void Read(RedGeometry geometry, Vector3[] positions, Matrix4x4 transform, Vector3 origin, Rdr2Material? material,
-        List<SurfaceVertex> into)
+        SceneGeometry into)
     {
         Vector4[]? normals = Decode(geometry, RedSemantic.Normal), tangents = Decode(geometry, RedSemantic.Tangent0);
         Vector4[]? uv0 = Decode(geometry, RedSemantic.TexCoord0), uv1 = Decode(geometry, RedSemantic.TexCoord1);

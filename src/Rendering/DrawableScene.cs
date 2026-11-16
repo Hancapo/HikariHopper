@@ -259,50 +259,67 @@ internal sealed class DrawableScene
         }
         Vector3 origin = box.IsEmpty ? Vector3.Zero : box.Center;
 
-        var vertices = new List<SurfaceVertex>();
-        var indices = new List<uint>();
+        // Every triangle list's indexes, as many as are read below.
+        static int Corners(DrawableGeometry geometry, out int start)
+        {
+            int length = geometry.Indices.Indices.Length;
+            start = (int)Math.Min(geometry.IndexBufferOffset, (uint)length);
+            return Math.Min(geometry.IndexCount > 0 ? geometry.IndexCount : length, length - start) / 3 * 3;
+        }
+        int vertexTotal = 0, indexTotal = 0;
+        foreach (var item in placed)
+            if (item.Geometry.PrimitiveType == 3)
+            {
+                vertexTotal += item.Geometry.Vertices.Count;
+                indexTotal += Corners(item.Geometry, out _);
+            }
+        var built = new SceneGeometry(vertexTotal, indexTotal);
         var parts = new List<SurfacePart>();
         foreach (var (geometry, transform, material, model, lod, group, primary, boneParts) in placed)
         {
             if (geometry.PrimitiveType != 3)
                 continue;
-            int baseVertex = vertices.Count;
+            int baseVertex = built.VertexCount;
             VertexBuffer source = geometry.Vertices;
             var reader = new VertexReader(source);
             for (int i = 0; i < source.Count; i++)
-                vertices.Add(reader.Read(i, transform, origin));
+                built.Add(reader.Read(i, transform, origin));
             ReadOnlySpan<ushort> from = geometry.Indices.Indices;
-            int start = (int)Math.Min(geometry.IndexBufferOffset, (uint)from.Length);
-            int count = Math.Min(geometry.IndexCount > 0 ? geometry.IndexCount : from.Length, from.Length - start) / 3 * 3;
-            uint[] corners = new uint[count];
+            int count = Corners(geometry, out int start);
+            int geometryFirst = built.IndexCount;
+            Span<uint> corners = built.AddIndices(count);
             for (int i = 0; i < count; i++)
                 corners[i] = from[start + i] < source.Count ? from[start + i] : 0u;
-            // One part for the geometry, or one per part its triangles' bones belong to, in the order they first come.
-            foreach (var (name, triangles) in Split(geometry, corners, boneParts, group))
+            // One part for the geometry, or one per part its triangles' bones belong to, in the order they first come,
+            // their triangles laid out again in that order where the geometry's were.
+            List<(string Name, int First, int Count)> pieces = [(group, geometryFirst, count)];
+            if (Split(geometry, corners, boneParts, group) is { } split)
             {
-                uint first = (uint)indices.Count;
-                var used = new HashSet<uint>();
-                foreach (uint index in triangles)
+                pieces.Clear();
+                int next = geometryFirst;
+                foreach (var (name, triangles) in split)
                 {
-                    indices.Add(index);
-                    used.Add(index);
+                    triangles.CopyTo(built.Indices(next, triangles.Count));
+                    pieces.Add((name, next, triangles.Count));
+                    next += triangles.Count;
                 }
-                Vector3 sum = Vector3.Zero;
-                foreach (uint index in used)
-                    sum += vertices[baseVertex + (int)index].Position;
-                if (triangles.Count > 0)
-                    geometries.Add(geometry);
-                if (triangles.Count > 0)
-                    parts.Add(new SurfacePart(material, first, (uint)triangles.Count, baseVertex, used.Count > 0 ? sum / used.Count : Vector3.Zero,
-                        model, lod, name, primary, used.Count, CountEdges(indices, (int)first, triangles.Count)));
+            }
+            foreach (var (name, first, length) in pieces)
+            {
+                if (length == 0)
+                    continue;
+                (int used, Vector3 middle) = built.Used(first, length, baseVertex, source.Count);
+                geometries.Add(geometry);
+                parts.Add(new SurfacePart(material, (uint)first, (uint)length, baseVertex, middle, model, lod, name, primary, used,
+                    CountEdges(built.Indices(first, length))));
             }
         }
         return new DrawableScene
         {
             Box = box,
             Origin = origin,
-            Vertices = [.. vertices],
-            Indices = [.. indices],
+            Vertices = built.Vertices(),
+            Indices = built.AllIndices(),
             Parts = parts,
             Models = [.. models.Select(m => (m.Name, m.Group))],
             Variants = [.. models.Select(m => m.Variant)],
@@ -320,16 +337,16 @@ internal sealed class DrawableScene
     }
 
     /// <summary>
-    /// A geometry's triangles, whole under <paramref name="group"/>, or split by the part named for the bone each is
-    /// bound to: the vertices' heaviest influence, through the geometry's bone table. Vehicles bind rigidly, every
-    /// triangle to one bone.
+    /// A geometry's triangles split by the part named for the bone each is bound to (<paramref name="group"/> where none
+    /// is): the vertices' heaviest influence, through the geometry's bone table; null when they aren't split, all under
+    /// <paramref name="group"/>. Vehicles bind rigidly, every triangle to one bone.
     /// </summary>
-    private static List<(string Name, List<uint> Triangles)> Split(DrawableGeometry geometry, uint[] triangles,
+    private static List<(string Name, List<uint> Triangles)>? Split(DrawableGeometry geometry, ReadOnlySpan<uint> triangles,
         IReadOnlyDictionary<int, string>? bones, string group)
     {
         VertexLayout layout = geometry.Vertices.Layout;
         if (bones is null || !layout.TryFind(VertexSemantic.BlendIndices, out VertexElement table) || !layout.TryFind(VertexSemantic.BlendWeights, out _))
-            return [(group, [.. triangles])];
+            return null;
         // Indices are kept as bytes, read back as they are or over 255.
         float scale = table.Format == VertexElementFormat.UNorm8x4 ? 255 : 1;
         string PartOf(uint vertex)
@@ -365,10 +382,25 @@ internal sealed class DrawableScene
     /// Counted by sorting them rather than in a hash set, where an edge's two corners, packed in a long, would hash to
     /// little more than their difference and collide by the thousand.
     /// </summary>
-    internal static int CountEdges(List<uint> indices, int first, int count)
+    internal static int CountEdges(List<uint> indices, int first, int count) =>
+        CountEdges(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(indices).Slice(first, count));
+
+    internal static int CountEdges(ReadOnlySpan<uint> corners)
     {
-        ReadOnlySpan<uint> corners = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(indices).Slice(first, count);
-        var edges = new ulong[corners.Length / 3 * 3];
+        // Sorted in a buffer lent for it: a model's parts would otherwise allocate one each.
+        ulong[] lent = System.Buffers.ArrayPool<ulong>.Shared.Rent(Math.Max(1, corners.Length / 3 * 3));
+        try
+        {
+            return Count(corners, lent);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<ulong>.Shared.Return(lent);
+        }
+    }
+
+    private static int Count(ReadOnlySpan<uint> corners, ulong[] edges)
+    {
         int n = 0;
         for (int i = 0; i + 2 < corners.Length; i += 3)
         {
