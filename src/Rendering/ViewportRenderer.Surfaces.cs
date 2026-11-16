@@ -85,7 +85,7 @@ internal sealed unsafe partial class ViewportRenderer
     // Each uploaded texture's GPU texture, and its sRGB view, for the colour slots of RDR2's material.
     private readonly Dictionary<GameTexture, WebGpuSharp.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GameTexture, TextureView?> srgbViews = new(ReferenceEqualityComparer.Instance);
-    private readonly List<WebGpuSharp.Texture> uploaded = [];
+    private readonly HashSet<WebGpuSharp.Texture> uploaded = new(ReferenceEqualityComparer.Instance);
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.
@@ -349,6 +349,8 @@ internal sealed unsafe partial class ViewportRenderer
         if (drawable is null || drawable.Indices.Length == 0)
             return;
         origin = drawable.Origin;
+        modelLights = drawable.Lights;
+        modelLit = null;
         surfaceVertices = Upload((ReadOnlySpan<SurfaceVertex>)drawable.Vertices, SurfaceVertex.Size);
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
@@ -460,7 +462,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // With a uniform buffer of its own, filled with the values; or reading one it had, as it is.
-    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null)
+    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -473,7 +475,7 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = materialLayout!,
             Entries =
             [
-                new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+                new BindGroupEntry { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
                 new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
                 new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
                 new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
@@ -534,7 +536,7 @@ internal sealed unsafe partial class ViewportRenderer
         Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
     });
 
-    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null)
+    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -546,7 +548,7 @@ internal sealed unsafe partial class ViewportRenderer
         // height map as high as it goes; without a lookup map every weight is nothing, which is all the first layer.
         var entries = new List<BindGroupEntry>
         {
-            new() { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+            new() { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
             new() { Binding = 1, Sampler = surfaceSampler! },
         };
         for (int i = 0; i < 8; i++)
@@ -688,6 +690,19 @@ internal sealed unsafe partial class ViewportRenderer
 
     private TextureView? Upload(GameTexture source)
     {
+        if (CreateTexture(source) is not var (texture, block))
+            return null;
+        for (int level = 0; level < source.MipCount; level++)
+            WriteLevel(source, texture, block, level);
+        return Register(source, texture);
+    }
+
+    /// <summary>
+    /// A game texture's GPU texture, made but not written, and its formats' block size; null when its format or shape
+    /// can't be drawn.
+    /// </summary>
+    private (WebGpuSharp.Texture Texture, int Block)? CreateTexture(GameTexture source)
+    {
         // The shaders read texels as stored (albedo is squared by the lighting, as in the game), so sRGB formats are
         // read through their plain counterparts.
         (TextureFormat format, int block)? mapped = source.Format switch
@@ -719,18 +734,46 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
             ViewFormats = srgb is { } variant ? [variant] : [],
         });
+        return (texture, block);
+    }
+
+    /// <summary>One mip level of a game texture into its GPU texture; how many bytes that was.</summary>
+    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level) =>
+        WriteRows(source, texture, block, level, 0, int.MaxValue).Bytes;
+
+    /// <summary>
+    /// Rows of one mip level (rows of blocks, for a compressed format) into its GPU texture, from <paramref name="first"/>
+    /// at most <paramref name="rows"/>: how many bytes that was, and whether the level is done.
+    /// </summary>
+    private (long Bytes, bool Done) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
+    {
+        CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
+        // A mip smaller than a block is still a whole block.
+        uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
+        int total = (int)height / block, pitch = part.Mip.RowPitch;
+        int count = Math.Min(rows, total - first);
+        var copy = new TexelCopyTextureInfo
+        {
+            Texture = texture,
+            MipLevel = (uint)level,
+            Origin = new Origin3D(0, (uint)(first * block), 0),
+            Aspect = TextureAspect.All,
+        };
+        var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)pitch, RowsPerImage = (uint)count };
+        var size = new Extent3D(width, (uint)(count * block), 1);
+        ReadOnlySpan<byte> data = source.GetEncodedSlice(level).Slice(first * pitch, count * pitch);
+        queue.WriteTexture(copy, data, layout, size);
+        return (data.Length, first + count == total);
+    }
+
+    /// <summary>The bytes a row of a game texture's mip level holds (a row of blocks, for a compressed format).</summary>
+    private static int RowBytes(GameTexture source, int level) => source.GetSubresource(level).Mip.RowPitch;
+
+    /// <summary>A written texture, kept for the scene (or the world) and viewed.</summary>
+    private TextureView Register(GameTexture source, WebGpuSharp.Texture texture)
+    {
         uploaded.Add(texture);
         uploadedOf[source] = texture;
-        for (int level = 0; level < source.MipCount; level++)
-        {
-            CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
-            // A mip smaller than a block is still a whole block.
-            uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
-            var copy = new TexelCopyTextureInfo { Texture = texture, MipLevel = (uint)level, Aspect = TextureAspect.All };
-            var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)part.Mip.RowPitch, RowsPerImage = height / (uint)block };
-            var size = new Extent3D(width, height, 1);
-            queue.WriteTexture(copy, source.GetEncodedSlice(level), layout, size);
-        }
         return texture.CreateView();
     }
 }

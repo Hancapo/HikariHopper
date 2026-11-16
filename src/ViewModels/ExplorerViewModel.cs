@@ -23,7 +23,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
         nameof(ArchiveRootName), nameof(TabTitle), nameof(ArchiveIsRoot), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
-        nameof(InArchive), nameof(GameEdition), nameof(GameEditionId), nameof(CanCreateHere),
+        nameof(InArchive), nameof(GameEdition), nameof(GameEditionId), nameof(CanCreateHere), nameof(HasWorld),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =
@@ -46,7 +46,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private bool gameIndexing;
     private string gameLoadingName = "";
     private string currentPath = ".";
-    private List<string> history = [];
+    private List<HistoryStop> history = [];
     private int historyIndex = -1;
     private string search = "";
     private string sortColumn = "name";
@@ -150,7 +150,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
     /// <see cref="HomeTitle"/>, since the tab's mark already names the game; at a lone RPF's root, the RPF.
     /// </summary>
     public string TabTitle =>
-        searching ? SearchTabTitle
+        InWorld ? "World"
+        : searching ? SearchTabTitle
         : NavigationPathSegments is [.., var current] ? current.Label
         : ArchiveIsRoot ? Provider.RootArchiveName : Provider.HasGame ? HomeTitle : "New tab";
 
@@ -249,7 +250,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public bool CanGoForward => historyIndex + 1 < history.Count;
 
-    public bool CanGoUp => searching || currentPath is not ("" or ".");
+    public bool CanGoUp => !InWorld && (searching || currentPath is not ("" or "."));
 
     public bool FoldersVisible => foldersVisible;
 
@@ -287,7 +288,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private void ResetNavigation(string path = ".")
     {
         string normalized = path.Length > 0 ? path : ".";
-        history = [normalized];
+        history = [new HistoryStop(normalized)];
         historyIndex = 0;
         search = "";
         currentPath = normalized;
@@ -384,6 +385,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private void PublishWorkspace()
     {
+        // One of the game's own RPFs: its files, the game's world kept as it is (it's the game's, not the folder's).
+        // Another game, an archive on its own, or none: back to its files, the world forgotten.
+        if (KeepsWorld())
+            FacesFiles();
+        else
+            LeaveWorld();
         // Another game or archive: whatever was being searched is not there any more.
         EndSearch();
         RaiseAll(WorkspaceProperties);
@@ -501,6 +508,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         SetStatus($"Could not load game: {message}");
         SetGameLoading(false);
+        worldAsked = false;
     }
 
     private void SetGameLoading(bool loading)
@@ -526,6 +534,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
         {
             _ = GameTextures.ForGame(game).Load();
             _ = GameTextureDirectory.ForGame(game).Load();
+            // The light: the game's own timecycle, a moment to read; one that can't be read keeps the one in use.
+            _ = Task.Run(() =>
+            {
+                if (GameTimecycle.ForGame(game) is { } timecycle)
+                    Rendering.Timecycle.Use(timecycle);
+            });
         }
         // Red Dead Redemption 2's: where its models' textures are, a few seconds from nothing, a moment from the cache.
         _ = Rdr2IndexOfProvider()?.Load();
@@ -533,7 +547,15 @@ public sealed partial class ExplorerViewModel : ObservableObject
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();
         PublishWorkspace();
+        // Its world, if it has one, on its way.
+        PrepareWorld();
         SetStatus($"Loaded {Provider.Info.Version}");
+        // Opened from the start page's globe: on its World side, once the load has finished.
+        if (worldAsked)
+        {
+            worldAsked = false;
+            Avalonia.Threading.Dispatcher.UIThread.Post(ShowWorld, Avalonia.Threading.DispatcherPriority.Background);
+        }
     }
 
     /// <summary>Asks for an RPF with the native picker and opens it.</summary>
@@ -652,6 +674,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (EntryOperationBusy)
             return;
         Provider.Close();
+        LeaveWorld();
         SetEntries([]);
         SetTreeRows([]);
         history = [];
@@ -677,12 +700,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (searching)
             EndSearch();
         string normalized = path.Length > 0 ? path : ".";
-        if (normalized == currentPath)
+        // From the world, any folder (the one the files were left at too) is the files again.
+        if (normalized == currentPath && !InWorld)
             return;
-        history = history.Take(historyIndex + 1).ToList();
-        history.Add(normalized);
-        historyIndex++;
+        Push(new HistoryStop(normalized));
         currentPath = normalized;
+        SetFace(TabFace.Files);
         ExpandCurrentBranch();
         PublishNavigation();
     }
@@ -700,9 +723,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (historyIndex > 0)
         {
             historyIndex--;
-            currentPath = history[historyIndex];
-            ExpandCurrentBranch();
-            PublishNavigation();
+            GoTo(history[historyIndex]);
         }
     }
 
@@ -713,9 +734,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (historyIndex + 1 < history.Count)
         {
             historyIndex++;
-            currentPath = history[historyIndex];
-            ExpandCurrentBranch();
-            PublishNavigation();
+            GoTo(history[historyIndex]);
         }
     }
 

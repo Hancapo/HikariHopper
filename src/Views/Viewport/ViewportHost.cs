@@ -15,6 +15,12 @@ namespace HikariHopper.Views;
 /// looks around, W, A, S, D, Q and E fly (Shift faster), and the wheel sets how fast.
 /// </summary>
 /// <remarks>
+/// The free camera looks as RedFury.World's does: by the mouse's raw motion (WM_INPUT), unaffected by the pointer's
+/// acceleration and the screen's edges, gathered between frames and turned once a frame, the pointer hidden and kept in
+/// the view while it drags, and put back where the drag began. Frames are drawn above the streaming workers' priority,
+/// which otherwise held them back while flying.
+/// </remarks>
+/// <remarks>
 /// Frames are drawn on <c>WM_PAINT</c>, which Windows sends only once pending input and posted messages (Avalonia's
 /// dispatcher work too) are handled; a <see cref="DisplayPacer"/> asks for one per vertical blank. Dispatcher
 /// priorities can't pace frames: while mouse input is pending, Avalonia defers its work to a 10-16 ms timer, which
@@ -30,7 +36,11 @@ internal sealed partial class ViewportHost : NativeControlHost
     private nint hwnd;
     private nint previousProcedure;
     private volatile bool chained;
-    private bool drawing;
+    // Read by the pacer's thread too.
+    private volatile bool drawing;
+
+    // Whether a vertical blank went by while a frame was drawn.
+    private volatile bool blankWhileDrawing;
     private bool stopped;
     private bool dragging;
     private int mouseX;
@@ -53,6 +63,27 @@ internal sealed partial class ViewportHost : NativeControlHost
     private ViewportVertex[] solid = [];
     private bool free;
     private long flown;
+
+    // The free camera's look: whether a drag turns it, the raw motion gathered since the last frame, how far the drag
+    // has gone (a press that goes nowhere is a click), whether raw motion arrives (not over remote desktop, whose mouse
+    // is absolute: the pointer's moves turn it then), whether the pointer is hidden, and where it was pressed.
+    private bool looking;
+    private int lookX;
+    private int lookY;
+    private int lookTravel;
+    private bool rawLook;
+    private bool pointerHidden;
+    private ScreenPoint pressedAt;
+
+    // The pointer it showed before it hid it: the view's window has none of its own for Windows to put back.
+    private nint shownCursor;
+
+    // Raw motion counts to the camera's look in pixels: RedFury's 0.003 radians a count.
+    private const float LookPerCount = .5f;
+
+    // The longest step the camera flies in a frame, as RedFury's: a slow frame doesn't throw it forward, and a pause
+    // (a hidden viewport) doesn't fly it at all.
+    private const double LongestFlight = 1.0 / 30, Pause = .25;
 
     /// <summary>The renderer, once the window exists and WebGPU has started.</summary>
     public ViewportRenderer? Renderer => renderer;
@@ -121,6 +152,27 @@ internal sealed partial class ViewportHost : NativeControlHost
         }
     }
 
+    private bool world;
+    private long lastFrame;
+
+    /// <summary>Whether the view shows a game's world (<see cref="ViewportRenderer.WorldShown"/>).</summary>
+    public bool World
+    {
+        get => world;
+        set
+        {
+            world = value;
+            if (renderer is not null)
+                renderer.WorldShown = value;
+        }
+    }
+
+    /// <summary>
+    /// Before each frame is drawn, on the UI thread, with the seconds since the one before: what streams a world in
+    /// does its part then.
+    /// </summary>
+    internal event Action<ViewportRenderer, float>? Drawing;
+
     /// <summary>How fast the free camera flies, in metres a second.</summary>
     public float FreeSpeed => renderer?.Camera.Speed ?? 0;
 
@@ -160,6 +212,12 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     /// <summary>Raised when the view is clicked without dragging, with the ray from the eye through the pointer, in the world.</summary>
     public event Action<System.Numerics.Vector3, System.Numerics.Vector3>? Clicked;
+
+    /// <summary>
+    /// A click that didn't drag, at a pixel of the view (as the renderer's frame has them), and whether it was the
+    /// right button's: the world picks there.
+    /// </summary>
+    internal event Action<int, int, bool>? PixelClicked;
 
     /// <summary>Draws only the drawable's parts marked true, one flag per part.</summary>
     internal void ShowParts(bool[] shown)
@@ -214,6 +272,21 @@ internal sealed partial class ViewportHost : NativeControlHost
         else
             camera.Orbit(dx, dy);
     }
+
+    // Where the camera goes once the renderer starts, if somewhere was asked for before it did.
+    private (System.Numerics.Vector3 Eye, float Yaw, float Pitch)? placed;
+
+    /// <summary>Puts the camera's eye somewhere, looking along a yaw and pitch: now, or once the viewport starts.</summary>
+    public void Place(System.Numerics.Vector3 eye, float yaw, float pitch)
+    {
+        placed = (eye, yaw, pitch);
+        if (renderer is not null)
+            renderer.Camera.Place(eye, yaw, pitch);
+    }
+
+    /// <summary>Where the camera's eye is and where it looks; null before the viewport starts.</summary>
+    public (System.Numerics.Vector3 Eye, float Yaw, float Pitch)? CameraSpot =>
+        renderer?.Camera is { } camera ? (camera.Eye, camera.Yaw, camera.Pitch) : null;
 
     /// <summary>Points the camera back at what was framed last.</summary>
     public void Reframe() => renderer?.Frame(framed);
@@ -285,6 +358,12 @@ internal sealed partial class ViewportHost : NativeControlHost
     /// <summary>A letter or digit was pressed while the viewport had the keyboard, without Ctrl or Alt: a shortcut.</summary>
     public event Action<char>? ShortcutPressed;
 
+    /// <summary>
+    /// A key the window's shortcuts handle (F6, Alt+Left, Alt+Right) was pressed while the viewport had the keyboard, which
+    /// the window never sees then: named as <see cref="WindowShortcut"/> names it.
+    /// </summary>
+    public event Action<string>? KeyForwarded;
+
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
         if (!OperatingSystem.IsWindows())
@@ -310,10 +389,13 @@ internal sealed partial class ViewportHost : NativeControlHost
             (surfaceWidth, surfaceHeight) = ClientSize();
             renderer = new ViewportRenderer(hwnd, GetModuleHandleW(null), surfaceWidth, surfaceHeight);
             renderer.Frame(framed);
+            if (placed is { } spot)
+                renderer.Camera.Place(spot.Eye, spot.Yaw, spot.Pitch);
             renderer.SetSky(sky);
             renderer.SetTime(hours);
             ApplyGraphics();
             renderer.Camera.Free = free;
+            renderer.WorldShown = world;
             if (surfaces is not null)
             {
                 renderer.Show(surfaces);
@@ -344,14 +426,30 @@ internal sealed partial class ViewportHost : NativeControlHost
     // On the pacer's thread, once per vertical blank, unless frames take longer than that and already chain.
     private void RequestFrame()
     {
-        if (!stopped && !chained)
+        if (stopped)
+            return;
+        // A blank while a frame is drawn: its paint would be dropped (left to that frame), so the frame asks for the
+        // next itself when it ends. Without this, a frame that started late and straddled a blank waited for the one
+        // after: 30 frames a second from frames well under a refresh.
+        if (drawing)
+        {
+            blankWhileDrawing = true;
+            return;
+        }
+        if (!chained)
             InvalidateRect(hwnd, 0, 0);
     }
 
     private void Draw()
     {
+        // Frames are drawn on this (UI) thread; the streaming workers filling the cores held them back 30 to 100 ms at a
+        // time while flying (RedFury's finding): the frames come first.
+        if (Thread.CurrentThread.Priority != ThreadPriority.AboveNormal)
+            Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
         long start = Stopwatch.GetTimestamp();
+        blankWhileDrawing = false;
         drawing = true;
+        bool drew = false;
         try
         {
             if (!stopped && renderer is not null && IsEffectivelyVisible)
@@ -363,7 +461,13 @@ internal sealed partial class ViewportHost : NativeControlHost
                     (surfaceWidth, surfaceHeight) = (width, height);
                 }
                 Fly(renderer.Camera);
+                long now = Stopwatch.GetTimestamp();
+                // A pause (a hidden viewport) isn't one long frame.
+                float seconds = lastFrame == 0 ? 0 : (float)Math.Min(Stopwatch.GetElapsedTime(lastFrame, now).TotalSeconds, .25);
+                lastFrame = now;
+                Drawing?.Invoke(renderer, seconds);
                 renderer.Draw();
+                drew = true;
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
                 {
                     turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
@@ -379,9 +483,12 @@ internal sealed partial class ViewportHost : NativeControlHost
         {
             drawing = false;
         }
-        // A frame slower than the display asks for the next at once rather than sleeping until a vertical blank;
-        // input still comes first, as WM_PAINT waits for the message queue to drain.
-        chained = !stopped && pacer is { } p && Stopwatch.GetElapsedTime(start).TotalSeconds >= p.Period;
+        // The pacer's rate follows how long frames take. A frame slower than a tick asks for the next at once rather
+        // than sleeping until the next; input still comes first, as WM_PAINT waits for the message queue to drain.
+        double took = Stopwatch.GetElapsedTime(start).TotalSeconds;
+        if (drew)
+            pacer?.FrameTook(took);
+        chained = !stopped && pacer is { } p && (took >= p.Period || blankWhileDrawing);
         if (chained)
             InvalidateRect(hwnd, 0, 0);
     }
@@ -393,9 +500,16 @@ internal sealed partial class ViewportHost : NativeControlHost
     private void Fly(OrbitCamera camera)
     {
         long now = Stopwatch.GetTimestamp();
-        // A pause (a hidden viewport, a slow frame) doesn't fly the camera off in one step.
-        float seconds = flown == 0 ? 0 : (float)Math.Min(Stopwatch.GetElapsedTime(flown, now).TotalSeconds, .1);
+        double elapsed = flown == 0 ? 0 : Stopwatch.GetElapsedTime(flown, now).TotalSeconds;
         flown = now;
+        // The look gathered since the last frame, turned once.
+        if ((lookX, lookY) != (0, 0))
+        {
+            if (camera.Free)
+                camera.Look(lookX * LookPerCount, lookY * LookPerCount);
+            (lookX, lookY) = (0, 0);
+        }
+        float seconds = elapsed > Pause ? 0 : (float)Math.Min(elapsed, LongestFlight);
         if (!camera.Free || GetFocus() != hwnd || seconds <= 0)
             return;
         static float Axis(int plus, int minus) => (Held(plus) ? 1 : 0) - (Held(minus) ? 1 : 0);
@@ -406,8 +520,78 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     private static bool Held(int key) => GetKeyState(key) < 0;
 
+    // A free camera's drag begins: raw motion from now, the pointer where it was pressed.
+    private void BeginLook(nint window)
+    {
+        (looking, lookX, lookY, lookTravel, rawLook) = (true, 0, 0, 0, false);
+        GetCursorPos(out pressedAt);
+        // Foreground only; the mouse's usual messages still come.
+        var device = new RawDevice { Page = 1, Usage = 2, Target = window };
+        RegisterRawInputDevices(ref device, 1, (uint)Marshal.SizeOf<RawDevice>());
+    }
+
+    // Motion of the drag, raw or the pointer's: the pointer hides, kept in the view, once it's gone further than a click.
+    private void AddLook(nint window, int dx, int dy)
+    {
+        (lookX, lookY) = (lookX + dx, lookY + dy);
+        lookTravel += Math.Abs(dx) + Math.Abs(dy);
+        if (pressMoved || lookTravel <= 3)
+            return;
+        pressMoved = true;
+        pointerHidden = true;
+        shownCursor = SetCursor(0);
+        ConfineCursor(window);
+    }
+
+    // The drag ends (or is cut short): the pointer back where it was pressed, as it was.
+    private void EndLook()
+    {
+        if (!looking)
+            return;
+        looking = false;
+        var device = new RawDevice { Page = 1, Usage = 2, Flags = 1 };
+        RegisterRawInputDevices(ref device, 1, (uint)Marshal.SizeOf<RawDevice>());
+        if (pointerHidden)
+        {
+            pointerHidden = false;
+            unsafe
+            {
+                ClipCursor(null);
+            }
+            SetCursorPos(pressedAt.X, pressedAt.Y);
+            // The pointer it showed (the arrow, if it showed none), as nothing else puts it back.
+            SetCursor(shownCursor != 0 ? shownCursor : LoadCursorW(0, 32512));
+            shownCursor = 0;
+        }
+    }
+
+    private unsafe void ConfineCursor(nint window)
+    {
+        if (GetClientRect(window, out ClientRect rect) == 0)
+            return;
+        var start = new ScreenPoint { X = rect.Left, Y = rect.Top };
+        var end = new ScreenPoint { X = rect.Right, Y = rect.Bottom };
+        if (ClientToScreen(window, ref start) == 0 || ClientToScreen(window, ref end) == 0)
+            return;
+        var screen = new ClientRect { Left = start.X, Top = start.Y, Right = end.X, Bottom = end.Y };
+        ClipCursor(&screen);
+    }
+
+    // A raw mouse packet's relative motion; false for none, or an absolute one (remote desktop, tablets).
+    private static bool ReadMouseDelta(nint input, out int x, out int y)
+    {
+        x = y = 0;
+        uint size = (uint)Marshal.SizeOf<RawPacket>();
+        uint read = GetRawInputData(input, 0x10000003, out RawPacket packet, ref size, (uint)Marshal.SizeOf<RawHeader>());
+        if (read != size || packet.Header.Type != 0 || (packet.Mouse.Flags & 1) != 0)
+            return false;
+        (x, y) = (packet.Mouse.X, packet.Mouse.Y);
+        return true;
+    }
+
     private void Stop()
     {
+        EndLook();
         stopped = true;
         dragging = false;
         pacer?.Dispose();
@@ -462,7 +646,12 @@ internal sealed partial class ViewportHost : NativeControlHost
     private const uint RightUp = 0x0205;
     private const uint Wheel = 0x020A;
     private const uint KeyPressed = 0x0100;
+    private const uint SystemKeyPressed = 0x0104;
     private const uint CaptureChanged = 0x0215;
+    private const uint RawInput = 0x00FF;
+    private const uint SetCursorMessage = 0x0020;
+    private const uint KillFocus = 0x0008;
+    private const uint CancelMode = 0x001F;
 
     /// <summary>Handles a message, or returns null to leave it to the window's own procedure.</summary>
     private nint? Handle(nint window, uint message, nuint wParam, nint lParam)
@@ -483,34 +672,62 @@ internal sealed partial class ViewportHost : NativeControlHost
             case LeftDown:
             case RightDown when r.Camera.Free:
                 (mouseX, mouseY) = Point(lParam);
-                if (message == LeftDown)
-                    (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
+                (pressX, pressY, pressMoved) = (mouseX, mouseY, false);
                 dragging = true;
                 SetFocus(window);
                 SetCapture(window);
+                if (r.Camera.Free)
+                    BeginLook(window);
                 return 0;
+            case RawInput when looking:
+                if (ReadMouseDelta(lParam, out int rawX, out int rawY))
+                {
+                    rawLook = true;
+                    if ((rawX, rawY) != (0, 0))
+                        AddLook(window, rawX, rawY);
+                }
+                // Raw input wants the default handling, which frees its packet.
+                return DefWindowProcW(window, message, wParam, lParam);
+            case SetCursorMessage when pointerHidden:
+                SetCursor(0);
+                return 1;
             case MouseMove when dragging:
                 (int x, int y) = Point(lParam);
-                pressMoved |= Math.Abs(x - pressX) + Math.Abs(y - pressY) > 3;
-                if (r.Camera.Free)
-                    r.Camera.Look(x - mouseX, y - mouseY);
+                if (looking)
+                {
+                    // Raw motion turns the camera; the pointer's only where none comes (2 counts a pixel, as before).
+                    if (!rawLook)
+                        AddLook(window, (x - mouseX) * 2, (y - mouseY) * 2);
+                }
                 else
+                {
+                    pressMoved |= Math.Abs(x - pressX) + Math.Abs(y - pressY) > 3;
                     r.Camera.Orbit(x - mouseX, y - mouseY);
+                }
                 (mouseX, mouseY) = (x, y);
                 return 0;
             case LeftUp:
             case RightUp when dragging:
-                if (message == LeftUp && dragging && !pressMoved)
+                if (dragging && !pressMoved)
                 {
                     (int clickX, int clickY) = Point(lParam);
-                    (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
-                    Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                    bool right = message == RightUp;
+                    if (!right)
+                    {
+                        (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
+                        Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                    }
+                    Dispatcher.UIThread.Post(() => PixelClicked?.Invoke(clickX, clickY, right));
                 }
                 dragging = false;
+                EndLook();
                 ReleaseCapture();
                 return 0;
             case CaptureChanged:
+            case KillFocus:
+            case CancelMode:
                 dragging = false;
+                EndLook();
                 return null;
             case Wheel when r.Camera.Free:
                 r.Camera.Accelerate((short)((wParam >> 16) & 0xffff) / 120f);
@@ -519,6 +736,13 @@ internal sealed partial class ViewportHost : NativeControlHost
                 return 0;
             case Wheel:
                 r.Camera.Zoom((short)((wParam >> 16) & 0xffff) / 120f);
+                return 0;
+            case KeyPressed when wParam == 0x75:
+                Dispatcher.UIThread.Post(() => KeyForwarded?.Invoke("F6"));
+                return 0;
+            case SystemKeyPressed when (uint)wParam is 0x25 or 0x27:
+                string arrow = (uint)wParam == 0x25 ? "Alt+Left" : "Alt+Right";
+                Dispatcher.UIThread.Post(() => KeyForwarded?.Invoke(arrow));
                 return 0;
             case KeyPressed when wParam == 0x1B:
                 Dispatcher.UIThread.Post(() => EscapePressed?.Invoke());
@@ -580,4 +804,69 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     [LibraryImport("user32.dll")]
     private static partial int ReleaseCapture();
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ScreenPoint
+    {
+        public int X, Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RawDevice
+    {
+        public ushort Page, Usage;
+        public uint Flags;
+        public nint Target;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RawHeader
+    {
+        public uint Type, Size;
+        public nint Device, WParam;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct RawMouse
+    {
+        [FieldOffset(0)]
+        public ushort Flags;
+
+        [FieldOffset(12)]
+        public int X;
+
+        [FieldOffset(16)]
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RawPacket
+    {
+        public RawHeader Header;
+        public RawMouse Mouse;
+    }
+
+    [LibraryImport("user32.dll")]
+    private static partial int RegisterRawInputDevices(ref RawDevice devices, uint count, uint size);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetRawInputData(nint input, uint command, out RawPacket data, ref uint size, uint headerSize);
+
+    [LibraryImport("user32.dll")]
+    private static unsafe partial int ClipCursor(ClientRect* rect);
+
+    [LibraryImport("user32.dll")]
+    private static partial int ClientToScreen(nint hwnd, ref ScreenPoint point);
+
+    [LibraryImport("user32.dll")]
+    private static partial int GetCursorPos(out ScreenPoint point);
+
+    [LibraryImport("user32.dll")]
+    private static partial int SetCursorPos(int x, int y);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint SetCursor(nint cursor);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint LoadCursorW(nint instance, nint name);
 }

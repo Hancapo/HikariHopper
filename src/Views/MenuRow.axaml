@@ -64,6 +64,9 @@
       <c:RetroMenuSeparator />
       <c:RetroMenuItem Text="Folders pane" Checkable="True" Toggled="OnFoldersToggled"
                        IsChecked="{Binding ActiveBridge.FoldersVisible, Mode=OneWay}" />
+      <c:RetroMenuSeparator />
+      <c:RetroMenuItem Text="World" ShortcutText="F6" Checkable="True" Toggled="OnWorldToggled"
+                       IsChecked="{Binding ActiveBridge.InWorld, Mode=OneWay}" IsEnabled="{Binding ActiveBridge.HasWorld, Mode=OneWay}" />
     </c:RetroMenu>
 
     <c:RetroMenu x:Key="GoMenu" x:DataType="vm:ExplorerTabsViewModel">

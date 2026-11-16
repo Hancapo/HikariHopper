@@ -14,7 +14,8 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
-    private const int LightBytes = 560, ShadowViewBytes = 64;
+    // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
+    private const int LightBytes = 608, ShadowViewBytes = 80;
     private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
     private Sampler? shadowCompare;
 
@@ -164,8 +165,37 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // The local lights and their screen tiles (ViewportRenderer.LocalLights.cs): they keep their size, so
+                // the world's bundles keep reading them.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 5,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.LightBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 6,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.TileBytes },
+                },
+                // The scene behind the water, read pixel by pixel.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 7,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 8,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
+                },
             ],
         });
+        localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+        localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
         CreateShadowMap();
 
         // The shadow map: depth only, from the sun, nearer is smaller.
@@ -318,7 +348,8 @@ internal sealed unsafe partial class ViewportRenderer
         (hdrWidth, hdrHeight) = ScaledSize(width, height, renderScale);
         hdr = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            // Copied from for the water (ViewportRenderer.Water.cs).
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = HdrFormat,
@@ -328,7 +359,7 @@ internal sealed unsafe partial class ViewportRenderer
         hdrView = hdr.CreateView();
         hdrDepth = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment,
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = DepthFormat,
@@ -336,6 +367,7 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
         });
         hdrDepthView = hdrDepth.CreateView();
+        CreateWaterTargets();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {
@@ -422,7 +454,12 @@ internal sealed unsafe partial class ViewportRenderer
     private void WriteLight(bool shadows)
     {
         if (shadows)
-            FitCascades();
+        {
+            if (worldShown)
+                FitWorldShadows();
+            else
+                FitCascades();
+        }
         Span<float> values = stackalloc float[LightBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
         vectors[0] = new Vector4(key.Direction, 0);
@@ -448,6 +485,9 @@ internal sealed unsafe partial class ViewportRenderer
         // Without bloom, the tone map adds none.
         vectors[33] = Bloom ? Timecycle.BloomParameters(cycle) : Timecycle.BloomParameters(cycle) with { Y = 0 };
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
+        vectors[35] = new Vector4(cycle.ArtificialDown, 0);
+        vectors[36] = new Vector4(cycle.ArtificialUp, 0);
+        vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, (float)lodFadeTime);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 
@@ -457,7 +497,8 @@ internal sealed unsafe partial class ViewportRenderer
         shadowMap?.Destroy();
         shadowMap = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            // Read back by the tests too.
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)ShadowResolution, (uint)ShadowResolution, ShadowCascades),
             Format = DepthFormat,
@@ -499,6 +540,10 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 2, Sampler = shadowCompare! },
                 new BindGroupEntry { Binding = 3, TextureView = reflections },
                 new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
+                new BindGroupEntry { Binding = 5, Buffer = localLightBuffer!, Size = World.LocalLightFrame.LightBytes },
+                new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
+                new BindGroupEntry { Binding = 7, TextureView = WaterBackgroundView() },
+                new BindGroupEntry { Binding = 8, TextureView = WaterDepthView() },
             ],
         });
         lightGroup = LightGroup(sceneMap!.View);

@@ -110,6 +110,8 @@ struct MaterialVertexOutput {
     @location(9) grass_colour_ao: vec4f,
     @location(10) relative_position: vec3f,
     @location(11) hemisphere: f32,
+    // Its placement's level of detail fade in a world (light.wgsl's lod_fade_keeps): none in the viewer.
+    @location(12) @interpolate(flat) lod_fade: vec2f,
 };
 
 fn material_vertex_geometry(input: MaterialVertexInput) -> MaterialVertexOutput {
@@ -210,11 +212,48 @@ fn diffuse_burley(ndotv: f32, ndotl: f32, ldoth: f32, roughness: f32) -> f32 {
     return light * view * energy_factor / PI;
 }
 
-// Unshadowed local direct lighting. The CPU's conservative screen tiles bound the light loop;
-// exact radial/cone rejection happens here, including for transparent surfaces outside the prepass.
+// Unshadowed local direct light (RedFury's, copied): light.wgsl's local lights, for a model in the viewer and the
+// world alike. The CPU's conservative screen tiles bound the light loop; exact radial and cone rejection happens here,
+// blended surfaces included.
 fn local_irradiance(pixel: vec2f, position: vec3f, n: vec3f, v: vec3f, base_colour: vec3f,
     f0: vec3f, roughness: f32, metallic: f32, specular_scale: f32, edge_strength: f32) -> vec3f {
-    return vec3f(0.0);
+    let tile = local_light_tile();
+    let ndotv = max(dot(n, v), 0.0001);
+    var radiance = vec3f(0.0);
+    for (var word = 0u; word < 16u; word++) {
+        var mask = local_light_word(tile, word);
+        while (mask != 0u) {
+            let index = word * 32u + firstTrailingBit(mask);
+            mask &= mask - 1u;
+            let light = local_lights[index];
+            let delta = local_light_point(light) - position;
+            let distance = length(delta);
+            if (distance >= light.position_radius.w) { continue; }
+            let l = delta / max(distance, 0.0001);
+            let ndotl = max(dot(n, l), 0.0);
+            if (ndotl <= 0.0) { continue; }
+            var attenuation = pow(max(1.0 - distance / light.position_radius.w, 0.0), light.outer_falloff.y);
+            if (light.colour_type.w > 0.5 && light.colour_type.w < 1.5) {
+                let cosine = dot(-l, light.direction_inner.xyz);
+                let inner = light.direction_inner.w;
+                let outer = light.outer_falloff.x;
+                if (cosine < outer) { continue; }
+                if (inner > outer) {
+                    let cone = clamp((cosine - outer) / (inner - outer), 0.0, 1.0);
+                    attenuation *= cone * cone * (3.0 - 2.0 * cone);
+                }
+            }
+            let half_sum = v + l;
+            let h = half_sum / max(length(half_sum), 0.0001);
+            let fresnel = mix(f0, fresnel_schlick(max(dot(h, v), 0.0), f0), edge_strength);
+            let specular = distribution_ggx(n, h, roughness)
+                * visibility_smith_schlick(ndotv, ndotl, roughness) * fresnel * specular_scale;
+            let diffuse = (1.0 - metallic) * base_colour
+                * diffuse_burley(ndotv, ndotl, max(dot(l, h), 0.0), roughness);
+            radiance += (diffuse + specular) * light.colour_type.rgb * ndotl * attenuation;
+        }
+    }
+    return radiance;
 }
 
 fn terrain_flags() -> u32 {

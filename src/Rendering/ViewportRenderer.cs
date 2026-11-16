@@ -401,13 +401,27 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     internal void Render(TextureView target)
     {
         CommandEncoder encoder = device.CreateCommandEncoder();
-        // A drawable's shadow first: the ground under it and the drawable itself both read it.
+        // A drawable's shadow first: the ground under it and the drawable itself both read it. A world's casters into
+        // the cascades due this frame, once its visibility has culled them.
         bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
-        if (drawable)
+        bool lit = drawable || worldShown;
+        bool worldShadows = worldShown && Shadows && key.Direction.Z > 0;
+        if (lit)
         {
-            WriteLight(Shadows);
-            if (Shadows)
+            WriteLocalLights();
+            WriteLight(drawable ? Shadows : worldShadows);
+            if (drawable && Shadows)
                 DrawShadow(encoder);
+        }
+        if (worldShown)
+        {
+            worldShadowDraws = worldViewDraws = 0;
+            recordsThisFrame = 0;
+            if (!worldShadows)
+                SkipWorldShadows();
+            UpdateWorldVisibility(worldCascades, worldShadows);
+            if (worldShadows)
+                DrawWorldShadows(encoder);
         }
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
@@ -449,10 +463,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         pass.End();
         // Drawables in HDR, reflecting the scene as it is from the camera, then tone-mapped over the backdrop.
-        if (drawable)
+        if (lit)
         {
             DrawSceneReflections(encoder);
-            RenderPassEncoder lit = encoder.BeginRenderPass(new RenderPassDescriptor
+            RenderPassEncoder hdrPass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments =
                 [
@@ -462,14 +476,18 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                 {
                     View = hdrDepthView!,
                     DepthLoadOp = LoadOp.Clear,
-                    DepthStoreOp = StoreOp.Discard,
+                    // Kept: the water reads it, after the world's solid surfaces.
+                    DepthStoreOp = StoreOp.Store,
                     DepthClearValue = 0,
                 },
             });
-            lit.SetBindGroup(0, sceneGroup);
-            lit.SetBindGroup(2, lightGroup!);
-            DrawSurfaces(lit);
-            lit.End();
+            hdrPass.SetBindGroup(0, sceneGroup);
+            hdrPass.SetBindGroup(2, lightGroup!);
+            if (drawable)
+                DrawSurfaces(hdrPass);
+            if (worldShown)
+                hdrPass = DrawWorld(hdrPass, encoder);
+            hdrPass.End();
             MeasureFrame(encoder);
             if (Bloom)
                 DrawBloom(encoder);
@@ -484,6 +502,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             mapped.Draw(3);
             mapped.End();
             DrawOutline(encoder);
+            if (worldShown)
+                DrawWorldOutline(encoder);
             // The solid collision over the model, its nearest surface only, then the lines over everything.
             if (solidBuffer is not null)
             {
@@ -532,14 +552,28 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         Render(target);
     }
 
+    /// <summary>The view's width over its height.</summary>
+    internal float Aspect => (float)width / Math.Max(height, 1);
+
     /// <summary>The format frames go to the window in: what <see cref="RenderTo"/> needs.</summary>
     internal TextureFormat PresentFormat => presentFormat;
+
+    // The view the last frame was drawn with, from the scene's origin.
+    private Matrix4x4 sceneViewProjection;
+
+    /// <summary>The view the last frame was drawn with and the origin it's relative to, for tests.</summary>
+    internal (Matrix4x4 ViewProjection, Vector3 Origin) SceneView => (sceneViewProjection, origin);
 
     private void WriteScene()
     {
         float aspect = (float)width / height;
         Span<float> values = scene;
-        var matrix = Camera.ViewProjection(aspect, origin);
+        // The world is drawn relative to the camera: its origin moves to the camera before the view is made from it, or
+        // a moving camera's frame would be drawn from where the camera was the frame before.
+        if (worldShown)
+            origin = Camera.Eye;
+        sceneViewProjection = Camera.ViewProjection(aspect, origin);
+        var matrix = sceneViewProjection;
         MemoryMarshal.Write(MemoryMarshal.AsBytes(values), in matrix);
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values[16..]);
         vectors[0] = new Vector4(Camera.Eye, 0);
@@ -549,6 +583,12 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // The ground under what is framed, its grid a power of ten about a tenth of its size.
         vectors[4] = new Vector4(aspect, OrbitCamera.TanHalf, Ground, GridSpacing(Camera.Radius));
         ViewportPalette.Linear().CopyTo(vectors[5..]);
+        if (worldShown)
+        {
+            // The world stands on its own ground: the grid goes.
+            for (int line = 8; line <= 11; line++)
+                vectors[line].W = 0;
+        }
         vectors[12] = new Vector4(origin, 0);
         // The window's size, then the HDR target's, which the drawables are drawn at.
         vectors[13] = new Vector4(width, height, hdrWidth, hdrHeight);
@@ -594,6 +634,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         segmentBuffer?.Destroy();
         DisposeAntialiasing();
         DestroyOutline();
+        ClearWorld();
         ClearSurfaces();
         surface?.Unconfigure();
     }

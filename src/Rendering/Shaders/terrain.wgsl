@@ -89,6 +89,10 @@ struct TerrainOutput {
     @location(10) distance: f32,
     // The vertex's angle to the sun less bumpSelfShadowAmount, times nine: the bump self-shadow's start.
     @location(11) bump_shadow: f32,
+    // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
+    @location(12) @interpolate(flat) room: vec4f,
+    // Its placement's level of detail fade (light.wgsl's lod_fade_keeps): none in the viewer.
+    @location(13) @interpolate(flat) lod_fade: vec2f,
 };
 
 // The camera's reflection map being drawn, as surface.wgsl reads it.
@@ -124,6 +128,7 @@ fn vs_terrain_paraboloid(input: TerrainInput) -> TerrainOutput {
 fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
     var output: TerrainOutput;
     output.hemisphere = 1.0;
+    output.room = vec4f(0.0);
     output.place = input.position;
     output.normal = normalize(input.normal);
     output.tangent = input.tangent.xyz;
@@ -145,7 +150,14 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
 
 @fragment
 fn fs_terrain(input: TerrainOutput) -> @location(0) vec4f {
-    return shade_terrain(input);
+    use_local_lights(input.position.xy, input.place);
+    use_room(input.room);
+    // Left out after shading, which needs uniform control flow.
+    let colour = shade_terrain(input);
+    if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
+        discard;
+    }
+    return colour;
 }
 
 // Into the reflection map: what is behind the hemisphere is left out, after shading.
@@ -343,5 +355,6 @@ fn shade_terrain(input: TerrainOutput) -> vec4f {
 
     let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
     let shadow = sun_shadow(input.place, normalize(input.normal)) * self_shadow;
-    return vec4f(gta_lit(stored, normal, view, intensity, power, terrain.specular.w, ambient * ambient, shadow, 1.0), 1.0);
+    let artificial = saturate(input.colour0.g);
+    return vec4f(gta_lit(stored, normal, view, intensity, power, terrain.specular.w, ambient * ambient, shadow, 1.0, artificial * artificial), 1.0);
 }

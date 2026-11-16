@@ -18,12 +18,44 @@ All notable changes to HikariHopper are documented here. The format follows
 - Open Red Dead Redemption 2's collisions and navmeshes in the 3D viewer, collisions by material as the game names them. ([#245](https://github.com/Hancapo/HikariHopper/pull/245))
 - Open and extract the textures a Red Dead Redemption 2 model carries, from its 3D viewer. ([#246](https://github.com/Hancapo/HikariHopper/pull/246))
 - List a Red Dead Redemption 2 fragment's parts by physics group, and show its damaged state with only its breaking pieces swapped. ([#247](https://github.com/Hancapo/HikariHopper/pull/247))
+- Flip a Red Dead Redemption 2 tab between its files and its world with the status bar's switch or F6: the world flown through with W A S D, its coordinates in the address row, its time of day at the status bar's end as in the 3D viewer, and Back and Forward through both. ([#248](https://github.com/Hancapo/HikariHopper/pull/248))
+- Open Red Dead Redemption 2 straight on its world from the globe at the end of its start page row. ([#249](https://github.com/Hancapo/HikariHopper/pull/249))
+- Prepare Red Dead Redemption 2's world in the background as the game opens, cached until the game's archives change, with a loading screen saying how far it has got when the world is shown before it's ready. ([#250](https://github.com/Hancapo/HikariHopper/pull/250))
+- Fly through Red Dead Redemption 2's world: the whole map through the game's own levels of detail, with full detail streamed in around the camera within a 4 GB budget. ([#251](https://github.com/Hancapo/HikariHopper/pull/251))
+- Cast the sun's shadow over Red Dead Redemption 2's world, its four cascades cast in turn while the camera moves. ([#252](https://github.com/Hancapo/HikariHopper/pull/252))
+- Grow Red Dead Redemption 2's grass around the camera and light its lamps, windows and fires after dark, each light at its own hours. ([#253](https://github.com/Hancapo/HikariHopper/pull/253))
+- Pick what's in Red Dead Redemption 2's world: a click outlines it, and a right click names it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#254](https://github.com/Hancapo/HikariHopper/pull/254))
+- Give GTA V tabs a World side and a globe on the start page, starting at Legion Square, with the base game's maps indexed in the background for Legacy and Enhanced and cached until the game's archives change. ([#256](https://github.com/Hancapo/HikariHopper/pull/256))
+- Fly through GTA V's world: its maps' models streamed around the camera and drawn with the 3D viewer's GTA V shaders, terrain included, textured through their archetypes' dictionaries and those dictionaries' parents, and casting the sun's shadow. ([#257](https://github.com/Hancapo/HikariHopper/pull/257))
+- Grow GTA V's grass around the camera and light its street lamps, signs and windows after dark, each light at its own hours, capsule lights included. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Light GTA V models in the 3D viewer with the lights they carry, at the viewer's time of day. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Show GTA V's interiors in its world: each interior's contents and the entity sets it turns on by default, every room lit by its own ambient from the game's timecycle modifiers. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
+- Draw water in both games' worlds over the scene behind it, refracting and reflecting it: Red Dead Redemption 2's rivers and lakes with RedFury's water, and GTA V's ocean, lakes and pools from its water.xml and its water shaders' rivers and fountains, shaded as its own water shader does with the game's water textures and tuning. ([#260](https://github.com/Hancapo/HikariHopper/pull/260))
+- Pick what's in GTA V's world as in Red Dead Redemption 2's: a click outlines it, and a right click names it, an interior's contents by where they are in it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#261](https://github.com/Hancapo/HikariHopper/pull/261))
 
 ### Changed
 
+- Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
+- Keep the worlds' buffers in shared pages instead of one buffer each, which the GPU rounded up to 64 KB: GTA V's Legion Square takes 1.3 GB of video memory, down from 2.9 GB. ([#262](https://github.com/Hancapo/HikariHopper/pull/262))
+- Stream the worlds in faster: GTA V's models read on up to four threads at once, and as many uploaded each frame as two and a half milliseconds allow instead of one: GTA V's Legion Square is all in 10 s after opening at 60 frames a second, down from 60 s, and Grapeseed 8 s after flying there, down from 48 s. ([#263](https://github.com/Hancapo/HikariHopper/pull/263))
+- Let go of the worlds' texture pixels once they're on the GPU, and keep 192 MB of GTA V's texture dictionaries for the next models instead of 768 MB: 490 MB less memory after flying from Legion Square to Grapeseed. ([#265](https://github.com/Hancapo/HikariHopper/pull/265))
+- Compile the worlds' pipelines in the background as the app starts, on the GPU driver's threads, instead of on the first frames of a world: GTA V's world no longer stalls for over a second as its first models come in. ([#266](https://github.com/Hancapo/HikariHopper/pull/266))
+- Plan the worlds' streaming with each asset's cost kept as a running total rather than the whole cut priced at every step: flying over GTA V's city allocates a quarter of what it did and collects garbage a seventh as often, so far fewer frames are held up. ([#270](https://github.com/Hancapo/HikariHopper/pull/270))
+- Pace the 3D view at a steady rate its frames keep up with, every first, second, third or fourth refresh of the display, rather than at every refresh whatever they took: on a fast or variable refresh display frames no longer go out unevenly. ([#271](https://github.com/Hancapo/HikariHopper/pull/271))
+- Upload the detail streaming in for 1 ms a frame while the camera moves, 2.5 ms once it stays: a world's frames are held up less as its levels of detail change in flight. ([#272](https://github.com/Hancapo/HikariHopper/pull/272))
+- Fade between levels of detail in both games' worlds as GTA V does: a model and the ones replacing it share their pixels by a dither for 0.4 s as one gives way to the other, instead of the swap popping. ([#273](https://github.com/Hancapo/HikariHopper/pull/273))
+- Collect the arrays of up to 4 MB that the worlds' streaming reads and builds as young garbage, rather than in the large object heap, whose collections held the frames up: flying over GTA V's city, the longest frame takes 28 ms, down from 46 ms. ([#275](https://github.com/Hancapo/HikariHopper/pull/275))
+- Build each streamed model's vertices and indexes once, in arrays the size they come to, rather than in lists that grew and were copied out and copied again: flying over GTA V's city allocates 14% less, and three times fewer frames take over 16.7 ms. ([#276](https://github.com/Hancapo/HikariHopper/pull/276))
+- Keep each placement's matrices where they are in its model's storage while it stays in view of the streaming, rather than rewriting all of a model's placements when one joins or leaves: in Red Dead Redemption 2's Valentine, keeping that storage takes half the time a frame, and its longest update 6 ms rather than 8. ([#277](https://github.com/Hancapo/HikariHopper/pull/277))
+- Look around with the free camera as RedFury.World does: by the mouse's raw motion, turned once a frame, the pointer hidden and held in the view while dragging and put back after; frames drawn ahead of the streaming threads, and a slow frame no longer throws the camera forward. ([#267](https://github.com/Hancapo/HikariHopper/pull/267))
+
 ### Fixed
 
+- Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
+- Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))
+
 ### Removed
 
 ## [0.2.1] - 2026-11-14

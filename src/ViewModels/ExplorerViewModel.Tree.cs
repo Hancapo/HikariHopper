@@ -76,7 +76,7 @@ public sealed partial class ExplorerViewModel
             }
             string localPath = RpfProvider.EntryLocalPath(entry);
             ResetNavigation();
-            history.Add(localPath);
+            history.Add(new HistoryStop(localPath));
             historyIndex = 1;
             currentPath = localPath;
             ExpandCurrentBranch();

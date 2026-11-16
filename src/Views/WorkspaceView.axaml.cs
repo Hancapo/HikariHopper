@@ -55,6 +55,19 @@ public partial class WorkspaceView : UserControl
             () => _ = OpenPropertiesDialog()));
     }
 
+    /// <summary>The world view, once a tab has shown its World side.</summary>
+    internal WorldView? World => WorldHost.Content as WorldView;
+
+    /// <summary>The tab's files, or its world in their place.</summary>
+    private void RefreshFace()
+    {
+        bool world = Bridge?.InWorld == true;
+        if (world && WorldHost.Content is null)
+            WorldHost.Content = new WorldView();
+        WorldHost.IsVisible = world;
+        Split.IsVisible = !world;
+    }
+
     /// <summary>Whether the folder panel is shown, or on its way there (it slides).</summary>
     internal bool ShowsFolders => foldersShown;
 
@@ -94,6 +107,7 @@ public partial class WorkspaceView : UserControl
         // Another tab: its folders as they are, at once.
         RefreshFolders(animate: false);
         RefreshEntriesView();
+        RefreshFace();
     }
 
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -101,6 +115,10 @@ public partial class WorkspaceView : UserControl
         if (e.PropertyName == nameof(ExplorerViewModel.ShownViewMode))
         {
             RefreshEntriesView();
+        }
+        else if (e.PropertyName == nameof(ExplorerViewModel.InWorld))
+        {
+            RefreshFace();
         }
         else if (e.PropertyName == nameof(ExplorerViewModel.FoldersVisible))
         {
