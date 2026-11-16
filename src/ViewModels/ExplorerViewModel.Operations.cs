@@ -490,7 +490,8 @@ public sealed partial class ExplorerViewModel
         {
             data = Provider.ReadEntryBytes(entry);
             sourcePath = Provider.EntrySourcePath(entry);
-            sourceTarget = Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null;
+            // In an archive that can't be changed (an RDR2 archive's), it opens with nothing to save to: Save As only.
+            sourceTarget = Provider.InArchive && Provider.ArchiveWritable ? Provider.GetArchiveEntryTarget(entry) : null;
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {

@@ -23,6 +23,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))
 ### Removed
 
 ## [0.2.1] - 2026-11-14

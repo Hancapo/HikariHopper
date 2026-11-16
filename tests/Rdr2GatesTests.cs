@@ -99,4 +99,26 @@ public sealed class Rdr2GatesTests : ExplorerTestBase
         Assert.NotNull(opened);
         Assert.Null(opened.SaveTarget);
     }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void A_texture_dictionary_from_the_installed_games_archives_opens_with_save_as_only()
+    {
+        string game = TestGames.Rdr2();
+        ExplorerViewModel.GameLoader = path => RpfProvider.LoadGame(path);
+        var tab = new ExplorerViewModel();
+        tab.OpenGame(game);
+        tab.GoToAddress("textures_0.rpf");
+        Assert.True(tab.Provider.InArchive);
+        EntryItem dictionary = tab.EntriesModel.First(item => !item.Record.IsDirectory && item.Record.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase));
+        tab.ActivateEntry(tab.EntriesModel.IndexOf(dictionary));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while ((tab.TextureViewer.Loading || tab.TextureViewer.TextureCount == 0) && clock.ElapsedMilliseconds < 15_000)
+            TestWait.Pump(20);
+        Assert.DoesNotContain("Could not", tab.Status);
+        Assert.Equal(dictionary.Record.Name, tab.TextureViewer.SourceName);
+        Assert.True(tab.TextureViewer.TextureCount > 0);
+        // Nothing to save back into: Save As only.
+        Assert.False(tab.TextureViewer.CanSave);
+        Assert.True(tab.TextureViewer.CanSaveAs);
+    }
 }
