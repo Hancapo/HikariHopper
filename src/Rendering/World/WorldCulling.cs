@@ -46,6 +46,9 @@ internal sealed class WorldCullSet
         internal readonly int[] Index;
         internal int Count;
 
+        // How many of its placements are mirrored: an asset with any is drawn without culling either face.
+        internal int Reflected;
+
         internal PreparedNode(WorldLodNode node, InteriorAmbient? room = null)
         {
             int capacity = node.Instances.Count == 0 ? (node.Grass is null ? 1 : 0) : node.Instances.Count;
@@ -105,6 +108,8 @@ internal sealed class WorldCullSet
                     normal.M44 = InteriorAmbient.Pack(ambient.Up);
                 }
             }
+            if (transform.GetDeterminant() < 0)
+                Reflected++;
             World[Count] = transform;
             Normal[Count] = normal;
             X[Count] = center.X;

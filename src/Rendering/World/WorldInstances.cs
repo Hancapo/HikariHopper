@@ -4,39 +4,33 @@ namespace HikariHopper.Rendering.World;
 
 /// <summary>
 /// An asset's placements as rdr2_world.wgsl reads them, each its world matrix (from the asset's own vertices) and its
-/// inverse transpose (RedFury's WorldInstanceBuffer, copied). Kept while the coverage stays; whether it changed is
-/// known, so only changed ones are written to the GPU.
+/// inverse transpose, a row each (after RedFury's WorldInstanceBuffer). The renderer keeps each covered node's rows
+/// where they are, and writes to the GPU only the rows it set.
 /// </summary>
 internal sealed class WorldInstanceBuffer
 {
     internal Matrix4x4[] Matrices { get; private set; } = [];
+
+    /// <summary>The rows in use, gaps included.</summary>
     internal int Count { get; private set; }
-    internal bool Changed { get; private set; }
 
-    internal void Begin()
+    /// <summary>Sets a row's world matrix and inverse transpose, growing the rows to reach it.</summary>
+    internal void Set(int row, in Matrix4x4 world, in Matrix4x4 normal)
     {
-        Count = 0;
-        Changed = false;
-    }
-
-    /// <summary>A placement's world matrix and its inverse transpose, from its prepared block.</summary>
-    internal void Add(in Matrix4x4 world, in Matrix4x4 normal)
-    {
-        int offset = Count * 2;
+        int offset = row * 2;
         if (offset + 2 > Matrices.Length)
         {
             Matrix4x4[] grown = Matrices;
-            Array.Resize(ref grown, Math.Max(32, offset * 2));
+            Array.Resize(ref grown, Math.Max(32, Math.Max(offset + 2, Matrices.Length * 2)));
             Matrices = grown;
         }
-        if (Matrices[offset] != world || Matrices[offset + 1] != normal)
-        {
-            Matrices[offset] = world;
-            Matrices[offset + 1] = normal;
-            Changed = true;
-        }
-        Count++;
+        Matrices[offset] = world;
+        Matrices[offset + 1] = normal;
+        Count = Math.Max(Count, row + 1);
     }
+
+    /// <summary>The rows from <paramref name="rows"/> on are no longer kept.</summary>
+    internal void Truncate(int rows) => Count = Math.Min(Count, rows);
 }
 
 /// <summary>

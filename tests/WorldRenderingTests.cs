@@ -184,5 +184,83 @@ public sealed class WorldRenderingTests
         }
     }
 
+    [Fact]
+    public void A_placement_joining_or_leaving_an_asset_moves_none_of_its_others_and_takes_the_gap_one_left()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(64, 32);
+            renderer.WorldShown = true;
+            renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
+            var key = new RedFury.World.WorldAssetKey(1, 2);
+            Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
+                new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            // Placements of the one asset, a metre apart.
+            RedFury.World.WorldLodNode[] nodes = [.. Enumerable.Range(0, 80).Select(i => new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, i), null, key,
+                Matrix4x4.CreateTranslation(i, 0, 0), new Vector3(i + .5f, .5f, 0), 1, 100, 0, 0))];
+            void Cover(params RedFury.World.WorldLodNode[] covered)
+            {
+                renderer.SetWorldSelection(new RedFury.World.WorldSelection(covered, [key]));
+                renderer.RenderTo(view);
+                Assert.True(renderer.WorldSourcesMatchCoverage());
+            }
+            void FadesEnd()
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(ViewportRenderer.LodFadeSeconds + .15));
+                renderer.RenderTo(view);
+                Assert.Equal(0, renderer.WorldFadingOut);
+                Assert.True(renderer.WorldSourcesMatchCoverage());
+            }
+            var (a, b, c, d, e) = (nodes[0], nodes[1], nodes[2], nodes[3], nodes[4]);
+            Cover(a, b, c);
+            Assert.Equal((3, 3), renderer.WorldSourceRows(key));
+            // One leaves, fading out where it was; one comes in, fading in after them; the others stay put.
+            Cover(a, c, d);
+            Assert.Equal((4, 4), renderer.WorldSourceRows(key));
+            Assert.Equal((0, 2, 3), (renderer.WorldSourceRow(a).Row, renderer.WorldSourceRow(c).Row, renderer.WorldSourceRow(d).Row));
+            Assert.Equal(-1f, renderer.WorldSourceRow(b).Normal.M24);
+            Assert.Equal(1f, renderer.WorldSourceRow(d).Normal.M24);
+            Assert.Equal(0f, renderer.WorldSourceRow(a).Normal.M24);
+            // Faded out, it leaves its row as a gap, which the next to come in takes.
+            FadesEnd();
+            Assert.Equal((4, 3), renderer.WorldSourceRows(key));
+            Cover(a, c, d, e);
+            Assert.Equal(1, renderer.WorldSourceRow(e).Row);
+            Assert.Equal((4, 4), renderer.WorldSourceRows(key));
+            // Once gaps are half the storage, it's laid out again without them.
+            FadesEnd();
+            Cover(nodes);
+            Assert.Equal((80, 80), renderer.WorldSourceRows(key));
+            FadesEnd();
+            Cover(a);
+            FadesEnd();
+            Assert.Equal((80, 1), renderer.WorldSourceRows(key));
+            Cover(a, b);
+            Assert.Equal((2, 2), renderer.WorldSourceRows(key));
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+
     private const long WorldShadowCount = Rendering.World.WorldShadowCascades.Count;
 }
