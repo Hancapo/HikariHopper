@@ -201,9 +201,9 @@ internal sealed unsafe partial class ViewportRenderer
                 continue;
             pass.SetBindGroup(2, pickAssetGroup!, (uint)(i * PickSlot));
             pass.SetBindGroup(3, asset.SourceGroup);
-            pass.SetVertexBuffer(0, asset.Vertices);
-            pass.SetVertexBuffer(1, asset.Instances);
-            pass.SetIndexBuffer(asset.Indices!, IndexFormat.Uint32);
+            SetSlice(pass, 0, asset.Vertices.Value);
+            SetSlice(pass, 1, asset.Instances.Value);
+            SetIndexSlice(pass, asset.Indices!.Value);
             foreach (WorldMesh mesh in asset.Meshes)
             {
                 uint count = (uint)asset.LodCount[mesh.Level];
@@ -258,9 +258,9 @@ internal sealed unsafe partial class ViewportRenderer
         masked.SetBindGroup(1, worldEmptyGroup!);
         masked.SetBindGroup(2, worldEmptyGroup!);
         masked.SetBindGroup(3, asset.SourceGroup);
-        masked.SetVertexBuffer(0, asset.Vertices);
+        masked.SetVertexBuffer(0, asset.Vertices.Value.Buffer, asset.Vertices.Value.Offset, asset.Vertices.Value.Size);
         masked.SetVertexBuffer(1, pickedInstance!);
-        masked.SetIndexBuffer(asset.Indices!, IndexFormat.Uint32);
+        masked.SetIndexBuffer(asset.Indices!.Value.Buffer, IndexFormat.Uint32, asset.Indices.Value.Offset, asset.Indices.Value.Size);
         foreach (WorldMesh mesh in asset.Meshes)
             if (mesh.Level == level && !mesh.Decal)
                 masked.DrawIndexed(mesh.Part.IndexCount, 1, mesh.Part.FirstIndex, 0, 0);

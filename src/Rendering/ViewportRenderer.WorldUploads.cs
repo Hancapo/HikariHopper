@@ -34,7 +34,7 @@ internal sealed unsafe partial class ViewportRenderer
         internal int Block, Level, Row;
         internal readonly List<GameTexture> Registered = [];
 
-        internal Buffer? VertexBuffer, IndexBuffer;
+        internal WorldSlice? VertexBuffer, IndexBuffer;
         internal long VertexOffset, IndexOffset;
     }
 
@@ -109,16 +109,9 @@ internal sealed unsafe partial class ViewportRenderer
                 return;
             if (pending.Layout.Vertices.Length > 0)
             {
-                pending.VertexBuffer ??= device.CreateBuffer(new BufferDescriptor
-                {
-                    Size = ((ulong)pending.Layout.Vertices.Length * SurfaceVertex.Size + 3) & ~3UL,
-                    Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
-                });
-                pending.IndexBuffer ??= device.CreateBuffer(new BufferDescriptor
-                {
-                    Size = (ulong)pending.Layout.Indices.Length * sizeof(uint),
-                    Usage = BufferUsage.Index | BufferUsage.CopyDst,
-                });
+                pending.VertexBuffer ??= VertexPages.Allocate(((ulong)pending.Layout.Vertices.Length * SurfaceVertex.Size + 3) & ~3UL);
+                pending.IndexBuffer ??= IndexPages.Allocate((ulong)pending.Layout.Indices.Length * sizeof(uint));
+                WorldSlice vertexSlice = pending.VertexBuffer.Value, indexSlice = pending.IndexBuffer.Value;
                 ReadOnlySpan<byte> vertices = MemoryMarshal.AsBytes(pending.Layout.Vertices.AsSpan());
                 ReadOnlySpan<byte> indices = MemoryMarshal.AsBytes(pending.Layout.Indices.AsSpan());
                 // Whole vertices and indexes a chunk, as writes go in fours.
@@ -126,7 +119,7 @@ internal sealed unsafe partial class ViewportRenderer
                 while (pending.VertexOffset < vertices.Length && !Spent())
                 {
                     int count = (int)Math.Min(vertexChunk, vertices.Length - pending.VertexOffset);
-                    queue.WriteBuffer(pending.VertexBuffer, (ulong)pending.VertexOffset, vertices.Slice((int)pending.VertexOffset, count));
+                    queue.WriteBuffer(vertexSlice.Buffer, vertexSlice.Offset + (ulong)pending.VertexOffset, vertices.Slice((int)pending.VertexOffset, count));
                     pending.VertexOffset += count;
                     bytes += count;
                     writes++;
@@ -134,7 +127,7 @@ internal sealed unsafe partial class ViewportRenderer
                 while (pending.VertexOffset == vertices.Length && pending.IndexOffset < indices.Length && !Spent())
                 {
                     int count = (int)Math.Min(ChunkBytes, indices.Length - pending.IndexOffset);
-                    queue.WriteBuffer(pending.IndexBuffer, (ulong)pending.IndexOffset, indices.Slice((int)pending.IndexOffset, count));
+                    queue.WriteBuffer(indexSlice.Buffer, indexSlice.Offset + (ulong)pending.IndexOffset, indices.Slice((int)pending.IndexOffset, count));
                     pending.IndexOffset += count;
                     bytes += count;
                     writes++;
@@ -157,7 +150,7 @@ internal sealed unsafe partial class ViewportRenderer
         var uploaded = new WorldGpuAsset(pending.Source) { Vertices = pending.VertexBuffer, Indices = pending.IndexBuffer };
         if (uploaded.Vertices is not null)
         {
-            var groups = new Dictionary<int, (BindGroup Group, Buffer Uniforms)>();
+            var groups = new Dictionary<int, (BindGroup Group, WorldSlice Uniforms)>();
             foreach (int i in pending.Layout.Order)
             {
                 var (part, material, rdr2) = pending.Layout.Kept[i];
@@ -166,24 +159,25 @@ internal sealed unsafe partial class ViewportRenderer
                 if (!groups.TryGetValue(part.Material, out var group))
                 {
                     CreateWorldFamily(family);
-                    Buffer uniforms;
+                    WorldSlice uniforms;
                     if (rdr2 is not null)
                     {
-                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
-                        group = (Rdr2Group(rdr2, uniforms), uniforms);
+                        uniforms = UniformPages.Allocate(Rdr2Material.UniformBytes);
+                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<byte>)rdr2.Uniforms);
+                        group = (Rdr2Group(rdr2, uniforms.Buffer, uniforms.Offset), uniforms);
                     }
                     else if (material.Water is { } water)
                     {
-                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = GtaWater.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)water.Uniforms());
-                        group = (GtaWaterGroup(water, uniforms), uniforms);
+                        uniforms = UniformPages.Allocate(GtaWater.UniformBytes);
+                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)water.Uniforms());
+                        group = (GtaWaterGroup(water, uniforms.Buffer, uniforms.Offset), uniforms);
                     }
                     else
                     {
-                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)material.Uniforms);
-                        group = (material.Terrain ? TerrainGroup(material, uniforms) : MaterialGroup(material, material.Uniforms, uniforms), uniforms);
+                        uniforms = UniformPages.Allocate(SurfaceMaterial.UniformBytes);
+                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)material.Uniforms);
+                        group = (material.Terrain ? TerrainGroup(material, uniforms.Buffer, uniforms.Offset)
+                            : MaterialGroup(material, material.Uniforms, uniforms.Buffer, uniforms.Offset), uniforms);
                     }
                     groups.Add(part.Material, group);
                     foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
@@ -223,8 +217,8 @@ internal sealed unsafe partial class ViewportRenderer
             return;
         pendingWorld = null;
         pending.GpuTexture?.Destroy();
-        pending.VertexBuffer?.Destroy();
-        pending.IndexBuffer?.Destroy();
+        FreeSlice(VertexPages, pending.VertexBuffer);
+        FreeSlice(IndexPages, pending.IndexBuffer);
         foreach (GameTexture texture in pending.Registered)
             if (!worldTextureUsers.ContainsKey(texture))
                 ForgetTexture(texture);
