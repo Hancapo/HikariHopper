@@ -8,21 +8,26 @@ namespace HikariHopper.Rendering.World;
 /// <summary>
 /// Streams a world into a viewport around its camera (after RedFury's WorldSession). Ten times a second the LOD graph is
 /// cut where the camera is: the whole map through its lowest levels, the detail near the camera, within the memory
-/// budget. A worker reads the assets the cut asks for from the game's archives, one at a time, and the grass batches
-/// nearest the camera; the viewport uploads one asset read each frame. The cut's static lights are bound to their
-/// placements when it changes. Only the UI thread touches the renderer.
+/// budget. Workers read the assets the cut asks for from the game's archives (several at once where the index can, one
+/// at a time otherwise), and the first the grass batches nearest the camera; the viewport uploads the assets read, as many
+/// a frame as its upload time allows. The cut's static lights are bound to their placements when it changes. Only the UI
+/// thread touches the renderer.
 /// </summary>
 internal sealed class WorldStreamer : IDisposable
 {
     /// <summary>What the world may keep, fixed for now.</summary>
     internal const long ResidenceBytes = 4L * 1024 * 1024 * 1024;
 
-    // Nearby sibling groups streamed at once; admission is checked on their combined cost.
-    private const int MaxRefinementGroups = 8;
+    // Nearby sibling groups streamed at once; admission is checked on their combined cost. RedFury's eight left the
+    // uploads waiting on the next cut while a city's levels came in.
+    private const int MaxRefinementGroups = 32;
 
-    // Assets read ahead of the one-per-frame upload, by count and bytes.
-    private const int PreparedLimit = 8;
+    // Assets read ahead of the uploads, by count (those being read included) and bytes.
+    private const int PreparedLimit = 16;
     private const long PreparedBytesLimit = 128L * 1024 * 1024;
+
+    // How long a frame starts uploading assets read, once the one going up is up.
+    private static readonly long FrameUploadTicks = System.Diagnostics.Stopwatch.Frequency / 400;
 
     // The largest asset uploaded at once.
     private const long LargestAsset = 384L * 1024 * 1024;
@@ -34,16 +39,16 @@ internal sealed class WorldStreamer : IDisposable
     private readonly Func<WorldLodNode, InteriorAmbient?> ambient;
     private readonly CancellationTokenSource stop = new();
     private readonly Lock gate = new();
-    private readonly SemaphoreSlim workAvailable = new(0, 1);
+    private readonly SemaphoreSlim workAvailable;
     private readonly ConcurrentQueue<WorldAsset> prepared = new();
     private readonly HashSet<WorldAssetKey> queued = [], failed = [];
     private readonly WorldDeferredRequests deferred = new();
     private readonly WorldStreamingBudget budget = new(ResidenceBytes);
     private readonly List<string> diagnostics = [];
     private readonly WorldTimeFilter timeFilter = new();
-    private readonly Task worker;
+    private readonly Task[] workers;
     private WorldAssetKey[] wanted = [];
-    private WorldAssetKey? loading;
+    private readonly HashSet<WorldAssetKey> loading = [];
     private HashSet<WorldAssetKey> resident = [];
     private long preparedBytes;
     private float selectionTime;
@@ -85,7 +90,10 @@ internal sealed class WorldStreamer : IDisposable
     {
         ambient = index.AmbientOf;
         this.index = index;
-        worker = Task.Run(Work);
+        // Half the cores, at most four, leave the UI thread and the GPU's driver theirs.
+        int count = index.LoadsConcurrently ? Math.Clamp(Environment.ProcessorCount / 2, 1, 4) : 1;
+        workAvailable = new SemaphoreSlim(0, count);
+        workers = [.. Enumerable.Range(0, count).Select(n => Task.Run(() => Work(grass: n == 0)))];
     }
 
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
@@ -104,7 +112,7 @@ internal sealed class WorldStreamer : IDisposable
         get
         {
             lock (gate)
-                return planning is not null || loading is not null || loadingGrass is not null || !prepared.IsEmpty || uploadPending
+                return planning is not null || loading.Count > 0 || loadingGrass is not null || !prepared.IsEmpty || uploadPending
                     || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key))
                     || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
         }
@@ -120,13 +128,13 @@ internal sealed class WorldStreamer : IDisposable
         }
     }
 
-    // The worker: reads the assets wanted, one at a time, while there's room for them ahead of the uploads, and the grass
+    // A worker: reads the assets wanted while there's room for them ahead of the uploads, and (the first) the grass
     // batches wanted.
-    private async Task Work()
+    private async Task Work(bool grass)
     {
         try
         {
-            Func<WorldLodNode, CancellationToken, WorldLodNode>? grassLoader = index.CreateGrass();
+            Func<WorldLodNode, CancellationToken, WorldLodNode>? grassLoader = grass ? index.CreateGrass() : null;
             while (!stop.IsCancellationRequested)
             {
                 bool loaded = LoadNext();
@@ -144,19 +152,24 @@ internal sealed class WorldStreamer : IDisposable
     {
         WorldAssetKey? next;
         lock (gate)
-            next = prepared.Count >= PreparedLimit || preparedBytes >= PreparedBytesLimit ? null
+        {
+            next = prepared.Count + loading.Count >= PreparedLimit || preparedBytes >= PreparedBytesLimit ? null
                 : wanted.Cast<WorldAssetKey?>().FirstOrDefault(k => !resident.Contains(k!.Value) && !queued.Contains(k.Value)
-                    && !failed.Contains(k.Value) && !deferred.Contains(k.Value));
+                    && !failed.Contains(k.Value) && !deferred.Contains(k.Value) && !loading.Contains(k.Value));
+            if (next is { } taken)
+                loading.Add(taken);
+        }
         if (next is not { } key)
             return false;
-        lock (gate)
-            loading = key;
         try
         {
             WorldAsset asset;
             // The archives held open are the index's, for whichever streamer reads it.
-            lock (index.Gate)
+            if (index.LoadsConcurrently)
                 asset = index.LoadAsset(key);
+            else
+                lock (index.Gate)
+                    asset = index.LoadAsset(key);
             if (asset.Bytes > LargestAsset)
                 throw new InvalidDataException($"Asset exceeds the world's upload budget ({asset.Bytes:N0} bytes).");
             lock (gate)
@@ -179,7 +192,7 @@ internal sealed class WorldStreamer : IDisposable
         finally
         {
             lock (gate)
-                loading = null;
+                loading.Remove(key);
         }
         return true;
     }
@@ -382,47 +395,63 @@ internal sealed class WorldStreamer : IDisposable
         }
     }
 
-    // The asset on its way up a frame's step further (let go when it's no longer wanted); when none is, the next one
-    // read, if it's still wanted, on its way.
+    // The asset on its way up a frame's step further (let go when it's no longer wanted); then, while the frame's upload
+    // time lasts, the next ones read that are still wanted, one after another: most are small enough for several a frame,
+    // and one a frame kept a city's few thousand waiting most of a minute at 60 frames a second. What's resident is told
+    // to the workers once, after.
     private void UploadPrepared(ViewportRenderer viewport)
     {
         if (viewport.WorldUploadKey is { } uploading && !selected.Requested.Contains(uploading))
+        {
             viewport.CancelWorldUpload();
-        if (viewport.HasPendingWorldUpload)
-        {
-            Step(viewport);
-            return;
+            lock (gate)
+                resident = [.. viewport.WorldResident];
         }
-        if (!prepared.TryDequeue(out WorldAsset? asset))
+        if (viewport.HasPendingWorldUpload && !Step(viewport))
             return;
-        if (selected.Requested.Contains(asset.Key))
+        long until = System.Diagnostics.Stopwatch.GetTimestamp() + FrameUploadTicks;
+        HashSet<WorldAssetKey>? protect = null;
+        List<WorldAsset>? taken = null;
+        while (System.Diagnostics.Stopwatch.GetTimestamp() < until && prepared.TryDequeue(out WorldAsset? asset))
         {
-            HashSet<WorldAssetKey> protect = [.. selected.Requested.Where(viewport.IsWorldReady)];
-            try
+            (taken ??= []).Add(asset);
+            if (selected.Requested.Contains(asset.Key))
             {
-                if (!viewport.AddWorldAsset(asset, protect, budget.Limit))
-                    lock (gate)
-                        deferred.Add(asset.Key);
+                // The ready assets the cut asks for aren't evicted for it, nor those put up before it this frame.
+                protect ??= [.. selected.Requested.Where(viewport.IsWorldReady)];
+                try
+                {
+                    if (viewport.AddWorldAsset(asset, protect, budget.Limit))
+                        protect.Add(asset.Key);
+                    else
+                        lock (gate)
+                            deferred.Add(asset.Key);
+                }
+                catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
+                {
+                    MarkFailed(asset.Key, error);
+                }
             }
-            catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
-            {
-                MarkFailed(asset.Key, error);
-            }
+            if (viewport.HasPendingWorldUpload && !Step(viewport))
+                break;
         }
+        if (taken is null)
+            return;
         lock (gate)
         {
-            // What's uploaded is told before its place in the queue is let go, so the worker doesn't read it again.
+            // What's uploaded is told before its place in the queue is let go, so a worker doesn't read it again.
             resident = [.. viewport.WorldResident];
-            queued.Remove(asset.Key);
-            preparedBytes -= asset.Bytes;
+            foreach (WorldAsset asset in taken)
+            {
+                queued.Remove(asset.Key);
+                preparedBytes -= asset.Bytes;
+            }
             SignalWorker();
         }
-        if (viewport.HasPendingWorldUpload)
-            Step(viewport);
     }
 
-    // A frame's step of the asset on its way up.
-    private void Step(ViewportRenderer viewport)
+    // A frame's step of the asset on its way up; whether it's done (up, or let go).
+    private bool Step(ViewportRenderer viewport)
     {
         WorldAssetKey key = viewport.WorldUploadKey!.Value;
         try
@@ -432,20 +461,20 @@ internal sealed class WorldStreamer : IDisposable
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
         {
             MarkFailed(key, error);
-        }
-        if (!viewport.HasPendingWorldUpload)
             lock (gate)
             {
                 resident = [.. viewport.WorldResident];
                 SignalWorker();
             }
+        }
+        return !viewport.HasPendingWorldUpload;
     }
 
-    // Under the lock: the worker looks again. Signals coalesce, and it checks after every wake.
+    // Under the lock: the workers look again. Signals coalesce, one per worker, and each checks after every wake.
     private void SignalWorker()
     {
-        if (!closing && workAvailable.CurrentCount == 0)
-            workAvailable.Release();
+        if (!closing && workAvailable.CurrentCount < workers.Length)
+            workAvailable.Release(workers.Length - workAvailable.CurrentCount);
     }
 
     private void MarkFailed(WorldAssetKey key, Exception error)
@@ -464,13 +493,13 @@ internal sealed class WorldStreamer : IDisposable
             diagnostics.Add(message);
     }
 
-    /// <summary>Stops the worker, without waiting for the asset it's reading; what's uploaded stays with the viewport.</summary>
+    /// <summary>Stops the workers, without waiting for the assets they're reading; what's uploaded stays with the viewport.</summary>
     public void Dispose()
     {
         lock (gate)
             closing = true;
         stop.Cancel();
-        _ = worker.ContinueWith(_ =>
+        _ = Task.WhenAll(workers).ContinueWith(_ =>
         {
             prepared.Clear();
             workAvailable.Dispose();

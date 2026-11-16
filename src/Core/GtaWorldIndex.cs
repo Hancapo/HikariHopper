@@ -50,11 +50,12 @@ internal sealed class GtaWorldIndex : WorldIndex
     // shader's drawables share.
     private GtaWater WaterTextures()
     {
-        if (waterTextures is not null)
-            return waterTextures;
+        lock (cacheGate)
+            if (waterTextures is not null)
+                return waterTextures;
         TextureDictionary? graphics = Dictionary(new Hash32("graphics").Value);
         FiveFury.Textures.Texture? Named(string name) => graphics?.Textures.FirstOrDefault(texture => string.Equals(texture.Name, name, StringComparison.OrdinalIgnoreCase));
-        return waterTextures = water.Tuning with
+        GtaWater made = water.Tuning with
         {
             Fog = Named("waterfog"),
             WorldFog = true,
@@ -63,6 +64,8 @@ internal sealed class GtaWorldIndex : WorldIndex
             Noise = Named("waternoise"),
             Foam = Named("waterfoam"),
         };
+        lock (cacheGate)
+            return waterTextures ??= made;
     }
 
     // The interior rooms' ambients of the placements inside them.
@@ -79,6 +82,11 @@ internal sealed class GtaWorldIndex : WorldIndex
     private GameFileCache? graph;
     private readonly Dictionary<uint, uint[]> chains = [];
     private readonly Dictionary<uint, LinkedListNode<(uint Hash, TextureDictionary? Dictionary, long Bytes)>> dictionaries = [];
+
+    // Held around the caches here (not the archives, which Gate covers), as assets are read on several threads; and
+    // the dictionaries being read, so a dictionary two assets want at once is read once and shared.
+    private readonly Lock cacheGate = new();
+    private readonly Dictionary<uint, Lazy<(TextureDictionary? Dictionary, long Bytes)>> reading = [];
     private readonly LinkedList<(uint Hash, TextureDictionary? Dictionary, long Bytes)> recent = new();
     private long dictionaryBytes;
 
@@ -88,8 +96,10 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// <summary>
     /// Reads an archetype's drawable, fragment (intact) or drawable dictionary member, its textures from its own
     /// dictionary, then the one its archetype names and that one's gtxd parents, then mapdetail.ytd, as the game
-    /// binds them. Under <see cref="WorldIndex.Gate"/>.
+    /// binds them. On any thread: the archives are read under <see cref="WorldIndex.Gate"/>, the rest outside it.
     /// </summary>
+    public override bool LoadsConcurrently => true;
+
     public override WorldAsset LoadAsset(WorldAssetKey key)
     {
         // A quad of the open water.
@@ -101,9 +111,14 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
         GameFileType type = TypeOf(key.Extension) is { } known and not GameFileType.Ymap ? known
             : throw new NotSupportedException($"Unsupported world asset {key}.");
-        GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
-        byte[] data = file.ReadStandalone();
-        string name = Path.GetFileNameWithoutExtension(file.VirtualPath);
+        byte[] data;
+        string name;
+        lock (Gate)
+        {
+            GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
+            data = file.ReadStandalone();
+            name = Path.GetFileNameWithoutExtension(file.VirtualPath);
+        }
         // A fragment's lights are its own (a lamp post's), not its drawables'.
         Yft? fragment = type == GameFileType.Yft ? Yft.Read(data) : null;
         IReadOnlyList<SceneModel> models = type switch
@@ -143,8 +158,19 @@ internal sealed class GtaWorldIndex : WorldIndex
     // detail maps.
     private uint[] Chain(uint dictionary)
     {
-        if (chains.TryGetValue(dictionary, out uint[]? known))
-            return known;
+        lock (cacheGate)
+            if (chains.TryGetValue(dictionary, out uint[]? known))
+                return known;
+        uint[] chain;
+        lock (Gate)
+            chain = ReadChain(dictionary);
+        lock (cacheGate)
+            return chains[dictionary] = chain;
+    }
+
+    // Under Gate: the texture graph reads the game's gtxd files the first time.
+    private uint[] ReadChain(uint dictionary)
+    {
         graph ??= new GameFileCache(Game.FileSystem);
         var order = new List<uint>();
         if (dictionary != 0)
@@ -162,41 +188,80 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
         if (!order.Contains(MapDetail))
             order.Add(MapDetail);
-        return chains[dictionary] = [.. order];
+        return [.. order];
     }
 
     private static readonly uint MapDetail = new Hash32("mapdetail").Value;
 
-    // A dictionary by name hash, as the game streams it; null when the game has none or it can't be read.
+    // A dictionary by name hash, as the game streams it; null when the game has none or it can't be read. One being read
+    // for another asset is waited for, so each dictionary's textures are one set, uploaded once.
     private TextureDictionary? Dictionary(uint hash)
     {
-        if (dictionaries.TryGetValue(hash, out var known))
+        Lazy<(TextureDictionary? Dictionary, long Bytes)>? read;
+        bool mine = false;
+        lock (cacheGate)
         {
-            recent.Remove(known);
-            recent.AddFirst(known);
-            return known.Value.Dictionary;
+            if (dictionaries.TryGetValue(hash, out var known))
+            {
+                recent.Remove(known);
+                recent.AddFirst(known);
+                return known.Value.Dictionary;
+            }
+            if (!reading.TryGetValue(hash, out read))
+            {
+                read = new(() => ReadDictionary(hash), LazyThreadSafetyMode.ExecutionAndPublication);
+                reading.Add(hash, read);
+                mine = true;
+            }
         }
-        TextureDictionary? dictionary = null;
-        long bytes = 0;
-        if (Game.FileSystem.Resolve(new Hash32(hash), GameFileType.Ytd).Value is { } file)
-            try
-            {
-                dictionary = FiveFury.Ytd.Ytd.Read(file.ReadStandalone()).Dictionary;
-                bytes = dictionary.Textures.Sum(texture => (long)texture.Data.Length);
-            }
-            catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
-                or OverflowException)
-            {
-            }
-        dictionaries[hash] = recent.AddFirst((hash, dictionary, bytes));
-        dictionaryBytes += bytes;
-        while (dictionaryBytes > DictionaryBudget && recent.Last is { } oldest && oldest.Value.Hash != hash)
+        if (!mine)
+            return read.Value.Dictionary;
+        (TextureDictionary? dictionary, long bytes) = (null, 0);
+        try
         {
-            recent.RemoveLast();
-            dictionaries.Remove(oldest.Value.Hash);
-            dictionaryBytes -= oldest.Value.Bytes;
+            (dictionary, bytes) = read.Value;
+        }
+        catch
+        {
+            lock (cacheGate)
+                reading.Remove(hash);
+            throw;
+        }
+        // Kept as it stops being read, in one step, so no other asset reads it again in between.
+        lock (cacheGate)
+        {
+            reading.Remove(hash);
+            dictionaries[hash] = recent.AddFirst((hash, dictionary, bytes));
+            dictionaryBytes += bytes;
+            while (dictionaryBytes > DictionaryBudget && recent.Last is { } oldest && oldest.Value.Hash != hash)
+            {
+                recent.RemoveLast();
+                dictionaries.Remove(oldest.Value.Hash);
+                dictionaryBytes -= oldest.Value.Bytes;
+            }
         }
         return dictionary;
+    }
+
+    // Read under Gate, parsed outside it.
+    private (TextureDictionary? Dictionary, long Bytes) ReadDictionary(uint hash)
+    {
+        try
+        {
+            byte[]? data = null;
+            lock (Gate)
+                if (Game.FileSystem.Resolve(new Hash32(hash), GameFileType.Ytd).Value is { } file)
+                    data = file.ReadStandalone();
+            if (data is null)
+                return (null, 0);
+            TextureDictionary dictionary = FiveFury.Ytd.Ytd.Read(data).Dictionary;
+            return (dictionary, dictionary.Textures.Sum(texture => (long)texture.Data.Length));
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+            or OverflowException)
+        {
+            return (null, 0);
+        }
     }
 
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => ExpandGrass;

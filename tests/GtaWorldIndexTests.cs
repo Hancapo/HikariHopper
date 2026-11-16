@@ -59,6 +59,19 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.NotEmpty(asset.Layout.Kept);
             Assert.DoesNotContain(asset.Diagnostics, line => line.StartsWith("Texture not found", StringComparison.Ordinal));
             Assert.All(asset.Layout.Kept, kept => Assert.Null(kept.Rdr2));
+            // Assets are read on several threads at once: those sharing a dictionary (the area's busiest one, and so its
+            // parents) share its textures, read once, so each texture goes up once.
+            Assert.True(index.LoadsConcurrently);
+            WorldAssetKey[] roads = [.. near.Where(node => node.Asset.Extension == 2 && node.Asset.TextureDictionary != 0).Select(node => node.Asset).Distinct()
+                .GroupBy(key => key.TextureDictionary).MaxBy(group => group.Count())!.Take(8)];
+            Assert.True(roads.Length >= 2, $"{roads.Length} assets sharing a dictionary");
+            Rendering.World.WorldAsset[] together = new Rendering.World.WorldAsset[roads.Length];
+            Parallel.For(0, roads.Length, new ParallelOptions { MaxDegreeOfParallelism = 4 }, i => together[i] = index.LoadAsset(roads[i]));
+            FiveFury.Textures.Texture[][] bound = [.. together.Select(item => item.Scene.Materials.SelectMany(material => material.BoundTextures()).OfType<FiveFury.Textures.Texture>()
+                .ToArray())];
+            var shared = bound.SelectMany(textures => textures).GroupBy(texture => texture.Name, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(shared, same => same.Count() > 1);
+            Assert.All(shared, same => Assert.Single(same.Distinct(ReferenceEqualityComparer.Instance)));
             // Grass batches are indexed unread; one expands into its plants, each with its colour and fade.
             WorldLodNode grass = index.Lod.Nodes.First(node => node.Grass is { InstanceCount: > 16 });
             WorldLodNode plants;

@@ -112,7 +112,8 @@ internal sealed class GameWorld
 
 /// <summary>
 /// A game's world, made: its maps' placements and their levels of detail, and how its assets are read, its grass
-/// expanded and its files found. The streamer's worker reads through it one thing at a time, under <see cref="Gate"/>.
+/// expanded and its files found. The streamer's workers read through it one thing at a time, under <see cref="Gate"/>,
+/// unless it reads assets on several threads at once (<see cref="LoadsConcurrently"/>).
 /// </summary>
 internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
 {
@@ -131,7 +132,16 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// <summary>Held while the game's archives are read: by whichever streamer reads them, and for finding files.</summary>
     public object Gate { get; } = new();
 
-    /// <summary>Reads an asset the LOD graph names and makes it ready for the GPU. Under <see cref="Gate"/>.</summary>
+    /// <summary>
+    /// Whether <see cref="LoadAsset"/> can be called from several threads at once, taking <see cref="Gate"/> itself only
+    /// while it reads the archives; otherwise it's called under the gate.
+    /// </summary>
+    public virtual bool LoadsConcurrently => false;
+
+    /// <summary>
+    /// Reads an asset the LOD graph names and makes it ready for the GPU. Under <see cref="Gate"/>, unless
+    /// <see cref="LoadsConcurrently"/>.
+    /// </summary>
     /// <exception cref="FileNotFoundException">The game has no such asset.</exception>
     /// <exception cref="NotSupportedException">An asset this can't read.</exception>
     public abstract WorldAsset LoadAsset(WorldAssetKey key);
