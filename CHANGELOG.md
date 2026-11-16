@@ -38,6 +38,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 - Keep the worlds' buffers in shared pages instead of one buffer each, which the GPU rounded up to 64 KB: GTA V's Legion Square takes 1.3 GB of video memory, down from 2.9 GB. ([#262](https://github.com/Hancapo/HikariHopper/pull/262))
+- Stream the worlds in faster: GTA V's models read on up to four threads at once, and as many uploaded each frame as two and a half milliseconds allow instead of one: GTA V's Legion Square is all in 10 s after opening at 60 frames a second, down from 60 s, and Grapeseed 8 s after flying there, down from 48 s. ([#263](https://github.com/Hancapo/HikariHopper/pull/263))
 
 ### Fixed
 
