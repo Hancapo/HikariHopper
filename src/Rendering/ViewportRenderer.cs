@@ -48,13 +48,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     // their own first (ViewportRenderer.Antialiasing.cs), in the frame format every pass's pipeline is made for.
     private readonly TextureFormat surfaceFormat;
     private readonly TextureFormat presentFormat;
-
-    // How frames reach the window: without waiting for its vertical blank where the GPU can (mailbox, which drops
-    // frames rather than tearing, or else immediate), so the frame rate isn't held to the display's refresh.
-    private readonly PresentMode presentMode = PresentMode.Fifo;
-
-    /// <summary>Whether frames are presented without waiting for the display's vertical blank.</summary>
-    public bool Unlocked => presentMode != PresentMode.Fifo;
     private readonly TextureFormat viewFormat = FrameFormat;
     private readonly float[] scene = new float[SceneBytes / sizeof(float)];
     private Texture? depth;
@@ -107,9 +100,6 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                     : formats.Contains(TextureFormat.BGRA8Unorm) ? TextureFormat.BGRA8Unorm
                     : formats.Contains(TextureFormat.RGBA8Unorm) ? TextureFormat.RGBA8Unorm
                     : throw new NotSupportedException("The window offers no 8-bit colour format.");
-                ReadOnlySpan<PresentMode> modes = capabilities.PresentModes;
-                presentMode = modes.Contains(PresentMode.Mailbox) ? PresentMode.Mailbox
-                    : modes.Contains(PresentMode.Immediate) ? PresentMode.Immediate : PresentMode.Fifo;
             }
             else
             {
@@ -359,7 +349,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
             Width = (uint)width,
             Height = (uint)height,
-            PresentMode = presentMode,
+            PresentMode = PresentMode.Fifo,
         });
         depth?.Destroy();
         depth = device.CreateTexture(new TextureDescriptor
