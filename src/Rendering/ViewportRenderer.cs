@@ -558,11 +558,22 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     /// <summary>The format frames go to the window in: what <see cref="RenderTo"/> needs.</summary>
     internal TextureFormat PresentFormat => presentFormat;
 
+    // The view the last frame was drawn with, from the scene's origin.
+    private Matrix4x4 sceneViewProjection;
+
+    /// <summary>The view the last frame was drawn with and the origin it's relative to, for tests.</summary>
+    internal (Matrix4x4 ViewProjection, Vector3 Origin) SceneView => (sceneViewProjection, origin);
+
     private void WriteScene()
     {
         float aspect = (float)width / height;
         Span<float> values = scene;
-        var matrix = Camera.ViewProjection(aspect, origin);
+        // The world is drawn relative to the camera: its origin moves to the camera before the view is made from it, or
+        // a moving camera's frame would be drawn from where the camera was the frame before.
+        if (worldShown)
+            origin = Camera.Eye;
+        sceneViewProjection = Camera.ViewProjection(aspect, origin);
+        var matrix = sceneViewProjection;
         MemoryMarshal.Write(MemoryMarshal.AsBytes(values), in matrix);
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values[16..]);
         vectors[0] = new Vector4(Camera.Eye, 0);
@@ -574,8 +585,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         ViewportPalette.Linear().CopyTo(vectors[5..]);
         if (worldShown)
         {
-            // The world is drawn relative to the camera, and stands on its own ground: the grid goes.
-            origin = Camera.Eye;
+            // The world stands on its own ground: the grid goes.
             for (int line = 8; line <= 11; line++)
                 vectors[line].W = 0;
         }

@@ -45,6 +45,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 
 ### Removed
