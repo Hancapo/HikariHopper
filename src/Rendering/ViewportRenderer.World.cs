@@ -173,7 +173,8 @@ internal sealed unsafe partial class ViewportRenderer
     private WorldSelection worldSelection = new([], []);
     private WorldGpuAsset?[] worldNodeAsset = [];
     private bool[] worldNodeCasts = [];
-    private uint[] worldSourceIndex = [];
+    // Each covered node's first row in its asset's storage: its placements' rows follow, as its entries do.
+    private int[] worldNodeRow = [];
 
     // What each volume sees: the camera, then each cascade.
     private readonly List<int>[] worldVisible = [.. Enumerable.Range(0, 1 + WorldShadowCascades.Count).Select(_ => new List<int>())];
@@ -521,8 +522,8 @@ internal sealed unsafe partial class ViewportRenderer
     private void UpdateWorldSources()
     {
         WorldCullSet set = worldCull;
-        if (worldSourceIndex.Length < set.X.Length)
-            worldSourceIndex = new uint[set.X.Length];
+        if (worldNodeRow.Length < set.Nodes.Length)
+            worldNodeRow = new int[set.Nodes.Length];
         foreach (WorldGpuAsset asset in worldAssets.Values)
             asset.NextNodes.Clear();
         for (int n = 0; n < set.Nodes.Length; n++)
@@ -531,16 +532,11 @@ internal sealed unsafe partial class ViewportRenderer
         long seen = ++worldSourceUpdates;
         foreach (WorldGpuAsset asset in worldAssets.Values)
         {
-            // The same nodes in the same order, written with the fades as they are: only the entries are mapped again.
+            // The same nodes in the same order, written with the fades as they are: only the nodes are mapped again.
             if (asset.SourceRevision >= 0 && !asset.FadeChanged && SameNodes(asset))
             {
                 for (int k = 0; k < asset.NextNodes.Count; k++)
-                {
-                    int n = asset.NextNodes[k];
-                    uint row = (uint)asset.SourceFirsts[k];
-                    for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
-                        worldSourceIndex[entry] = row++;
-                }
+                    worldNodeRow[asset.NextNodes[k]] = asset.SourceFirsts[k];
                 continue;
             }
             worldSourceRanges.Clear();
@@ -612,7 +608,7 @@ internal sealed unsafe partial class ViewportRenderer
                 if (block.Count > 0)
                     worldSourceRanges.Add((first, block.Count));
             }
-            // The entries mapped to their rows, and the order kept for the next update.
+            // The nodes mapped to their rows, and the order kept for the next update.
             asset.SourceNodes.Clear();
             asset.SourceFirsts.Clear();
             foreach (int n in asset.NextNodes)
@@ -621,9 +617,7 @@ internal sealed unsafe partial class ViewportRenderer
                 int first = asset.Slots[node].First;
                 asset.SourceNodes.Add(node);
                 asset.SourceFirsts.Add(first);
-                uint row = (uint)first;
-                for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
-                    worldSourceIndex[entry] = row++;
+                worldNodeRow[n] = first;
             }
             int count = asset.SourceRows;
             bool replaced = count > asset.Capacity;
@@ -715,7 +709,7 @@ internal sealed unsafe partial class ViewportRenderer
             WorldCullSet.PreparedNode block = set.Blocks[n];
             for (int i = 0; i < block.Count; i++)
             {
-                uint row = worldSourceIndex[set.First[n] + i];
+                uint row = (uint)(worldNodeRow[n] + i);
                 if (asset.Sources.Matrices[row * 2] != block.World[i] || !ReferenceEquals(asset.Placements[(int)row].Node, set.Nodes[n]))
                     return false;
             }
@@ -896,7 +890,8 @@ internal sealed unsafe partial class ViewportRenderer
             gatheredAssets.Clear();
             foreach (int entry in entries)
             {
-                WorldGpuAsset asset = worldNodeAsset[set.Node[entry]]!;
+                int node = set.Node[entry];
+                WorldGpuAsset asset = worldNodeAsset[node]!;
                 if (!asset.Gathered)
                 {
                     asset.Gathered = true;
@@ -908,7 +903,7 @@ internal sealed unsafe partial class ViewportRenderer
                     listedAssets.Add(asset);
                 }
                 float x = set.X[entry] - eye.X, y = set.Y[entry] - eye.Y, z = set.Z[entry] - eye.Z;
-                asset.Buckets[asset.Level(x * x + y * y + z * z)].Add(worldSourceIndex[entry]);
+                asset.Buckets[asset.Level(x * x + y * y + z * z)].Add((uint)(worldNodeRow[node] + entry - set.First[node]));
             }
             foreach (WorldGpuAsset asset in gatheredAssets)
             {
