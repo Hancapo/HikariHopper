@@ -323,9 +323,9 @@ internal sealed unsafe partial class ViewportRenderer
 
         void SetBindGroup(uint index, BindGroup group);
 
-        void SetVertexBuffer(uint slot, Buffer buffer);
+        void SetVertexBuffer(uint slot, WorldSlice slice);
 
-        void SetIndexBuffer(Buffer buffer);
+        void SetIndexBuffer(WorldSlice slice);
 
         void Draw(int argument);
     }
@@ -336,9 +336,9 @@ internal sealed unsafe partial class ViewportRenderer
 
         public void SetBindGroup(uint index, BindGroup group) => encoder.SetBindGroup(index, group);
 
-        public void SetVertexBuffer(uint slot, Buffer buffer) => encoder.SetVertexBuffer(slot, buffer, 0);
+        public void SetVertexBuffer(uint slot, WorldSlice slice) => encoder.SetVertexBuffer(slot, slice.Buffer, slice.Offset, slice.Size);
 
-        public void SetIndexBuffer(Buffer buffer) => encoder.SetIndexBuffer(buffer, IndexFormat.Uint32, 0);
+        public void SetIndexBuffer(WorldSlice slice) => encoder.SetIndexBuffer(slice.Buffer, IndexFormat.Uint32, slice.Offset, slice.Size);
 
         public void Draw(int argument) => encoder.DrawIndexedIndirect(arguments, (ulong)argument * 20);
     }
@@ -349,9 +349,9 @@ internal sealed unsafe partial class ViewportRenderer
 
         public void SetBindGroup(uint index, BindGroup group) => pass.SetBindGroup(index, group);
 
-        public void SetVertexBuffer(uint slot, Buffer buffer) => pass.SetVertexBuffer(slot, buffer, 0);
+        public void SetVertexBuffer(uint slot, WorldSlice slice) => pass.SetVertexBuffer(slot, slice.Buffer, slice.Offset, slice.Size);
 
-        public void SetIndexBuffer(Buffer buffer) => pass.SetIndexBuffer(buffer, IndexFormat.Uint32, 0);
+        public void SetIndexBuffer(WorldSlice slice) => pass.SetIndexBuffer(slice.Buffer, IndexFormat.Uint32, slice.Offset, slice.Size);
 
         public void Draw(int argument)
         {
@@ -368,13 +368,12 @@ internal sealed unsafe partial class ViewportRenderer
             return 0;
         bool shadow = bundle >= ShadowBundle;
         int pass = shadow ? 1 + bundle - ShadowBundle : 0;
-        Buffer? instances = shadow ? asset.ShadowInstances : asset.Instances;
-        if (instances is null)
+        if ((shadow ? asset.ShadowInstances : asset.Instances) is not { } instances)
             return 0;
         target.SetBindGroup(3, asset.SourceGroup);
-        target.SetVertexBuffer(0, asset.Vertices);
+        target.SetVertexBuffer(0, asset.Vertices.Value);
         target.SetVertexBuffer(1, instances);
-        target.SetIndexBuffer(asset.Indices!);
+        target.SetIndexBuffer(asset.Indices!.Value);
         int draws = 0;
         if (shadow)
         {
@@ -579,9 +578,9 @@ internal sealed unsafe partial class ViewportRenderer
             if (draw.Asset != boundAsset)
             {
                 pass.SetBindGroup(3, draw.Asset.SourceGroup!);
-                pass.SetVertexBuffer(0, draw.Asset.Vertices!);
-                pass.SetVertexBuffer(1, draw.Asset.Instances!);
-                pass.SetIndexBuffer(draw.Asset.Indices!, IndexFormat.Uint32);
+                SetSlice(pass, 0, draw.Asset.Vertices!.Value);
+                SetSlice(pass, 1, draw.Asset.Instances!.Value);
+                SetIndexSlice(pass, draw.Asset.Indices!.Value);
                 boundAsset = draw.Asset;
             }
             if (draw.Mesh.Material != boundMaterial)

@@ -186,7 +186,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// colour slot through its sRGB view; a missing slot as RedFury fills it: a flat normal for a normal map, black for
     /// the emissive map, a checkerboard for a colour map it names that wasn't found, white otherwise.
     /// </summary>
-    private BindGroup Rdr2Group(Rdr2Material material, Buffer? had = null)
+    private BindGroup Rdr2Group(Rdr2Material material, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -196,7 +196,7 @@ internal sealed unsafe partial class ViewportRenderer
         }
         var entries = new List<BindGroupEntry>
         {
-            new() { Binding = 0, Buffer = uniforms, Size = Rdr2Material.UniformBytes },
+            new() { Binding = 0, Buffer = uniforms, Offset = offset, Size = Rdr2Material.UniformBytes },
             new() { Binding = 1, Sampler = surfaceSampler! },
         };
         for (int slot = 0; slot < Rdr2Material.Slots; slot++)

@@ -23,7 +23,7 @@ internal sealed unsafe partial class ViewportRenderer
         internal readonly WorldLightBones LightBones = source.LightBones;
         internal readonly float[] LodReach2 = source.LodReach2;
 
-        internal Buffer? Vertices, Indices;
+        internal WorldSlice? Vertices, Indices;
 
         // Its surfaces, laid out by level of detail with each level's solid ones together, and those runs of solid
         // surfaces, each drawn as one in the shadow.
@@ -34,7 +34,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         // The covered placements' matrices (a storage buffer, and the group reading it), and the indexes of those the
         // camera sees and of those casting into each cascade.
-        internal Buffer? SourceInstances, Instances, ShadowInstances;
+        internal WorldSlice? SourceInstances, Instances, ShadowInstances;
         internal BindGroup? SourceGroup;
         internal readonly WorldInstanceBuffer Sources = new();
 
@@ -84,7 +84,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // A surface of an asset: its part (with indexes into the asset's vertices as they are), and how it's drawn.
-    private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, Buffer Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
+    private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, WorldSlice Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
         WorldFamily Family)
     {
         internal int Level => Part.Lod is >= 0 and < WorldAsset.Lods ? Part.Lod : 0;
@@ -107,6 +107,33 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly record struct WorldBlendedDraw(WorldGpuAsset Asset, WorldMesh Mesh, uint Instance, float Distance);
 
     private readonly Dictionary<WorldAssetKey, WorldGpuAsset> worldAssets = [];
+
+    // The assets' buffers, in shared pages by usage: vertices and placements' indexes, indexes, placements' matrices,
+    // and materials' values.
+    private WorldBufferPages? worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages;
+
+    private WorldBufferPages VertexPages => worldVertexPages ??= new(device, BufferUsage.Vertex | BufferUsage.CopyDst);
+
+    private WorldBufferPages IndexPages => worldIndexPages ??= new(device, BufferUsage.Index | BufferUsage.CopyDst);
+
+    private WorldBufferPages StoragePages => worldStoragePages ??= new(device, BufferUsage.Storage | BufferUsage.CopyDst);
+
+    private WorldBufferPages UniformPages => worldUniformPages ??= new(device, BufferUsage.Uniform | BufferUsage.CopyDst, 1024 * 1024);
+
+    /// <summary>The GPU memory the world's buffer pages take, what's used of it, and how many buffers they are.</summary>
+    internal (ulong Bytes, ulong Used, int Buffers) WorldBufferMemory
+    {
+        get
+        {
+            WorldBufferPages?[] all = [worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages];
+            ulong bytes = 0, used = 0;
+            int buffers = 0;
+            foreach (WorldBufferPages? pages in all)
+                if (pages is not null)
+                    (bytes, used, buffers) = (bytes + pages.Bytes, used + pages.UsedBytes, buffers + pages.Buffers);
+            return (bytes, used, buffers);
+        }
+    }
     private readonly Dictionary<GameTexture, int> worldTextureUsers = new(ReferenceEqualityComparer.Instance);
     private readonly WorldCullSet worldCull = new();
     private WorldSelection worldSelection = new([], []);
@@ -292,6 +319,8 @@ internal sealed unsafe partial class ViewportRenderer
         worldPicked = null;
         WorldDrawnCount = 0;
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
+        foreach (WorldBufferPages? pages in new[] { worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages })
+            pages?.Clear();
     }
 
     private void RemoveWorldAsset(WorldAssetKey key)
@@ -304,14 +333,14 @@ internal sealed unsafe partial class ViewportRenderer
         ReleaseAssetBundles(asset);
         if (asset.IndirectFirst >= 0)
             worldArgumentAllocator.Free(asset.IndirectFirst, ArgumentSlots(asset));
-        // The GPU memory goes now, not whenever the handles are collected.
-        asset.Vertices?.Destroy();
-        asset.Indices?.Destroy();
-        asset.SourceInstances?.Destroy();
-        asset.Instances?.Destroy();
-        asset.ShadowInstances?.Destroy();
-        foreach (Buffer uniforms in asset.Meshes.Select(mesh => mesh.Uniforms).Distinct())
-            uniforms.Destroy();
+        // Its ranges of the pages go back now.
+        FreeSlice(VertexPages, asset.Vertices);
+        FreeSlice(IndexPages, asset.Indices);
+        FreeSlice(StoragePages, asset.SourceInstances);
+        FreeSlice(VertexPages, asset.Instances);
+        FreeSlice(VertexPages, asset.ShadowInstances);
+        foreach (WorldSlice uniforms in asset.Meshes.Select(mesh => mesh.Uniforms).Distinct())
+            UniformPages.Free(uniforms);
         foreach (GameTexture texture in asset.Textures)
         {
             int users = worldTextureUsers[texture] - 1;
@@ -324,6 +353,16 @@ internal sealed unsafe partial class ViewportRenderer
             ForgetTexture(texture);
         }
     }
+
+    private static void FreeSlice(WorldBufferPages pages, WorldSlice? slice)
+    {
+        if (slice is { } range)
+            pages.Free(range);
+    }
+
+    private static void SetSlice(RenderPassEncoder pass, uint slot, WorldSlice slice) => pass.SetVertexBuffer(slot, slice.Buffer, slice.Offset, slice.Size);
+
+    private static void SetIndexSlice(RenderPassEncoder pass, WorldSlice slice) => pass.SetIndexBuffer(slice.Buffer, IndexFormat.Uint32, slice.Offset, slice.Size);
 
     // A texture no asset binds any more, off the GPU.
     private void ForgetTexture(GameTexture texture)
@@ -381,25 +420,26 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 int capacity = Math.Max(16, count);
                 ReleaseAssetBundles(asset);
-                asset.SourceInstances?.Destroy();
-                asset.Instances?.Destroy();
+                FreeSlice(StoragePages, asset.SourceInstances);
+                FreeSlice(VertexPages, asset.Instances);
                 SetInstanceCharge(asset, capacity, asset.ShadowCapacity);
                 asset.Data.Reserve(capacity);
-                asset.SourceInstances = device.CreateBuffer(new BufferDescriptor { Size = (ulong)capacity * 128, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+                WorldSlice sources = StoragePages.Allocate((ulong)capacity * 128);
+                asset.SourceInstances = sources;
                 asset.SourceGroup = device.CreateBindGroup(new BindGroupDescriptor
                 {
                     Layout = worldInstanceLayout!,
                     Entries =
                     [
-                        new BindGroupEntry { Binding = 0, Buffer = asset.SourceInstances, Size = (ulong)capacity * 128 },
+                        new BindGroupEntry { Binding = 0, Buffer = sources.Buffer, Offset = sources.Offset, Size = sources.Size },
                     ],
                 });
-                asset.Instances = device.CreateBuffer(new BufferDescriptor { Size = (ulong)capacity * 4, Usage = BufferUsage.Vertex | BufferUsage.CopyDst });
+                asset.Instances = VertexPages.Allocate((ulong)capacity * 4);
                 asset.Rewrite = true;
                 worldVisibilityDirty = true;
             }
             if (count > 0 && (replaced || asset.Sources.Changed))
-                queue.WriteBuffer(asset.SourceInstances!, 0, (ReadOnlySpan<Matrix4x4>)asset.Sources.Matrices.AsSpan(0, count * 2));
+                queue.WriteBuffer(asset.SourceInstances!.Value.Buffer, asset.SourceInstances.Value.Offset, (ReadOnlySpan<Matrix4x4>)asset.Sources.Matrices.AsSpan(0, count * 2));
             bool reflected = false;
             for (int i = 0; i < count && !reflected; i++)
                 reflected = asset.Sources.Matrices[i * 2].GetDeterminant() < 0;
@@ -528,22 +568,22 @@ internal sealed unsafe partial class ViewportRenderer
             TrackBundleLods(asset);
             if ((asset.Data.Changed || asset.Rewrite) && asset.Data.Count > 0)
             {
-                queue.WriteBuffer(asset.Instances!, 0, (ReadOnlySpan<uint>)asset.Data.Values.AsSpan(0, asset.Data.Count));
+                queue.WriteBuffer(asset.Instances!.Value.Buffer, asset.Instances.Value.Offset, (ReadOnlySpan<uint>)asset.Data.Values.AsSpan(0, asset.Data.Count));
                 asset.Rewrite = false;
             }
             if (asset.ShadowData.Count > asset.ShadowCapacity)
             {
                 // Each cascade lists a covered placement once at most: room for the whole coverage in every cascade
                 // keeps turning the camera from growing (and recording again) many assets at once.
-                asset.ShadowInstances?.Destroy();
+                FreeSlice(VertexPages, asset.ShadowInstances);
                 SetInstanceCharge(asset, asset.Capacity, Math.Max(16, Math.Max(asset.ShadowData.Count, asset.Capacity * WorldShadowCascades.Count)));
-                asset.ShadowInstances = device.CreateBuffer(new BufferDescriptor { Size = (ulong)asset.ShadowCapacity * 4, Usage = BufferUsage.Vertex | BufferUsage.CopyDst });
+                asset.ShadowInstances = VertexPages.Allocate((ulong)asset.ShadowCapacity * 4);
                 ReleaseAssetBundles(asset);
                 asset.RewriteShadow = true;
             }
             if ((asset.ShadowData.Changed || asset.RewriteShadow) && asset.ShadowData.Count > 0)
             {
-                queue.WriteBuffer(asset.ShadowInstances!, 0, (ReadOnlySpan<uint>)asset.ShadowData.Values.AsSpan(0, asset.ShadowData.Count));
+                queue.WriteBuffer(asset.ShadowInstances!.Value.Buffer, asset.ShadowInstances.Value.Offset, (ReadOnlySpan<uint>)asset.ShadowData.Values.AsSpan(0, asset.ShadowData.Count));
                 asset.RewriteShadow = false;
             }
             drawn += asset.Data.Count;

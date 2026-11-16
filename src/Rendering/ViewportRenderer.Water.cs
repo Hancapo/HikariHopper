@@ -122,7 +122,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // A GTA water material's group, reading its uniforms from the buffer given.
-    private BindGroup GtaWaterGroup(GtaWater water, Buffer uniforms)
+    private BindGroup GtaWaterGroup(GtaWater water, Buffer uniforms, ulong offset = 0)
     {
         waterSampler ??= device.CreateSampler(new SamplerDescriptor
         {
@@ -141,7 +141,7 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = GtaWaterLayout(),
             Entries =
             [
-                new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = GtaWater.UniformBytes },
+                new BindGroupEntry { Binding = 0, Buffer = uniforms, Offset = offset, Size = GtaWater.UniformBytes },
                 new BindGroupEntry { Binding = 1, Sampler = waterSampler },
                 new BindGroupEntry { Binding = 2, TextureView = View(water.Fog) ?? white! },
                 new BindGroupEntry { Binding = 3, TextureView = View(water.Bump) ?? flat! },

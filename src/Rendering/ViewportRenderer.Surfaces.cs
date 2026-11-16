@@ -462,7 +462,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // With a uniform buffer of its own, filled with the values; or reading one it had, as it is.
-    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null)
+    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -475,7 +475,7 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = materialLayout!,
             Entries =
             [
-                new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+                new BindGroupEntry { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
                 new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
                 new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
                 new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
@@ -536,7 +536,7 @@ internal sealed unsafe partial class ViewportRenderer
         Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
     });
 
-    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null)
+    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -548,7 +548,7 @@ internal sealed unsafe partial class ViewportRenderer
         // height map as high as it goes; without a lookup map every weight is nothing, which is all the first layer.
         var entries = new List<BindGroupEntry>
         {
-            new() { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+            new() { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
             new() { Binding = 1, Sampler = surfaceSampler! },
         };
         for (int i = 0; i < 8; i++)
