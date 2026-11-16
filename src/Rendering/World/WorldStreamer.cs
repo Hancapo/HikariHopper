@@ -26,8 +26,12 @@ internal sealed class WorldStreamer : IDisposable
     private const int PreparedLimit = 16;
     private const long PreparedBytesLimit = 128L * 1024 * 1024;
 
-    // How long a frame starts uploading assets read, once the one going up is up.
-    private static readonly long FrameUploadTicks = System.Diagnostics.Stopwatch.Frequency / 400;
+    // How long a frame uploads assets read: 2.5 ms while the camera stays, 1 ms while it moves, so the detail coming in
+    // as it flies doesn't hold its frames back (the rest goes up once it stops).
+    private static readonly long FrameUploadTicks = System.Diagnostics.Stopwatch.Frequency / 400, MovingUploadTicks = System.Diagnostics.Stopwatch.Frequency / 1000;
+
+    // Where the camera was at the last frame's uploads.
+    private Vector3 uploadEye = new(float.NaN);
 
     // The largest asset uploaded at once.
     private const long LargestAsset = 384L * 1024 * 1024;
@@ -403,15 +407,18 @@ internal sealed class WorldStreamer : IDisposable
     // to the workers once, after.
     private void UploadPrepared(ViewportRenderer viewport)
     {
+        Vector3 eye = viewport.Camera.Eye;
+        long uploadTicks = eye == uploadEye ? FrameUploadTicks : MovingUploadTicks;
+        uploadEye = eye;
         if (viewport.WorldUploadKey is { } uploading && !selected.Requested.Contains(uploading))
         {
             viewport.CancelWorldUpload();
             lock (gate)
                 resident = [.. viewport.WorldResident];
         }
-        if (viewport.HasPendingWorldUpload && !Step(viewport))
+        if (viewport.HasPendingWorldUpload && !Step(viewport, uploadTicks))
             return;
-        long until = System.Diagnostics.Stopwatch.GetTimestamp() + FrameUploadTicks;
+        long until = System.Diagnostics.Stopwatch.GetTimestamp() + uploadTicks;
         HashSet<WorldAssetKey>? protect = null;
         List<WorldAsset>? taken = null;
         while (System.Diagnostics.Stopwatch.GetTimestamp() < until && prepared.TryDequeue(out WorldAsset? asset))
@@ -434,7 +441,7 @@ internal sealed class WorldStreamer : IDisposable
                     MarkFailed(asset.Key, error);
                 }
             }
-            if (viewport.HasPendingWorldUpload && !Step(viewport))
+            if (viewport.HasPendingWorldUpload && !Step(viewport, uploadTicks))
                 break;
         }
         if (taken is null)
@@ -453,12 +460,12 @@ internal sealed class WorldStreamer : IDisposable
     }
 
     // A frame's step of the asset on its way up; whether it's done (up, or let go).
-    private bool Step(ViewportRenderer viewport)
+    private bool Step(ViewportRenderer viewport, long uploadTicks)
     {
         WorldAssetKey key = viewport.WorldUploadKey!.Value;
         try
         {
-            viewport.ProcessWorldUploads();
+            viewport.ProcessWorldUploads(uploadTicks);
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
         {
