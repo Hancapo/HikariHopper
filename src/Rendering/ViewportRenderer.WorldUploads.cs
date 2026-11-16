@@ -27,12 +27,15 @@ internal sealed unsafe partial class ViewportRenderer
         // Its surfaces as they'll be drawn, laid out on the worker that read it.
         internal WorldLayout Layout => Source.Layout;
 
-        // The textures still to go up, the one going up (with its mip level), and those it put up.
+        // The textures still to go up, the one going up (with its mip level), and those it put up (by what they are).
         internal readonly Queue<GameTexture> Textures = new();
         internal GameTexture? Texture;
         internal WebGpuSharp.Texture? GpuTexture;
         internal int Block, Level, Row;
-        internal readonly List<GameTexture> Registered = [];
+        internal readonly List<object> Registered = [];
+
+        // Every texture its materials bind, as read.
+        internal readonly HashSet<GameTexture> Read = new(ReferenceEqualityComparer.Instance);
 
         internal WorldSlice? VertexBuffer, IndexBuffer;
         internal long VertexOffset, IndexOffset;
@@ -50,10 +53,10 @@ internal sealed unsafe partial class ViewportRenderer
     private void BeginWorldUpload(WorldAsset asset)
     {
         var pending = new PendingWorldUpload(asset);
-        var queued = new HashSet<GameTexture>(ReferenceEqualityComparer.Instance);
+        var queued = new HashSet<object>();
         foreach (var (_, material, rdr2) in asset.Layout.Kept)
             foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
-                if (texture is not null && !textures.ContainsKey(texture) && queued.Add(texture))
+                if (texture is not null && pending.Read.Add(texture) && asset.TextureId(texture) is var id && !worldTextures.ContainsKey(id) && queued.Add(id))
                     pending.Textures.Enqueue(texture);
         pendingWorld = pending;
     }
@@ -81,10 +84,12 @@ internal sealed unsafe partial class ViewportRenderer
                 if (pending.GpuTexture is null)
                 {
                     // Another asset's upload may have put it up meanwhile; one that can't be drawn reads as missing.
-                    var made = textures.ContainsKey(texture) ? null : CreateTexture(texture);
+                    object id = pending.Source.TextureId(texture);
+                    var made = worldTextures.ContainsKey(id) ? null : CreateTexture(texture);
                     if (made is not var (created, block))
                     {
-                        textures.TryAdd(texture, null);
+                        if (worldTextures.TryAdd(id, new WorldTexture(null)))
+                            pending.Registered.Add(id);
                         pending.Texture = null;
                         continue;
                     }
@@ -100,8 +105,9 @@ internal sealed unsafe partial class ViewportRenderer
                     (pending.Level, pending.Row) = (pending.Level + 1, 0);
                 if (pending.Level == texture.MipCount)
                 {
-                    textures[texture] = Register(texture, pending.GpuTexture);
-                    pending.Registered.Add(texture);
+                    object id = pending.Source.TextureId(texture);
+                    worldTextures[id] = new WorldTexture(pending.GpuTexture);
+                    pending.Registered.Add(id);
                     (pending.Texture, pending.GpuTexture) = (null, null);
                 }
             }
@@ -148,66 +154,79 @@ internal sealed unsafe partial class ViewportRenderer
     private void FinishWorldUpload(PendingWorldUpload pending)
     {
         var uploaded = new WorldGpuAsset(pending.Source) { Vertices = pending.VertexBuffer, Indices = pending.IndexBuffer };
-        if (uploaded.Vertices is not null)
+        LendWorldTextures(pending.Source, pending.Read);
+        try
         {
-            var groups = new Dictionary<int, (BindGroup Group, WorldSlice Uniforms)>();
-            foreach (int i in pending.Layout.Order)
-            {
-                var (part, material, rdr2) = pending.Layout.Kept[i];
-                WorldFamily family = rdr2 is not null ? rdr2.Water ? WorldFamily.Rdr2Water : WorldFamily.Rdr2
-                    : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
-                if (!groups.TryGetValue(part.Material, out var group))
-                {
-                    CreateWorldFamily(family);
-                    WorldSlice uniforms;
-                    if (rdr2 is not null)
-                    {
-                        uniforms = UniformPages.Allocate(Rdr2Material.UniformBytes);
-                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<byte>)rdr2.Uniforms);
-                        group = (Rdr2Group(rdr2, uniforms.Buffer, uniforms.Offset), uniforms);
-                    }
-                    else if (material.Water is { } water)
-                    {
-                        uniforms = UniformPages.Allocate(GtaWater.UniformBytes);
-                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)water.Uniforms());
-                        group = (GtaWaterGroup(water, uniforms.Buffer, uniforms.Offset), uniforms);
-                    }
-                    else
-                    {
-                        uniforms = UniformPages.Allocate(SurfaceMaterial.UniformBytes);
-                        queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)material.Uniforms);
-                        group = (material.Terrain ? TerrainGroup(material, uniforms.Buffer, uniforms.Offset)
-                            : MaterialGroup(material, material.Uniforms, uniforms.Buffer, uniforms.Offset), uniforms);
-                    }
-                    groups.Add(part.Material, group);
-                    foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
-                        if (texture is not null && !uploaded.Textures.Contains(texture))
-                            uploaded.Textures.Add(texture);
-                }
-                // Terrain is solid ground, as the model viewer draws it; water is blended over the scene behind it.
-                AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
-                    : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
-                uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
-                    material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family));
-            }
-            // RedFury's depth runs: adjacent casters of a level, one draw each.
-            foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
-            {
-                int last = uploaded.DepthRuns.Count - 1;
-                if (last >= 0 && uploaded.DepthRuns[last] is var run && run.Level == mesh.Level && run.FirstIndex + run.IndexCount == mesh.Part.FirstIndex)
-                    uploaded.DepthRuns[last] = run with { IndexCount = run.IndexCount + mesh.Part.IndexCount };
-                else
-                    uploaded.DepthRuns.Add(new WorldDepthRun(mesh.Level, mesh.Part.FirstIndex, mesh.Part.IndexCount));
-            }
-            uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.Mode == AlphaMode.Mask);
+            if (uploaded.Vertices is not null)
+                AddWorldMeshes(pending, uploaded);
         }
-        foreach (GameTexture texture in uploaded.Textures)
-            worldTextureUsers[texture] = worldTextureUsers.GetValueOrDefault(texture) + 1;
+        finally
+        {
+            ReturnWorldTextures(pending.Source, pending.Read);
+        }
+        foreach (object id in uploaded.Textures)
+            if (worldTextures.TryGetValue(id, out WorldTexture? texture))
+                texture.Users++;
         uploaded.Used = worldClock;
         uploaded.Id = ++worldAssetIds;
         worldAssets.Add(pending.Source.Key, uploaded);
         pendingWorld = null;
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
+    }
+
+    // Its surfaces' material groups (each material's values in the uniform pages) and meshes, and its depth runs.
+    private void AddWorldMeshes(PendingWorldUpload pending, WorldGpuAsset uploaded)
+    {
+        var groups = new Dictionary<int, (BindGroup Group, WorldSlice Uniforms)>();
+        foreach (int i in pending.Layout.Order)
+        {
+            var (part, material, rdr2) = pending.Layout.Kept[i];
+            WorldFamily family = rdr2 is not null ? rdr2.Water ? WorldFamily.Rdr2Water : WorldFamily.Rdr2
+                : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
+            if (!groups.TryGetValue(part.Material, out var group))
+            {
+                CreateWorldFamily(family);
+                WorldSlice uniforms;
+                if (rdr2 is not null)
+                {
+                    uniforms = UniformPages.Allocate(Rdr2Material.UniformBytes);
+                    queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<byte>)rdr2.Uniforms);
+                    group = (Rdr2Group(rdr2, uniforms.Buffer, uniforms.Offset), uniforms);
+                }
+                else if (material.Water is { } water)
+                {
+                    uniforms = UniformPages.Allocate(GtaWater.UniformBytes);
+                    queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)water.Uniforms());
+                    group = (GtaWaterGroup(water, uniforms.Buffer, uniforms.Offset), uniforms);
+                }
+                else
+                {
+                    uniforms = UniformPages.Allocate(SurfaceMaterial.UniformBytes);
+                    queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)material.Uniforms);
+                    group = (material.Terrain ? TerrainGroup(material, uniforms.Buffer, uniforms.Offset)
+                        : MaterialGroup(material, material.Uniforms, uniforms.Buffer, uniforms.Offset), uniforms);
+                }
+                groups.Add(part.Material, group);
+                foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
+                    if (texture is not null && pending.Source.TextureId(texture) is var id && !uploaded.Textures.Contains(id))
+                        uploaded.Textures.Add(id);
+            }
+            // Terrain is solid ground, as the model viewer draws it; water is blended over the scene behind it.
+            AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
+                : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
+            uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
+                material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family));
+        }
+        // RedFury's depth runs: adjacent casters of a level, one draw each.
+        foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
+        {
+            int last = uploaded.DepthRuns.Count - 1;
+            if (last >= 0 && uploaded.DepthRuns[last] is var run && run.Level == mesh.Level && run.FirstIndex + run.IndexCount == mesh.Part.FirstIndex)
+                uploaded.DepthRuns[last] = run with { IndexCount = run.IndexCount + mesh.Part.IndexCount };
+            else
+                uploaded.DepthRuns.Add(new WorldDepthRun(mesh.Level, mesh.Part.FirstIndex, mesh.Part.IndexCount));
+        }
+        uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.Mode == AlphaMode.Mask);
     }
 
     /// <summary>Lets go of the asset on its way up, and what it put up that nothing else uses.</summary>
@@ -219,9 +238,9 @@ internal sealed unsafe partial class ViewportRenderer
         pending.GpuTexture?.Destroy();
         FreeSlice(VertexPages, pending.VertexBuffer);
         FreeSlice(IndexPages, pending.IndexBuffer);
-        foreach (GameTexture texture in pending.Registered)
-            if (!worldTextureUsers.ContainsKey(texture))
-                ForgetTexture(texture);
+        foreach (object id in pending.Registered)
+            if (worldTextures.TryGetValue(id, out WorldTexture? texture) && texture.Users == 0)
+                ForgetWorldTexture(id);
         ReleaseWorldMemory(pending.Source.MemoryCost);
     }
 }

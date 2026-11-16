@@ -90,8 +90,17 @@ internal sealed class GtaWorldIndex : WorldIndex
     private readonly LinkedList<(uint Hash, TextureDictionary? Dictionary, long Bytes)> recent = new();
     private long dictionaryBytes;
 
-    /// <summary>How much of the dictionaries read lately is kept for the next asset that reads them.</summary>
-    internal const long DictionaryBudget = 768L * 1024 * 1024;
+    /// <summary>
+    /// How much of the dictionaries read lately is kept for the next asset that reads them. Their textures on the GPU
+    /// are the viewport's, by what they are (<see cref="WorldTextureId"/>), so a dictionary read again isn't uploaded
+    /// again: this only saves reading it.
+    /// </summary>
+    internal const long DictionaryBudget = 192L * 1024 * 1024;
+
+    // Each dictionary's textures, named as they're read.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<FiveFury.Textures.Texture, object> textureIds = new();
+
+    private WorldTextureId? TextureId(FiveFury.Textures.Texture texture) => textureIds.TryGetValue(texture, out object? id) ? (WorldTextureId)id : null;
 
     /// <summary>
     /// Reads an archetype's drawable, fragment (intact) or drawable dictionary member, its textures from its own
@@ -107,7 +116,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         {
             if (key.Member >= water.Quads.Count)
                 throw new FileNotFoundException($"Asset {key} not found.");
-            return WorldAsset.FromGta(key, water.Surface((int)key.Member, WaterTextures()), []);
+            return WorldAsset.FromGta(key, water.Surface((int)key.Member, WaterTextures()), [], TextureId);
         }
         GameFileType type = TypeOf(key.Extension) is { } known and not GameFileType.Ymap ? known
             : throw new NotSupportedException($"Unsupported world asset {key}.");
@@ -150,7 +159,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                     FoamScale = global.FoamScale,
                 };
             }
-        return WorldAsset.FromGta(key, scene, models.Select(model => model.Drawable));
+        return WorldAsset.FromGta(key, scene, models.Select(model => model.Drawable), TextureId);
     }
 
     // Where the game looks for the textures of a model whose archetype names a dictionary (as FiveFury's ResolveTexture):
@@ -255,6 +264,8 @@ internal sealed class GtaWorldIndex : WorldIndex
             if (data is null)
                 return (null, 0);
             TextureDictionary dictionary = FiveFury.Ytd.Ytd.Read(data).Dictionary;
+            foreach (FiveFury.Textures.Texture texture in dictionary.Textures)
+                textureIds.AddOrUpdate(texture, new WorldTextureId(hash, new Hash32((texture.Name ?? "").ToLowerInvariant()).Value));
             return (dictionary, dictionary.Textures.Sum(texture => (long)texture.Data.Length));
         }
         catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException

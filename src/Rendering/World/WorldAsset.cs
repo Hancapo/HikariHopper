@@ -16,10 +16,11 @@ namespace HikariHopper.Rendering.World;
 internal sealed class WorldAsset
 {
     private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IEnumerable<(object Texture, long Bytes)> textures,
-        WorldLightBones lightBones)
+        WorldLightBones lightBones, IReadOnlyDictionary<GameTexture, object>? textureIds = null)
     {
         Key = key;
         Scene = scene;
+        this.textureIds = textureIds ?? new Dictionary<GameTexture, object>();
         LightBones = lightBones;
         LodReach2 = [.. lodDistances.Select(d => d >= float.MaxValue ? float.MaxValue : d * d)];
         foreach (SurfacePart part in scene.Parts)
@@ -60,6 +61,15 @@ internal sealed class WorldAsset
     public long Bytes { get; }
 
     public IReadOnlyList<string> Diagnostics => Scene.Diagnostics;
+
+    private readonly IReadOnlyDictionary<GameTexture, object> textureIds;
+
+    /// <summary>
+    /// What a texture is, for keeping it on the GPU once whichever asset read it: a dictionary's texture by the
+    /// dictionary and its name (a <see cref="WorldTextureId"/>), so it's the one already up when its dictionary is read
+    /// again for another asset; any other, the texture itself.
+    /// </summary>
+    public object TextureId(GameTexture texture) => textureIds.TryGetValue(texture, out object? id) ? id : texture;
 
     /// <summary>
     /// Reads an asset from the catalog's archives: a drawable (extension 2), a fragment's intact drawables (3) or a
@@ -110,7 +120,8 @@ internal sealed class WorldAsset
     /// A GTA V asset made ready from its scene (GtaWorldIndex reads it): each level's switch distance its drawables'
     /// furthest (unlimited where none says), and what its textures hold, the dictionaries' shared with other assets.
     /// </summary>
-    public static WorldAsset FromGta(WorldAssetKey key, DrawableScene scene, IEnumerable<FiveFury.Drawables.Drawable> drawables)
+    public static WorldAsset FromGta(WorldAssetKey key, DrawableScene scene, IEnumerable<FiveFury.Drawables.Drawable> drawables,
+        Func<GameTexture, WorldTextureId?>? identify = null)
     {
         float[] distances = [0, 0, 0, 0];
         foreach (FiveFury.Drawables.Drawable drawable in drawables)
@@ -125,7 +136,13 @@ internal sealed class WorldAsset
             foreach (GameTexture? texture in material.BoundTextures())
                 if (texture is not null)
                     textures.Add(texture);
-        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.Carrying(scene.Lights));
+        var ids = new Dictionary<GameTexture, object>(ReferenceEqualityComparer.Instance);
+        if (identify is not null)
+            foreach (GameTexture texture in textures)
+                if (identify(texture) is { } id)
+                    ids[texture] = id;
+        return new WorldAsset(key, scene, distances, textures.Select(texture => (ids.GetValueOrDefault(texture) ?? texture, (long)texture.Data.Length)),
+            WorldLightBones.Carrying(scene.Lights), ids);
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once.
@@ -136,6 +153,12 @@ internal sealed class WorldAsset
 
     private static long nextIdentity;
     private static readonly ConditionalWeakTable<object, MemoryIdentity> Identities = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<WorldTextureId, long> NamedIdentities = new();
+
+    // A texture named by its dictionary is the same allocation however many times it's read.
+    private static long IdentityOf(object texture) => texture is WorldTextureId id
+        ? NamedIdentities.GetOrAdd(id, _ => Interlocked.Increment(ref nextIdentity))
+        : Identities.GetOrCreateValue(texture).Value;
 
     // Geometry on the GPU and while it's made (twice), each material's uniforms; each texture's pixels as read and on
     // the GPU.
@@ -143,11 +166,14 @@ internal sealed class WorldAsset
     {
         long owned = 2 * ((long)scene.Vertices.Length * SurfaceVertex.Size + (long)scene.Indices.Length * 4)
             + (long)scene.Materials.Count * Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024;
-        var shared = textures.DistinctBy(texture => texture.Texture, ReferenceEqualityComparer.Instance)
-            .Select(texture => new WorldSharedMemory(Identities.GetOrCreateValue(texture.Texture).Value, texture.Bytes * 3));
+        var shared = textures.DistinctBy(texture => texture.Texture)
+            .Select(texture => new WorldSharedMemory(IdentityOf(texture.Texture), texture.Bytes * 3));
         return new WorldMemoryCost(owned, shared);
     }
 }
+
+/// <summary>A texture of a texture dictionary the game streams: the dictionary's name hash and the texture's.</summary>
+internal readonly record struct WorldTextureId(uint Dictionary, uint Name);
 
 /// <summary>
 /// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials, water
