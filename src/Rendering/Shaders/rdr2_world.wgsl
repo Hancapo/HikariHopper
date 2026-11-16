@@ -31,6 +31,7 @@ fn vs_rdr2_world(vertex: Rdr2Vertex, @location(8) source_index: u32) -> Material
     if (is_grass(instance)) {
         output.grass_colour_ao = vec4f(instance.n0.w, instance.n1.w, instance.n2.w, instance.n3.w);
     }
+    output.lod_fade = instance_lod_fade(instance);
     output.position = scene.view_projection * vec4f(placed.position, 1.0);
     return output;
 }
@@ -38,5 +39,10 @@ fn vs_rdr2_world(vertex: Rdr2Vertex, @location(8) source_index: u32) -> Material
 @fragment
 fn fs_rdr2_world(input: MaterialVertexOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.relative_position);
-    return shade_material(input, front);
+    // Left out after shading, which needs uniform control flow.
+    let colour = shade_material(input, front);
+    if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
+        discard;
+    }
+    return colour;
 }

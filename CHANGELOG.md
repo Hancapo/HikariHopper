@@ -44,6 +44,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Plan the worlds' streaming with each asset's cost kept as a running total rather than the whole cut priced at every step: flying over GTA V's city allocates a quarter of what it did and collects garbage a seventh as often, so far fewer frames are held up. ([#270](https://github.com/Hancapo/HikariHopper/pull/270))
 - Pace the 3D view at a steady rate its frames keep up with, every first, second, third or fourth refresh of the display, rather than at every refresh whatever they took: on a fast or variable refresh display frames no longer go out unevenly. ([#271](https://github.com/Hancapo/HikariHopper/pull/271))
 - Upload the detail streaming in for 1 ms a frame while the camera moves, 2.5 ms once it stays: a world's frames are held up less as its levels of detail change in flight. ([#272](https://github.com/Hancapo/HikariHopper/pull/272))
+- Fade between levels of detail in both games' worlds as GTA V does: a model and the ones replacing it share their pixels by a dither for 0.4 s as one gives way to the other, instead of the swap popping. ([#273](https://github.com/Hancapo/HikariHopper/pull/273))
 - Look around with the free camera as RedFury.World does: by the mouse's raw motion, turned once a frame, the pointer hidden and held in the view while dragging and put back after; frames drawn ahead of the streaming threads, and a slow frame no longer throws the camera forward. ([#267](https://github.com/Hancapo/HikariHopper/pull/267))
 
 ### Fixed
