@@ -79,6 +79,10 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.Equal("bh1_48", index.NameOf(interiorLod.Id.Map));
             Assert.Equal(index.Lod.Nodes.Count(node => node.Parent == interiorLod.Id), interiorLod.ExpectedChildren);
             Assert.True(armchair.Distance <= 45);
+            // The menu says where it is in its interior, not the placing map's entity of its number; a map's own entity
+            // is that.
+            Assert.Matches(@"^interior entity \d+$", index.PlacementDetail(armchair));
+            Assert.Null(index.PlacementDetail(placed));
             // The open water: water.xml's quads, each its own asset, with the game's water textures and watertune.xml's
             // values; the ocean's fog map read over the map by world position.
             WorldLodNode sea = index.Lod.Nodes.First(node => node.Asset.Extension == GtaWorldWater.Extension);

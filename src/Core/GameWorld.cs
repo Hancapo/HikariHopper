@@ -147,6 +147,12 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
 
     /// <summary>The ambient of the interior room a placement is in; null for one outside, or a game without rooms' ambients.</summary>
     public virtual InteriorAmbient? AmbientOf(WorldLodNode node) => null;
+
+    /// <summary>
+    /// Where in its map a placement is, as the right-click menu says it (after the map's name), for one that isn't simply
+    /// the map's entity of its number (a GTA V interior's); null for those that are.
+    /// </summary>
+    public virtual string? PlacementDetail(WorldLodNode node) => null;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>
