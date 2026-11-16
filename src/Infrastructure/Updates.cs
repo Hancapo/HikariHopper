@@ -61,7 +61,13 @@ internal static class Updates
     /// changed. Nothing while the folder's lock file is open, as it is while a copy of the app downloads or installs an
     /// update. A file that can't go stays for the next time. False when it left everything for the lock.
     /// </summary>
-    public static bool RemoveLeftovers(string packages, string? work, string? keep)
+    public static bool RemoveLeftovers(string packages, string? work, string? keep) => RemoveLeftovers(packages, work, () => keep);
+
+    /// <summary>
+    /// As <see cref="RemoveLeftovers(string, string?, string?)"/>, with the package kept named once the lock is held: a
+    /// download finishing in between would otherwise be the newest package, and deleted.
+    /// </summary>
+    public static bool RemoveLeftovers(string packages, string? work, Func<string?> newest)
     {
         if (!Directory.Exists(packages))
             return true;
@@ -77,6 +83,7 @@ internal static class Updates
         }
         using (gate)
         {
+            string? keep = newest();
             // Only a folder inside the packages folder, as Velopack's is (VelopackTemp): never one a wrong path names.
             if (work is not null && Directory.Exists(work) && Inside(work, packages))
                 Try(() => Directory.Delete(work, recursive: true));
@@ -161,7 +168,7 @@ internal sealed class GitHubUpdateSource : IUpdateSource
             return;
         try
         {
-            Updates.RemoveLeftovers(packages, locator.AppTempDir, locator.GetLatestLocalFullPackage()?.FileName);
+            Updates.RemoveLeftovers(packages, locator.AppTempDir, () => locator.GetLatestLocalFullPackage()?.FileName);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

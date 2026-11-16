@@ -36,8 +36,12 @@ internal sealed class FakeUpdateSource : IUpdateSource
     /// <summary>Thrown by a download, as when the connection drops.</summary>
     public Exception? DownloadError { get; set; }
 
+    /// <summary>How many downloads were started.</summary>
+    public int Downloads { get; private set; }
+
     public async Task DownloadAsync(AvailableUpdate update, Action<int> progress, CancellationToken cancel)
     {
+        Downloads++;
         if (DownloadError is not null)
             throw DownloadError;
         progress(50);
@@ -61,7 +65,14 @@ internal sealed class FakeUpdateSource : IUpdateSource
     /// <summary>How many times what updating left behind was cleaned up.</summary>
     public int CleanUps => Volatile.Read(ref cleanUps);
 
-    public void CleanUp() => Interlocked.Increment(ref cleanUps);
+    /// <summary>Holds each clean-up until set, when given, as a slow one holding the packages folder's lock.</summary>
+    public ManualResetEventSlim? CleanUpGate { get; set; }
+
+    public void CleanUp()
+    {
+        CleanUpGate?.Wait();
+        Interlocked.Increment(ref cleanUps);
+    }
 }
 
 [Collection(ExplorerCollection.Name)]
@@ -305,7 +316,47 @@ public sealed class UpdateTests : ExplorerTestBase, IDisposable
 
         // Nothing there to clean: nothing happens.
         Assert.True(Updates.RemoveLeftovers(packages, Path.Combine(packages, "VelopackTemp"), "HikariHopper-0.2.1-full.nupkg"));
-        Assert.True(Updates.RemoveLeftovers(Path.Combine(Work, "none"), null, null));
+        Assert.True(Updates.RemoveLeftovers(Path.Combine(Work, "none"), null, (string?)null));
+    }
+
+    [Fact]
+    public void ThePackageKeptIsTheNewestOnceTheLockIsHeld()
+    {
+        // A download finishing just before the clean-up takes the lock is the newest package then, and stays.
+        string packages = Packages();
+        Assert.True(Updates.RemoveLeftovers(packages, null, () =>
+        {
+            File.WriteAllText(Path.Combine(packages, "HikariHopper-0.2.2-full.nupkg"), "new");
+            return "HikariHopper-0.2.2-full.nupkg";
+        }));
+        Assert.Contains("HikariHopper-0.2.2-full.nupkg", Left(packages));
+        Assert.DoesNotContain("HikariHopper-0.2.1-full.nupkg", Left(packages));
+        // Nor is it asked for while another copy holds the lock.
+        bool asked = false;
+        using (new FileStream(Path.Combine(packages, ".velopack_lock"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            Assert.False(Updates.RemoveLeftovers(packages, null, () => { asked = true; return null; }));
+        Assert.False(asked);
+    }
+
+    [AvaloniaFact]
+    public async Task ADownloadWaitsForTheCleanUpStillRunning()
+    {
+        source.Found = Version005;
+        using var gate = new ManualResetEventSlim();
+        source.CleanUpGate = gate;
+        UpdateFlow updates = Open(out _);
+        await Settled(updates.Checked);
+
+        Click(updates.Sheet!, "Update and restart");
+        Pump();
+        Thread.Sleep(100);
+        Pump();
+        Assert.Equal(0, source.Downloads);
+
+        gate.Set();
+        await Settled(updates.Updating);
+        Assert.Equal(1, source.Downloads);
+        Assert.Same(source.Found, source.Applied);
     }
 
     [Fact]

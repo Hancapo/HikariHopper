@@ -160,6 +160,8 @@ internal sealed class UpdateFlow
         shown.ShowProgress(0, update.Size);
         try
         {
+            // A clean-up still running holds the packages folder's lock, which the download would give up waiting for.
+            await CleanedUp.ContinueWith(_ => { }, TaskScheduler.Default);
             await Updates.Source.DownloadAsync(update,
                 percent => Dispatcher.UIThread.Post(() =>
                 {
