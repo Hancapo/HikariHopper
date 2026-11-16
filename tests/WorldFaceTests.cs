@@ -227,4 +227,62 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.False(tab.InWorld);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Until_its_index_is_ready_the_world_shows_its_loading_screen_and_opens_by_itself()
+    {
+        using var release = new ManualResetEventSlim();
+        Rdr2World.Builder = (_, crypto, report, _) =>
+        {
+            report(new Rdr2WorldProgress("Reading the maps", .42));
+            release.Wait(TimeSpan.FromSeconds(20));
+            return EmptyWorld(crypto);
+        };
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        // Started as the game opened.
+        TestWait.Until(() => tab.WorldProgress is not null, "the world's index to report");
+        Assert.True(tab.WorldPreparing);
+        Assert.False(tab.WorldReady);
+        tab.ShowWorld();
+        TestWait.Pump(100);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Cover.IsVisible);
+        Assert.False(world.Viewport.IsVisible);
+        Assert.Equal("READING THE MAPS", world.Loading.Title);
+        Assert.Equal("Preparing the world", world.Loading.Detail);
+        Assert.Equal(.42, world.Loading.Progress);
+        Assert.Equal("42%", world.Loading.ProgressText);
+        Assert.Equal("Preparing the world", Find<StatusBar>(window).WorldText.Text);
+        // The switch still works meanwhile.
+        tab.ShowFiles();
+        TestWait.Pump(50);
+        Assert.False(world.Cover.IsVisible);
+        tab.ShowWorld();
+
+        release.Set();
+        TestWait.Until(() => tab.WorldReady || tab.WorldFailure is not null, "the world's index");
+        Assert.Null(tab.WorldFailure);
+        TestWait.Pump(100);
+        Assert.False(world.Cover.IsVisible);
+        Assert.Equal("0 maps · 0 placements", tab.WorldStatus);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_world_that_cant_be_prepared_says_why()
+    {
+        Rdr2World.Builder = (_, _, _, _) => throw new InvalidDataException("The game's content files couldn't be read");
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldFailure is not null, "the world's index to fail");
+        tab.ShowWorld();
+        TestWait.Pump(100);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Cover.IsVisible);
+        Assert.Equal("COULDN'T PREPARE THE WORLD", world.Loading.Title);
+        Assert.Equal("The game's content files couldn't be read", world.Loading.Detail);
+        Assert.False(world.Loading.IsRunning);
+        window.Close();
+    }
 }

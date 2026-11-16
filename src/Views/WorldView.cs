@@ -11,7 +11,9 @@ namespace HikariHopper.Views;
 /// A game's world, on its tab's World side (<see cref="ExplorerViewModel.InWorld"/>): the 3D view, under the address row
 /// and over the status bar, with a camera that flies (W A S D, Q and E down and up, drag to look, wheel for speed). It
 /// starts where the tab's camera was left (<see cref="ExplorerViewModel.WorldSpot"/>) and says where it is as it moves.
-/// One view serves every tab, as the files' views do, moving its camera to the tab shown.
+/// One view serves every tab, as the files' views do, moving its camera to the tab shown. Until the game's world index is
+/// ready, the loading screen shows in its place: the train, what the index is doing, "Preparing the world" and how far
+/// it has got; the world opens by itself when it's done.
 /// <para>
 /// The viewport is a native window, which covers whatever the main window draws over it: it hides while a dialog or a
 /// menu is open over the window, or the tab's loading cover is up.
@@ -36,7 +38,28 @@ internal sealed class WorldView : UserControl
     public WorldView()
     {
         Viewport = new ViewportHost { FreeCamera = true };
-        Content = Viewport;
+        Pattern = new RailPattern { IsRunning = false };
+        Loading = new LoadingOverlay { Background = Avalonia.Media.Brushes.Transparent, Detail = "Preparing the world" };
+        Cover = new Panel
+        {
+            IsVisible = false,
+            Background = Ui.Theme.WindowBg,
+            Children =
+            {
+                Pattern,
+                new Border
+                {
+                    Width = 640,
+                    Height = 320,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                    IsHitTestVisible = false,
+                    Background = Ui.Theme.RailPatternClearing,
+                },
+                Loading,
+            },
+        };
+        Content = new Panel { Children = { Viewport, Cover } };
         Background = Ui.Theme.WindowBg;
         Viewport.Started += _ =>
         {
@@ -79,6 +102,14 @@ internal sealed class WorldView : UserControl
     /// <summary>The 3D view.</summary>
     internal ViewportHost Viewport { get; }
 
+    /// <summary>The loading screen, shown while the world's index is made.</summary>
+    internal Panel Cover { get; }
+
+    /// <summary>The loading screen's train and caption.</summary>
+    internal LoadingOverlay Loading { get; }
+
+    private RailPattern Pattern { get; }
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
@@ -110,6 +141,11 @@ internal sealed class WorldView : UserControl
                 Refresh();
                 break;
             case nameof(ExplorerViewModel.GameLoading):
+            case nameof(ExplorerViewModel.WorldReady):
+            case nameof(ExplorerViewModel.WorldPreparing):
+            case nameof(ExplorerViewModel.WorldStage):
+            case nameof(ExplorerViewModel.WorldProgress):
+            case nameof(ExplorerViewModel.WorldFailure):
                 Refresh();
                 break;
             case nameof(ExplorerViewModel.WorldHours):
@@ -150,7 +186,27 @@ internal sealed class WorldView : UserControl
 
     private void Refresh()
     {
-        bool shown = bridge is { InWorld: true } && !Covered;
+        // The loading screen while the index is made: the stage, small and capitalised, and how far, when known.
+        bool preparing = bridge is { InWorld: true, WorldPreparing: true };
+        Cover.IsVisible = preparing;
+        Pattern.IsRunning = Loading.IsRunning = preparing;
+        if (bridge?.WorldFailure is { } failure)
+        {
+            // Why it couldn't be made, the train standing still.
+            Loading.Title = "COULDN'T PREPARE THE WORLD";
+            Loading.Detail = failure;
+            Loading.Progress = null;
+            Pattern.IsRunning = Loading.IsRunning = false;
+        }
+        else if (bridge is not null)
+        {
+            Loading.Title = bridge.WorldStage.ToUpperInvariant();
+            Loading.Detail = "Preparing the world";
+            Loading.Progress = bridge.WorldProgress;
+            Loading.ProgressText = bridge.WorldProgress is { } share
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{share * 100:0}%") : null;
+        }
+        bool shown = bridge is { InWorld: true, WorldReady: true } && !Covered;
         int request = ++shownRequest;
         if (!shown)
         {
@@ -173,7 +229,5 @@ internal sealed class WorldView : UserControl
         {
             follow.Start();
         }
-        if (bridge is { InWorld: true } world)
-            world.SetWorldStatus("No map streamed yet");
     }
 }

@@ -537,6 +537,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
         expandedNodes = new HashSet<string>(StringComparer.Ordinal) { "game://." };
         ResetNavigation();
         PublishWorkspace();
+        // Its world, if it has one, on its way.
+        PrepareWorld();
         SetStatus($"Loaded {Provider.Info.Version}");
         // Opened from the start page's globe: on its World side, once the load has finished.
         if (worldAsked)
