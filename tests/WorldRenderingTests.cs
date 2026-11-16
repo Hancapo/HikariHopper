@@ -95,5 +95,42 @@ public sealed class WorldRenderingTests
         }
     }
 
+    [Fact]
+    public void A_moving_camera_s_frame_is_drawn_from_where_the_camera_is_now()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(64, 32);
+            renderer.WorldShown = true;
+            renderer.Camera.Frame(new Vector3(195, -1030, 62), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(195, -1030, 62), -MathF.PI / 2, .2f);
+            renderer.RenderTo(view);
+            // Flown 30 m sideways between frames: the point 10 m ahead of the camera now is in the middle of this frame, its
+            // origin the camera, not where it was the frame before.
+            renderer.Camera.Fly(0, 1, 0, 1);
+            renderer.RenderTo(view);
+            var (matrix, origin) = renderer.SceneView;
+            Assert.Equal(renderer.Camera.Eye, origin);
+            Vector4 ahead = Vector4.Transform(new Vector4(renderer.Camera.Eye + renderer.Camera.Forward * 10 - origin, 1), matrix);
+            Assert.Equal(0, ahead.X / ahead.W, 3);
+            Assert.Equal(0, ahead.Y / ahead.W, 3);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+
     private const long WorldShadowCount = Rendering.World.WorldShadowCascades.Count;
 }
