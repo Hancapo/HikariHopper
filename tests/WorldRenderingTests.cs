@@ -27,6 +27,7 @@ public sealed class WorldRenderingTests
             });
             gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
             renderer.CreateWorldPipelines();
+            renderer.CreatePickPipelines();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Shadows = true;
@@ -35,6 +36,8 @@ public sealed class WorldRenderingTests
             renderer.Camera.Place(new Vector3(-300, 740, 132), -MathF.PI / 2, .18f);
             renderer.SetTime(14);
             renderer.RenderTo(target.CreateView());
+            // Nothing streamed: nothing under the pointer.
+            Assert.Null(renderer.PickWorldAt(32, 16));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
             Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
             Assert.Equal(WorldShadowCount, renderer.CascadesCast);

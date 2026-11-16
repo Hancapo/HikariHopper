@@ -293,6 +293,52 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void A_picked_placements_menu_names_it_jumps_to_its_files_and_copies_it()
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady || tab.WorldFailure is not null, "the world's index");
+        string map = Write(Path.Combine(tab.Provider.GamePath, "x64", "val_02__strm_0.ymap"), "map");
+        tab.ShowWorld();
+        TestWait.Pump(50);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        var placement = new WorldPlacement("val_bank", "val_02__strm_0.ymap · entity 50", null,
+            new WorldFile("x64/val_02__strm_0.ymap", 3), new System.Numerics.Vector3(-306.42f, 771.15f, 120.61f));
+        world.OpenMenu(placement, new Avalonia.Point(200, 150));
+        TestWait.Pump(50);
+        Assert.NotNull(world.Menu);
+        List<TextBlock> texts = [.. world.Menu!.GetVisualDescendants().OfType<TextBlock>()];
+        Assert.Equal("val_bank", texts[0].Text);
+        Assert.Equal("val_02__strm_0.ymap · entity 50", texts[1].Text);
+        List<PartsPanel.MenuRowItem> items = [.. world.Menu.GetVisualDescendants().OfType<PartsPanel.MenuRowItem>()];
+        Assert.Equal(["Open model", "Show model in Files", "Show map file in Files", "Copy name", "Copy coordinates"], items.Select(item => item.Text));
+        // Its model wasn't found: what needs it is off.
+        Assert.False(items[0].IsEnabled);
+        Assert.False(items[1].IsEnabled);
+        Assert.True(items[2].IsEnabled);
+
+        world.OpenMenu(placement, new Avalonia.Point(200, 150));
+        TestWait.Pump(50);
+        items = [.. world.Menu!.GetVisualDescendants().OfType<PartsPanel.MenuRowItem>()];
+        items[4].Trigger();
+        Assert.Equal("-306.42, 771.15, 120.61", Clipboard.Text);
+        Assert.Null(world.Menu);
+
+        // The map file shown in its folder, selected; Back returns to the world.
+        world.OpenMenu(placement, new Avalonia.Point(200, 150));
+        TestWait.Pump(50);
+        items = [.. world.Menu!.GetVisualDescendants().OfType<PartsPanel.MenuRowItem>()];
+        items[2].Trigger();
+        Settle([tab]);
+        Assert.False(tab.InWorld);
+        Assert.Equal(["val_02__strm_0.ymap"], tab.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
+        tab.GoBack();
+        Assert.True(tab.InWorld);
+        Assert.True(File.Exists(map));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_world_that_cant_be_prepared_says_why()
     {
         Rdr2World.Builder = (_, _, _, _) => throw new InvalidDataException("The game's content files couldn't be read");
