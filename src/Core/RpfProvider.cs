@@ -80,9 +80,12 @@ public sealed class RpfProvider
         }
     }
 
-    /// <summary>"GTA V Legacy" or "GTA V Enhanced" while a game is open, otherwise "".</summary>
-    public string GameEdition => gameRoot is null ? ""
-        : gameTarget == FiveFury.GameTarget.Enhanced ? "GTA V Enhanced" : "GTA V Legacy";
+    /// <summary>The open game's edition id (<see cref="GameCatalog"/>), "" without a game.</summary>
+    public string GameEditionId => gameRoot is null ? ""
+        : gameTarget == FiveFury.GameTarget.Enhanced ? GameSettings.EnhancedEdition : GameSettings.LegacyEdition;
+
+    /// <summary>The open game's edition as the status bar and tabs name it ("GTA V Legacy"), "" without a game.</summary>
+    public string GameEdition => GameCatalog.Edition(GameEditionId)?.ShortName ?? "";
 
     public bool IsOpen => gameRoot is not null || archive is not null;
 
@@ -146,13 +149,14 @@ public sealed class RpfProvider
         string root = Path.GetFullPath(path);
         if (!Directory.Exists(root))
             throw new ArgumentException($"Game folder does not exist: {root}");
-        string enhanced = Path.Combine(root, "GTA5_Enhanced.exe");
-        string legacy = Path.Combine(root, "GTA5.exe");
-        (GameTarget target, string executable) = File.Exists(enhanced)
-            ? (FiveFury.GameTarget.Enhanced, enhanced)
-            : File.Exists(legacy)
-                ? (FiveFury.GameTarget.Legacy, legacy)
-                : throw new ArgumentException("Select the GTA V folder containing GTA5.exe or GTA5_Enhanced.exe");
+        string edition = GameSettings.GameEditionForPath(root);
+        GameTarget target = edition switch
+        {
+            GameSettings.EnhancedEdition => FiveFury.GameTarget.Enhanced,
+            GameSettings.LegacyEdition => FiveFury.GameTarget.Legacy,
+            _ => throw new ArgumentException("Select the GTA V folder containing GTA5.exe or GTA5_Enhanced.exe"),
+        };
+        string executable = Path.Combine(root, GameSettings.GameExecutable(edition));
         return new LoadedGame(root.TrimEnd(Path.DirectorySeparatorChar), target, GameKeys.Load(executable));
     }
 

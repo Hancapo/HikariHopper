@@ -17,29 +17,28 @@ public static class GameSettings
     private const string LegacyName = "Hikari Hopper";
     private const int SettingsSchemaVersion = 3;
 
-    private static readonly Dictionary<string, (string Key, string Executable, string Title)> Editions = new()
-    {
-        [LegacyEdition] = (LegacyGameRootKey, "GTA5.exe", "Select GTA V Legacy Installation"),
-        [EnhancedEdition] = (EnhancedGameRootKey, "GTA5_Enhanced.exe", "Select GTA V Enhanced Installation"),
-    };
+    public static IEnumerable<string> AllEditions => GameCatalog.Editions.Select(edition => edition.Id);
 
-    public static IEnumerable<string> AllEditions => Editions.Keys;
+    private static GameEditionInfo Info(string edition) =>
+        GameCatalog.Edition(edition) ?? throw new ArgumentException($"No such edition: {edition}", nameof(edition));
 
-    public static string GameRootKey(string edition) => Editions[edition].Key;
+    public static string GameRootKey(string edition) => Info(edition).SettingsKey;
 
-    public static string GameExecutable(string edition) => Editions[edition].Executable;
+    public static string GameExecutable(string edition) => Info(edition).Executable;
 
-    public static string BrowseTitle(string edition) => Editions[edition].Title;
+    public static string BrowseTitle(string edition) => Info(edition).BrowseTitle;
 
-    /// <summary>The GTA V edition installed at <paramref name="value"/>, preferring Enhanced.</summary>
+    /// <summary>
+    /// The edition installed at <paramref name="value"/>, by the executable beside it, in the catalog's order (GTA V
+    /// Enhanced before Legacy); "" when it isn't a game's folder.
+    /// </summary>
     public static string GameEditionForPath(string? value)
     {
         if (string.IsNullOrEmpty(value) || !Directory.Exists(value))
             return "";
-        if (File.Exists(Path.Combine(value, GameExecutable(EnhancedEdition))))
-            return EnhancedEdition;
-        if (File.Exists(Path.Combine(value, GameExecutable(LegacyEdition))))
-            return LegacyEdition;
+        foreach (GameEditionInfo edition in GameCatalog.Editions)
+            if (File.Exists(Path.Combine(value, edition.Executable)))
+                return edition.Id;
         return "";
     }
 
@@ -71,7 +70,7 @@ public static class GameSettings
         string lastRoot = AppSettings.GetString(LastGameRootKey);
         if (IsGameRoot(lastRoot))
             return lastRoot;
-        foreach (string candidate in new[] { EnhancedEdition, LegacyEdition })
+        foreach (string candidate in AllEditions)
         {
             string path = ConfiguredGameRoot(candidate);
             if (IsGameRoot(path, candidate))

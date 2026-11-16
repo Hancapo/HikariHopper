@@ -46,14 +46,9 @@ public sealed class ExplorerTabsViewModel : ObservableObject
             {
                 if (!Directory.Exists(path))
                     continue;
-                string edition;
-                if (File.Exists(Path.Combine(path, "GTA5_Enhanced.exe")))
-                    edition = "GTA V Enhanced";
-                else if (File.Exists(Path.Combine(path, "GTA5.exe")))
-                    edition = "GTA V Legacy";
-                else
+                if (GameCatalog.Edition(GameSettings.GameEditionForPath(path)) is not { } edition)
                     continue;
-                games.Add(new RecentGame(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)), path, edition));
+                games.Add(new RecentGame(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)), path, edition.ShortName));
             }
             return games;
         }
