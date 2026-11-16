@@ -3,6 +3,8 @@ using System.Numerics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using HikariHopper.Core;
+using HikariHopper.Rendering.World;
 using HikariHopper.ViewModels;
 
 namespace HikariHopper.Views;
@@ -13,7 +15,9 @@ namespace HikariHopper.Views;
 /// starts where the tab's camera was left (<see cref="ExplorerViewModel.WorldSpot"/>) and says where it is as it moves.
 /// One view serves every tab, as the files' views do, moving its camera to the tab shown. Until the game's world index is
 /// ready, the loading screen shows in its place: the train, what the index is doing, "Preparing the world" and how far
-/// it has got; the world opens by itself when it's done.
+/// it has got; the world opens by itself when it's done. Then it streams in around the camera (<see cref="WorldStreamer"/>):
+/// the whole map through its lowest levels of detail, the detail near the camera. On the Files side it pauses, keeping
+/// what it streamed.
 /// <para>
 /// The viewport is a native window, which covers whatever the main window draws over it: it hides while a dialog or a
 /// menu is open over the window, or the tab's loading cover is up.
@@ -34,10 +38,13 @@ internal sealed class WorldView : UserControl
     private ExplorerViewModel? bridge;
     private TopLevel? top;
     private int shownRequest;
+    private WorldStreamer? streamer;
+    private Rdr2WorldIndex? streamed;
 
     public WorldView()
     {
-        Viewport = new ViewportHost { FreeCamera = true };
+        Viewport = new ViewportHost { FreeCamera = true, World = true };
+        Viewport.Drawing += (renderer, seconds) => streamer?.Update(renderer, seconds, bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours);
         Pattern = new RailPattern { IsRunning = false };
         Loading = new LoadingOverlay { Background = Avalonia.Media.Brushes.Transparent, Detail = "Preparing the world" };
         Cover = new Panel
@@ -96,6 +103,7 @@ internal sealed class WorldView : UserControl
             Controls.RetroMenu.OpenMenusChanged -= OnMenusChanged;
             follow.Stop();
             top = null;
+            Stream(null);
         };
     }
 
@@ -109,6 +117,9 @@ internal sealed class WorldView : UserControl
     internal LoadingOverlay Loading { get; }
 
     private RailPattern Pattern { get; }
+
+    /// <summary>What streams the world in, once its index is ready; none before, or without a world.</summary>
+    internal WorldStreamer? Streamer => streamer;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -174,11 +185,31 @@ internal sealed class WorldView : UserControl
         Viewport.Place(spot.Eye, spot.Yaw, spot.Pitch);
     }
 
-    // Tells the tab where the camera is, while the world is shown.
+    // Tells the tab where the camera is, and what's streamed, while the world is shown.
     private void Follow()
     {
         if (bridge is { InWorld: true } model && Viewport.CameraSpot is { } camera)
+        {
             model.RememberWorldSpot(new WorldSpot(camera.Eye, camera.Yaw, camera.Pitch));
+            if (streamer is { Status.Length: > 0 } streaming)
+                model.SetWorldStatus(streaming.Status);
+        }
+    }
+
+    /// <summary>
+    /// Streams the world whose index this is, or none: what another world streamed goes. Tabs of the same game share
+    /// one index, and what it streamed.
+    /// </summary>
+    private void Stream(Rdr2WorldIndex? index)
+    {
+        if (ReferenceEquals(index, streamed))
+            return;
+        streamer?.Dispose();
+        streamer = null;
+        streamed = index;
+        Viewport.Renderer?.ClearWorld();
+        if (index is not null)
+            streamer = new WorldStreamer(index);
     }
 
     /// <summary>Whether something the main window draws covers the viewport now: a dialog, a menu, the loading cover.</summary>
@@ -186,6 +217,7 @@ internal sealed class WorldView : UserControl
 
     private void Refresh()
     {
+        Stream(top is null ? null : bridge?.WorldIndex);
         // The loading screen while the index is made: the stage, small and capitalised, and how far, when known.
         bool preparing = bridge is { InWorld: true, WorldPreparing: true };
         Cover.IsVisible = preparing;

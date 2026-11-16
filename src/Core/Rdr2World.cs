@@ -137,7 +137,7 @@ internal sealed partial class Rdr2World
         }
         scanning.GetAwaiter().GetResult();
         report(new Rdr2WorldProgress("Ready", 1));
-        return new Rdr2WorldIndex(catalog.MapCount, catalog.Lod, assets, reads);
+        return new Rdr2WorldIndex(catalog.MapCount, catalog.Lod, assets, reads, crypto);
     }
 }
 
@@ -145,8 +145,9 @@ internal sealed partial class Rdr2World
 /// <param name="MapCount">The base map's maps.</param>
 /// <param name="Lod">Their placements and their levels of detail.</param>
 /// <param name="Assets">The archives the world's assets and textures are found in, scanned.</param>
-/// <param name="Reads">The archives held open for reading them.</param>
-internal sealed record Rdr2WorldIndex(int MapCount, WorldLodGraph Lod, RpfTextureCatalog Assets, RpfReadSession Reads)
+/// <param name="Reads">The archives held open for reading them: one reader at a time, under its lock.</param>
+/// <param name="Crypto">The game's keys, which they're read with.</param>
+internal sealed record Rdr2WorldIndex(int MapCount, WorldLodGraph Lod, RpfTextureCatalog Assets, RpfReadSession Reads, Rdr2Crypto Crypto)
 {
     /// <summary>Every placement in it: an entity, or one of a batch's instances.</summary>
     public long Placements { get; } = Lod.Nodes.Sum(node => (long)Math.Max(1, node.Instances.Count));

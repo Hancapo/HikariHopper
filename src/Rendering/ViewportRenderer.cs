@@ -401,14 +401,18 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     internal void Render(TextureView target)
     {
         CommandEncoder encoder = device.CreateCommandEncoder();
-        // A drawable's shadow first: the ground under it and the drawable itself both read it.
+        // A drawable's shadow first: the ground under it and the drawable itself both read it. A world is lit without
+        // shadows for now.
         bool drawable = surfaceVertices is not null && surfaceParts.Length > 0;
-        if (drawable)
+        bool lit = drawable || worldShown;
+        if (lit)
         {
-            WriteLight(Shadows);
-            if (Shadows)
+            WriteLight(drawable && Shadows);
+            if (drawable && Shadows)
                 DrawShadow(encoder);
         }
+        if (worldShown)
+            UpdateWorldVisibility();
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
             ColorAttachments =
@@ -449,10 +453,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         pass.End();
         // Drawables in HDR, reflecting the scene as it is from the camera, then tone-mapped over the backdrop.
-        if (drawable)
+        if (lit)
         {
             DrawSceneReflections(encoder);
-            RenderPassEncoder lit = encoder.BeginRenderPass(new RenderPassDescriptor
+            RenderPassEncoder hdrPass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments =
                 [
@@ -466,10 +470,13 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
                     DepthClearValue = 0,
                 },
             });
-            lit.SetBindGroup(0, sceneGroup);
-            lit.SetBindGroup(2, lightGroup!);
-            DrawSurfaces(lit);
-            lit.End();
+            hdrPass.SetBindGroup(0, sceneGroup);
+            hdrPass.SetBindGroup(2, lightGroup!);
+            if (drawable)
+                DrawSurfaces(hdrPass);
+            if (worldShown)
+                DrawWorld(hdrPass);
+            hdrPass.End();
             MeasureFrame(encoder);
             if (Bloom)
                 DrawBloom(encoder);
@@ -532,6 +539,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         Render(target);
     }
 
+    /// <summary>The view's width over its height.</summary>
+    internal float Aspect => (float)width / Math.Max(height, 1);
+
     /// <summary>The format frames go to the window in: what <see cref="RenderTo"/> needs.</summary>
     internal TextureFormat PresentFormat => presentFormat;
 
@@ -549,6 +559,13 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // The ground under what is framed, its grid a power of ten about a tenth of its size.
         vectors[4] = new Vector4(aspect, OrbitCamera.TanHalf, Ground, GridSpacing(Camera.Radius));
         ViewportPalette.Linear().CopyTo(vectors[5..]);
+        if (worldShown)
+        {
+            // The world is drawn relative to the camera, and stands on its own ground: the grid goes.
+            origin = Camera.Eye;
+            for (int line = 8; line <= 11; line++)
+                vectors[line].W = 0;
+        }
         vectors[12] = new Vector4(origin, 0);
         // The window's size, then the HDR target's, which the drawables are drawn at.
         vectors[13] = new Vector4(width, height, hdrWidth, hdrHeight);
@@ -594,6 +611,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         segmentBuffer?.Destroy();
         DisposeAntialiasing();
         DestroyOutline();
+        ClearWorld();
         ClearSurfaces();
         surface?.Unconfigure();
     }

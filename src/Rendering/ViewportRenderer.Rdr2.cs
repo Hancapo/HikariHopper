@@ -77,7 +77,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n" + Read("rdr2.wgsl"),
+            Code = LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n" + Read("rdr2_vertex.wgsl") + "\n" + Read("rdr2.wgsl"),
         }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected) =>
             gpu.Pipeline($"rdr2/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor

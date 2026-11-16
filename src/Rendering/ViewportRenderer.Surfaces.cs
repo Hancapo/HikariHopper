@@ -85,7 +85,7 @@ internal sealed unsafe partial class ViewportRenderer
     // Each uploaded texture's GPU texture, and its sRGB view, for the colour slots of RDR2's material.
     private readonly Dictionary<GameTexture, WebGpuSharp.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GameTexture, TextureView?> srgbViews = new(ReferenceEqualityComparer.Instance);
-    private readonly List<WebGpuSharp.Texture> uploaded = [];
+    private readonly HashSet<WebGpuSharp.Texture> uploaded = new(ReferenceEqualityComparer.Instance);
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.

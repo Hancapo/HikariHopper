@@ -121,6 +121,27 @@ internal sealed partial class ViewportHost : NativeControlHost
         }
     }
 
+    private bool world;
+    private long lastFrame;
+
+    /// <summary>Whether the view shows a game's world (<see cref="ViewportRenderer.WorldShown"/>).</summary>
+    public bool World
+    {
+        get => world;
+        set
+        {
+            world = value;
+            if (renderer is not null)
+                renderer.WorldShown = value;
+        }
+    }
+
+    /// <summary>
+    /// Before each frame is drawn, on the UI thread, with the seconds since the one before: what streams a world in
+    /// does its part then.
+    /// </summary>
+    internal event Action<ViewportRenderer, float>? Drawing;
+
     /// <summary>How fast the free camera flies, in metres a second.</summary>
     public float FreeSpeed => renderer?.Camera.Speed ?? 0;
 
@@ -337,6 +358,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             renderer.SetTime(hours);
             ApplyGraphics();
             renderer.Camera.Free = free;
+            renderer.WorldShown = world;
             if (surfaces is not null)
             {
                 renderer.Show(surfaces);
@@ -386,6 +408,11 @@ internal sealed partial class ViewportHost : NativeControlHost
                     (surfaceWidth, surfaceHeight) = (width, height);
                 }
                 Fly(renderer.Camera);
+                long now = Stopwatch.GetTimestamp();
+                // A pause (a hidden viewport) isn't one long frame.
+                float seconds = lastFrame == 0 ? 0 : (float)Math.Min(Stopwatch.GetElapsedTime(lastFrame, now).TotalSeconds, .25);
+                lastFrame = now;
+                Drawing?.Invoke(renderer, seconds);
                 renderer.Draw();
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
                 {

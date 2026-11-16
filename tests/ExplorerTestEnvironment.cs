@@ -106,7 +106,7 @@ public abstract class ExplorerTestBase : IDisposable
 
     /// <summary>A world with no maps: what a test's RDR2 game has.</summary>
     private protected static Rdr2WorldIndex EmptyWorld(RedFury.Rpf.Rdr2Crypto crypto) =>
-        new(0, new RedFury.World.WorldLodGraph([]), new RedFury.Textures.RpfTextureCatalog([]), new RedFury.Rpf.RpfReadSession(crypto));
+        new(0, new RedFury.World.WorldLodGraph([]), new RedFury.Textures.RpfTextureCatalog([]), new RedFury.Rpf.RpfReadSession(crypto), crypto);
 
     public void Dispose()
     {
