@@ -504,6 +504,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         SetStatus($"Could not load game: {message}");
         SetGameLoading(false);
+        worldAsked = false;
     }
 
     private void SetGameLoading(bool loading)
@@ -537,6 +538,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
         ResetNavigation();
         PublishWorkspace();
         SetStatus($"Loaded {Provider.Info.Version}");
+        // Opened from the start page's globe: on its World side, once the load has finished.
+        if (worldAsked)
+        {
+            worldAsked = false;
+            Avalonia.Threading.Dispatcher.UIThread.Post(ShowWorld, Avalonia.Threading.DispatcherPriority.Background);
+        }
     }
 
     /// <summary>Asks for an RPF with the native picker and opens it.</summary>
