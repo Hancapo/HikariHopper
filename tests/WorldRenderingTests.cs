@@ -53,5 +53,47 @@ public sealed class WorldRenderingTests
         ViewportRenderer.DirectWorldDraws = false;
     }
 
+    [Fact]
+    public void A_texture_read_again_for_another_asset_is_the_one_on_the_GPU_and_its_pixels_go()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            var weak = new List<WeakReference>();
+            // Two assets reading the same dictionary's texture, each its own read of it: different objects, one texture.
+            void Add(uint hash)
+            {
+                var dictionary = new FiveFury.Textures.TextureDictionary();
+                var texture = new FiveFury.Textures.Texture("road_d", 4, 4, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[8]);
+                dictionary.Textures.Add(texture);
+                weak.Add(new WeakReference(texture));
+                FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle(diffuseName: "road_d")).Drawable;
+                DrawableScene scene = DrawableScene.Build(drawable, [dictionary]);
+                Assert.Same(texture, scene.Materials.Single().Diffuse);
+                var asset = Rendering.World.WorldAsset.FromGta(new RedFury.World.WorldAssetKey(hash, 2), scene, [drawable],
+                    read => new Rendering.World.WorldTextureId(7, 9));
+                Assert.True(renderer.AddWorldAsset(asset, new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+                while (renderer.HasPendingWorldUpload)
+                    renderer.ProcessWorldUploads();
+            }
+            Add(1);
+            Add(2);
+            Assert.True(renderer.IsWorldReady(new RedFury.World.WorldAssetKey(1, 2)) && renderer.IsWorldReady(new RedFury.World.WorldAssetKey(2, 2)));
+            Assert.Equal(1, renderer.WorldTextureCount);
+            // Up, nothing holds the textures read (nor their pixels).
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Assert.All(weak, reference => Assert.False(reference.IsAlive));
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.ClearWorld();
+            Assert.Equal(0, renderer.WorldTextureCount);
+            renderer.Dispose();
+        }
+    }
+
     private const long WorldShadowCount = Rendering.World.WorldShadowCascades.Count;
 }

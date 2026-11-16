@@ -29,7 +29,7 @@ internal sealed unsafe partial class ViewportRenderer
         // surfaces, each drawn as one in the shadow.
         internal readonly List<WorldMesh> Meshes = [];
         internal readonly List<WorldDepthRun> DepthRuns = [];
-        internal readonly List<GameTexture> Textures = [];
+        internal readonly List<object> Textures = [];
         internal bool CastsShadows;
 
         // The covered placements' matrices (a storage buffer, and the group reading it), and the indexes of those the
@@ -134,7 +134,21 @@ internal sealed unsafe partial class ViewportRenderer
             return (bytes, used, buffers);
         }
     }
-    private readonly Dictionary<GameTexture, int> worldTextureUsers = new(ReferenceEqualityComparer.Instance);
+    // The world's textures on the GPU by what they are (WorldAsset.TextureId), not by the object read: the pixels read
+    // go once they're up, as nothing here holds them, and a texture read again is the one up. Each with how many
+    // assets bind it; one that can't be drawn has no GPU texture and reads as missing.
+    private sealed class WorldTexture(WebGpuSharp.Texture? gpu)
+    {
+        internal readonly WebGpuSharp.Texture? Gpu = gpu;
+        internal readonly TextureView? View = gpu?.CreateView();
+        internal TextureView? Srgb;
+        internal int Users;
+    }
+
+    private readonly Dictionary<object, WorldTexture> worldTextures = [];
+
+    /// <summary>The world's textures on the GPU.</summary>
+    internal int WorldTextureCount => worldTextures.Count;
     private readonly WorldCullSet worldCull = new();
     private WorldSelection worldSelection = new([], []);
     private WorldGpuAsset?[] worldNodeAsset = [];
@@ -341,19 +355,10 @@ internal sealed unsafe partial class ViewportRenderer
         FreeSlice(VertexPages, asset.ShadowInstances);
         foreach (WorldSlice uniforms in asset.Meshes.Select(mesh => mesh.Uniforms).Distinct())
             UniformPages.Free(uniforms);
-        foreach (GameTexture texture in asset.Textures)
-        {
-            int users = worldTextureUsers[texture] - 1;
-            if (users > 0)
-            {
-                worldTextureUsers[texture] = users;
-                continue;
-            }
-            worldTextureUsers.Remove(texture);
-            ForgetTexture(texture);
-        }
+        foreach (object id in asset.Textures)
+            if (worldTextures.TryGetValue(id, out WorldTexture? texture) && --texture.Users <= 0)
+                ForgetWorldTexture(id);
     }
-
     private static void FreeSlice(WorldBufferPages pages, WorldSlice? slice)
     {
         if (slice is { } range)
@@ -365,14 +370,36 @@ internal sealed unsafe partial class ViewportRenderer
     private static void SetIndexSlice(RenderPassEncoder pass, WorldSlice slice) => pass.SetIndexBuffer(slice.Buffer, IndexFormat.Uint32, slice.Offset, slice.Size);
 
     // A texture no asset binds any more, off the GPU.
-    private void ForgetTexture(GameTexture texture)
+    private void ForgetWorldTexture(object id)
     {
-        textures.Remove(texture);
-        srgbViews.Remove(texture);
-        if (uploadedOf.Remove(texture, out WebGpuSharp.Texture? gpuTexture))
+        if (worldTextures.Remove(id, out WorldTexture? texture))
+            texture.Gpu?.Destroy();
+    }
+
+    // An asset's textures, as the material groups look them up, while its groups are made: the objects it read stand
+    // for the textures up by what they are, and are let go after.
+    private void LendWorldTextures(WorldAsset asset, IEnumerable<GameTexture> read)
+    {
+        foreach (GameTexture texture in read)
         {
-            uploaded.Remove(gpuTexture);
-            gpuTexture.Destroy();
+            WorldTexture? up = worldTextures.GetValueOrDefault(asset.TextureId(texture));
+            textures[texture] = up?.View;
+            if (up?.Gpu is { } gpu)
+                uploadedOf[texture] = gpu;
+            if (up?.Srgb is { } srgb)
+                srgbViews[texture] = srgb;
+        }
+    }
+
+    private void ReturnWorldTextures(WorldAsset asset, IEnumerable<GameTexture> read)
+    {
+        foreach (GameTexture texture in read)
+        {
+            // An sRGB view made meanwhile (RDR2's colour slots) stays with the texture.
+            if (srgbViews.Remove(texture, out TextureView? srgb) && worldTextures.GetValueOrDefault(asset.TextureId(texture)) is { Srgb: null } up)
+                up.Srgb = srgb;
+            textures.Remove(texture);
+            uploadedOf.Remove(texture);
         }
     }
 
