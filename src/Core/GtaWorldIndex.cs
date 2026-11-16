@@ -55,16 +55,19 @@ internal sealed class GtaWorldIndex : WorldIndex
         GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
         byte[] data = file.ReadStandalone();
         string name = Path.GetFileNameWithoutExtension(file.VirtualPath);
+        // A fragment's lights are its own (a lamp post's), not its drawables'.
+        Yft? fragment = type == GameFileType.Yft ? Yft.Read(data) : null;
         IReadOnlyList<SceneModel> models = type switch
         {
             GameFileType.Ydr => [new SceneModel(name, Ydr.Read(data).Drawable, Matrix4x4.Identity)],
-            GameFileType.Yft => [.. FragmentModels.Of(Yft.Read(data), name).Where(model => model.Variant != ModelVariant.Damaged)],
+            GameFileType.Yft => [.. FragmentModels.Of(fragment!, name).Where(model => model.Variant != ModelVariant.Damaged)],
             _ => [.. Ydd.Read(data).Drawables.Where(entry => key.Member == 0 || entry.Name.Value == key.Member)
                 .Select(entry => new SceneModel(ModelContent.EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
         };
         if (models.Count == 0)
             throw new FileNotFoundException($"Asset {key} has no such drawable.");
-        DrawableScene scene = DrawableScene.Build(models, new TextureLookup([.. Chain(key.TextureDictionary).Select(Dictionary).OfType<TextureDictionary>()], []));
+        DrawableScene scene = DrawableScene.Build(models, new TextureLookup([.. Chain(key.TextureDictionary).Select(Dictionary).OfType<TextureDictionary>()], []),
+            fragmentLights: fragment?.Lights);
         return WorldAsset.FromGta(key, scene, models.Select(model => model.Drawable));
     }
 
@@ -129,7 +132,70 @@ internal sealed class GtaWorldIndex : WorldIndex
         return dictionary;
     }
 
-    public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => null;
+    public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => ExpandGrass;
+
+    // The maps grass was read from lately, by name hash: neighbouring batches are in the same map.
+    private readonly LinkedList<(uint Map, Ymap Ymap)> grassMaps = new();
+
+    /// <summary>
+    /// A grass batch's plants, read from its map and placed as GTA V's grass_batch vertex shader places them: at their
+    /// quantised place in the batch's bounds, scaled across the batch's scale range by their own, turned by one of
+    /// eight headings by their number (the game's eight instance matrices, here 45 degrees apart), and tilted towards
+    /// the ground's normal by the batch's orientToTerrain; with their colour and occlusion, fading out from 85% of the
+    /// batch's reach. Under <see cref="WorldIndex.Gate"/>.
+    /// </summary>
+    private WorldLodNode ExpandGrass(WorldLodNode node, CancellationToken cancellation)
+    {
+        WorldGrassBatch descriptor = node.Grass ?? throw new ArgumentException("Node is not a grass batch.", nameof(node));
+        Ymap ymap = GrassMap(node.Id.Map);
+        if ((uint)descriptor.BatchIndex >= ymap.InstancedData.Grass.Count)
+            throw new InvalidDataException("Grass batch index is invalid.");
+        GrassInstanceBatch batch = ymap.InstancedData.Grass[descriptor.BatchIndex];
+        if (batch.Instances.Count != descriptor.InstanceCount)
+            throw new InvalidDataException("Grass batch changed since indexing.");
+        float fadeStart = float.IsFinite(batch.LodFadeStartDistance) && batch.LodFadeStartDistance > 0
+            ? Math.Min(batch.LodFadeStartDistance, node.Distance * .85f) : node.Distance * .7f;
+        var instances = new List<WorldInstance>(batch.Instances.Count);
+        for (int i = 0; i < batch.Instances.Count; i++)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            GrassInstance plant = batch.Instances[i];
+            float scale = batch.ScaleRange.X + (batch.ScaleRange.Y - batch.ScaleRange.X) * (plant.Scale / 255f);
+            if (!(scale > .00001f) || !float.IsFinite(scale))
+                continue;
+            Vector3 normal = plant.Normal;
+            var tilt = Quaternion.Normalize(new Quaternion(-normal.Y, normal.X, 0, 1 + normal.Z));
+            tilt = Quaternion.Slerp(Quaternion.Identity, tilt, Math.Clamp(batch.OrientToTerrain, 0, 1));
+            Matrix4x4 t = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateRotationZ((i & 7) * MathF.PI / 4)
+                * Matrix4x4.CreateFromQuaternion(tilt) * Matrix4x4.CreateTranslation(plant.Position(batch.Bounds));
+            if (!VectorMath.IsFinite(t))
+                continue;
+            var rows = new Matrix3x4(new(t.M11, t.M21, t.M31, t.M41), new(t.M12, t.M22, t.M32, t.M42), new(t.M13, t.M23, t.M33, t.M43));
+            var colour = new Vector3(plant.Color.R, plant.Color.G, plant.Color.B) / 255f;
+            instances.Add(new WorldInstance(rows, Vector3.Transform(descriptor.ModelCenter, t), descriptor.ModelRadius * scale)
+            {
+                Grass = new WorldGrassAttributes(colour, plant.AmbientOcclusion / 255f, fadeStart, node.Distance),
+            });
+        }
+        return node with { Instances = instances.AsReadOnly() };
+    }
+
+    private Ymap GrassMap(uint map)
+    {
+        for (LinkedListNode<(uint Map, Ymap Ymap)>? at = grassMaps.First; at is not null; at = at.Next)
+            if (at.Value.Map == map)
+            {
+                grassMaps.Remove(at);
+                grassMaps.AddFirst(at);
+                return at.Value.Ymap;
+            }
+        GameFile file = Game.FileSystem.Resolve(new Hash32(map), GameFileType.Ymap).Value ?? throw new FileNotFoundException("Grass map is unavailable.");
+        Ymap ymap = Ymap.Read(file.ReadStandalone());
+        grassMaps.AddFirst((map, ymap));
+        if (grassMaps.Count > 8)
+            grassMaps.RemoveLast();
+        return ymap;
+    }
 
     public override WorldFile? Locate(uint hash, byte extension)
     {
@@ -162,7 +228,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-1";
+    private const string CacheVersion = "hh-gta-world-2";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -183,9 +249,23 @@ internal sealed class GtaWorldIndex : WorldIndex
                 report(new WorldProgress("Reading the world from the cache", null));
                 catalog = GtaWorldCache.Read(cache, fingerprint);
             }
+            WorldLodGraph? lod = null;
+            if (catalog is not null)
+            {
+                try
+                {
+                    lod = new WorldLodGraph(catalog.Value.Nodes);
+                }
+                catch (ArgumentException)
+                {
+                    catalog = null;
+                }
+            }
             if (catalog is null)
             {
                 catalog = GtaWorldCatalog.Load(game.FileSystem, report, cancellation);
+                // Made into a graph before it's cached, so only a good index is.
+                lod = new WorldLodGraph(catalog.Value.Nodes);
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
@@ -196,7 +276,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                 }
             }
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, new WorldLodGraph(catalog.Value.Nodes), game);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod!, game);
         }
         catch
         {
@@ -280,7 +360,8 @@ internal static class GtaWorldCatalog
             {
                 continue;
             }
-            uint map = ymap.Name.Value != 0 ? ymap.Name.Value : file.NameHash.Value, parentMap = ymap.Parent.Value;
+            // By its file's name, which finds it again: two files can carry the same name inside.
+            uint map = file.NameHash.Value, parentMap = ymap.Parent.Value;
             read++;
             // Each entity's place in its map, which a local LOD parent is found by.
             var indexes = new Dictionary<YmapEntity, int>(ReferenceEqualityComparer.Instance);
@@ -327,10 +408,67 @@ internal static class GtaWorldCatalog
                     TimeFlags = type.TimeFlags,
                 });
             }
+            AddInstances(ymap, map, archetypes, nodes);
         }
         if (nodes.Count == 0)
             throw new InvalidDataException("No readable world placements were found in the game's maps.");
         return (read, [.. nodes]);
+    }
+
+    /// <summary>The longest a grass batch is drawn from, whatever it says (RedFury's near-field tier).</summary>
+    internal const float GrassReach = 180;
+
+    // A map's instanced data, after its entities, numbered on from them (RedFury's WorldCatalog): each grass batch a node
+    // whose plants are read when it's wanted, each batch of instanced props a node with its placements.
+    private static void AddInstances(Ymap ymap, uint map, Dictionary<uint, Archetype> archetypes, List<WorldLodNode> nodes)
+    {
+        int index = ymap.Entities.Count;
+        for (int g = 0; g < ymap.InstancedData.Grass.Count; g++, index++)
+        {
+            GrassInstanceBatch batch = ymap.InstancedData.Grass[g];
+            if (batch.Instances.Count == 0 || !archetypes.TryGetValue(batch.ArchetypeName.Value, out Archetype? type))
+                continue;
+            float distance = Math.Min(batch.LodDistance > 0 ? batch.LodDistance : type.Distance, GrassReach);
+            Vector3 range = batch.ScaleRange;
+            float maxScale = Math.Max(Math.Abs(range.X), Math.Abs(range.Y)) + Math.Abs(range.Y * range.Z);
+            Vector3 min = batch.Bounds.Minimum, max = batch.Bounds.Maximum;
+            if (!float.IsFinite(maxScale) || !float.IsFinite(distance) || distance <= 0 || !(type.Radius > 0) || !VectorMath.IsFinite(min) || !VectorMath.IsFinite(max))
+                continue;
+            float padding = (type.Center.Length() + type.Radius) * maxScale;
+            nodes.Add(new WorldLodNode(new WorldEntityId(map, index), null, type.Asset, Matrix4x4.Identity, (min + max) * .5f,
+                (max - min).Length() * .5f + padding, distance, 0, 0)
+            {
+                Grass = new WorldGrassBatch(g, batch.Instances.Count, type.Center, type.Radius),
+                ArchetypeFlags = (ulong)type.Flags,
+                TimeFlags = type.TimeFlags,
+            });
+        }
+        foreach (PropInstanceBatch batch in ymap.InstancedData.Props)
+        {
+            int at = index++;
+            if (batch.Instances.Count == 0 || !archetypes.TryGetValue(batch.ArchetypeName.Value, out Archetype? type))
+                continue;
+            var placements = new List<WorldInstance>(batch.Instances.Count);
+            foreach (PropInstance instance in batch.Instances)
+            {
+                Matrix4x4 t = instance.Transform;
+                if (!VectorMath.IsFinite(t))
+                    continue;
+                placements.Add(new WorldInstance(new Matrix3x4(new(t.M11, t.M21, t.M31, t.M41), new(t.M12, t.M22, t.M32, t.M42), new(t.M13, t.M23, t.M33, t.M43)),
+                    Vector3.Transform(type.Center, t), type.Radius * TransformMath.RadiusScale(t)));
+            }
+            if (placements.Count == 0)
+                continue;
+            Vector3 min = batch.Bounds.Minimum, max = batch.Bounds.Maximum;
+            float distance = Math.Min(batch.LodDistance > 0 ? batch.LodDistance : type.Distance, 30000);
+            nodes.Add(new WorldLodNode(new WorldEntityId(map, at), null, type.Asset, Matrix4x4.Identity, (min + max) * .5f,
+                (max - min).Length() * .5f + type.Radius, distance, 0, 0)
+            {
+                Instances = placements.AsReadOnly(),
+                ArchetypeFlags = (ulong)type.Flags,
+                TimeFlags = type.TimeFlags,
+            });
+        }
     }
 }
 
@@ -376,10 +514,41 @@ internal static class GtaWorldCache
                 writer.Write(node.TintValue);
                 writer.Write(node.ArchetypeFlags);
                 writer.Write(node.TimeFlags);
+                writer.Write(node.Grass is not null);
+                if (node.Grass is { } grass)
+                {
+                    writer.Write(grass.BatchIndex);
+                    writer.Write(grass.InstanceCount);
+                    Write(writer, grass.ModelCenter);
+                    writer.Write(grass.ModelRadius);
+                }
+                writer.Write(node.Instances.Count);
+                foreach (WorldInstance instance in node.Instances)
+                {
+                    Matrix3x4 rows = instance.TransformRows;
+                    foreach (Vector4 row in (ReadOnlySpan<Vector4>)[rows.Row0, rows.Row1, rows.Row2])
+                    {
+                        writer.Write(row.X);
+                        writer.Write(row.Y);
+                        writer.Write(row.Z);
+                        writer.Write(row.W);
+                    }
+                    Write(writer, instance.Center);
+                    writer.Write(instance.Radius);
+                }
             }
         }
         File.Move(temporary, path, overwrite: true);
     }
+
+    private static void Write(BinaryWriter writer, Vector3 value)
+    {
+        writer.Write(value.X);
+        writer.Write(value.Y);
+        writer.Write(value.Z);
+    }
+
+    private static Vector3 Read(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
     /// <summary>The cached index; null when there's none for the game as it is, or it can't be read.</summary>
     public static (int Maps, WorldLodNode[] Nodes)? Read(string path, string fingerprint)
@@ -405,13 +574,30 @@ internal static class GtaWorldCache
                 var center = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
                 float radius = reader.ReadSingle(), distance = reader.ReadSingle(), childDistance = reader.ReadSingle();
                 int children = reader.ReadInt32();
-                nodes[i] = new WorldLodNode(id, parent, asset, transform, center, radius, distance, childDistance, children)
+                var node = new WorldLodNode(id, parent, asset, transform, center, radius, distance, childDistance, children)
                 {
                     EntityFlags = reader.ReadUInt32(),
                     TintValue = reader.ReadUInt32(),
                     ArchetypeFlags = reader.ReadUInt64(),
                     TimeFlags = reader.ReadUInt32(),
                 };
+                if (reader.ReadBoolean())
+                    node = node with { Grass = new WorldGrassBatch(reader.ReadInt32(), reader.ReadInt32(), Read(reader), reader.ReadSingle()) };
+                int instances = reader.ReadInt32();
+                if (instances is < 0 or > 1_000_000)
+                    return null;
+                if (instances > 0)
+                {
+                    var placements = new WorldInstance[instances];
+                    for (int k = 0; k < instances; k++)
+                    {
+                        Vector4 Row() => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+                        var rows = new Matrix3x4(Row(), Row(), Row());
+                        placements[k] = new WorldInstance(rows, Read(reader), reader.ReadSingle());
+                    }
+                    node = node with { Instances = placements };
+                }
+                nodes[i] = node;
             }
             return (maps, nodes);
         }

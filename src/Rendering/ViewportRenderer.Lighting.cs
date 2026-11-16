@@ -165,8 +165,24 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // The local lights and their screen tiles (ViewportRenderer.LocalLights.cs): they keep their size, so
+                // the world's bundles keep reading them.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 5,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.LightBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 6,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.TileBytes },
+                },
             ],
         });
+        localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+        localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
         CreateShadowMap();
 
         // The shadow map: depth only, from the sun, nearer is smaller.
@@ -506,6 +522,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 2, Sampler = shadowCompare! },
                 new BindGroupEntry { Binding = 3, TextureView = reflections },
                 new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
+                new BindGroupEntry { Binding = 5, Buffer = localLightBuffer!, Size = World.LocalLightFrame.LightBytes },
+                new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
             ],
         });
         lightGroup = LightGroup(sceneMap!.View);

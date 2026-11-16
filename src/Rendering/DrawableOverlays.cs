@@ -87,7 +87,7 @@ internal sealed record DrawableOverlays(ViewportSegment[] Skeleton, ViewportSegm
     }
 
     /// <summary>Where the bone tagged <paramref name="tag"/> is, which a light moves with; the drawable's origin without one.</summary>
-    private static Matrix4x4 BoneOf(Drawable drawable, Matrix4x4[]? bones, short tag) =>
+    internal static Matrix4x4 BoneOf(Drawable drawable, Matrix4x4[]? bones, short tag) =>
         drawable.Skeleton?.FindBone((ushort)tag) is { } bone && bones is not null && bone.Index < bones.Length ? bones[bone.Index] : Matrix4x4.Identity;
 
     /// <summary>A collision's triangles, relative to the scene's origin.</summary>

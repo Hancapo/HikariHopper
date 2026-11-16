@@ -13,7 +13,7 @@ public sealed class WorldLightTests
 
     // A camera at the eye looking along +Y, its near plane at 0.1, square.
     private static void Update(LocalLightFrame frame, IReadOnlyList<LocalLight> lights, Vector3 eye = default, Vector3? forward = null) =>
-        frame.Update(lights, eye, forward ?? Vector3.UnitY, .1f, 1);
+        frame.Update(lights, eye, forward ?? Vector3.UnitY, .1f, 1, eye);
 
     [Fact]
     public void Lights_are_packed_relative_to_the_camera_their_tiles_follow_it_and_removed_lights_clear()
@@ -30,7 +30,7 @@ public sealed class WorldLightTests
         Assert.Equal(10, packed[4]);
         Assert.Equal(5, packed[5]);
         Assert.Equal(2.5f, packed[6]);
-        Assert.NotEqual(0u, frame.TileMasks[(9 * LocalLightFrame.Columns + 16) * 4]);
+        Assert.NotEqual(0u, frame.TileMasks[(9 * LocalLightFrame.Columns + 16) * LocalLightFrame.Words]);
         Assert.Equal(0u, frame.TileMasks[0]);
         Update(frame, [Point(eye + new Vector3(0, 10, 0))], eye, -Vector3.UnitY);
         Assert.Equal(0, frame.Count);
@@ -40,15 +40,15 @@ public sealed class WorldLightTests
     }
 
     [Fact]
-    public void At_most_128_are_drawn_the_nearest_whatever_their_order()
+    public void At_most_512_are_drawn_the_nearest_whatever_their_order()
     {
-        LocalLight[] lights = [.. Enumerable.Range(0, 140).Select(i => Point(new(0, 200 - i, 0)))];
+        LocalLight[] lights = [.. Enumerable.Range(0, LocalLightFrame.Capacity + 12).Select(i => Point(new(0, LocalLightFrame.Capacity + 72 - i, 0)))];
         var frame = new LocalLightFrame();
         Update(frame, lights);
-        Assert.Equal(128, frame.Count);
+        Assert.Equal(LocalLightFrame.Capacity, frame.Count);
         ReadOnlySpan<float> packed = MemoryMarshal.Cast<byte, float>(frame.LightData);
         Assert.Equal(61, packed[1]);
-        Assert.Equal(188, packed[127 * 16 + 1]);
+        Assert.Equal(60 + LocalLightFrame.Capacity, packed[(LocalLightFrame.Capacity - 1) * 16 + 1]);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class WorldLightTests
         var frame = new LocalLightFrame();
         Update(frame, [spot]);
         Assert.Equal(Vector3.UnitY, spot.Direction);
-        Assert.All(frame.TileMasks.ToArray().Where((_, index) => index % 4 == 0), mask => Assert.Equal(1u, mask));
+        Assert.All(frame.TileMasks.ToArray().Where((_, index) => index % LocalLightFrame.Words == 0), mask => Assert.Equal(1u, mask));
         ReadOnlySpan<float> packed = MemoryMarshal.Cast<byte, float>(frame.LightData);
         Assert.Equal(1, packed[7]);
         Assert.Equal(.9f, packed[11]);
@@ -67,9 +67,9 @@ public sealed class WorldLightTests
     }
 
     [Fact]
-    public void The_tile_masks_use_all_four_words_and_clear_those_no_longer_used()
+    public void The_tile_masks_use_every_word_and_clear_those_no_longer_used()
     {
-        LocalLight[] lights = [.. Enumerable.Repeat(Point(Vector3.Zero, 2), 128)];
+        LocalLight[] lights = [.. Enumerable.Repeat(Point(Vector3.Zero, 2), LocalLightFrame.Capacity)];
         var frame = new LocalLightFrame();
         Update(frame, lights);
         Assert.All(frame.TileMasks.ToArray(), mask => Assert.Equal(uint.MaxValue, mask));
@@ -77,10 +77,10 @@ public sealed class WorldLightTests
         ReadOnlySpan<uint> masks = frame.TileMasks;
         for (int tile = 0; tile < LocalLightFrame.Columns * LocalLightFrame.Rows; tile++)
         {
-            Assert.Equal(uint.MaxValue, masks[tile * 4]);
-            Assert.Equal(1u, masks[tile * 4 + 1]);
-            Assert.Equal(0u, masks[tile * 4 + 2]);
-            Assert.Equal(0u, masks[tile * 4 + 3]);
+            Assert.Equal(uint.MaxValue, masks[tile * LocalLightFrame.Words]);
+            Assert.Equal(1u, masks[tile * LocalLightFrame.Words + 1]);
+            for (int word = 2; word < LocalLightFrame.Words; word++)
+                Assert.Equal(0u, masks[tile * LocalLightFrame.Words + word]);
         }
     }
 
@@ -157,10 +157,60 @@ public sealed class WorldLightTests
     [Fact]
     public void Without_a_skeleton_lights_use_the_placement_and_unsupported_or_invalid_ones_are_said()
     {
-        WorldLodNode node = Node(new([Definition with { BoneTag = 111 }, Definition with { LightType = 4 }, Definition with { Falloff = float.NaN }], []));
+        WorldLodNode node = Node(new([Definition with { BoneTag = 111 }, Definition with { LightType = 3 }, Definition with { Falloff = float.NaN }], []));
         WorldLightBinding result = Resolve(node);
         Assert.Equal(new Vector3(12, 20, 30), Assert.Single(result.Lights).Position);
-        Assert.Contains(result.Diagnostics, d => d.Contains("type 4"));
+        Assert.Contains(result.Diagnostics, d => d.Contains("type 3"));
         Assert.Contains(result.Diagnostics, d => d.Contains("invalid"));
+    }
+
+    [Fact]
+    public void A_capsule_shines_from_along_its_length_scaled_with_its_placement()
+    {
+        LocalLight capsule = WorldLightBinding.ToLocal(Definition with { LightType = 4, Extents = new Vector3(6, 1, 1) }, Matrix4x4.CreateScale(2))!.Value;
+        Assert.Equal(LocalLightType.Capsule, capsule.Type);
+        Assert.Equal(12, capsule.Extent);
+        Assert.Equal(-Vector3.UnitZ, capsule.Direction);
+        var frame = new LocalLightFrame();
+        Update(frame, [capsule]);
+        ReadOnlySpan<float> packed = MemoryMarshal.Cast<byte, float>(frame.LightData);
+        Assert.Equal(2, packed[7]);
+        Assert.Equal(12, packed[14]);
+        // Points and spots have no length.
+        Assert.Equal(0, WorldLightBinding.ToLocal(Definition with { Extents = new Vector3(6, 1, 1) }, Matrix4x4.Identity)!.Value.Extent);
+    }
+
+    [Fact]
+    public void An_asset_carrying_its_own_lights_shines_them_at_each_placement_at_their_hours()
+    {
+        WorldLodNode node = Node(WorldLightSet.Empty);
+        var selection = new WorldSelection([], [node.Asset]) { Coverage = [node] };
+        WorldLightBones carrying = WorldLightBones.Carrying([Definition with { TimeFlags = 1u << 22 }]);
+        Assert.Equal(new Vector3(12, 20, 30), Assert.Single(WorldLightBinding.Resolve(selection, _ => carrying, hour: 22).Lights).Position);
+        Assert.Empty(WorldLightBinding.Resolve(selection, _ => carrying, hour: 13).Lights);
+        Assert.Empty(Resolve(node).Lights);
+    }
+
+    [Fact]
+    public void A_models_lights_are_where_their_drawable_is_placed_and_a_fragments_move_with_its_main_drawable()
+    {
+        static FiveFury.Drawables.DrawableLight Light(Vector3 at, byte type)
+        {
+            var light = new FiveFury.Drawables.DrawableLight();
+            light.Attributes.Position = at;
+            light.Attributes.LightType = type;
+            light.Attributes.BoneTag = -1;
+            light.Attributes.Intensity = 5;
+            light.Attributes.Falloff = 3;
+            light.Attributes.TimeFlags = 0xFFFFFF;
+            return light;
+        }
+        var drawable = new FiveFury.Drawables.Drawable();
+        drawable.Lights.Add(Light(Vector3.UnitX, 1));
+        Rendering.SceneModel[] models = [new("lamp", drawable, Matrix4x4.CreateTranslation(1, 2, 3))];
+        IReadOnlyList<WorldLightDefinition> lights = Rendering.DrawableLights.Of(models, [Light(Vector3.UnitZ, 2)]);
+        Assert.Equal([new Vector3(2, 2, 3), new Vector3(1, 2, 4)], lights.Select(light => light.Position));
+        Assert.Equal([1, 2], lights.Select(light => (int)light.LightType));
+        Assert.All(lights, light => Assert.Equal(-1, light.BoneTag));
     }
 }

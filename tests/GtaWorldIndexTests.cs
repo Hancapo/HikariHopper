@@ -59,6 +59,14 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.NotEmpty(asset.Layout.Kept);
             Assert.DoesNotContain(asset.Diagnostics, line => line.StartsWith("Texture not found", StringComparison.Ordinal));
             Assert.All(asset.Layout.Kept, kept => Assert.Null(kept.Rdr2));
+            // Grass batches are indexed unread; one expands into its plants, each with its colour and fade.
+            WorldLodNode grass = index.Lod.Nodes.First(node => node.Grass is { InstanceCount: > 16 });
+            WorldLodNode plants;
+            lock (index.Gate)
+                plants = index.CreateGrass()!(grass, CancellationToken.None);
+            Assert.InRange(plants.Instances.Count, 1, grass.Grass!.InstanceCount);
+            Assert.All(plants.Instances, plant => Assert.Equal(grass.Distance, plant.Grass!.Value.FadeEnd));
+            Assert.True(grass.Distance <= GtaWorldCatalog.GrassReach);
         }
         finally
         {

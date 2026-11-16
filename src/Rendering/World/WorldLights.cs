@@ -11,6 +11,8 @@ internal enum LocalLightType
 {
     Point,
     Spot,
+    /// <summary>A segment of light (GTA V's capsule lights): its middle at the position, along the direction.</summary>
+    Capsule,
 }
 
 /// <summary>
@@ -44,11 +46,14 @@ internal readonly record struct LocalLight
     /// <summary>The exponent max(1 - distance / radius, 0) is raised to.</summary>
     public float FalloffExponent { get; }
 
+    /// <summary>A capsule's length along its direction; nought for the others.</summary>
+    public float Extent { get; }
+
     /// <exception cref="ArgumentOutOfRangeException">A value that isn't finite or is out of its range.</exception>
     public LocalLight(LocalLightType type, Vector3 position, Vector3 colour, float intensity, float radius,
-        Vector3 direction = default, float innerCos = 1, float outerCos = 0, float falloffExponent = 2)
+        Vector3 direction = default, float innerCos = 1, float outerCos = 0, float falloffExponent = 2, float extent = 0)
     {
-        if (type is not (LocalLightType.Point or LocalLightType.Spot))
+        if (type is not (LocalLightType.Point or LocalLightType.Spot or LocalLightType.Capsule))
             throw new ArgumentOutOfRangeException(nameof(type));
         if (!VectorMath.IsFinite(position))
             throw new ArgumentOutOfRangeException(nameof(position));
@@ -64,28 +69,31 @@ internal readonly record struct LocalLight
             throw new ArgumentOutOfRangeException(nameof(innerCos));
         if (!float.IsFinite(outerCos) || outerCos < -1 || outerCos > innerCos)
             throw new ArgumentOutOfRangeException(nameof(outerCos));
-        if (type == LocalLightType.Spot && (!VectorMath.IsFinite(direction) || !float.IsFinite(direction.LengthSquared()) || direction.LengthSquared() < 1e-12f))
+        if (type != LocalLightType.Point && (!VectorMath.IsFinite(direction) || !float.IsFinite(direction.LengthSquared()) || direction.LengthSquared() < 1e-12f))
             throw new ArgumentOutOfRangeException(nameof(direction));
+        if (!float.IsFinite(extent) || extent < 0)
+            throw new ArgumentOutOfRangeException(nameof(extent));
         Type = type;
         Position = position;
         Colour = colour;
         Intensity = intensity;
         Radius = radius;
-        Direction = type == LocalLightType.Spot ? Vector3.Normalize(direction) : Vector3.Zero;
+        Direction = type == LocalLightType.Point ? Vector3.Zero : Vector3.Normalize(direction);
         InnerCos = innerCos;
         OuterCos = outerCos;
         FalloffExponent = falloffExponent;
+        Extent = type == LocalLightType.Capsule ? extent : 0;
     }
 }
 
 /// <summary>
-/// The local lights a frame draws (RedFury's LocalLightFrame, copied): the 128 nearest the camera that reach the screen,
-/// and a fixed grid of it, whose bindings stay put whatever the size, each tile a 128-bit mask of its lights. Spheres
+/// The local lights a frame draws (RedFury's LocalLightFrame, copied): the 512 nearest the camera that reach the screen,
+/// and a fixed grid of it, whose bindings stay put whatever the size, each tile a 512-bit mask of its lights. Spheres
 /// overestimate spots on purpose.
 /// </summary>
 internal sealed class LocalLightFrame
 {
-    internal const int Capacity = 128, Columns = 32, Rows = 18, LightBytes = Capacity * 64, TileBytes = Columns * Rows * 16;
+    internal const int Capacity = 512, Columns = 32, Rows = 18, Words = Capacity / 32, LightBytes = Capacity * 64, TileBytes = Columns * Rows * Words * 4;
 
     private readonly byte[] lightData = new byte[LightBytes];
     private readonly uint[] tileMasks = new uint[TileBytes / 4];
@@ -101,8 +109,11 @@ internal sealed class LocalLightFrame
 
     internal ReadOnlySpan<uint> TileMasks => tileMasks;
 
-    /// <summary>The lights for a camera at <paramref name="eye"/>, positions relative to it.</summary>
-    internal void Update(IReadOnlyList<LocalLight> lights, Vector3 eye, Vector3 forward, float near, float aspect)
+    /// <summary>
+    /// The lights for a camera at <paramref name="eye"/>, positions relative to <paramref name="relativeTo"/>, where the
+    /// scene is drawn from (the camera in a world, the model's middle in the viewer).
+    /// </summary>
+    internal void Update(IReadOnlyList<LocalLight> lights, Vector3 eye, Vector3 forward, float near, float aspect, Vector3 relativeTo)
     {
         Count = 0;
         Array.Clear(tileMasks);
@@ -137,7 +148,7 @@ internal sealed class LocalLightFrame
             LocalLight light = selected[i];
             Span<float> target = data.Slice(i * 16, 16);
             target.Clear();
-            (light.Position - eye).CopyTo(target);
+            (light.Position - relativeTo).CopyTo(target);
             target[3] = light.Radius;
             (light.Colour * light.Intensity).CopyTo(target[4..]);
             target[7] = (float)light.Type;
@@ -145,11 +156,12 @@ internal sealed class LocalLightFrame
             target[11] = light.InnerCos;
             target[12] = light.OuterCos;
             target[13] = light.FalloffExponent;
+            target[14] = light.Extent;
             TileBounds rectangle = bounds[i];
             uint mask = 1u << (i & 31);
             for (int y = rectangle.Top; y <= rectangle.Bottom; y++)
                 for (int x = rectangle.Left; x <= rectangle.Right; x++)
-                    tileMasks[(y * Columns + x) * 4 + i / 32] |= mask;
+                    tileMasks[(y * Columns + x) * Words + i / 32] |= mask;
         }
     }
 
@@ -159,8 +171,10 @@ internal sealed class LocalLightFrame
         bounds = default;
         // In double precision, so far authored bounds can't overflow choosing and projecting them.
         double dx = (double)light.Position.X - eye.X, dy = (double)light.Position.Y - eye.Y, dz = (double)light.Position.Z - eye.Z;
-        distance = Math.Max(0, Math.Sqrt(dx * dx + dy * dy + dz * dz) - light.Radius);
-        double z = dx * forward.X + dy * forward.Y + dz * forward.Z, radius = light.Radius;
+        // A capsule's sphere holds its whole length.
+        double radius = light.Radius + light.Extent * .5;
+        distance = Math.Max(0, Math.Sqrt(dx * dx + dy * dy + dz * dz) - radius);
+        double z = dx * forward.X + dy * forward.Y + dz * forward.Z;
         if (z + radius < near)
             return false;
         if (z - radius <= near)
@@ -200,10 +214,20 @@ internal sealed class WorldLightBones
         this.transforms = transforms;
     }
 
+    /// <summary>
+    /// The lights an asset carries itself (GTA V's drawables and fragments have theirs), in its own coordinates, at its
+    /// bones already; each placement of it has them, beside any its archetype names.
+    /// </summary>
+    public IReadOnlyList<WorldLightDefinition> Own { get; private init; } = [];
+
+    /// <summary>An asset without bones to attach lights to, carrying these lights itself.</summary>
+    public static WorldLightBones Carrying(IReadOnlyList<WorldLightDefinition> lights) =>
+        lights.Count == 0 ? Empty : new WorldLightBones(false, []) { Own = lights };
+
     /// <summary>Whether any drawable had a skeleton, even an incomplete one.</summary>
     public bool HasSkeleton { get; }
 
-    internal long Bytes => transforms.Count * 96L;
+    internal long Bytes => transforms.Count * 96L + Own.Count * 160L;
 
     /// <summary>Each bone's bind matrix, then its model's placement; a tag bound two ways stays unresolved.</summary>
     public static WorldLightBones From(IReadOnlyList<Rdr2Scene.Placed> models)
@@ -274,9 +298,8 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
         var candidates = new Candidates(eye, maximumCandidates);
         foreach (WorldLodNode node in selection.Coverage)
         {
-            if (node.ArchetypeLights.Primary.Count == 0 && node.ArchetypeLights.Secondary.Count == 0 && node.EntityLights.Secondary.Count == 0)
-                continue;
-            if (residentBones(node.Asset) is not { } bones)
+            bool named = node.ArchetypeLights.Primary.Count != 0 || node.ArchetypeLights.Secondary.Count != 0 || node.EntityLights.Secondary.Count != 0;
+            if (residentBones(node.Asset) is not { } bones || !named && bones.Own.Count == 0)
                 continue;
             Bind(node, bones, candidates, $"{node.Asset}: ", hour);
         }
@@ -305,15 +328,17 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
         }
         foreach (WorldLightDefinition definition in node.EntityLights.Secondary)
             BindDefinition(definition);
+        foreach (WorldLightDefinition definition in bones.Own)
+            BindDefinition(definition);
         if (node.ArchetypeLights.Secondary.Count != 0)
             candidates.Diagnose(prefix, "Archetype secondary light activation is not implemented.");
 
         void BindDefinition(WorldLightDefinition definition)
         {
             // An override replaces the whole definition, its hours included.
-            if (hour is { } h && !RedFury.Ytyp.TimeArchetype.ActiveAt(definition.TimeFlags, h))
+            if (hour is { } h && !ActiveAt(definition, h))
                 return;
-            if (definition.LightType is not (1 or 2))
+            if (definition.LightType is not (1 or 2 or 4))
             {
                 candidates.Diagnose(prefix, $"Unsupported local light type {definition.LightType}.");
                 return;
@@ -323,15 +348,6 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
                 candidates.Diagnose(prefix, $"Local light bone tag {unchecked((ushort)definition.BoneTag)} is missing or ambiguous; light omitted.");
                 return;
             }
-            float inner = definition.ConeInnerAngle, outer = definition.ConeOuterAngle;
-            bool spot = definition.LightType == 2;
-            if (spot && (!float.IsFinite(inner) || !float.IsFinite(outer) || inner < 0 || outer < inner || outer >= 180))
-            {
-                candidates.Diagnose(prefix, "Local light contains invalid cone angles; light omitted.");
-                return;
-            }
-            float innerCos = spot ? MathF.Cos(inner * MathF.PI / 180) : 1;
-            float outerCos = spot ? MathF.Cos(outer * MathF.PI / 180) : 0;
             // The game reads each light's position as it is, not its extension's offset.
             if (node.Instances.Count == 0)
                 Add(node.Transform);
@@ -341,20 +357,43 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
 
             void Add(Matrix4x4 placement)
             {
-                try
-                {
-                    Matrix4x4 transform = bone * placement;
-                    candidates.Add(new LocalLight(spot ? LocalLightType.Spot : LocalLightType.Point,
-                        Vector3.Transform(definition.Position, transform), definition.Color, definition.Intensity,
-                        definition.Falloff * TransformMath.RadiusScale(transform),
-                        Vector3.TransformNormal(definition.Direction, transform),
-                        innerCos, outerCos, definition.FalloffExponent));
-                }
-                catch (ArgumentException)
-                {
-                    candidates.Diagnose(prefix, "Local light contains invalid geometry or photometric values; light omitted.");
-                }
+                if (ToLocal(definition, bone * placement) is { } light)
+                    candidates.Add(light);
+                else
+                    candidates.Diagnose(prefix, "Local light contains invalid geometry, cone or photometric values; light omitted.");
             }
+        }
+    }
+
+    /// <summary>Whether a light is on at <paramref name="hour"/> (0 to 23), by its hours.</summary>
+    public static bool ActiveAt(in WorldLightDefinition definition, int hour) => RedFury.Ytyp.TimeArchetype.ActiveAt(definition.TimeFlags, hour);
+
+    /// <summary>
+    /// A point, spot or capsule light (types 1, 2 and 4) placed by <paramref name="transform"/>, from its own coordinates;
+    /// null for another type, or values it can't be drawn with. A capsule's length is its extents' x.
+    /// </summary>
+    public static LocalLight? ToLocal(in WorldLightDefinition definition, Matrix4x4 transform)
+    {
+        if (definition.LightType is not (1 or 2 or 4))
+            return null;
+        bool capsule = definition.LightType == 4;
+        float inner = definition.ConeInnerAngle, outer = definition.ConeOuterAngle;
+        bool spot = definition.LightType == 2;
+        if (spot && (!float.IsFinite(inner) || !float.IsFinite(outer) || inner < 0 || outer < inner || outer >= 180))
+            return null;
+        try
+        {
+            float scale = TransformMath.RadiusScale(transform);
+            return new LocalLight(spot ? LocalLightType.Spot : capsule ? LocalLightType.Capsule : LocalLightType.Point,
+                Vector3.Transform(definition.Position, transform), definition.Color, definition.Intensity,
+                definition.Falloff * scale,
+                Vector3.TransformNormal(definition.Direction, transform),
+                spot ? MathF.Cos(inner * MathF.PI / 180) : 1, spot ? MathF.Cos(outer * MathF.PI / 180) : 0, definition.FalloffExponent,
+                capsule ? Math.Max(0, definition.Extents.X) * scale : 0);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 

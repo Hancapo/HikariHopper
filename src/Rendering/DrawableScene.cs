@@ -138,6 +138,9 @@ internal sealed class DrawableScene
     /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
     public int EmbeddedTextureCount { get; init; }
 
+    /// <summary>The lights the drawables carry (GTA V's), in their own coordinates: what lights them in the viewer.</summary>
+    public IReadOnlyList<RedFury.World.WorldLightDefinition> Lights { get; init; } = [];
+
     /// <summary>What can be drawn over the drawables: their skeletons, bounds and lights.</summary>
     public DrawableOverlays Overlays { get; init; } = DrawableOverlays.None;
 
@@ -305,6 +308,7 @@ internal sealed class DrawableScene
             Variants = [.. models.Select(m => m.Variant)],
             EmbeddedTextureCount = own.Count,
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
+            Lights = DrawableLights.Of(models, fragmentLights),
             Materials = materials,
             Sources = sources,
             SourceLists = sourceLists,
