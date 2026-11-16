@@ -28,6 +28,12 @@
     <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Arrays up to 4 MB (the most the GC takes) are allocated young rather than in the large object heap: the worlds'
+         streaming threads read and build hundreds of megabytes of those a second, which kept the large object heap's
+         background collections running and held the UI thread's own allocations, and so its frames, up behind them. -->
+    <RuntimeHostConfigurationOption Include="System.GC.LOHThreshold" Value="4194304" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- The native linker records only the PDB's file name (MSVC's %_PDB%), not this machine's path to it. -->
     <LinkerArg Include="/PDBALTPATH:%25_PDB%25" />
   </ItemGroup>
