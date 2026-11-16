@@ -41,6 +41,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Stream the worlds in faster: GTA V's models read on up to four threads at once, and as many uploaded each frame as two and a half milliseconds allow instead of one: GTA V's Legion Square is all in 10 s after opening at 60 frames a second, down from 60 s, and Grapeseed 8 s after flying there, down from 48 s. ([#263](https://github.com/Hancapo/HikariHopper/pull/263))
 - Draw the 3D viewer and the worlds as fast as the GPU can, no longer held to the display's refresh rate: frames are presented without waiting for its vertical blank where the GPU allows, without tearing where it can. ([#264](https://github.com/Hancapo/HikariHopper/pull/264))
 - Let go of the worlds' texture pixels once they're on the GPU, and keep 192 MB of GTA V's texture dictionaries for the next models instead of 768 MB: 490 MB less memory after flying from Legion Square to Grapeseed. ([#265](https://github.com/Hancapo/HikariHopper/pull/265))
+- Compile the worlds' pipelines in the background as the app starts, on the GPU driver's threads, instead of on the first frames of a world: GTA V's world no longer stalls for over a second as its first models come in. ([#266](https://github.com/Hancapo/HikariHopper/pull/266))
 
 ### Fixed
 

@@ -72,7 +72,8 @@ internal sealed class GpuDevice
 
     /// <summary>
     /// Starts making the GPU and compiling every viewport pipeline in the background, once, so the first 3D viewer
-    /// opens without waiting for them. Failures are left for that viewer to report.
+    /// opens without waiting for them, and the worlds' pipelines compiling on the driver's threads, so the first world
+    /// shown doesn't wait for them either. Failures are left for that viewer to report.
     /// </summary>
     internal static Task WarmUp()
     {
@@ -83,7 +84,12 @@ internal sealed class GpuDevice
                 {
                     GpuDevice gpu = Shared;
                     lock (gpu.Gate)
-                        new ViewportRenderer(gpu).Dispose();
+                    {
+                        var renderer = new ViewportRenderer(gpu);
+                        // The worlds' pipelines go on compiling on the driver's threads, for when a world is shown.
+                        renderer.PrepareWorldFamilies(Enum.GetValues<WorldFamily>());
+                        renderer.Dispose();
+                    }
                 }
                 catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
                     or EntryPointNotFoundException or TimeoutException or WebGPUException)
@@ -92,8 +98,37 @@ internal sealed class GpuDevice
             });
     }
 
-    /// <summary>A render pipeline compiled once per key: a viewport's pipelines are the same for every viewport.</summary>
-    internal RenderPipeline Pipeline(string key, Func<RenderPipeline> create) => (RenderPipeline)pipelines.GetOrAdd(key, _ => create());
+    /// <summary>
+    /// A render pipeline compiled once per key: a viewport's pipelines are the same for every viewport. One compiling in
+    /// the background (<see cref="Prepare"/>) is waited for; one that failed there is compiled here.
+    /// </summary>
+    internal RenderPipeline Pipeline(string key, Func<RenderPipeline> create)
+    {
+        object value = pipelines.GetOrAdd(key, _ => create());
+        if (value is not Task<RenderPipeline> compiling)
+            return (RenderPipeline)value;
+        RenderPipeline made;
+        try
+        {
+            made = compiling.GetAwaiter().GetResult();
+        }
+        catch (Exception error) when (error is WebGPUException or InvalidOperationException)
+        {
+            made = create();
+        }
+        pipelines[key] = made;
+        return made;
+    }
+
+    /// <summary>
+    /// Starts compiling a render pipeline on the driver's threads, unless it's compiled or compiling already: the
+    /// viewport that asks for it later (<see cref="Pipeline"/>) gets it without compiling it then.
+    /// </summary>
+    internal void Prepare(string key, Func<Task<RenderPipeline>> start)
+    {
+        if (!pipelines.ContainsKey(key))
+            pipelines.TryAdd(key, start());
+    }
 
     /// <summary>A compute pipeline compiled once per key.</summary>
     internal ComputePipeline Compute(string key, Func<ComputePipeline> create) => (ComputePipeline)pipelines.GetOrAdd(key, _ => create());

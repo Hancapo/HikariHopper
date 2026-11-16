@@ -249,8 +249,10 @@ internal sealed class WorldStreamer : IDisposable
     {
         if (!ReferenceEquals(renderer, viewport))
         {
-            // Another viewport (the native view was made again): it holds nothing yet.
+            // Another viewport (the native view was made again): it holds nothing yet. The game's pipelines start
+            // compiling now, while the first assets are read.
             renderer = viewport;
+            viewport.PrepareWorldFamilies(index.Families);
             selectionPending = true;
             firstSelection = true;
             selectedReady = [];
