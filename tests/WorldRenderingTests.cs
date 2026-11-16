@@ -3,7 +3,7 @@ using HikariHopper.Rendering;
 
 namespace HikariHopper.Tests;
 
-// The world's GPU side, without a game: its pipelines and a frame of it, with its shadow, raise no GPU errors.
+// The world's GPU side, without a game: every game's pipelines and a frame of it, with its shadow, raise no GPU errors.
 public sealed class WorldRenderingTests
 {
     [Theory]
@@ -28,6 +28,12 @@ public sealed class WorldRenderingTests
             gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
             renderer.CreateWorldPipelines();
             renderer.CreatePickPipelines();
+            // Each game's: RDR2's material, and GTA V's surfaces and terrain, drawn, cast and picked.
+            foreach (WorldFamily family in Enum.GetValues<WorldFamily>())
+            {
+                renderer.CreateWorldFamily(family);
+                renderer.CreatePickFamily(family);
+            }
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Shadows = true;

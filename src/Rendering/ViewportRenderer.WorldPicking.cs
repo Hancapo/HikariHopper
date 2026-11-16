@@ -21,7 +21,8 @@ internal sealed unsafe partial class ViewportRenderer
     // Each asset's slot of picking ids, as far apart as uniform offsets must be.
     private const int PickSlot = 256;
 
-    private RenderPipeline? worldPick, worldMaskedPick, worldMask;
+    private RenderPipeline? worldMask;
+    private readonly RenderPipeline?[] worldPick = new RenderPipeline?[WorldFamilies], worldMaskedPick = new RenderPipeline?[WorldFamilies];
     private BindGroupLayout? pickAssetLayout;
     private Texture? pickTexture, pickDepth;
     private Buffer? pickAssets, pickReadback, pickedInstance;
@@ -45,7 +46,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     internal void CreatePickPipelines()
     {
-        if (worldPick is not null)
+        if (pickAssetLayout is not null)
             return;
         CreateWorldPipelines();
         pickAssetLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -60,43 +61,13 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             ],
         });
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("rdr2_world_pick.wgsl") }));
-        var instance = new VertexBufferLayout
+        // The outline's mask needs no material.
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            ArrayStride = sizeof(uint),
-            StepMode = VertexStepMode.Instance,
-            Attributes = [new VertexAttribute { ShaderLocation = 8, Offset = 0, Format = VertexFormat.Uint32 }],
-        };
-        var vertex = new VertexBufferLayout
-        {
-            ArrayStride = SurfaceVertex.Size,
-            Attributes = new[]
-            {
-                new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
-                new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
-                new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
-            },
-        };
-        PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
-        {
-            BindGroupLayouts = [sceneLayout, rdr2Layout!, pickAssetLayout, worldInstanceLayout!],
-        });
-        RenderPipeline Pick(string fragment) => gpu.Pipeline($"rdr2-world-{fragment}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
-        {
-            Layout = layout,
-            Vertex = new VertexState { Module = shader.Value, EntryPoint = "vs_world_pick", Buffers = [vertex, instance] },
-            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
-            Fragment = new FragmentState
-            {
-                Module = shader.Value,
-                EntryPoint = fragment,
-                Targets = new[] { new ColorTargetState { Format = TextureFormat.RG32Uint, WriteMask = ColorWriteMask.All } },
-            },
-            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.GreaterEqual },
+            Code = Shader("world_instances.wgsl") + "\n" + Read("world_pick.wgsl"),
         }));
-        worldPick = Pick("fs_world_pick");
-        worldMaskedPick = Pick("fs_world_pick_masked");
-        worldMask = gpu.Pipeline($"rdr2-world-mask/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        var instance = WorldInstanceLayout();
+        worldMask = gpu.Pipeline($"world-mask/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
             {
@@ -113,6 +84,50 @@ internal sealed unsafe partial class ViewportRenderer
         }));
         pickReadback = device.CreateBuffer(new BufferDescriptor { Size = 256, Usage = BufferUsage.CopyDst | BufferUsage.MapRead });
         pickedInstance = device.CreateBuffer(new BufferDescriptor { Size = 4, Usage = BufferUsage.Vertex | BufferUsage.CopyDst });
+    }
+
+    // A family's pipelines into the id target: everything solid, and cut-outs through their game's alpha test.
+    internal void CreatePickFamily(WorldFamily family)
+    {
+        int f = (int)family;
+        if (worldPick[f] is not null)
+            return;
+        CreatePickPipelines();
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
+        {
+            Code = Shader("world_instances.wgsl") + "\n" + Read("world_pick.wgsl") + "\n"
+                + Read(family == WorldFamily.Rdr2 ? "rdr2_world_pick.wgsl" : "gta_world_pick.wgsl"),
+        }));
+        var vertex = new VertexBufferLayout
+        {
+            ArrayStride = SurfaceVertex.Size,
+            Attributes = new[]
+            {
+                new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
+            },
+        };
+        PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
+        {
+            BindGroupLayouts = [sceneLayout, WorldMaterialLayout(family), pickAssetLayout!, worldInstanceLayout!],
+        });
+        RenderPipeline Pick(string fragment) => gpu.Pipeline($"world-{family}-{fragment}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = layout,
+            Vertex = new VertexState { Module = shader.Value, EntryPoint = "vs_world_pick", Buffers = [vertex, WorldInstanceLayout()] },
+            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
+            Fragment = new FragmentState
+            {
+                Module = shader.Value,
+                EntryPoint = fragment,
+                Targets = new[] { new ColorTargetState { Format = TextureFormat.RG32Uint, WriteMask = ColorWriteMask.All } },
+            },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.GreaterEqual },
+        }));
+        worldPick[f] = Pick("fs_world_pick");
+        // Terrain is never cut out.
+        worldMaskedPick[f] = family == WorldFamily.GtaTerrain ? worldPick[f] : Pick("fs_world_pick_masked");
     }
 
     /// <summary>
@@ -194,7 +209,8 @@ internal sealed unsafe partial class ViewportRenderer
                 uint count = (uint)asset.LodCount[mesh.Level];
                 if (!mesh.Opaque || count == 0)
                     continue;
-                pass.SetPipeline(mesh.Mode == AlphaMode.Mask ? worldMaskedPick! : worldPick!);
+                CreatePickFamily(mesh.Family);
+                pass.SetPipeline(mesh.Mode == AlphaMode.Mask ? worldMaskedPick[(int)mesh.Family]! : worldPick[(int)mesh.Family]!);
                 pass.SetBindGroup(1, mesh.Material);
                 pass.DrawIndexed(mesh.Part.IndexCount, count, mesh.Part.FirstIndex, 0, (uint)asset.LodStart[mesh.Level]);
             }

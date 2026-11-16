@@ -136,7 +136,6 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (worldInstanceLayout is not null)
             return;
-        CreateRdr2Pipelines();
         // An asset's placements, and the world's local lights and their screen tiles, the same buffers in every asset's
         // group: they keep their size, so bundles keep reading them.
         worldInstanceLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
@@ -167,33 +166,82 @@ internal sealed unsafe partial class ViewportRenderer
         localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
         worldEmptyLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = [] });
         worldEmptyGroup = device.CreateBindGroup(new BindGroupDescriptor { Layout = worldEmptyLayout, Entries = [] });
+
+        // Into the shadow: solid casters' depth alone, whatever their game. Both sides cast.
+        worldShadow = gpu.Pipeline("world-shadow", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, worldEmptyLayout, worldEmptyLayout, worldInstanceLayout] }),
+            Vertex = new VertexState
+            {
+                Module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("world_instances.wgsl") + "\n" + Read("world_shadow.wgsl") }),
+                EntryPoint = "vs_world_shadow",
+                Buffers = [new VertexBufferLayout { ArrayStride = SurfaceVertex.Size, Attributes = new[] { new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 } } }, WorldInstanceLayout()],
+            },
+            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
+            DepthStencil = CasterDepth(),
+        }));
+    }
+
+    // Which of the asset's placements each instance is.
+    private static VertexBufferLayout WorldInstanceLayout() => new()
+    {
+        ArrayStride = sizeof(uint),
+        StepMode = VertexStepMode.Instance,
+        Attributes = [new VertexAttribute { ShaderLocation = 8, Offset = 0, Format = VertexFormat.Uint32 }],
+    };
+
+    // A family's material group's layout: RDR2's material, GTA V's surface.wgsl or terrain.wgsl.
+    private BindGroupLayout WorldMaterialLayout(WorldFamily family) => family switch
+    {
+        WorldFamily.Rdr2 => rdr2Layout!,
+        WorldFamily.GtaTerrain => terrainLayout!,
+        _ => materialLayout!,
+    };
+
+    /// <summary>
+    /// A family's pipelines, made the first time one of its surfaces comes in: its surfaces drawn solid (back faces
+    /// culled), unculled, blended and as decals, and its cut-outs into the shadow.
+    /// </summary>
+    internal void CreateWorldFamily(WorldFamily family)
+    {
+        int f = (int)family;
+        if (worldSolid[f] is not null)
+            return;
+        CreateWorldPipelines();
+        if (family == WorldFamily.Rdr2)
+            CreateRdr2Pipelines();
+        BindGroupLayout material = WorldMaterialLayout(family);
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
         {
-            BindGroupLayouts = [sceneLayout, rdr2Layout!, lightLayout!, worldInstanceLayout],
+            BindGroupLayouts = [sceneLayout, material, lightLayout!, worldInstanceLayout!],
         });
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
+        string instances = Read("world_instances.wgsl");
+        (string name, string vertex, string fragment) = family switch
         {
-            Code = LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
-                + Read("rdr2_vertex.wgsl") + "\n" + Read("rdr2_world.wgsl"),
-        }));
-        // Which of the asset's placements each instance is.
-        static VertexBufferLayout InstanceLayout() => new()
-        {
-            ArrayStride = sizeof(uint),
-            StepMode = VertexStepMode.Instance,
-            Attributes = [new VertexAttribute { ShaderLocation = 8, Offset = 0, Format = VertexFormat.Uint32 }],
+            WorldFamily.Rdr2 => ("rdr2-world", "vs_rdr2_world", "fs_rdr2_world"),
+            WorldFamily.GtaTerrain => ("gta-terrain-world", "vs_terrain_world", "fs_terrain"),
+            _ => ("gta-world", "vs_surface_world", "fs_surface"),
         };
+        string Code() => family switch
+        {
+            WorldFamily.Rdr2 => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
+                + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl"),
+            WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + Read("gta_world_terrain.wgsl"),
+            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + Read("gta_world.wgsl"),
+        };
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Code() }));
         // Decals are pulled towards the camera a little, as RedFury's are, over the surface they lie on.
         RenderPipeline Pipeline(CullMode cull, bool blend, bool decal = false) =>
-            gpu.Pipeline($"rdr2-world/{cull}/{blend}/{decal}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+            gpu.Pipeline($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = layout,
-                Vertex = new VertexState { Module = shader.Value, EntryPoint = "vs_rdr2_world", Buffers = [SurfaceVertexLayout(), InstanceLayout()] },
+                Vertex = new VertexState { Module = shader.Value, EntryPoint = vertex, Buffers = [SurfaceVertexLayout(), WorldInstanceLayout()] },
+                // Both games' triangles face the camera when wound counter-clockwise.
                 Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, FrontFace = FrontFace.CCW, CullMode = cull },
                 Fragment = new FragmentState
                 {
                     Module = shader.Value,
-                    EntryPoint = "fs_rdr2_world",
+                    EntryPoint = fragment,
                     Targets = new[]
                     {
                         new ColorTargetState
@@ -217,52 +265,45 @@ internal sealed unsafe partial class ViewportRenderer
                     DepthBiasSlopeScale = decal ? 1 : 0,
                 },
             }));
-        worldSolid = Pipeline(CullMode.Back, blend: false);
-        worldUnculled = Pipeline(CullMode.None, blend: false);
-        worldBlended = Pipeline(CullMode.None, blend: true);
-        worldDecal = Pipeline(CullMode.None, blend: true, decal: true);
+        worldSolid[f] = Pipeline(CullMode.Back, blend: false);
+        worldUnculled[f] = Pipeline(CullMode.None, blend: false);
+        worldBlended[f] = Pipeline(CullMode.None, blend: true);
+        worldDecal[f] = Pipeline(CullMode.None, blend: true, decal: true);
 
-        // Into the shadow: solid casters' depth alone, cut-outs through their material's alpha. Both sides cast.
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("rdr2_world_shadow.wgsl") }));
-        var position = new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 };
-        worldShadow = gpu.Pipeline("rdr2-world-shadow", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        // Cut-outs into the shadow through their material's alpha; terrain is never cut out.
+        if (family == WorldFamily.GtaTerrain)
+            return;
+        string test = family == WorldFamily.Rdr2 ? "rdr2_world_shadow.wgsl" : "gta_world_shadow.wgsl";
+        worldMaskedShadow[f] = gpu.Pipeline($"{name}-shadow-masked", () =>
         {
-            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, worldEmptyLayout, worldEmptyLayout, worldInstanceLayout] }),
-            Vertex = new VertexState
+            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("world_shadow.wgsl") + "\n" + Read(test) });
+            return device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
-                Module = shadowShader.Value,
-                EntryPoint = "vs_world_shadow",
-                Buffers = [new VertexBufferLayout { ArrayStride = SurfaceVertex.Size, Attributes = new[] { position } }, InstanceLayout()],
-            },
-            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
-            DepthStencil = CasterDepth(),
-        }));
-        worldMaskedShadow = gpu.Pipeline("rdr2-world-shadow-masked", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
-        {
-            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, rdr2Layout!, worldEmptyLayout, worldInstanceLayout] }),
-            Vertex = new VertexState
-            {
-                Module = shadowShader.Value,
-                EntryPoint = "vs_world_shadow_masked",
-                Buffers =
-                [
-                    new VertexBufferLayout
-                    {
-                        ArrayStride = SurfaceVertex.Size,
-                        Attributes = new[]
+                Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, material, worldEmptyLayout!, worldInstanceLayout!] }),
+                Vertex = new VertexState
+                {
+                    Module = module,
+                    EntryPoint = "vs_world_shadow_masked",
+                    Buffers =
+                    [
+                        new VertexBufferLayout
                         {
-                            position,
-                            new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
-                            new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
+                            ArrayStride = SurfaceVertex.Size,
+                            Attributes = new[]
+                            {
+                                new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                                new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                                new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
+                            },
                         },
-                    },
-                    InstanceLayout(),
-                ],
-            },
-            Fragment = new FragmentState { Module = shadowShader.Value, EntryPoint = "fs_world_shadow_masked", Targets = [] },
-            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
-            DepthStencil = CasterDepth(),
-        }));
+                        WorldInstanceLayout(),
+                    ],
+                },
+                Fragment = new FragmentState { Module = module, EntryPoint = "fs_world_shadow_masked", Targets = [] },
+                Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
+                DepthStencil = CasterDepth(),
+            });
+        });
     }
 
     // RedFury's casters' depth: less or equal, pushed back by 2 and 2.5 times the slope, so surfaces don't shadow
@@ -348,34 +389,37 @@ internal sealed unsafe partial class ViewportRenderer
                     draws++;
                 }
         }
-        bool masked = false;
+        RenderPipeline? current = null;
         for (int i = 0; i < asset.Meshes.Count; i++)
         {
             WorldMesh mesh = asset.Meshes[i];
             if ((levels >> mesh.Level & 1) == 0)
                 continue;
-            RenderPipeline pipeline;
+            int family = (int)mesh.Family;
+            RenderPipeline? pipeline;
             if (shadow)
             {
-                if (mesh.Mode != AlphaMode.Mask)
+                if (mesh.Mode != AlphaMode.Mask || worldMaskedShadow[family] is null)
                     continue;
-                pipeline = worldMaskedShadow!;
-                if (!masked)
-                    target.SetPipeline(pipeline);
-                masked = true;
+                pipeline = worldMaskedShadow[family];
             }
             else if (bundle == DecalBundle)
             {
                 if (!mesh.Decal)
                     continue;
-                target.SetPipeline(worldDecal!);
+                pipeline = worldDecal[family];
             }
             else
             {
                 if (!mesh.Opaque)
                     continue;
                 // Cut-outs, two-sided surfaces and mirrored placements aren't culled, as RedFury has them.
-                target.SetPipeline(mesh.Mode == AlphaMode.Mask || mesh.DoubleSided || asset.Reflected ? worldUnculled! : worldSolid!);
+                pipeline = mesh.Mode == AlphaMode.Mask || mesh.DoubleSided || asset.Reflected ? worldUnculled[family] : worldSolid[family];
+            }
+            if (pipeline != current)
+            {
+                target.SetPipeline(pipeline!);
+                current = pipeline;
             }
             target.SetBindGroup(1, mesh.Material);
             target.Draw(ArgumentIndex(asset, i, pass));
@@ -503,10 +547,10 @@ internal sealed unsafe partial class ViewportRenderer
         BindGroup? boundMaterial = null;
         foreach (WorldBlendedDraw draw in worldBlendedDraws)
         {
-            if (current is null)
+            if (worldBlended[(int)draw.Mesh.Family] is { } blended && blended != current)
             {
-                pass.SetPipeline(worldBlended!);
-                current = worldBlended;
+                pass.SetPipeline(blended);
+                current = blended;
             }
             if (draw.Asset != boundAsset)
             {

@@ -15,7 +15,8 @@ namespace HikariHopper.Rendering.World;
 /// </summary>
 internal sealed class WorldAsset
 {
-    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IReadOnlyList<RedTexture> textures, WorldLightBones lightBones)
+    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IEnumerable<(object Texture, long Bytes)> textures,
+        WorldLightBones lightBones)
     {
         Key = key;
         Scene = scene;
@@ -102,7 +103,29 @@ internal sealed class WorldAsset
         for (int lod = 0; lod < Lods; lod++)
             if (distances[lod] <= 0)
                 distances[lod] = float.MaxValue;
-        return new WorldAsset(key, scene, distances, textures, WorldLightBones.From(models));
+        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.From(models));
+    }
+
+    /// <summary>
+    /// A GTA V asset made ready from its scene (GtaWorldIndex reads it): each level's switch distance its drawables'
+    /// furthest (unlimited where none says), and what its textures hold, the dictionaries' shared with other assets.
+    /// </summary>
+    public static WorldAsset FromGta(WorldAssetKey key, DrawableScene scene, IEnumerable<FiveFury.Drawables.Drawable> drawables)
+    {
+        float[] distances = [0, 0, 0, 0];
+        foreach (FiveFury.Drawables.Drawable drawable in drawables)
+            for (int lod = 0; lod < Lods; lod++)
+                if (drawable.Lods[(CommonFury.Assets.DrawableLod)lod] is { Models.Count: > 0, Distance: > 0 and var distance })
+                    distances[lod] = Math.Max(distances[lod], distance);
+        for (int lod = 0; lod < Lods; lod++)
+            if (distances[lod] <= 0)
+                distances[lod] = float.MaxValue;
+        var textures = new HashSet<GameTexture>(ReferenceEqualityComparer.Instance);
+        foreach (SurfaceMaterial material in scene.Materials)
+            foreach (GameTexture? texture in material.BoundTextures())
+                if (texture is not null)
+                    textures.Add(texture);
+        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.Empty);
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once.
@@ -116,25 +139,27 @@ internal sealed class WorldAsset
 
     // Geometry on the GPU and while it's made (twice), each material's uniforms; each texture's pixels as read and on
     // the GPU.
-    private static WorldMemoryCost Estimate(DrawableScene scene, IReadOnlyList<RedTexture> textures)
+    private static WorldMemoryCost Estimate(DrawableScene scene, IEnumerable<(object Texture, long Bytes)> textures)
     {
         long owned = 2 * ((long)scene.Vertices.Length * SurfaceVertex.Size + (long)scene.Indices.Length * 4)
-            + (long)scene.Materials.Count * Rdr2Material.UniformBytes + 1024;
-        var shared = textures.Distinct().Select(texture => new WorldSharedMemory(Identities.GetOrCreateValue(texture).Value, (long)texture.Data.Length * 3));
+            + (long)scene.Materials.Count * Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024;
+        var shared = textures.DistinctBy(texture => texture.Texture, ReferenceEqualityComparer.Instance)
+            .Select(texture => new WorldSharedMemory(Identities.GetOrCreateValue(texture.Texture).Value, texture.Bytes * 3));
         return new WorldMemoryCost(owned, shared);
     }
 }
 
 /// <summary>
-/// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials only
-/// (water waits for the scene behind it to be copied), by level of detail, each level's solid surfaces first so they
+/// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials, and GTA
+/// V's that surface.wgsl and terrain.wgsl draw (water waits for the scene behind it to be copied; fur grass and
+/// cables, which the model viewer draws with shaders of their own, for now too), by level of detail, each level's solid surfaces first so they
 /// cast as one, the indexes made the vertices' own, and the vertices in the asset's own space (the scene has them from
 /// its middle), as the placements' matrices take them.
 /// </summary>
 internal sealed class WorldLayout
 {
     /// <summary>Its surfaces, by part, with their materials.</summary>
-    public List<(SurfacePart Part, SurfaceMaterial Material, Rdr2Material Rdr2)> Kept { get; } = [];
+    public List<(SurfacePart Part, SurfaceMaterial Material, Rdr2Material? Rdr2)> Kept { get; } = [];
 
     /// <summary>The surfaces in the order their indexes are laid out.</summary>
     public int[] Order { get; private set; } = [];
@@ -146,12 +171,17 @@ internal sealed class WorldLayout
 
     public uint[] Indices { get; private set; } = [];
 
+    // Whether the world draws a material yet.
+    private static bool Drawn(SurfaceMaterial material) => material.Rdr2 is { } rdr2
+        ? !rdr2.Water
+        : !material.Fur && !material.Cable && !material.Glass && !material.Shader.StartsWith("water", StringComparison.OrdinalIgnoreCase);
+
     public static WorldLayout Of(DrawableScene scene)
     {
         var layout = new WorldLayout();
         foreach (SurfacePart part in scene.Parts)
-            if (scene.Materials[part.Material] is { Rdr2: { Water: false } rdr2 } material && part.IndexCount > 0)
-                layout.Kept.Add((part, material, rdr2));
+            if (part.IndexCount > 0 && scene.Materials[part.Material] is var material && Drawn(material))
+                layout.Kept.Add((part, material, material.Rdr2));
         if (layout.Kept.Count == 0 || scene.Vertices.Length == 0)
             return layout;
         var kept = layout.Kept;

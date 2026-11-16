@@ -2,10 +2,16 @@ using System.Numerics;
 using CommonFury.Numerics;
 using FiveFury;
 using FiveFury.Assets;
+using FiveFury.Authoring;
 using CommonFury.Hashing;
 using FiveFury.Numerics;
 using FiveFury.Ymap;
+using FiveFury.Textures;
+using FiveFury.Ydd;
+using FiveFury.Ydr;
+using FiveFury.Yft;
 using FiveFury.Ytyp;
+using HikariHopper.Rendering;
 using HikariHopper.Rendering.World;
 using RedFury.World;
 
@@ -25,8 +31,103 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// <summary>The base game, mounted.</summary>
     public GameInstallation Game { get; }
 
-    public override WorldAsset LoadAsset(WorldAssetKey key) =>
-        throw new NotSupportedException("GTA V's world assets aren't drawn yet.");
+    // The base game's dictionaries' parents (gtxd.meta and the maps' manifests), made the first time an asset is read,
+    // and each dictionary's chain as found; and the dictionaries read lately, by name hash, shared by the assets that
+    // read them, so a parent's textures go up once.
+    private GameFileCache? graph;
+    private readonly Dictionary<uint, uint[]> chains = [];
+    private readonly Dictionary<uint, LinkedListNode<(uint Hash, TextureDictionary? Dictionary, long Bytes)>> dictionaries = [];
+    private readonly LinkedList<(uint Hash, TextureDictionary? Dictionary, long Bytes)> recent = new();
+    private long dictionaryBytes;
+
+    /// <summary>How much of the dictionaries read lately is kept for the next asset that reads them.</summary>
+    internal const long DictionaryBudget = 768L * 1024 * 1024;
+
+    /// <summary>
+    /// Reads an archetype's drawable, fragment (intact) or drawable dictionary member, its textures from its own
+    /// dictionary, then the one its archetype names and that one's gtxd parents, then mapdetail.ytd, as the game
+    /// binds them. Under <see cref="WorldIndex.Gate"/>.
+    /// </summary>
+    public override WorldAsset LoadAsset(WorldAssetKey key)
+    {
+        GameFileType type = TypeOf(key.Extension) is { } known and not GameFileType.Ymap ? known
+            : throw new NotSupportedException($"Unsupported world asset {key}.");
+        GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
+        byte[] data = file.ReadStandalone();
+        string name = Path.GetFileNameWithoutExtension(file.VirtualPath);
+        IReadOnlyList<SceneModel> models = type switch
+        {
+            GameFileType.Ydr => [new SceneModel(name, Ydr.Read(data).Drawable, Matrix4x4.Identity)],
+            GameFileType.Yft => [.. FragmentModels.Of(Yft.Read(data), name).Where(model => model.Variant != ModelVariant.Damaged)],
+            _ => [.. Ydd.Read(data).Drawables.Where(entry => key.Member == 0 || entry.Name.Value == key.Member)
+                .Select(entry => new SceneModel(ModelContent.EntryName(entry.Name.Value, entry.Drawable.Name), entry.Drawable, Matrix4x4.Identity))],
+        };
+        if (models.Count == 0)
+            throw new FileNotFoundException($"Asset {key} has no such drawable.");
+        DrawableScene scene = DrawableScene.Build(models, new TextureLookup([.. Chain(key.TextureDictionary).Select(Dictionary).OfType<TextureDictionary>()], []));
+        return WorldAsset.FromGta(key, scene, models.Select(model => model.Drawable));
+    }
+
+    // Where the game looks for the textures of a model whose archetype names a dictionary (as FiveFury's ResolveTexture):
+    // that dictionary, its parents nearest first, then mapdetail.ytd, which the game keeps loaded for every drawable's
+    // detail maps.
+    private uint[] Chain(uint dictionary)
+    {
+        if (chains.TryGetValue(dictionary, out uint[]? known))
+            return known;
+        graph ??= new GameFileCache(Game.FileSystem);
+        var order = new List<uint>();
+        if (dictionary != 0)
+            order.Add(dictionary);
+        for (uint current = dictionary; current != 0;)
+        {
+            var parent = graph.TextureGraph.GetParent(new Hash32(current));
+            // Two packs naming different parents: the first, as nothing ranks them.
+            uint next = parent is { Status: ResolutionStatus.Resolved, Value: { } edge } ? edge.ParentHash.Value
+                : parent.Status == ResolutionStatus.Ambiguous && graph.TextureGraph.EdgesFrom(new Hash32(current)) is [var first, ..] ? first.ParentHash.Value : 0;
+            if (next == 0 || order.Contains(next))
+                break;
+            order.Add(next);
+            current = next;
+        }
+        if (!order.Contains(MapDetail))
+            order.Add(MapDetail);
+        return chains[dictionary] = [.. order];
+    }
+
+    private static readonly uint MapDetail = new Hash32("mapdetail").Value;
+
+    // A dictionary by name hash, as the game streams it; null when the game has none or it can't be read.
+    private TextureDictionary? Dictionary(uint hash)
+    {
+        if (dictionaries.TryGetValue(hash, out var known))
+        {
+            recent.Remove(known);
+            recent.AddFirst(known);
+            return known.Value.Dictionary;
+        }
+        TextureDictionary? dictionary = null;
+        long bytes = 0;
+        if (Game.FileSystem.Resolve(new Hash32(hash), GameFileType.Ytd).Value is { } file)
+            try
+            {
+                dictionary = FiveFury.Ytd.Ytd.Read(file.ReadStandalone()).Dictionary;
+                bytes = dictionary.Textures.Sum(texture => (long)texture.Data.Length);
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+                or OverflowException)
+            {
+            }
+        dictionaries[hash] = recent.AddFirst((hash, dictionary, bytes));
+        dictionaryBytes += bytes;
+        while (dictionaryBytes > DictionaryBudget && recent.Last is { } oldest && oldest.Value.Hash != hash)
+        {
+            recent.RemoveLast();
+            dictionaries.Remove(oldest.Value.Hash);
+            dictionaryBytes -= oldest.Value.Bytes;
+        }
+        return dictionary;
+    }
 
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => null;
 
