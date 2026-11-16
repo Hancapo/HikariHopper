@@ -32,14 +32,10 @@ internal sealed class WorldStreamingBudget(long limit)
     internal (IReadOnlySet<WorldEntityId> Cut, bool Pressure) Plan(WorldLodGraph graph, System.Numerics.Vector3 eye, Func<WorldAssetKey, bool> unavailable,
         int? hour = null)
     {
-        bool pressure = false;
-        long EstimateCut(IEnumerable<WorldAssetKey> keys)
-        {
-            long bytes = Estimate(keys);
-            pressure |= bytes > Target;
-            return bytes;
-        }
-        return (graph.Plan(eye, EstimateCut, Target, unavailable, hour is { } h ? node => WorldTimeFilter.ActiveAt(node, h) : null), pressure);
+        // Each asset's cost, kept as a running total over the cut while it's refined (RedFury's per-asset Plan): pricing
+        // the whole cut at every step allocated most of what the world allocated while flying.
+        WorldPlan plan = graph.Plan(eye, Cost, Target, unavailable, hour is { } h ? node => WorldTimeFilter.ActiveAt(node, h) : null);
+        return (plan.Refinements, plan.Pressure);
     }
 
     /// <summary>The costs alone, for planning in the background: it never reads the live loader's.</summary>
@@ -61,8 +57,6 @@ internal sealed class WorldStreamingBudget(long limit)
         Revision++;
         Observe(key, WorldMemoryCost.Total([footprint]));
     }
-
-    internal long Estimate(IEnumerable<WorldAssetKey> keys) => WorldMemoryCost.Total(keys.Distinct().Select(Cost));
 
     private WorldMemoryCost Cost(WorldAssetKey key) =>
         footprints.GetValueOrDefault(key) ?? (costs.TryGetValue(key, out long bytes) ? new WorldMemoryCost(bytes) : UnknownCost);
