@@ -30,7 +30,7 @@ internal sealed class WorldStreamer : IDisposable
     // The plants expanded at once, nearest batches first.
     private const int MaximumGrassInstances = 131072;
 
-    private readonly Rdr2WorldIndex index;
+    private readonly WorldIndex index;
     private readonly CancellationTokenSource stop = new();
     private readonly Lock gate = new();
     private readonly SemaphoreSlim workAvailable = new(0, 1);
@@ -80,7 +80,7 @@ internal sealed class WorldStreamer : IDisposable
     private Vector3 lightEye;
     private int? lightHour;
 
-    public WorldStreamer(Rdr2WorldIndex index)
+    public WorldStreamer(WorldIndex index)
     {
         this.index = index;
         worker = Task.Run(Work);
@@ -124,7 +124,7 @@ internal sealed class WorldStreamer : IDisposable
     {
         try
         {
-            var grassLoader = new WorldGrassLoader(index.Assets, index.Crypto, index.Reads);
+            Func<WorldLodNode, CancellationToken, WorldLodNode>? grassLoader = index.CreateGrass();
             while (!stop.IsCancellationRequested)
             {
                 bool loaded = LoadNext();
@@ -153,8 +153,8 @@ internal sealed class WorldStreamer : IDisposable
         {
             WorldAsset asset;
             // The archives held open are the index's, for whichever streamer reads it.
-            lock (index.Reads)
-                asset = WorldAsset.Load(key, index.Assets, index.Crypto, index.Reads);
+            lock (index.Gate)
+                asset = index.LoadAsset(key);
             if (asset.Bytes > LargestAsset)
                 throw new InvalidDataException($"Asset exceeds the world's upload budget ({asset.Bytes:N0} bytes).");
             lock (gate)
@@ -183,8 +183,10 @@ internal sealed class WorldStreamer : IDisposable
     }
 
     // Expands the nearest grass batch wanted and not yet expanded.
-    private bool LoadGrassNext(WorldGrassLoader loader)
+    private bool LoadGrassNext(Func<WorldLodNode, CancellationToken, WorldLodNode>? loader)
     {
+        if (loader is null)
+            return false;
         WorldLodNode? source;
         lock (gate)
         {
@@ -196,8 +198,8 @@ internal sealed class WorldStreamer : IDisposable
         try
         {
             WorldLodNode expanded;
-            lock (index.Reads)
-                expanded = loader.Load(source, stop.Token);
+            lock (index.Gate)
+                expanded = loader(source, stop.Token);
             lock (gate)
                 if (wantedGrass.Any(node => ReferenceEquals(node, source)))
                 {

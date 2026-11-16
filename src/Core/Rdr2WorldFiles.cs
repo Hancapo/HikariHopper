@@ -21,11 +21,12 @@ internal sealed record WorldFile(string Path, long Size)
 internal static class Rdr2WorldFiles
 {
     /// <summary>The asset or map of this hash and extension (2 drawable, 3 fragment, 4 dictionary, 73 map); null when there's none.</summary>
-    public static WorldFile? Locate(Rdr2WorldIndex index, string gameRoot, uint hash, byte extension)
+    public static WorldFile? Locate(Rdr2WorldIndex index, uint hash, byte extension)
     {
+        string gameRoot = index.Root;
         TextureAssetLocation? location;
         // The catalog is the streamer's worker's too, under the same lock.
-        lock (index.Reads)
+        lock (index.Gate)
             location = index.Assets.Find(hash, extension).LastOrDefault();
         if (location is null)
             return null;

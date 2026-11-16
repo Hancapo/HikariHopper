@@ -66,7 +66,7 @@ internal sealed class WorldAsset
     /// </summary>
     /// <exception cref="FileNotFoundException">The catalog has no such asset.</exception>
     /// <exception cref="NotSupportedException">An asset of another kind.</exception>
-    public static WorldAsset Load(WorldAssetKey key, RpfTextureCatalog catalog, Rdr2Crypto crypto, RpfReadSession reads)
+    public static WorldAsset LoadRdr2(WorldAssetKey key, RpfTextureCatalog catalog, Rdr2Crypto crypto, RpfReadSession reads)
     {
         TextureAssetLocation location = catalog.Find(key.Hash, key.Extension).LastOrDefault()
             ?? throw new FileNotFoundException($"Asset {key} not found.");

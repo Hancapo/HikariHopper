@@ -71,7 +71,11 @@ public static class GameCatalog
         [
             new(GameSettings.EnhancedEdition, "Enhanced", "GTA5_Enhanced.exe", GameSettings.EnhancedGameRootKey),
             new(GameSettings.LegacyEdition, "Legacy", "GTA5.exe", GameSettings.LegacyGameRootKey),
-        ]),
+        ])
+        {
+            // Legion Square, from its south side, looking north across it.
+            Landmark = new("Legion Square", new Vector3(195, -1030, 62), -MathF.PI / 2, .2f),
+        },
         // One edition, so it has no name of its own; its start page row is named for the store it came from.
         new(Rdr2, "Red Dead Redemption 2", "RDR2",
         [
