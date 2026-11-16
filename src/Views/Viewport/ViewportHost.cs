@@ -449,6 +449,7 @@ internal sealed partial class ViewportHost : NativeControlHost
         long start = Stopwatch.GetTimestamp();
         blankWhileDrawing = false;
         drawing = true;
+        bool drew = false;
         try
         {
             if (!stopped && renderer is not null && IsEffectivelyVisible)
@@ -466,6 +467,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 lastFrame = now;
                 Drawing?.Invoke(renderer, seconds);
                 renderer.Draw();
+                drew = true;
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
                 {
                     turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
@@ -481,9 +483,12 @@ internal sealed partial class ViewportHost : NativeControlHost
         {
             drawing = false;
         }
-        // A frame slower than the display asks for the next at once rather than sleeping until a vertical blank;
-        // input still comes first, as WM_PAINT waits for the message queue to drain.
-        chained = !stopped && pacer is { } p && (Stopwatch.GetElapsedTime(start).TotalSeconds >= p.Period || blankWhileDrawing);
+        // The pacer's rate follows how long frames take. A frame slower than a tick asks for the next at once rather
+        // than sleeping until the next; input still comes first, as WM_PAINT waits for the message queue to drain.
+        double took = Stopwatch.GetElapsedTime(start).TotalSeconds;
+        if (drew)
+            pacer?.FrameTook(took);
+        chained = !stopped && pacer is { } p && (took >= p.Period || blankWhileDrawing);
         if (chained)
             InvalidateRect(hwnd, 0, 0);
     }
