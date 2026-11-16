@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using HikariHopper.Rendering.World;
 using RedFury.World;
 using WebGpuSharp;
@@ -41,9 +43,19 @@ internal sealed unsafe partial class ViewportRenderer
         // Which placement each of Sources is: its node, and which of its instances (-1 for a node without any).
         internal readonly List<(WorldLodNode Node, int Instance)> Placements = [];
 
-        // The nodes its storage holds, in order, and this coverage's (by their index in the cull set).
+        // The nodes its storage holds, in the cull set's order, with each one's first row, and this coverage's (by their
+        // index in the cull set).
         internal readonly List<WorldLodNode> SourceNodes = [];
+        internal readonly List<int> SourceFirsts = [];
         internal readonly List<int> NextNodes = [];
+
+        // Where each covered node's placements are in its storage, which stay put while it's covered; the gaps nodes no
+        // longer covered left, refilled first; the rows in use, gaps included; the rows live, and how many are mirrored;
+        // and whether a node's fade began since its rows were written.
+        internal readonly Dictionary<WorldLodNode, WorldSourceSlot> Slots = new(ReferenceEqualityComparer.Instance);
+        internal readonly List<(int First, int Count)> Gaps = [];
+        internal int SourceRows, LiveSources, ReflectedSources;
+        internal bool FadeChanged;
 
         // Its number in the picking pass, from 1.
         internal int Id;
@@ -81,6 +93,14 @@ internal sealed unsafe partial class ViewportRenderer
         internal long Used;
 
         internal int Level(float distance2) => WorldLodSelection.Level(LodMask, LodReach2, distance2);
+    }
+
+    // A covered node's rows in its asset's storage, the fade they were written with, and the update that last saw it.
+    private struct WorldSourceSlot
+    {
+        internal int First, Count, Reflected;
+        internal (float Start, float Direction) Fade;
+        internal long Seen;
     }
 
     // A surface of an asset: its part (with indexes into the asset's vertices as they are), and how it's drawn.
@@ -350,13 +370,22 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 worldFadingOut.Remove(node);
                 worldFades[node] = ((float)now, 1);
+                MarkFade(node);
             }
         foreach (WorldLodNode node in before)
             if (!kept.Contains(node) && !IsGrass(node) && worldAssets.ContainsKey(node.Asset))
             {
                 worldFadingOut[node] = now;
                 worldFades[node] = ((float)now, -1);
+                MarkFade(node);
             }
+
+        // Its asset's storage holds the node's rows with the fade they had.
+        void MarkFade(WorldLodNode node)
+        {
+            if (worldAssets.TryGetValue(node.Asset, out WorldGpuAsset? asset))
+                asset.FadeChanged = true;
+        }
 
         static bool IsGrass(WorldLodNode node) => node.Grass is not null || node.Instances is [{ Grass: not null }, ..];
     }
@@ -484,9 +513,11 @@ internal sealed unsafe partial class ViewportRenderer
         }
     }
 
-    // The covered placements' matrices into each asset's storage, when the coverage or the assets changed. An asset
-    // whose nodes came back as they were, in the same order, keeps its storage and only maps the entries to it again:
-    // a coverage change touches only the assets whose placements changed.
+    // The covered placements' matrices into each asset's storage, when the coverage or the assets changed. Each covered
+    // node keeps its rows while it stays covered: a node coming in takes a gap one going left, or rows at the end, and
+    // only its rows, and those whose fade changed, are written and uploaded. An asset with a city's placements of one
+    // tree or rock no longer rewrites all of them when one joins or leaves. Its storage is laid out again, without gaps,
+    // once they are half of it.
     private void UpdateWorldSources()
     {
         WorldCullSet set = worldCull;
@@ -497,32 +528,104 @@ internal sealed unsafe partial class ViewportRenderer
         for (int n = 0; n < set.Nodes.Length; n++)
             if (worldAssets.TryGetValue(set.Nodes[n].Asset, out WorldGpuAsset? asset))
                 asset.NextNodes.Add(n);
+        long seen = ++worldSourceUpdates;
         foreach (WorldGpuAsset asset in worldAssets.Values)
         {
-            if (asset.SourceRevision >= 0 && SameNodes(asset))
+            // The same nodes in the same order, written with the fades as they are: only the entries are mapped again.
+            if (asset.SourceRevision >= 0 && !asset.FadeChanged && SameNodes(asset))
             {
-                uint next = 0;
-                foreach (int n in asset.NextNodes)
+                for (int k = 0; k < asset.NextNodes.Count; k++)
+                {
+                    int n = asset.NextNodes[k];
+                    uint row = (uint)asset.SourceFirsts[k];
                     for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
-                        worldSourceIndex[entry] = next++;
+                        worldSourceIndex[entry] = row++;
+                }
                 continue;
             }
-            asset.Sources.Begin();
-            asset.Placements.Clear();
-            asset.SourceNodes.Clear();
+            worldSourceRanges.Clear();
+            // Half of it gaps: laid out again from the start.
+            if (asset.SourceRows > 64 && asset.SourceRows > 2 * asset.LiveSources)
+            {
+                asset.Slots.Clear();
+                asset.Gaps.Clear();
+                asset.Placements.Clear();
+                asset.Sources.Truncate(0);
+                asset.SourceRows = asset.LiveSources = asset.ReflectedSources = 0;
+            }
+            // Those still covered stay, their rows written again only for a fade that changed; the others come in.
+            worldAddedNodes.Clear();
             foreach (int n in asset.NextNodes)
             {
                 WorldLodNode node = set.Nodes[n];
-                WorldCullSet.PreparedNode block = set.Blocks[n];
-                asset.SourceNodes.Add(node);
-                for (int i = 0, entry = set.First[n]; i < block.Count; i++, entry++)
+                ref WorldSourceSlot slot = ref CollectionsMarshal.GetValueRefOrNullRef(asset.Slots, node);
+                if (Unsafe.IsNullRef(ref slot))
                 {
-                    worldSourceIndex[entry] = (uint)asset.Sources.Count;
-                    asset.Sources.Add(block.World[i], WithWorldFade(block.Normal[i], node));
-                    asset.Placements.Add((node, block.Index[i]));
+                    worldAddedNodes.Add(n);
+                    continue;
+                }
+                slot.Seen = seen;
+                var fade = worldFades.GetValueOrDefault(node);
+                if (slot.Fade != fade)
+                {
+                    slot.Fade = fade;
+                    WorldCullSet.PreparedNode block = set.Blocks[n];
+                    for (int i = 0; i < slot.Count; i++)
+                        asset.Sources.Set(slot.First + i, block.World[i], WithWorldFade(block.Normal[i], node));
+                    worldSourceRanges.Add((slot.First, slot.Count));
                 }
             }
-            int count = asset.Sources.Count;
+            // Those no longer covered leave their rows as a gap.
+            if (asset.Slots.Count > asset.NextNodes.Count - worldAddedNodes.Count)
+            {
+                worldRemovedNodes.Clear();
+                foreach (var (node, slot) in asset.Slots)
+                    if (slot.Seen != seen)
+                        worldRemovedNodes.Add(node);
+                foreach (WorldLodNode node in worldRemovedNodes)
+                {
+                    asset.Slots.Remove(node, out WorldSourceSlot slot);
+                    asset.LiveSources -= slot.Count;
+                    asset.ReflectedSources -= slot.Reflected;
+                    for (int i = 0; i < slot.Count; i++)
+                        asset.Placements[slot.First + i] = (null!, -1);
+                    if (slot.Count > 0)
+                        asset.Gaps.Add((slot.First, slot.Count));
+                }
+            }
+            foreach (int n in worldAddedNodes)
+            {
+                WorldLodNode node = set.Nodes[n];
+                WorldCullSet.PreparedNode block = set.Blocks[n];
+                int first = TakeGap(asset, block.Count);
+                var fade = worldFades.GetValueOrDefault(node);
+                asset.Slots.Add(node, new WorldSourceSlot { First = first, Count = block.Count, Reflected = block.Reflected, Fade = fade, Seen = seen });
+                while (asset.Placements.Count < first + block.Count)
+                    asset.Placements.Add((null!, -1));
+                for (int i = 0; i < block.Count; i++)
+                {
+                    asset.Sources.Set(first + i, block.World[i], WithWorldFade(block.Normal[i], node));
+                    asset.Placements[first + i] = (node, block.Index[i]);
+                }
+                asset.LiveSources += block.Count;
+                asset.ReflectedSources += block.Reflected;
+                if (block.Count > 0)
+                    worldSourceRanges.Add((first, block.Count));
+            }
+            // The entries mapped to their rows, and the order kept for the next update.
+            asset.SourceNodes.Clear();
+            asset.SourceFirsts.Clear();
+            foreach (int n in asset.NextNodes)
+            {
+                WorldLodNode node = set.Nodes[n];
+                int first = asset.Slots[node].First;
+                asset.SourceNodes.Add(node);
+                asset.SourceFirsts.Add(first);
+                uint row = (uint)first;
+                for (int entry = set.First[n], end = entry + set.Count[n]; entry < end; entry++)
+                    worldSourceIndex[entry] = row++;
+            }
+            int count = asset.SourceRows;
             bool replaced = count > asset.Capacity;
             if (replaced)
             {
@@ -545,17 +648,31 @@ internal sealed unsafe partial class ViewportRenderer
                 asset.Instances = VertexPages.Allocate((ulong)capacity * 4);
                 asset.Rewrite = true;
                 worldVisibilityDirty = true;
+                // New storage holds nothing yet: all of it goes up.
+                worldSourceRanges.Clear();
+                if (count > 0)
+                    worldSourceRanges.Add((0, count));
             }
-            if (count > 0 && (replaced || asset.Sources.Changed))
-                queue.WriteBuffer(asset.SourceInstances!.Value.Buffer, asset.SourceInstances.Value.Offset, (ReadOnlySpan<Matrix4x4>)asset.Sources.Matrices.AsSpan(0, count * 2));
-            bool reflected = false;
-            for (int i = 0; i < count && !reflected; i++)
-                reflected = asset.Sources.Matrices[i * 2].GetDeterminant() < 0;
+            // Only the rows written, a run of adjacent ones at a time.
+            worldSourceRanges.Sort();
+            for (int r = 0; r < worldSourceRanges.Count;)
+            {
+                var (first, length) = worldSourceRanges[r++];
+                while (r < worldSourceRanges.Count && worldSourceRanges[r].First <= first + length)
+                {
+                    length = Math.Max(length, worldSourceRanges[r].First + worldSourceRanges[r].Count - first);
+                    r++;
+                }
+                queue.WriteBuffer(asset.SourceInstances!.Value.Buffer, asset.SourceInstances.Value.Offset + (ulong)first * 128,
+                    (ReadOnlySpan<Matrix4x4>)asset.Sources.Matrices.AsSpan(first * 2, length * 2));
+            }
+            bool reflected = asset.ReflectedSources > 0;
             if (asset.Reflected != reflected)
             {
                 asset.Reflected = reflected;
                 ReleaseAssetBundles(asset);
             }
+            asset.FadeChanged = false;
             asset.SourceRevision = ++worldSourceBuilds;
         }
         worldSourcesDirty = false;
@@ -571,6 +688,67 @@ internal sealed unsafe partial class ViewportRenderer
             return true;
         }
     }
+
+    /// <summary>An uploaded asset's rows in use, gaps included, and those live; for tests.</summary>
+    internal (int Rows, int Live) WorldSourceRows(WorldAssetKey key) =>
+        worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? (asset.SourceRows, asset.LiveSources) : default;
+
+    /// <summary>The row a covered node's first placement is in, and its normal matrix there; for tests.</summary>
+    internal (int Row, Matrix4x4 Normal) WorldSourceRow(WorldLodNode node)
+    {
+        WorldGpuAsset asset = worldAssets[node.Asset];
+        int row = asset.Slots[node].First;
+        return (row, asset.Sources.Matrices[row * 2 + 1]);
+    }
+
+    /// <summary>
+    /// Whether every covered placement's entry reads its own world matrix from its asset's storage, and its rows name
+    /// it; for tests.
+    /// </summary>
+    internal bool WorldSourcesMatchCoverage()
+    {
+        WorldCullSet set = worldCull;
+        for (int n = 0; n < set.Nodes.Length; n++)
+        {
+            if (!worldAssets.TryGetValue(set.Nodes[n].Asset, out WorldGpuAsset? asset))
+                continue;
+            WorldCullSet.PreparedNode block = set.Blocks[n];
+            for (int i = 0; i < block.Count; i++)
+            {
+                uint row = worldSourceIndex[set.First[n] + i];
+                if (asset.Sources.Matrices[row * 2] != block.World[i] || !ReferenceEquals(asset.Placements[(int)row].Node, set.Nodes[n]))
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    // Rows for a node coming in: the first gap it fits, what it leaves of it kept, or rows at the end.
+    private static int TakeGap(WorldGpuAsset asset, int count)
+    {
+        if (count == 0)
+            return 0;
+        for (int g = 0; g < asset.Gaps.Count; g++)
+        {
+            var (first, length) = asset.Gaps[g];
+            if (length < count)
+                continue;
+            if (length == count)
+                asset.Gaps.RemoveAt(g);
+            else
+                asset.Gaps[g] = (first + count, length - count);
+            return first;
+        }
+        int end = asset.SourceRows;
+        asset.SourceRows += count;
+        return end;
+    }
+
+    // Scratch for the updates above.
+    private readonly List<(int First, int Count)> worldSourceRanges = [];
+    private readonly List<int> worldAddedNodes = [];
+    private readonly List<WorldLodNode> worldRemovedNodes = [];
+    private long worldSourceUpdates;
 
     // An asset's charge with its placements' storage at these capacities.
     private void SetInstanceCharge(WorldGpuAsset asset, int capacity, int shadowCapacity)
