@@ -83,7 +83,10 @@ public sealed class WorldCullingTests
         Assert.Equal(1, set.Count[0]);
         Assert.True(Matrix4x4.Invert(good.Transform, out Matrix4x4 inverse));
         Assert.Equal(good.Transform, set.Pair(0));
-        Assert.Equal(Matrix4x4.Transpose(inverse), set.Pair(1));
+        // The inverse transpose, its fourth column (which the normals don't read) cleared for the level of detail fade.
+        Matrix4x4 normal = Matrix4x4.Transpose(inverse);
+        normal.M14 = normal.M24 = normal.M34 = 0;
+        Assert.Equal(normal, set.Pair(1));
         Assert.Equal(101f * 101f, set.Reach2[0]);
     }
 

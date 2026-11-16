@@ -132,5 +132,57 @@ public sealed class WorldRenderingTests
         }
     }
 
+    [Fact]
+    public void A_placement_leaving_the_coverage_fades_out_while_the_one_replacing_it_fades_in()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(64, 32);
+            renderer.WorldShown = true;
+            renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            // A low-detail model and the one replacing it, both up.
+            RedFury.World.WorldLodNode Place(uint hash, int index)
+            {
+                FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
+                var key = new RedFury.World.WorldAssetKey(hash, 2);
+                Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
+                    new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+                while (renderer.HasPendingWorldUpload)
+                    renderer.ProcessWorldUploads();
+                return new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, index), null, key, Matrix4x4.Identity, new Vector3(.5f, .5f, 0), 1, 100, 0, 0);
+            }
+            RedFury.World.WorldLodNode low = Place(1, 0), high = Place(2, 1);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([low], [low.Asset]));
+            renderer.RenderTo(view);
+            Assert.Equal(0, renderer.WorldFadingOut);
+            // Replaced: it stays drawn, fading out, as long as the fade lasts, then goes.
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([high], [high.Asset]));
+            renderer.RenderTo(view);
+            Assert.Equal(1, renderer.WorldFadingOut);
+            Thread.Sleep(TimeSpan.FromSeconds(ViewportRenderer.LodFadeSeconds + .15));
+            renderer.RenderTo(view);
+            Assert.Equal(0, renderer.WorldFadingOut);
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+
     private const long WorldShadowCount = Rendering.World.WorldShadowCascades.Count;
 }

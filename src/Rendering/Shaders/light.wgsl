@@ -47,7 +47,7 @@ struct Light {
     artificial_down: vec4f,
     artificial_up: vec4f,
     // The water's: seconds since the view began (its ripples' time), the timecycle's water_foglight, and the frame's
-    // near plane (depth is near over distance).
+    // near plane (depth is near over distance); then the level of detail fades' clock (lod_fade_keeps).
     water: vec4f,
 };
 
@@ -211,6 +211,24 @@ fn gta_artificial_ambient(n: vec3f) -> vec3f {
         return mix(unpack_ambient(shaded_room.y), unpack_ambient(shaded_room.x), h);
     }
     return mix(light.artificial_up.rgb, light.artificial_down.rgb, h);
+}
+
+// How long a placement takes to fade in or out as the levels of detail change, in seconds.
+const LOD_FADE_SECONDS: f32 = 0.4;
+
+// Whether a pixel of a placement fading between levels of detail is drawn (after GTA's dithered entity fade): one fading
+// in is drawn on more of its pixels each moment, one fading out on fewer, by a 4x4 ordered dither, so a model and the
+// ones replacing it, which began together, share the pixels between them as one gives way to the other. fade is when
+// the fade began on the fades' clock (water.w) and which way, 1 in, -1 out, 0 none.
+fn lod_fade_keeps(pixel: vec2f, fade: vec2f) -> bool {
+    if (abs(fade.y) < 0.5) {
+        return true;
+    }
+    let t = saturate((light.water.w - fade.x) / LOD_FADE_SECONDS);
+    var bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    let cell = vec2u(max(pixel, vec2f(0.0))) % vec2u(4u);
+    let threshold = (bayer[cell.y * 4u + cell.x] + 0.5) / 16.0;
+    return select((threshold >= t), (threshold < t), (fade.y > 0.0));
 }
 
 // The key light's shadow at a point, from the cascade its distance from the camera falls in, as RedFury's cascade_pcf

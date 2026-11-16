@@ -110,6 +110,8 @@ struct MaterialVertexOutput {
     @location(9) grass_colour_ao: vec4f,
     @location(10) relative_position: vec3f,
     @location(11) hemisphere: f32,
+    // Its placement's level of detail fade in a world (light.wgsl's lod_fade_keeps): none in the viewer.
+    @location(12) @interpolate(flat) lod_fade: vec2f,
 };
 
 fn material_vertex_geometry(input: MaterialVertexInput) -> MaterialVertexOutput {

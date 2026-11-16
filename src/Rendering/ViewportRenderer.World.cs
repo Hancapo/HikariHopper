@@ -299,8 +299,9 @@ internal sealed unsafe partial class ViewportRenderer
         // The same coverage is common while assets come in or the camera only turns.
         if (!worldSelection.Coverage.SequenceEqual(selection.Coverage, ReferenceEqualityComparer.Instance))
         {
-            worldVisibilityDirty = worldSourcesDirty = worldNodeAssetsDirty = true;
-            worldCull.Update(selection.Coverage);
+            StartWorldFades(worldSelection.Coverage, selection.Coverage);
+            worldSelection = selection;
+            UpdateWorldCoverage();
         }
         worldSelection = selection;
         foreach (WorldLodNode node in selection.Coverage)
@@ -318,10 +319,90 @@ internal sealed unsafe partial class ViewportRenderer
         set => worldCull.Ambient = value;
     }
 
+    // GTA's level of detail fades (light.wgsl's lod_fade_keeps): the placements that came into the coverage fade in, and
+    // those that left it stay drawn for the fade, fading out, in the same moment, so a model and the ones replacing it
+    // share their pixels as one gives way to the other. When each began on the light's clock, and which way; those
+    // fading out, when they began; and how long a fade is, as the shaders have it.
+    private readonly Dictionary<WorldLodNode, (float Start, float Direction)> worldFades = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<WorldLodNode, double> worldFadingOut = new(ReferenceEqualityComparer.Instance);
+    internal const double LodFadeSeconds = .4;
+
+    // The fades' clock, in seconds since the renderer was made (light.wgsl's water.w): it doesn't wrap, so a fade done
+    // stays done, and a float of it keeps to a hundredth of a second for days.
+    private readonly System.Diagnostics.Stopwatch lodFadeClock = System.Diagnostics.Stopwatch.StartNew();
+
+    private double lodFadeTime => lodFadeClock.Elapsed.TotalSeconds;
+
+    /// <summary>The placements fading out of the coverage, still drawn.</summary>
+    internal int WorldFadingOut => worldFadingOut.Count;
+
+    // A coverage change's fades: none for the first coverage (nothing was shown to fade from), nor for grass, which
+    // fades with distance of its own.
+    private void StartWorldFades(IReadOnlyList<WorldLodNode> before, IReadOnlyList<WorldLodNode> after)
+    {
+        if (before.Count == 0)
+            return;
+        double now = lodFadeTime;
+        var was = new HashSet<WorldLodNode>(before, ReferenceEqualityComparer.Instance);
+        var kept = new HashSet<WorldLodNode>(after, ReferenceEqualityComparer.Instance);
+        foreach (WorldLodNode node in after)
+            if (!was.Contains(node) && !IsGrass(node))
+            {
+                worldFadingOut.Remove(node);
+                worldFades[node] = ((float)now, 1);
+            }
+        foreach (WorldLodNode node in before)
+            if (!kept.Contains(node) && !IsGrass(node) && worldAssets.ContainsKey(node.Asset))
+            {
+                worldFadingOut[node] = now;
+                worldFades[node] = ((float)now, -1);
+            }
+
+        static bool IsGrass(WorldLodNode node) => node.Grass is not null || node.Instances is [{ Grass: not null }, ..];
+    }
+
+    // The coverage drawn: the selection's, and those fading out of it while their fade lasts.
+    private void UpdateWorldCoverage()
+    {
+        worldVisibilityDirty = worldSourcesDirty = worldNodeAssetsDirty = true;
+        worldCull.Update(worldFadingOut.Count == 0 ? worldSelection.Coverage : [.. worldSelection.Coverage, .. worldFadingOut.Keys]);
+    }
+
+    // Those faded out go; those faded in need nothing more (their pixels are all drawn, and the clock doesn't wrap).
+    private void EndWorldFades()
+    {
+        if (worldFades.Count == 0)
+            return;
+        double now = lodFadeTime;
+        bool ended = false;
+        foreach (var (node, (start, direction)) in worldFades.ToArray())
+        {
+            if (now - start < LodFadeSeconds)
+                continue;
+            worldFades.Remove(node);
+            if (direction < 0 && worldFadingOut.Remove(node))
+                ended = true;
+        }
+        if (ended)
+            UpdateWorldCoverage();
+    }
+
+    // A placement's normal matrix with its level of detail fade in the lanes the normals don't read (WorldCullSet).
+    private Matrix4x4 WithWorldFade(Matrix4x4 normal, WorldLodNode node)
+    {
+        if (normal.M43 > .5f || !worldFades.TryGetValue(node, out var fade))
+            return normal;
+        normal.M14 = fade.Start;
+        normal.M24 = fade.Direction;
+        return normal;
+    }
+
     /// <summary>Lets go of every asset: another world, or none.</summary>
     public void ClearWorld()
     {
         CancelWorldUpload();
+        worldFades.Clear();
+        worldFadingOut.Clear();
         foreach (WorldAssetKey key in worldAssets.Keys.ToArray())
             RemoveWorldAsset(key);
         worldSelection = new WorldSelection([], []);
@@ -437,7 +518,7 @@ internal sealed unsafe partial class ViewportRenderer
                 for (int i = 0, entry = set.First[n]; i < block.Count; i++, entry++)
                 {
                     worldSourceIndex[entry] = (uint)asset.Sources.Count;
-                    asset.Sources.Add(block.World[i], block.Normal[i]);
+                    asset.Sources.Add(block.World[i], WithWorldFade(block.Normal[i], node));
                     asset.Placements.Add((node, block.Index[i]));
                 }
             }
@@ -509,6 +590,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     private void UpdateWorldVisibility(ShadowCascade[] cascades, bool shadows)
     {
+        EndWorldFades();
         if (worldSourcesDirty)
             UpdateWorldSources();
         Vector3 eye = Camera.Eye, forward = Camera.Forward;
@@ -565,7 +647,8 @@ internal sealed unsafe partial class ViewportRenderer
                 else
                 {
                     ShadowCascade cascade = cascades[volume - 1];
-                    if (worldNodeCasts[n] && cascade.Intersects(node.Center - eye, node.Radius))
+                    // What's fading out casts no longer: the models replacing it do.
+                    if (worldNodeCasts[n] && cascade.Intersects(node.Center - eye, node.Radius) && !worldFadingOut.ContainsKey(node))
                         WorldCulling.Cascade(set, set.First[n], set.Count[n], eye, cascade, output);
                 }
             }

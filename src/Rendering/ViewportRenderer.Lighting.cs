@@ -487,7 +487,7 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
         vectors[35] = new Vector4(cycle.ArtificialDown, 0);
         vectors[36] = new Vector4(cycle.ArtificialUp, 0);
-        vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, 0);
+        vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, (float)lodFadeTime);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 

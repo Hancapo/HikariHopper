@@ -91,6 +91,8 @@ struct TerrainOutput {
     @location(11) bump_shadow: f32,
     // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
     @location(12) @interpolate(flat) room: vec4f,
+    // Its placement's level of detail fade (light.wgsl's lod_fade_keeps): none in the viewer.
+    @location(13) @interpolate(flat) lod_fade: vec2f,
 };
 
 // The camera's reflection map being drawn, as surface.wgsl reads it.
@@ -150,7 +152,12 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
 fn fs_terrain(input: TerrainOutput) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.place);
     use_room(input.room);
-    return shade_terrain(input);
+    // Left out after shading, which needs uniform control flow.
+    let colour = shade_terrain(input);
+    if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
+        discard;
+    }
+    return colour;
 }
 
 // Into the reflection map: what is behind the hemisphere is left out, after shading.

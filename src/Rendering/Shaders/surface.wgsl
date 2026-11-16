@@ -118,6 +118,8 @@ struct SurfaceOutput {
     @location(9) controls: vec2f,
     // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
     @location(10) @interpolate(flat) room: vec4f,
+    // Its placement's level of detail fade (light.wgsl's lod_fade_keeps): none in the viewer.
+    @location(11) @interpolate(flat) lod_fade: vec2f,
 };
 
 // The camera's reflection map being drawn (ViewportRenderer.Reflections.cs): the eye relative to the scene's origin,
@@ -193,7 +195,12 @@ struct Surface {
 fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.place);
     use_room(input.room);
-    return shade_surface(input, front);
+    // Left out after shading, which needs uniform control flow.
+    let colour = shade_surface(input, front);
+    if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
+        discard;
+    }
+    return colour;
 }
 
 // Into the reflection map: the paraboloid mirrors the winding, and what is behind the hemisphere is left out (after
