@@ -380,7 +380,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             }
             else
                 renderer.Show(shown);
-            pacer = new DisplayPacer(hwnd, RequestFrame);
+            pacer = new DisplayPacer(hwnd, RequestFrame, renderer.Unlocked);
             Started?.Invoke(renderer.AdapterName);
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
@@ -418,6 +418,7 @@ internal sealed partial class ViewportHost : NativeControlHost
         long start = Stopwatch.GetTimestamp();
         blankWhileDrawing = false;
         drawing = true;
+        bool drew = false;
         try
         {
             if (!stopped && renderer is not null && IsEffectivelyVisible)
@@ -435,6 +436,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 lastFrame = now;
                 Drawing?.Invoke(renderer, seconds);
                 renderer.Draw();
+                drew = true;
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
                 {
                     turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
@@ -449,6 +451,14 @@ internal sealed partial class ViewportHost : NativeControlHost
         finally
         {
             drawing = false;
+        }
+        // Unlocked, the pacer asks for the next frame now that this one's drawn.
+        if (pacer is { Unlocked: true } unlockedPacer)
+        {
+            chained = false;
+            if (drew)
+                unlockedPacer.FrameDrawn();
+            return;
         }
         // A frame slower than the display asks for the next at once rather than sleeping until a vertical blank;
         // input still comes first, as WM_PAINT waits for the message queue to drain.

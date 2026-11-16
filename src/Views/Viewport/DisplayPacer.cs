@@ -4,20 +4,24 @@ using System.Runtime.InteropServices;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// Calls <c>tick</c> once per vertical blank of the monitor showing a window, on a thread of its own (after RedFury's).
+/// Calls <c>tick</c> once per vertical blank of the monitor showing a window, on a thread of its own (after RedFury's);
+/// or, unlocked, as soon as the frame before is drawn (<see cref="FrameDrawn"/>), and a few times a second while none is.
 /// </summary>
 internal sealed partial class DisplayPacer : IDisposable
 {
     private readonly nint window;
     private readonly Action tick;
     private readonly Thread thread;
+    private readonly bool unlocked;
+    private readonly AutoResetEvent drawn = new(false);
     private volatile bool stopped;
     private double period = 1.0 / 60;
 
-    public DisplayPacer(nint window, Action tick)
+    public DisplayPacer(nint window, Action tick, bool unlocked = false)
     {
         this.window = window;
         this.tick = tick;
+        this.unlocked = unlocked;
         thread = new Thread(Run) { IsBackground = true, Name = "HikariHopper display pacer", Priority = ThreadPriority.AboveNormal };
         thread.Start();
     }
@@ -25,8 +29,32 @@ internal sealed partial class DisplayPacer : IDisposable
     /// <summary>The time between vertical blanks in seconds, smoothed; 1/60 until measured.</summary>
     public double Period => Volatile.Read(ref period);
 
+    /// <summary>Whether frames follow one another as fast as they're drawn rather than the vertical blank.</summary>
+    public bool Unlocked => unlocked;
+
+    /// <summary>
+    /// A frame was drawn: unlocked, the next is asked for now. From the pacer's thread, not the frame's, so the window's
+    /// paint isn't asked for again before its message queue is looked at: chained paints would starve its timers.
+    /// </summary>
+    public void FrameDrawn()
+    {
+        if (unlocked)
+            drawn.Set();
+    }
+
     private void Run()
     {
+        if (unlocked)
+        {
+            // A viewport that draws nothing (hidden) is looked at twenty times a second.
+            while (!stopped)
+            {
+                drawn.WaitOne(50);
+                if (!stopped)
+                    tick();
+            }
+            return;
+        }
         using var blank = new VerticalBlank();
         long previous = 0;
         while (!stopped)
@@ -55,6 +83,7 @@ internal sealed partial class DisplayPacer : IDisposable
     public void Dispose()
     {
         stopped = true;
+        drawn.Set();
         if (Thread.CurrentThread != thread)
             thread.Join(250);
     }
