@@ -564,7 +564,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-7";
+    private const string CacheVersion = "hh-gta-world-8";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -834,7 +834,8 @@ internal static class GtaWorldCatalog
     /// gives way to all of them together as it would to the instance (<paramref name="adopted"/> counts the extra
     /// children); none reaches further than the instance does, as the game shows an interior's contents only within
     /// that. Each one in a room (not the limbo, room nought, which is outside) takes that room's ambient
-    /// (<paramref name="ambients"/>), by its timecycle modifiers. Interiors only cutscenes show are left out. Returns the
+    /// (<paramref name="ambients"/>), by its timecycle modifiers. Interiors only cutscenes show are left out, and so are rooms the outside can't see
+    /// into (<see cref="SeenFromOutside"/>). Returns the
     /// next number.
     /// </summary>
     private static int AddInterior(MloInstanceDef instance, WorldEntityId? parent, uint map, int next, Dictionary<uint, Archetype> archetypes,
@@ -866,6 +867,9 @@ internal static class GtaWorldCatalog
                 foreach (LocalReference<YmapEntity> attached in portal.AttachedObjects)
                     if (attached.Target is { } held)
                         rooms.TryAdd(held, side);
+        // The rooms seen from outside: an interior whose rooms only look out (a set with its own view of outside, as
+        // the psychiatrist's office at Vespucci has) shows nothing of them to the world around it.
+        HashSet<MloRoomDef> seen = SeenFromOutside(interior);
         var sets = new HashSet<uint>(instance.DefaultEntitySets.Select(name => name.Value));
         // Each with where it is in the interior: its place in the interior's entities, or in an entity set's.
         var contents = interior.Entities.Select((entity, at) => (Entity: entity, Room: rooms.GetValueOrDefault(entity), Set: -1, At: at))
@@ -878,8 +882,8 @@ internal static class GtaWorldCatalog
         {
             int index = next++;
             interiorEntities[new WorldEntityId(map, index)] = (set, at);
-            if (value is not EntityDef entity || value is MloInstanceDef || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type)
-                || Place(entity, type, placement) is not { } placed)
+            if (value is not EntityDef entity || value is MloInstanceDef || room is not null && !seen.Contains(room)
+                || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type) || Place(entity, type, placement) is not { } placed)
                 continue;
             if (timecycle is not null && room is not null && interior.Rooms.IndexOf(room) > 0)
             {
@@ -900,6 +904,29 @@ internal static class GtaWorldCatalog
         if (parent is { } lod)
             adopted[lod] = adopted.GetValueOrDefault(lod) + placedCount - 1;
         return next;
+    }
+
+    /// <summary>
+    /// The rooms of an interior seen from outside it: its limbo (room nought, the outside), and every room a portal
+    /// opens onto from one seen. A one-way portal is seen through only from its own room, out: the room beyond it
+    /// looks out but can't be looked into. An interior without rooms is all outside.
+    /// </summary>
+    internal static HashSet<MloRoomDef> SeenFromOutside(MloArchetypeDef interior)
+    {
+        var seen = new HashSet<MloRoomDef>(ReferenceEqualityComparer.Instance);
+        if (interior.Rooms.Count == 0)
+            return seen;
+        seen.Add(interior.Rooms[0]);
+        var next = new Queue<MloRoomDef>(seen);
+        while (next.TryDequeue(out MloRoomDef? from))
+            foreach (MloPortalDef portal in interior.Portals)
+            {
+                MloRoomDef? to = ReferenceEquals(portal.RoomFrom.Target, from) ? portal.RoomTo.Target
+                    : ReferenceEquals(portal.RoomTo.Target, from) && (portal.Flags & PortalFlags.OneWay) == 0 ? portal.RoomFrom.Target : null;
+                if (to is not null && seen.Add(to))
+                    next.Enqueue(to);
+            }
+        return seen;
     }
 
     // An entity's LOD parent: one of this map's, or (flagged) of its parent map, by its place there.
