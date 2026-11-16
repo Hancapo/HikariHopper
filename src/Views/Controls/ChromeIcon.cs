@@ -51,6 +51,8 @@ public class ChromeIcon : Control
         ["subfolders"] = "list-tree",
         ["package"] = "package",
         ["folder"] = "folder",
+        ["globe"] = "globe",
+        ["pin"] = "map-pin",
         ["house"] = "house",
         ["sun"] = "sun",
         ["parts"] = "panel-left",

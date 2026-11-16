@@ -58,6 +58,17 @@ internal sealed class OrbitCamera
         Speed = Math.Max(radius, .5f) * 1.5f;
     }
 
+    /// <summary>
+    /// Puts the eye at <paramref name="eye"/>, looking along <paramref name="yaw"/> and <paramref name="pitch"/>, at the
+    /// distance it is at: a camera spot kept and come back to.
+    /// </summary>
+    public void Place(Vector3 eye, float yaw, float pitch)
+    {
+        Yaw = MathF.IEEERemainder(yaw, MathF.Tau);
+        Pitch = Math.Clamp(pitch, -MaxPitch, MaxPitch);
+        Center = eye + Forward * Distance;
+    }
+
     /// <summary>Turns about the eye by a drag in pixels, as <see cref="Orbit"/> turns about the centre: dragging right looks right.</summary>
     public void Look(float dx, float dy)
     {
