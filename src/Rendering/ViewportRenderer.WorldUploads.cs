@@ -161,7 +161,8 @@ internal sealed unsafe partial class ViewportRenderer
             foreach (int i in pending.Layout.Order)
             {
                 var (part, material, rdr2) = pending.Layout.Kept[i];
-                WorldFamily family = rdr2 is not null ? WorldFamily.Rdr2 : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
+                WorldFamily family = rdr2 is not null ? rdr2.Water ? WorldFamily.Rdr2Water : WorldFamily.Rdr2
+                    : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
                 if (!groups.TryGetValue(part.Material, out var group))
                 {
                     CreateWorldFamily(family);
@@ -171,6 +172,12 @@ internal sealed unsafe partial class ViewportRenderer
                         uniforms = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Material.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
                         queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<byte>)rdr2.Uniforms);
                         group = (Rdr2Group(rdr2, uniforms), uniforms);
+                    }
+                    else if (material.Water is { } water)
+                    {
+                        uniforms = device.CreateBuffer(new BufferDescriptor { Size = GtaWater.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+                        queue.WriteBuffer(uniforms, 0, (ReadOnlySpan<float>)water.Uniforms());
+                        group = (GtaWaterGroup(water, uniforms), uniforms);
                     }
                     else
                     {
@@ -183,10 +190,11 @@ internal sealed unsafe partial class ViewportRenderer
                         if (texture is not null && !uploaded.Textures.Contains(texture))
                             uploaded.Textures.Add(texture);
                 }
-                // Terrain is solid ground, as the model viewer draws it.
-                AlphaMode mode = material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
+                // Terrain is solid ground, as the model viewer draws it; water is blended over the scene behind it.
+                AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
+                    : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
                 uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
-                    material.Decal, family));
+                    material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family));
             }
             // RedFury's depth runs: adjacent casters of a level, one draw each.
             foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))

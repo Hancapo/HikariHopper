@@ -178,8 +178,9 @@ internal sealed unsafe partial class ViewportRenderer
     // A family's material group's layout: RDR2's material, GTA V's surface.wgsl or terrain.wgsl.
     private BindGroupLayout WorldMaterialLayout(WorldFamily family) => family switch
     {
-        WorldFamily.Rdr2 => rdr2Layout!,
+        WorldFamily.Rdr2 or WorldFamily.Rdr2Water => rdr2Layout!,
         WorldFamily.GtaTerrain => terrainLayout!,
+        WorldFamily.GtaWater => GtaWaterLayout(),
         _ => materialLayout!,
     };
 
@@ -193,7 +194,7 @@ internal sealed unsafe partial class ViewportRenderer
         if (worldSolid[f] is not null)
             return;
         CreateWorldPipelines();
-        if (family == WorldFamily.Rdr2)
+        if (family is WorldFamily.Rdr2 or WorldFamily.Rdr2Water)
             CreateRdr2Pipelines();
         BindGroupLayout material = WorldMaterialLayout(family);
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
@@ -204,13 +205,19 @@ internal sealed unsafe partial class ViewportRenderer
         (string name, string vertex, string fragment) = family switch
         {
             WorldFamily.Rdr2 => ("rdr2-world", "vs_rdr2_world", "fs_rdr2_world"),
+            WorldFamily.Rdr2Water => ("rdr2-water-world", "vs_rdr2_world", "fs_rdr2_world_water"),
             WorldFamily.GtaTerrain => ("gta-terrain-world", "vs_terrain_world", "fs_terrain"),
+            WorldFamily.GtaWater => ("gta-water-world", "vs_gta_water", "fs_gta_water"),
             _ => ("gta-world", "vs_surface_world", "fs_surface"),
         };
         string Code() => family switch
         {
             WorldFamily.Rdr2 => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
                 + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl"),
+            WorldFamily.Rdr2Water => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
+                + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl") + "\n" + Read("water_common.wgsl") + "\n"
+                + Read("rdr2_water.wgsl"),
+            WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + Read("gta_water.wgsl"),
             WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + Read("gta_world_terrain.wgsl"),
             _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + Read("gta_world.wgsl"),
         };
@@ -250,6 +257,12 @@ internal sealed unsafe partial class ViewportRenderer
                     DepthBiasSlopeScale = decal ? 1 : 0,
                 },
             }));
+        // Water is only ever blended over the copy of what's behind it.
+        if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater)
+        {
+            worldSolid[f] = worldUnculled[f] = worldDecal[f] = worldBlended[f] = Pipeline(CullMode.None, blend: true);
+            return;
+        }
         worldSolid[f] = Pipeline(CullMode.Back, blend: false);
         worldUnculled[f] = Pipeline(CullMode.None, blend: false);
         worldBlended[f] = Pipeline(CullMode.None, blend: true);
@@ -514,25 +527,51 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>
     /// The placements in view, as RedFury draws them: the solid surfaces, each instanced over its level's placements;
-    /// the decals over them, the same way, as each lies on its own placement; then the blended surfaces one placement at
-    /// a time, far to near.
+    /// the decals over them, the same way, as each lies on its own placement; then the water, over a copy of the scene
+    /// behind it, and the other blended surfaces, one placement at a time, far to near. Returns the pass to go on with.
     /// </summary>
-    private void DrawWorld(RenderPassEncoder pass)
+    private RenderPassEncoder DrawWorld(RenderPassEncoder pass, CommandEncoder encoder)
     {
         if (listedAssets.Count == 0 || worldInstanceLayout is null)
-            return;
+            return pass;
         DrawWorldPass(pass, OpaqueBundle);
         DrawWorldPass(pass, DecalBundle);
-        worldViewDraws += worldBlendedDraws.Count;
+        // The water over what's behind it, which it refracts and reflects: the pass ends while that's copied.
+        if (worldWaterDraws.Count > 0)
+        {
+            pass.End();
+            CopyWaterBackground(encoder);
+            pass = encoder.BeginRenderPass(new RenderPassDescriptor
+            {
+                ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                DepthStencilAttachment = new RenderPassDepthStencilAttachment
+                {
+                    View = hdrDepthView!,
+                    DepthLoadOp = LoadOp.Load,
+                    DepthStoreOp = StoreOp.Store,
+                },
+            });
+        }
+        worldViewDraws += worldWaterDraws.Count + worldBlendedDraws.Count;
         // Bundles leave the pass's bindings cleared.
         pass.SetBindGroup(0, sceneGroup);
         pass.SetBindGroup(2, lightGroup!);
+        DrawBlended(pass, worldWaterDraws);
+        DrawBlended(pass, worldBlendedDraws);
+        return pass;
+    }
+
+    // Blended surfaces one placement at a time, in the order given.
+    private void DrawBlended(RenderPassEncoder pass, List<WorldBlendedDraw> draws)
+    {
         RenderPipeline? current = null;
         WorldGpuAsset? boundAsset = null;
         BindGroup? boundMaterial = null;
-        foreach (WorldBlendedDraw draw in worldBlendedDraws)
+        foreach (WorldBlendedDraw draw in draws)
         {
-            if (worldBlended[(int)draw.Mesh.Family] is { } blended && blended != current)
+            if (worldBlended[(int)draw.Mesh.Family] is not { } blended)
+                continue;
+            if (blended != current)
             {
                 pass.SetPipeline(blended);
                 current = blended;

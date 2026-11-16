@@ -26,8 +26,32 @@ namespace HikariHopper.Core;
 /// </summary>
 internal sealed class GtaWorldIndex : WorldIndex
 {
-    private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients)
-        : base(root, mapCount, lod) => (Game, this.ambients) = (game, ambients);
+    private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients,
+        GtaWorldWater water)
+        : base(root, mapCount, lod) => (Game, this.ambients, this.water) = (game, ambients, water);
+
+    // The open water (water.xml's quads) and its tuning, and the water textures the game binds itself (graphics.ytd's).
+    private readonly GtaWorldWater water;
+    private GtaWater? waterTextures;
+
+    // The game's own water textures, with watertune.xml's values: the ocean's material, whose textures a water
+    // shader's drawables share.
+    private GtaWater WaterTextures()
+    {
+        if (waterTextures is not null)
+            return waterTextures;
+        TextureDictionary? graphics = Dictionary(new Hash32("graphics").Value);
+        FiveFury.Textures.Texture? Named(string name) => graphics?.Textures.FirstOrDefault(texture => string.Equals(texture.Name, name, StringComparison.OrdinalIgnoreCase));
+        return waterTextures = water.Tuning with
+        {
+            Fog = Named("waterfog"),
+            WorldFog = true,
+            Bump = Named("waterbump"),
+            WaveBump = Named("waterbump2"),
+            Noise = Named("waternoise"),
+            Foam = Named("waterfoam"),
+        };
+    }
 
     // The interior rooms' ambients of the placements inside them.
     private readonly Dictionary<WorldEntityId, InteriorAmbient> ambients;
@@ -56,6 +80,13 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// </summary>
     public override WorldAsset LoadAsset(WorldAssetKey key)
     {
+        // A quad of the open water.
+        if (key.Extension == GtaWorldWater.Extension)
+        {
+            if (key.Member >= water.Quads.Count)
+                throw new FileNotFoundException($"Asset {key} not found.");
+            return WorldAsset.FromGta(key, water.Surface((int)key.Member, WaterTextures()), []);
+        }
         GameFileType type = TypeOf(key.Extension) is { } known and not GameFileType.Ymap ? known
             : throw new NotSupportedException($"Unsupported world asset {key}.");
         GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
@@ -74,6 +105,24 @@ internal sealed class GtaWorldIndex : WorldIndex
             throw new FileNotFoundException($"Asset {key} has no such drawable.");
         DrawableScene scene = DrawableScene.Build(models, new TextureLookup([.. Chain(key.TextureDictionary).Select(Dictionary).OfType<TextureDictionary>()], []),
             fragmentLights: fragment?.Lights);
+        // A water shader's drawables: the game's own water textures, and its fog map where the material has no fog texture.
+        foreach (SurfaceMaterial material in scene.Materials)
+            if (material.Water is { } own)
+            {
+                GtaWater global = WaterTextures();
+                material.Water = own with
+                {
+                    Fog = own.Fog ?? global.Fog,
+                    WorldFog = own.Fog is null,
+                    Bump = global.Bump,
+                    WaveBump = global.WaveBump,
+                    Noise = global.Noise,
+                    Foam = global.Foam,
+                    FogMin = global.FogMin,
+                    FogMax = global.FogMax,
+                    FoamScale = global.FoamScale,
+                };
+            }
         return WorldAsset.FromGta(key, scene, models.Select(model => model.Drawable));
     }
 
@@ -282,8 +331,11 @@ internal sealed class GtaWorldIndex : WorldIndex
                 {
                 }
             }
+            // The open water, read from the game each time (its placements are none of the cache's).
+            GtaWorldWater water = GtaWorldWater.Read(new LoadedGame(root, target, keys.Crypto));
+            lod = new WorldLodGraph([.. catalog.Value.Nodes, .. water.Nodes()]);
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod!, game, catalog.Value.Ambients);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, water);
         }
         catch
         {

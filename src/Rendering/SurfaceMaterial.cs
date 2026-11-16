@@ -91,9 +91,24 @@ internal sealed partial class SurfaceMaterial
     /// The textures its group binds, as surface.wgsl or terrain.wgsl read them (fur's and cables' aside): what the
     /// world puts up before it draws the material.
     /// </summary>
-    internal IEnumerable<Texture?> BoundTextures() => Terrain
+    internal IEnumerable<Texture?> BoundTextures() => Water is { } water ? water.Textures : Terrain
         ? [.. Layers, Lookup, TintPalette]
         : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask];
+
+    /// <summary>
+    /// GTA V's water, as gta_water.wgsl shades it: a water shader's own (water_river, water_shallow, water_fountain...,
+    /// not the foams), and the ocean's; the world fills in the textures the game binds itself (GtaWorldIndex).
+    /// </summary>
+    internal GtaWater? Water { get; set; }
+
+    /// <summary>The ocean's, lakes' and pools' surface (water.xml's quads).</summary>
+    internal static SurfaceMaterial ForWater(GtaWater water) => new()
+    {
+        Shader = "water",
+        Rebuilt = true,
+        AlphaMode = AlphaMode.Blend,
+        Water = water,
+    };
 
     /// <summary>
     /// Ped hair, which covers each pixel by its alpha. Enhanced draws it with deferredsubsamplealpha: it drops pixels by
@@ -224,8 +239,27 @@ internal sealed partial class SurfaceMaterial
             return fallback;
         }
 
+        // A water shader's own fog texture and values (water_river.fxc's parameters); the foams are decals over it.
+        GtaWater? water = null;
+        if (shader.StartsWith("water", StringComparison.OrdinalIgnoreCase) && !shader.Contains("foam", StringComparison.OrdinalIgnoreCase))
+        {
+            float Scalar(string name, float fallback) =>
+                values.TryGetValue(name, out MaterialParameterValue? value) && value.Values.Length > 0 && float.IsFinite(value.Values.Span[0]) ? value.Values.Span[0]
+                : definition?.FindParameter(name) is { Defaults.Count: > 0 } parameter ? parameter.Defaults[0] : fallback;
+            Texture? fog = values.TryGetValue("FogTexture", out MaterialParameterValue? fogValue) && fogValue.Texture is { } fogReference ? resolve(fogReference) : null;
+            water = new GtaWater
+            {
+                Fog = fog,
+                WorldFog = fog is null,
+                RippleScale = Scalar("RippleScale", .04f),
+                SpecularIntensity = Scalar("SpecularIntensity", 1),
+                SpecularFalloff = Scalar("SpecularFalloff", 1118),
+            };
+        }
+
         var result = new SurfaceMaterial
         {
+            Water = water,
             Shader = shader,
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
                 || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Furs.Contains(shader) || Cables.Contains(shader)
