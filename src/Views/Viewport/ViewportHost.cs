@@ -75,6 +75,9 @@ internal sealed partial class ViewportHost : NativeControlHost
     private bool pointerHidden;
     private ScreenPoint pressedAt;
 
+    // The pointer it showed before it hid it: the view's window has none of its own for Windows to put back.
+    private nint shownCursor;
+
     // Raw motion counts to the camera's look in pixels: RedFury's 0.003 radians a count.
     private const float LookPerCount = .5f;
 
@@ -541,7 +544,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             return;
         pressMoved = true;
         pointerHidden = true;
-        SetCursor(0);
+        shownCursor = SetCursor(0);
         ConfineCursor(window);
     }
 
@@ -561,6 +564,9 @@ internal sealed partial class ViewportHost : NativeControlHost
                 ClipCursor(null);
             }
             SetCursorPos(pressedAt.X, pressedAt.Y);
+            // The pointer it showed (the arrow, if it showed none), as nothing else puts it back.
+            SetCursor(shownCursor != 0 ? shownCursor : LoadCursorW(0, 32512));
+            shownCursor = 0;
         }
     }
 
@@ -865,4 +871,7 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     [LibraryImport("user32.dll")]
     private static partial nint SetCursor(nint cursor);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint LoadCursorW(nint instance, nint name);
 }
