@@ -15,6 +15,7 @@ fn vs_terrain_world(input: TerrainInput, @location(8) source_index: u32) -> Terr
         let rows = f32(textureDimensions(tint_palette).y);
         output.tint = textureSampleLevel(tint_palette, palette_sampler, vec2f(placed.colour0.b, (f32(row) + 0.5) / rows), 0.0).rgb;
     }
+    output.room = instance_room(instance);
     output.position = scene.view_projection * vec4f(placed.position, 1.0);
     return output;
 }

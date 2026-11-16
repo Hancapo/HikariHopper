@@ -15,7 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
     // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
-    private const int LightBytes = 560, ShadowViewBytes = 80;
+    private const int LightBytes = 592, ShadowViewBytes = 80;
     private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
     private Sampler? shadowCompare;
 
@@ -470,6 +470,8 @@ internal sealed unsafe partial class ViewportRenderer
         // Without bloom, the tone map adds none.
         vectors[33] = Bloom ? Timecycle.BloomParameters(cycle) : Timecycle.BloomParameters(cycle) with { Y = 0 };
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
+        vectors[35] = new Vector4(cycle.ArtificialDown, 0);
+        vectors[36] = new Vector4(cycle.ArtificialUp, 0);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
 

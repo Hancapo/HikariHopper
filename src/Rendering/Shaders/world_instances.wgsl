@@ -36,6 +36,15 @@ fn grass_fade_from(instance: WorldInstance, origin: vec3f) -> f32 {
     return 1.0 - smoothstep(instance.n3.x, max(instance.n3.x + 0.01, instance.n3.y), distance);
 }
 
+// An interior placement's room ambient (WorldCullSet's lanes): its artificial ambient from above and below, packed,
+// its natural ambient multiplier, and one in w; nought outside.
+fn instance_room(instance: WorldInstance) -> vec4f {
+    if (is_grass(instance) || instance.n3.z > -0.5) {
+        return vec4f(0.0);
+    }
+    return vec4f(instance.n3.y, instance.n3.w, -instance.n3.z - 1.0, 1.0);
+}
+
 // An ordinary placement's tint palette row; 0 keeps the material's.
 fn instance_tint_row_of(instance: WorldInstance) -> i32 {
     if (is_grass(instance)) {

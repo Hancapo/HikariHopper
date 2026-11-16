@@ -5,7 +5,8 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// GTA V's light at one time of day, from its timecycle: the directional light (the sun, or the moon at night), the
-/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the ambient occlusion multipliers, the
+/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the artificial ambient outside interiors (the
+/// same hemisphere; nought where the timecycle in use doesn't have it), the ambient occlusion multipliers, the
 /// peds' rim light, the exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
 /// its intensity. Colours are already multiplied by their intensities.
 /// </summary>
@@ -25,17 +26,21 @@ internal readonly record struct TimecycleLight(
     float ExposureMax,
     float BloomThreshold,
     float BloomWidth,
-    float BloomIntensity);
+    float BloomIntensity,
+    Vector3 ArtificialDown = default,
+    Vector3 ArtificialUp = default);
 
 /// <summary>
 /// GTA V's timecycle for clear weather (EXTRASUNNY, its global region, the same in both editions), interpolated
 /// between its keyframes, with the exposure and filmic tone map the game's post-process builds from it
-/// (postfx: PS_CalculateExposure and PS_Composite) and from visualsettings.dat.
+/// (postfx: PS_CalculateExposure and PS_Composite) and from visualsettings.dat. Read from the game once one is open
+/// (<see cref="Use"/>); until then, from a copy of its values kept with the app (timecycle.json).
 /// </summary>
 internal static class Timecycle
 {
     private static readonly float[] Hours;
-    private static readonly Dictionary<string, float[]> Values;
+    private static readonly Dictionary<string, float[]> Kept;
+    private static volatile Dictionary<string, float[]> Values;
 
     // visualsettings.dat: the curve from the scene's luminance to an exposure in stops, in both editions.
     internal const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
@@ -68,8 +73,22 @@ internal static class Timecycle
         using JsonDocument document = JsonDocument.Parse(ViewportRenderer.Read("timecycle.json"));
         JsonElement root = document.RootElement;
         Hours = [.. root.GetProperty("hours").EnumerateArray().Select(value => value.GetSingle())];
-        Values = root.GetProperty("values").EnumerateObject()
+        Kept = root.GetProperty("values").EnumerateObject()
             .ToDictionary(field => field.Name, field => field.Value.EnumerateArray().Select(value => value.GetSingle()).ToArray());
+        Values = Kept;
+    }
+
+    /// <summary>
+    /// Takes the game's clear weather from now on, each field it has at the keyframes over the copy kept with the app;
+    /// null goes back to the copy. Views pick it up the next time they set their hour.
+    /// </summary>
+    internal static void Use(Core.GameTimecycle? game)
+    {
+        var values = new Dictionary<string, float[]>(Kept);
+        foreach (var (name, keyframes) in game?.Weather ?? new Dictionary<string, float[]>())
+            if (keyframes.Length == Hours.Length)
+                values[name] = keyframes;
+        Values = values;
     }
 
     /// <summary>
@@ -93,7 +112,8 @@ internal static class Timecycle
     }
 
     /// <summary>One field of the timecycle between two keyframes.</summary>
-    internal static float Field(string name, int index, int next, float t) => float.Lerp(Values[name][index], Values[name][next], t);
+    internal static float Field(string name, int index, int next, float t) =>
+        Values.TryGetValue(name, out float[]? keyframes) ? float.Lerp(keyframes[index], keyframes[next], t) : 0;
 
     /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
     internal static TimecycleLight Evaluate(float hours)
@@ -120,7 +140,9 @@ internal static class Timecycle
             Get("postfx_exposure_max"),
             Get("postfx_bright_pass_thresh"),
             Get("postfx_bright_pass_thresh_width"),
-            Get("postfx_intensity_bloom"));
+            Get("postfx_intensity_bloom"),
+            Colour("light_artificial_ext_down_col") * Get("light_artificial_ext_down_intensity"),
+            Colour("light_artificial_ext_up_col") * Get("light_artificial_ext_up_intensity"));
     }
 
     /// <summary>

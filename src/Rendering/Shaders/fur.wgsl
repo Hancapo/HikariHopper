@@ -210,5 +210,5 @@ fn shade_fur(input: FurOutput, front: bool) -> vec4f {
     let ambient = clamp(1.0 - light.natural_up.w * (1.0 - saturate(input.colour0.r)), 0.0, 2.0);
     let view = normalize(scene.eye.xyz - (input.place + scene.origin.xyz));
     let shadow = sun_shadow(input.place, select(-1.0, 1.0, front) * normalize(input.normal));
-    return vec4f(gta_lit(base, normal, view, intensity, power, fur.specular.x, ambient * ambient, shadow, 1.0), 1.0);
+    return vec4f(gta_lit(base, normal, view, intensity, power, fur.specular.x, ambient * ambient, shadow, 1.0, 0.0), 1.0);
 }

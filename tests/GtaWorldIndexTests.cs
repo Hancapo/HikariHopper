@@ -67,6 +67,18 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.InRange(plants.Instances.Count, 1, grass.Grass!.InstanceCount);
             Assert.All(plants.Instances, plant => Assert.Equal(grass.Distance, plant.Grass!.Value.FadeEnd));
             Assert.True(grass.Distance <= GtaWorldCatalog.GrassReach);
+            // Interiors: Michael's house's contents are placed, each in a room taking its ambient from the game's
+            // timecycle modifiers (v_michael lets a fifth of the natural ambient in).
+            WorldLodNode armchair = index.Lod.Nodes.First(node => node.Asset.Hash == new CommonFury.Hashing.Hash32("v_res_m_armchair").Value
+                && Vector3.Distance(node.Center, new Vector3(-804.8f, 175.1f, 72.4f)) < 2);
+            Assert.Contains("interior_v_michael", index.NameOf(armchair.Id.Map));
+            Assert.Equal(.2f, index.AmbientOf(armchair)!.Value.Natural, 3);
+            Assert.Null(index.AmbientOf(placed));
+            // The interior takes its placement's place under the interior's LOD model, which gives way to all of it.
+            WorldLodNode interiorLod = index.Lod.Nodes.Single(node => node.Id == armchair.Parent);
+            Assert.Equal("bh1_48", index.NameOf(interiorLod.Id.Map));
+            Assert.Equal(index.Lod.Nodes.Count(node => node.Parent == interiorLod.Id), interiorLod.ExpectedChildren);
+            Assert.True(armchair.Distance <= 45);
         }
         finally
         {

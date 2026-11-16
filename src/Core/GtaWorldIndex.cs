@@ -26,7 +26,13 @@ namespace HikariHopper.Core;
 /// </summary>
 internal sealed class GtaWorldIndex : WorldIndex
 {
-    private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game) : base(root, mapCount, lod) => Game = game;
+    private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients)
+        : base(root, mapCount, lod) => (Game, this.ambients) = (game, ambients);
+
+    // The interior rooms' ambients of the placements inside them.
+    private readonly Dictionary<WorldEntityId, InteriorAmbient> ambients;
+
+    public override InteriorAmbient? AmbientOf(WorldLodNode node) => ambients.TryGetValue(node.Id, out InteriorAmbient ambient) ? ambient : null;
 
     /// <summary>The base game, mounted.</summary>
     public GameInstallation Game { get; }
@@ -228,7 +234,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-2";
+    private const string CacheVersion = "hh-gta-world-5";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -243,7 +249,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         try
         {
             string fingerprint = GameWorld.Fingerprint(root, $"{CacheVersion}|{target}"), cache = GameWorld.CachePath(root, "gta-world");
-            (int Maps, WorldLodNode[] Nodes)? catalog = null;
+            (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients)? catalog = null;
             if (File.Exists(cache))
             {
                 report(new WorldProgress("Reading the world from the cache", null));
@@ -263,20 +269,21 @@ internal sealed class GtaWorldIndex : WorldIndex
             }
             if (catalog is null)
             {
-                catalog = GtaWorldCatalog.Load(game.FileSystem, report, cancellation);
+                GameTimecycle? timecycle = GameTimecycle.ForGame(new LoadedGame(root, target, keys.Crypto));
+                catalog = GtaWorldCatalog.Load(game.FileSystem, timecycle, report, cancellation);
                 // Made into a graph before it's cached, so only a good index is.
                 lod = new WorldLodGraph(catalog.Value.Nodes);
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
-                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes);
+                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes, catalog.Value.Ambients);
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
                 }
             }
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod!, game);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod!, game, catalog.Value.Ambients);
         }
         catch
         {
@@ -296,8 +303,12 @@ internal static class GtaWorldCatalog
     private sealed record Archetype(WorldAssetKey Asset, Vector3 Center, float Radius, float Distance, ArchetypeFlags Flags, ArchetypeAssetType Type,
         bool Animated, uint TimeFlags);
 
-    public static (int Maps, WorldLodNode[] Nodes) Load(GameFileSystem files, Action<WorldProgress> report, CancellationToken cancellation)
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients) Load(GameFileSystem files, GameTimecycle? timecycle,
+        Action<WorldProgress> report, CancellationToken cancellation)
     {
+        var ambients = new Dictionary<WorldEntityId, InteriorAmbient>();
+        // How many more children each LOD model an interior is placed under has than it expects.
+        var adopted = new Dictionary<WorldEntityId, int>();
         // Each name's winning file, as the game streams it.
         List<GameFile> Winners(GameFileType type)
         {
@@ -309,6 +320,7 @@ internal static class GtaWorldCatalog
         }
         List<GameFile> types = Winners(GameFileType.Ytyp), maps = Winners(GameFileType.Ymap);
         var archetypes = new Dictionary<uint, Archetype>();
+        var interiors = new Dictionary<uint, MloArchetypeDef>();
         int done = 0, total = types.Count + maps.Count;
         void Progress(string stage)
         {
@@ -330,9 +342,14 @@ internal static class GtaWorldCatalog
             }
             foreach (YtypArchetype value in ytyp.Archetypes)
             {
-                // Interiors' archetypes (MLOs) and those without a model have nothing to draw of their own here.
-                if (value is not BaseArchetypeDef archetype || archetype is MloArchetypeDef || archetype.AssetType is ArchetypeAssetType.Assetless
-                    or ArchetypeAssetType.Uninitialized)
+                // Interiors' archetypes (MLOs) are their entities, placed where an instance of one is; those without a
+                // model have nothing to draw.
+                if (value is MloArchetypeDef interior)
+                {
+                    interiors[interior.Name.Value] = interior;
+                    continue;
+                }
+                if (value is not BaseArchetypeDef archetype || archetype.AssetType is ArchetypeAssetType.Assetless or ArchetypeAssetType.Uninitialized)
                     continue;
                 uint name = archetype.Name.Value, asset = archetype.AssetName.Value != 0 ? archetype.AssetName.Value : name;
                 WorldAssetKey key = archetype.DrawableDictionary.Value != 0 && archetype.AssetType != ArchetypeAssetType.Fragment
@@ -363,43 +380,27 @@ internal static class GtaWorldCatalog
             // By its file's name, which finds it again: two files can carry the same name inside.
             uint map = file.NameHash.Value, parentMap = ymap.Parent.Value;
             read++;
+            var placedInteriors = new List<(MloInstanceDef Instance, WorldEntityId? Parent)>();
             // Each entity's place in its map, which a local LOD parent is found by.
             var indexes = new Dictionary<YmapEntity, int>(ReferenceEqualityComparer.Instance);
             for (int i = 0; i < ymap.Entities.Count; i++)
                 indexes[ymap.Entities[i]] = i;
             for (int i = 0; i < ymap.Entities.Count; i++)
             {
-                if (ymap.Entities[i] is not EntityDef entity || entity is MloInstanceDef || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type))
-                    continue;
-                Matrix4x4 transform;
-                try
+                if (ymap.Entities[i] is MloInstanceDef instance)
                 {
-                    Quaternion rotation = GtaMath.DecodeEntityRotation(entity.Rotation, (entity.Flags & YmapEntityFlags.FullMatrix) != 0, type.Animated);
-                    Vector3 scale = type.Type == ArchetypeAssetType.Fragment ? Vector3.One : new Vector3(entity.ScaleXY, entity.ScaleXY, entity.ScaleZ);
-                    transform = TransformMath.CreateTrs(entity.Position, rotation, scale);
-                }
-                catch (ArgumentException)
-                {
+                    placedInteriors.Add((instance, LodParent(instance, map, parentMap, indexes)));
                     continue;
                 }
-                float scaleOf = type.Type == ArchetypeAssetType.Fragment ? 1 : Math.Max(Math.Abs(entity.ScaleXY), Math.Abs(entity.ScaleZ));
-                Vector3 center = Vector3.Transform(type.Center, transform);
-                float radius = type.Radius * scaleOf;
-                float distance = entity.LodDistance > 0 ? entity.LodDistance : type.Distance;
-                if (!float.IsFinite(distance) || distance <= 0 || !float.IsFinite(center.LengthSquared()) || !float.IsFinite(radius) || radius < 0
-                    || !VectorMath.IsFinite(transform))
+                if (ymap.Entities[i] is not EntityDef entity || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type))
+                    continue;
+                if (Place(entity, type, Matrix4x4.Identity) is not var (transform, center, radius, distance))
                     continue;
                 // The LOD parent: an entity of this map, or (flagged) of its parent map, by its place there.
-                int parentIndex = entity.Parent.Kind switch
-                {
-                    EntityParentKind.Local when entity.Parent.Entity is { } local && indexes.TryGetValue(local, out int at) => at,
-                    EntityParentKind.ParentMap or EntityParentKind.Unresolved => entity.Parent.Index,
-                    _ => -1,
-                };
                 uint flags = (uint)entity.Flags;
-                WorldEntityId? parent = WorldLodGraph.ParentReference(map, parentMap, parentIndex, flags);
+                WorldEntityId? parent = LodParent(entity, map, parentMap, indexes);
                 float childDistance = float.IsFinite(entity.ChildLodDistance) ? entity.ChildLodDistance : 0;
-                nodes.Add(new WorldLodNode(new WorldEntityId(map, i), parent, type.Asset, transform, center, radius, Math.Min(distance, 30000),
+                nodes.Add(new WorldLodNode(new WorldEntityId(map, i), parent, type.Asset, transform, center, radius, distance,
                     childDistance, checked((int)entity.NumberOfChildren))
                 {
                     EntityFlags = flags,
@@ -408,11 +409,19 @@ internal static class GtaWorldCatalog
                     TimeFlags = type.TimeFlags,
                 });
             }
-            AddInstances(ymap, map, archetypes, nodes);
+            int next = AddInstances(ymap, map, archetypes, nodes);
+            foreach (var (instance, parent) in placedInteriors)
+                next = AddInterior(instance, parent, map, next, archetypes, interiors, nodes, timecycle, ambients, adopted);
         }
+        // The LOD models interiors were placed under expect the interior placement as one child: they have its
+        // contents in its place.
+        if (adopted.Count != 0)
+            for (int n = 0; n < nodes.Count; n++)
+                if (adopted.TryGetValue(nodes[n].Id, out int extra))
+                    nodes[n] = nodes[n] with { ExpectedChildren = Math.Max(0, nodes[n].ExpectedChildren + extra) };
         if (nodes.Count == 0)
             throw new InvalidDataException("No readable world placements were found in the game's maps.");
-        return (read, [.. nodes]);
+        return (read, [.. nodes], ambients);
     }
 
     /// <summary>The longest a grass batch is drawn from, whatever it says (RedFury's near-field tier).</summary>
@@ -420,7 +429,7 @@ internal static class GtaWorldCatalog
 
     // A map's instanced data, after its entities, numbered on from them (RedFury's WorldCatalog): each grass batch a node
     // whose plants are read when it's wanted, each batch of instanced props a node with its placements.
-    private static void AddInstances(Ymap ymap, uint map, Dictionary<uint, Archetype> archetypes, List<WorldLodNode> nodes)
+    private static int AddInstances(Ymap ymap, uint map, Dictionary<uint, Archetype> archetypes, List<WorldLodNode> nodes)
     {
         int index = ymap.Entities.Count;
         for (int g = 0; g < ymap.InstancedData.Grass.Count; g++, index++)
@@ -469,6 +478,121 @@ internal static class GtaWorldCatalog
                 TimeFlags = type.TimeFlags,
             });
         }
+        return index;
+    }
+
+    /// <summary>
+    /// An interior placed by a map (an MLO instance): the entities of its archetype, and those of the entity sets the
+    /// instance turns on by default, each placed in the interior, then where the instance puts the interior (its rotation
+    /// as stored, unscaled). Numbered on from <paramref name="next"/>, in the instance's map. They take the instance's
+    /// place in the LOD tree: children of its LOD parent (<paramref name="parent"/>, the interior's LOD model), which
+    /// gives way to all of them together as it would to the instance (<paramref name="adopted"/> counts the extra
+    /// children); none reaches further than the instance does, as the game shows an interior's contents only within
+    /// that. Each one in a room (not the limbo, room nought, which is outside) takes that room's ambient
+    /// (<paramref name="ambients"/>), by its timecycle modifiers. Interiors only cutscenes show are left out. Returns the
+    /// next number.
+    /// </summary>
+    private static int AddInterior(MloInstanceDef instance, WorldEntityId? parent, uint map, int next, Dictionary<uint, Archetype> archetypes,
+        Dictionary<uint, MloArchetypeDef> interiors, List<WorldLodNode> nodes, GameTimecycle? timecycle, Dictionary<WorldEntityId, InteriorAmbient> ambients,
+        Dictionary<WorldEntityId, int> adopted)
+    {
+        if (!interiors.TryGetValue(instance.ArchetypeName.Value, out MloArchetypeDef? interior) || (interior.MloFlags & MloInteriorFlags.CutsceneOnly) != 0)
+            return next;
+        Matrix4x4 placement;
+        try
+        {
+            placement = TransformMath.CreateTrs(instance.Position, QuaternionMath.NormalizeChecked(instance.Rotation), Vector3.One);
+        }
+        catch (ArgumentException)
+        {
+            return next;
+        }
+        // Which room each entity is in: the rooms name theirs, the portals theirs, and an entity set's say where each of
+        // theirs is.
+        var rooms = new Dictionary<YmapEntity, MloRoomDef>(ReferenceEqualityComparer.Instance);
+        foreach (MloRoomDef room in interior.Rooms)
+            foreach (LocalReference<YmapEntity> attached in room.AttachedObjects)
+                if (attached.Target is { } held)
+                    rooms[held] = room;
+        // A portal's objects (its doors) are in the room on its inner side.
+        MloRoomDef? limbo = interior.Rooms.Count > 0 ? interior.Rooms[0] : null;
+        foreach (MloPortalDef portal in interior.Portals)
+            if ((portal.RoomTo.Target is { } to && to != limbo ? to : portal.RoomFrom.Target) is { } side)
+                foreach (LocalReference<YmapEntity> attached in portal.AttachedObjects)
+                    if (attached.Target is { } held)
+                        rooms.TryAdd(held, side);
+        var sets = new HashSet<uint>(instance.DefaultEntitySets.Select(name => name.Value));
+        var contents = interior.Entities.Select(entity => (Entity: entity, Room: rooms.GetValueOrDefault(entity)))
+            .Concat(interior.EntitySets.Where(set => sets.Contains(set.Name.Value)).SelectMany(set => set.Entities
+                .Select(item => (item.Entity, Room: item.Location.Room ?? rooms.GetValueOrDefault(item.Entity)))));
+        var roomAmbients = new Dictionary<MloRoomDef, InteriorAmbient>(ReferenceEqualityComparer.Instance);
+        float reach = instance.LodDistance > 0 ? instance.LodDistance : interior.LodDistance;
+        int placedCount = 0;
+        foreach (var (value, room) in contents)
+        {
+            int index = next++;
+            if (value is not EntityDef entity || value is MloInstanceDef || !archetypes.TryGetValue(entity.ArchetypeName.Value, out Archetype? type)
+                || Place(entity, type, placement) is not { } placed)
+                continue;
+            if (timecycle is not null && room is not null && interior.Rooms.IndexOf(room) > 0)
+            {
+                if (!roomAmbients.TryGetValue(room, out InteriorAmbient ambient))
+                    roomAmbients[room] = ambient = InteriorAmbient.For(room.TimecycleName.Value, room.SecondaryTimecycleName.Value, timecycle);
+                ambients[new WorldEntityId(map, index)] = ambient;
+            }
+            placedCount++;
+            nodes.Add(new WorldLodNode(new WorldEntityId(map, index), parent, type.Asset, placed.Transform, placed.Center, placed.Radius,
+                reach > 0 ? Math.Min(placed.Distance, reach) : placed.Distance, 0, 0)
+            {
+                EntityFlags = (uint)entity.Flags,
+                TintValue = entity.TintValue,
+                ArchetypeFlags = (ulong)type.Flags,
+                TimeFlags = type.TimeFlags,
+            });
+        }
+        if (parent is { } lod)
+            adopted[lod] = adopted.GetValueOrDefault(lod) + placedCount - 1;
+        return next;
+    }
+
+    // An entity's LOD parent: one of this map's, or (flagged) of its parent map, by its place there.
+    private static WorldEntityId? LodParent(EntityDef entity, uint map, uint parentMap, Dictionary<YmapEntity, int> indexes)
+    {
+        int parentIndex = entity.Parent.Kind switch
+        {
+            EntityParentKind.Local when entity.Parent.Entity is { } local && indexes.TryGetValue(local, out int at) => at,
+            EntityParentKind.ParentMap or EntityParentKind.Unresolved => entity.Parent.Index,
+            _ => -1,
+        };
+        return WorldLodGraph.ParentReference(map, parentMap, parentIndex, (uint)entity.Flags);
+    }
+
+    /// <summary>
+    /// Where an entity is, as the game places it: its rotation decoded, scaled unless it's a fragment, then moved by
+    /// <paramref name="parent"/> (an interior's placement; the identity for a map's own); its bounds and its reach (its
+    /// own LOD distance, or its archetype's). Null where it can't be placed.
+    /// </summary>
+    private static (Matrix4x4 Transform, Vector3 Center, float Radius, float Distance)? Place(EntityDef entity, Archetype type, Matrix4x4 parent)
+    {
+        Matrix4x4 transform;
+        try
+        {
+            Quaternion rotation = GtaMath.DecodeEntityRotation(entity.Rotation, (entity.Flags & YmapEntityFlags.FullMatrix) != 0, type.Animated);
+            Vector3 scale = type.Type == ArchetypeAssetType.Fragment ? Vector3.One : new Vector3(entity.ScaleXY, entity.ScaleXY, entity.ScaleZ);
+            transform = TransformMath.CreateTrs(entity.Position, rotation, scale) * parent;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        float scaleOf = type.Type == ArchetypeAssetType.Fragment ? 1 : Math.Max(Math.Abs(entity.ScaleXY), Math.Abs(entity.ScaleZ));
+        Vector3 center = Vector3.Transform(type.Center, transform);
+        float radius = type.Radius * scaleOf;
+        float distance = entity.LodDistance > 0 ? entity.LodDistance : type.Distance;
+        if (!float.IsFinite(distance) || distance <= 0 || !float.IsFinite(center.LengthSquared()) || !float.IsFinite(radius) || radius < 0
+            || !VectorMath.IsFinite(transform))
+            return null;
+        return (transform, center, radius, Math.Min(distance, 30000));
     }
 }
 
@@ -477,7 +601,7 @@ internal static class GtaWorldCache
 {
     private const uint Magic = 0x57474848; // "HHGW"
 
-    public static void Write(string path, string fingerprint, int maps, IReadOnlyList<WorldLodNode> nodes)
+    public static void Write(string path, string fingerprint, int maps, IReadOnlyList<WorldLodNode> nodes, IReadOnlyDictionary<WorldEntityId, InteriorAmbient> ambients)
     {
         string temporary = path + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary)))
@@ -537,6 +661,15 @@ internal static class GtaWorldCache
                     writer.Write(instance.Radius);
                 }
             }
+            writer.Write(ambients.Count);
+            foreach (var (id, ambient) in ambients)
+            {
+                writer.Write(id.Map);
+                writer.Write(id.Index);
+                Write(writer, ambient.Down);
+                Write(writer, ambient.Up);
+                writer.Write(ambient.Natural);
+            }
         }
         File.Move(temporary, path, overwrite: true);
     }
@@ -551,7 +684,7 @@ internal static class GtaWorldCache
     private static Vector3 Read(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
     /// <summary>The cached index; null when there's none for the game as it is, or it can't be read.</summary>
-    public static (int Maps, WorldLodNode[] Nodes)? Read(string path, string fingerprint)
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients)? Read(string path, string fingerprint)
     {
         try
         {
@@ -599,7 +732,13 @@ internal static class GtaWorldCache
                 }
                 nodes[i] = node;
             }
-            return (maps, nodes);
+            int rooms = reader.ReadInt32();
+            if (rooms is < 0 or > 10_000_000)
+                return null;
+            var ambients = new Dictionary<WorldEntityId, InteriorAmbient>(rooms);
+            for (int i = 0; i < rooms; i++)
+                ambients[new WorldEntityId(reader.ReadUInt32(), reader.ReadInt32())] = new InteriorAmbient(Read(reader), Read(reader), reader.ReadSingle());
+            return (maps, nodes, ambients);
         }
         catch (Exception error) when (error is IOException or EndOfStreamException or UnauthorizedAccessException or ArgumentException)
         {

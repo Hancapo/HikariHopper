@@ -30,6 +30,7 @@ fn vs_surface_world(input: SurfaceInput, @location(8) source_index: u32) -> Surf
         output.tint = vec3f(instance.n0.w, instance.n1.w, instance.n2.w);
         output.colour0 = vec4f(instance.n3.w, 0.0, 0.0, 1.0);
     }
+    output.room = instance_room(instance);
     output.position = scene.view_projection * vec4f(placed.position, 1.0);
     return output;
 }

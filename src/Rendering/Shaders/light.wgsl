@@ -43,6 +43,9 @@ struct Light {
     bloom: vec4f,
     // The peds' ambient occlusion multiplier (light_amb_occ_mult_ped) and their rim light's (light_ped_rim_mult).
     ped: vec4f,
+    // The artificial ambient outside interiors, on what faces up and on what faces down (light_artificial_ext_*).
+    artificial_down: vec4f,
+    artificial_up: vec4f,
 };
 
 @group(2) @binding(0) var<uniform> light: Light;
@@ -69,6 +72,20 @@ struct LocalLight {
 // Set by a fragment entry point that takes the local lights: the pixel and the point being shaded, relative to the
 // scene's origin. Left off where the screen's tiles don't apply (the reflection map).
 var<private> local_lights_on: bool = false;
+
+// The interior room the point being shaded is in (world_instances.wgsl's instance_room), set by its fragment entry
+// point: nought outside, and in the viewer.
+var<private> shaded_room: vec4f = vec4f(0.0);
+
+fn use_room(room: vec4f) {
+    shaded_room = room;
+}
+
+// A colour packed a byte a channel over 0 to 4 (InteriorAmbient.Pack).
+fn unpack_ambient(packed: f32) -> vec3f {
+    let bits = u32(packed + 0.5);
+    return vec3f(f32(bits & 255u), f32((bits >> 8u) & 255u), f32((bits >> 16u) & 255u)) * (4.0 / 255.0);
+}
 var<private> local_pixel: vec2f;
 var<private> local_place: vec3f;
 
@@ -170,9 +187,23 @@ fn filmic_blend(stops: f32) -> f32 {
 fn gta_ambient(n: vec3f) -> vec3f {
     let wrap = light.natural_down.w;
     let h = max(0.0, (n.z + wrap) / (1.0 + wrap));
-    let natural = mix(light.natural_up.rgb, light.natural_down.rgb, h);
+    // An interior room keeps only so much of the natural ambient.
+    let room_natural = select(1.0, shaded_room.z, shaded_room.w > 0.5);
+    let natural = mix(light.natural_up.rgb, light.natural_down.rgb, h) * room_natural;
     let directional = light.directional_ambient.rgb * saturate(dot(light.directional_ambient_direction.xyz, n));
     return natural + directional;
+}
+
+// PS_directional_ambient's artificial ambient for this normal, from above and below as the natural one: an interior
+// room's own (its timecycle modifiers'), or the weather's outside interiors (the game tells them apart by a stencil
+// bit its interiors set).
+fn gta_artificial_ambient(n: vec3f) -> vec3f {
+    let wrap = light.natural_down.w;
+    let h = max(0.0, (n.z + wrap) / (1.0 + wrap));
+    if (shaded_room.w > 0.5) {
+        return mix(unpack_ambient(shaded_room.y), unpack_ambient(shaded_room.x), h);
+    }
+    return mix(light.artificial_up.rgb, light.artificial_down.rgb, h);
 }
 
 // The key light's shadow at a point, from the cascade its distance from the camera falls in, as RedFury's cascade_pcf
@@ -237,7 +268,12 @@ fn gta_reflection(normal: vec3f, view: vec3f, exponent: f32, reflected_share: f3
     let rough = 1.0 - saturate(exponent / 1500.0);
     let mips = light.reflection.x;
     let level = select(rough * rough * 5.0 + mips - 5.0, rough * mips - 5.0, rough * mips < mips - 5.0);
-    let environment = textureSampleLevel(reflection_map, reflection_sampler, paraboloid_uv(direction), max(level, 0.0)).rgb;
+    var environment = textureSampleLevel(reflection_map, reflection_sampler, paraboloid_uv(direction), max(level, 0.0)).rgb;
+    // Inside an interior the game's reflection map, drawn from the camera, holds the room; the viewer's holds only the
+    // sky, so a room reflects its own artificial ambient in its place.
+    if (shaded_room.w > 0.5) {
+        environment = gta_artificial_ambient(direction);
+    }
     let energy = 0.31830987 + 0.68169010 * saturate(exponent / 563.0);
     return environment * reflected_share * energy;
 }
@@ -254,7 +290,7 @@ fn fresnel(fresnel_value: f32, cosine: f32) -> f32 {
 // a deferred shader wrote to its G-buffer: albedo as stored (gamma 2, squared here as the passes read it), normal,
 // specular intensity, power and fresnel, and the ambient scale. The game's lighting has no 1/pi.
 fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32, fresnel_value: f32, ambient_scale: f32,
-    shadow: f32, reflection_scale: f32) -> vec3f {
+    shadow: f32, reflection_scale: f32, artificial_scale: f32) -> vec3f {
     let to_light = normalize(light.sun_direction.xyz);
     let albedo = stored * stored;
     let spec = saturate(intensity);
@@ -274,9 +310,9 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(fresnel_value, h_dot_l);
     let sun = light.sun_colour.rgb * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
 
-    // Ambient: the timecycle's natural and directional ambient for this normal, by the ambient scale. Outdoors in
-    // daylight the game's artificial ambient is nothing to speak of, so it is left out.
-    let ambient = albedo * kept * gta_ambient(normal) * ambient_scale;
+    // Ambient: the timecycle's natural and directional ambient for this normal, by the ambient scale, and its
+    // artificial ambient by the artificial scale (what the vertex green stores).
+    let ambient = albedo * kept * (gta_ambient(normal) * ambient_scale + gta_artificial_ambient(normal) * artificial_scale);
 
     // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is, and by the scale
     // the G-buffer's last channel holds (one for all but peds, whose deferred shaders write their own).
