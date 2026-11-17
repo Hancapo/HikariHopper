@@ -112,8 +112,8 @@ internal static class GtaSky
         if (values.Length < Bytes / 16)
             throw new ArgumentException("Too small for the sky's constants.", nameof(values));
         TimecycleSample tc = Timecycle.Sample(hours);
-        float Get(string name) => tc.Get(name);
-        Vector3 Colour(string name) => tc.Colour(name);
+        float Get(string name) => Field(tc, name);
+        Vector3 Colour(string name) => FieldColour(tc, name);
         Vector3 Linear(string name) => Square(Colour(name));
         Vector3 Sky(string name) => Linear(name) * Get(name + "_inten");
 
@@ -191,7 +191,7 @@ internal static class GtaSky
     /// </summary>
     private static void Fog(Span<Vector4> values, TimecycleSample tc, float hours, SkyPath? path, float height, Vector3 sun, Vector3 moon)
     {
-        float Get(string name) => tc.Get(name);
+        float Get(string name) => Field(tc, name);
         float start = Get("fog_start");
         float end = MathF.Max(Get("far_clip"), start);
         float nearDensity = Get("fog_density") / 10000, falloff = Get("fog_falloff") / 1000;
@@ -205,9 +205,9 @@ internal static class GtaSky
         values[4] = new(moon, Get("fog_moon_lighting_calc_pow"));
 
         float hdr = Get("fog_hdr");
-        Vector3 sunColour = tc.Colour("fog_col") * hdr, moonColour = tc.Colour("fog_moon_col") * hdr;
-        Vector3 atmosphere = tc.Colour("fog_east_col") * hdr, ground = tc.Colour("fog_near_col") * hdr;
-        Vector3 haze = tc.Colour("fog_haze_col") * Get("fog_haze_hdr");
+        Vector3 sunColour = FieldColour(tc, "fog_col") * hdr, moonColour = FieldColour(tc, "fog_moon_col") * hdr;
+        Vector3 atmosphere = FieldColour(tc, "fog_east_col") * hdr, ground = FieldColour(tc, "fog_near_col") * hdr;
+        Vector3 haze = FieldColour(tc, "fog_haze_col") * Get("fog_haze_hdr");
         // The far colour towards the near one by how dense the fog is at the camera.
         atmosphere = Vector3.Lerp(atmosphere, ground, MathF.Pow(Math.Clamp(atViewer, 0, 1), .3f));
         var (sunFade, moonFade) = DayCycle.Fades(hours, path);
@@ -218,6 +218,127 @@ internal static class GtaSky
     }
 
     private static Vector3 Square(Vector3 colour) => colour * colour;
+
+    /// <summary>A timecycle field, or the default the game's code gives it where the timecycle hasn't it.</summary>
+    private static float Field(TimecycleSample tc, string name) =>
+        Timecycle.Has(name) ? tc.Get(name) : GameDefaults.GetValueOrDefault(name);
+
+    private static Vector3 FieldColour(TimecycleSample tc, string name) => new(Field(tc, name + "_r"), Field(tc, name + "_g"), Field(tc, name + "_b"));
+
+    /// <summary>
+    /// The defaults the game's timecycle variable table gives the sky's and fog's fields, for a timecycle without them
+    /// (the app's own stand-in, before a game is open): a fog with no end or falloff would divide by nought.
+    /// </summary>
+    private static readonly Dictionary<string, float> GameDefaults = new()
+    {
+        ["far_clip"] = 1500f,
+        ["fog_alpha"] = 1f,
+        ["fog_base_height"] = 0f,
+        ["fog_col_b"] = 0.78f,
+        ["fog_col_g"] = 0.584f,
+        ["fog_col_r"] = 0.412f,
+        ["fog_density"] = 1f,
+        ["fog_east_col_b"] = 0.78f,
+        ["fog_east_col_g"] = 0.584f,
+        ["fog_east_col_r"] = 0.412f,
+        ["fog_falloff"] = 0.5f,
+        ["fog_haze_alpha"] = 1f,
+        ["fog_haze_col_b"] = 0.78f,
+        ["fog_haze_col_g"] = 0.584f,
+        ["fog_haze_col_r"] = 0.412f,
+        ["fog_haze_density"] = 0.5f,
+        ["fog_haze_hdr"] = 1f,
+        ["fog_haze_start"] = 0f,
+        ["fog_hdr"] = 1f,
+        ["fog_horizon_tint_scale"] = 4f,
+        ["fog_moon_col_b"] = 0.5f,
+        ["fog_moon_col_g"] = 0.5f,
+        ["fog_moon_col_r"] = 0.5f,
+        ["fog_moon_lighting_calc_pow"] = 18f,
+        ["fog_near_col_b"] = 1f,
+        ["fog_near_col_g"] = 0.604f,
+        ["fog_near_col_r"] = 0.012f,
+        ["fog_start"] = 73f,
+        ["fog_sun_lighting_calc_pow"] = 8f,
+        ["sky_azimuth_east_col_b"] = 0.5f,
+        ["sky_azimuth_east_col_g"] = 0.5f,
+        ["sky_azimuth_east_col_inten"] = 1f,
+        ["sky_azimuth_east_col_r"] = 0.5f,
+        ["sky_azimuth_transition_col_b"] = 0.5f,
+        ["sky_azimuth_transition_col_g"] = 0.5f,
+        ["sky_azimuth_transition_col_inten"] = 1f,
+        ["sky_azimuth_transition_col_r"] = 0.5f,
+        ["sky_azimuth_transition_position"] = 0.5f,
+        ["sky_azimuth_west_col_b"] = 0.5f,
+        ["sky_azimuth_west_col_g"] = 0.5f,
+        ["sky_azimuth_west_col_inten"] = 1f,
+        ["sky_azimuth_west_col_r"] = 0.5f,
+        ["sky_cloud_base_col_b"] = 0.5f,
+        ["sky_cloud_base_col_g"] = 0.5f,
+        ["sky_cloud_base_col_r"] = 0.5f,
+        ["sky_cloud_base_strength"] = 0.9f,
+        ["sky_cloud_density_bias"] = 0.66f,
+        ["sky_cloud_density_mult"] = 2.24f,
+        ["sky_cloud_edge_strength"] = 0.5f,
+        ["sky_cloud_fadeout"] = 0.3f,
+        ["sky_cloud_gen_density_offset"] = 0.15f,
+        ["sky_cloud_gen_frequency"] = 2f,
+        ["sky_cloud_gen_scale"] = 64f,
+        ["sky_cloud_gen_softness"] = 0.2f,
+        ["sky_cloud_gen_threshold"] = 0.65f,
+        ["sky_cloud_hdr"] = 0.8f,
+        ["sky_cloud_mid_col_b"] = 0.5f,
+        ["sky_cloud_mid_col_g"] = 0.5f,
+        ["sky_cloud_mid_col_r"] = 0.5f,
+        ["sky_cloud_offset"] = 0.1f,
+        ["sky_cloud_overall_color"] = 0.5f,
+        ["sky_cloud_overall_strength"] = 0.5f,
+        ["sky_cloud_shadow_col_b"] = 0.5f,
+        ["sky_cloud_shadow_col_g"] = 0.5f,
+        ["sky_cloud_shadow_col_r"] = 0.5f,
+        ["sky_cloud_shadow_strength"] = 0.2f,
+        ["sky_hdr"] = 7f,
+        ["sky_moon_col_b"] = 1f,
+        ["sky_moon_col_g"] = 1f,
+        ["sky_moon_col_r"] = 1f,
+        ["sky_moon_disc_size"] = 2.5f,
+        ["sky_moon_influence_radius"] = 5f,
+        ["sky_moon_iten"] = 1f,
+        ["sky_moon_scatter_inten"] = 2f,
+        ["sky_small_cloud_col_b"] = 0.5f,
+        ["sky_small_cloud_col_g"] = 0.5f,
+        ["sky_small_cloud_col_r"] = 0.5f,
+        ["sky_small_cloud_density_bias"] = 0.558f,
+        ["sky_small_cloud_density_mult"] = 1.7f,
+        ["sky_small_cloud_detail_scale"] = 3.6f,
+        ["sky_small_cloud_detail_strength"] = 0.5f,
+        ["sky_stars_iten"] = 1f,
+        ["sky_sun_col_b"] = 0.5f,
+        ["sky_sun_col_g"] = 0.5f,
+        ["sky_sun_col_r"] = 0.5f,
+        ["sky_sun_disc_col_b"] = 0f,
+        ["sky_sun_disc_col_g"] = 0f,
+        ["sky_sun_disc_col_r"] = 0f,
+        ["sky_sun_disc_size"] = 2.5f,
+        ["sky_sun_hdr"] = 10f,
+        ["sky_sun_influence_radius"] = 5f,
+        ["sky_sun_mie_intensity_mult"] = 1f,
+        ["sky_sun_miephase"] = 1f,
+        ["sky_sun_miescatter"] = 1f,
+        ["sky_sun_scatter_inten"] = 2f,
+        ["sky_zenith_blend_start"] = 0f,
+        ["sky_zenith_col_b"] = 0.5f,
+        ["sky_zenith_col_g"] = 0.5f,
+        ["sky_zenith_col_inten"] = 1f,
+        ["sky_zenith_col_r"] = 0.5f,
+        ["sky_zenith_transition_col_b"] = 0.5f,
+        ["sky_zenith_transition_col_g"] = 0.5f,
+        ["sky_zenith_transition_col_inten"] = 1f,
+        ["sky_zenith_transition_col_r"] = 0.5f,
+        ["sky_zenith_transition_east_blend"] = 0.5f,
+        ["sky_zenith_transition_position"] = 0.5f,
+        ["sky_zenith_transition_west_blend"] = 0.5f,
+    };
 
     private static float WrapHours(float hours)
     {
