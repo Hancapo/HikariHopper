@@ -195,12 +195,18 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
-                // GTA V's fog over its world (gta_fog.wgsl, ViewportRenderer.WorldFog.cs).
+                // GTA V's fog over its world and its fog rays' map (gta_world_fog.wgsl, ViewportRenderer.WorldFog.cs).
                 new BindGroupLayoutEntry
                 {
                     Binding = 9,
                     Visibility = ShaderStage.Fragment,
-                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = GtaSky.FogBytes },
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = WorldFogBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 10,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
             ],
         });
@@ -381,6 +387,7 @@ internal sealed unsafe partial class ViewportRenderer
             SampleCount = 1,
         });
         hdrDepthView = hdrDepth.CreateView();
+        CreateFogRayTargets();
         CreateWaterTargets();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
@@ -559,7 +566,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
                 new BindGroupEntry { Binding = 7, TextureView = WaterBackgroundView() },
                 new BindGroupEntry { Binding = 8, TextureView = WaterDepthView() },
-                new BindGroupEntry { Binding = 9, Buffer = worldFogBuffer!, Size = GtaSky.FogBytes },
+                new BindGroupEntry { Binding = 9, Buffer = worldFogBuffer!, Size = WorldFogBytes },
+                new BindGroupEntry { Binding = 10, TextureView = FogRayView() },
             ],
         });
         lightGroup = LightGroup(sceneMap!.View);

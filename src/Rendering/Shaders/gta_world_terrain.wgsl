@@ -1,5 +1,5 @@
 // GTA V's world's terrain: gta_world.wgsl's placement, shaded by terrain.wgsl. Put after scene.wgsl, light.wgsl,
-// terrain.wgsl, world_instances.wgsl and gta_fog.wgsl.
+// terrain.wgsl, world_instances.wgsl, gta_fog.wgsl and gta_world_fog.wgsl.
 
 @vertex
 fn vs_terrain_world(input: TerrainInput, @location(8) source_index: u32) -> TerrainOutput {
@@ -32,5 +32,5 @@ fn fs_terrain_world_fogged(input: TerrainOutput) -> @location(0) vec4f {
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return gta_world_fogged(colour, input.place);
+    return gta_world_fogged(colour, input.place, input.position.xy);
 }

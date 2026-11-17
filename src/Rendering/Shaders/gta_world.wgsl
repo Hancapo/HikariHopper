@@ -2,7 +2,7 @@
 // surface.wgsl as the model viewer shades them. A placement's matrices are read per instance; positions go relative to
 // the scene's origin, the camera, so the world's large coordinates stay precise. An entity's tint picks its row of a
 // _tnt shader's palette, as the game's tint palette selector. Put after scene.wgsl, light.wgsl, surface.wgsl,
-// world_instances.wgsl and gta_fog.wgsl.
+// world_instances.wgsl, gta_fog.wgsl and gta_world_fog.wgsl.
 
 // A placement's vertex: in the world, then relative to the scene's origin. A plant shrinks away with distance.
 fn place_surface(input: SurfaceInput, instance: WorldInstance) -> SurfaceInput {
@@ -37,7 +37,7 @@ fn vs_surface_world(input: SurfaceInput, @location(8) source_index: u32) -> Surf
 }
 
 // A blended surface of the world, drawn after the world's fog pass: it takes the fog itself, as the game's forward
-// pass does (gta_fog.wgsl).
+// pass does (gta_world_fog.wgsl).
 @fragment
 fn fs_surface_world_fogged(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.place);
@@ -47,5 +47,5 @@ fn fs_surface_world_fogged(input: SurfaceOutput, @builtin(front_facing) front: b
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return gta_world_fogged(colour, input.place);
+    return gta_world_fogged(colour, input.place, input.position.xy);
 }
