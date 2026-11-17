@@ -37,7 +37,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw GTA V's cloud hats over its sky as the game draws them for clear weather: the weather's own hat of the game's cloud models and textures, lit from its cloud keyframes and the timecycle's sun and moon, turning and drifting over time, with its high layers fading in as the camera climbs. ([#291](https://github.com/Hancapo/HikariHopper/pull/291))
 - Draw the glow GTA V puts on its world's lights as the game draws it: each light's corona sized and faded with distance and with the way its light faces, hidden by what stands in front of it and fogged, and the coronas of the further lights at night, from the game's own textures, timecycle and visualsettings.dat. ([#292](https://github.com/Hancapo/HikariHopper/pull/292))
 - Fog GTA V's world as the game does, from its own timecycle: distant hills, streets and water fade into the haze, tinted towards the sun at dawn and dusk, with darker fog where buildings and hills shade it from the sun. ([#294](https://github.com/Hancapo/HikariHopper/pull/294))
-- Light GTA V's world by where the camera is, as the game does: Los Santos with its own city timecycle blended in at its edges, and the maps' timecycle boxes (tunnels, coasts, zones) over it, for the light, the sky, the exposure and the bloom. ([#PR](https://github.com/Hancapo/HikariHopper/pull/PR))
+- Light GTA V's world by where the camera is, as the game does: Los Santos with its own city timecycle blended in at its edges, and the maps' timecycle boxes (tunnels, coasts, zones) over it, for the light, the sky, the exposure and the bloom. ([#295](https://github.com/Hancapo/HikariHopper/pull/295))
 
 ### Changed
 
