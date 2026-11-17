@@ -33,6 +33,19 @@ internal static class DrawableLights
         return lights;
     }
 
+    /// <summary>Each light's corona values, in the order <see cref="Of"/> gives the lights.</summary>
+    public static IReadOnlyList<DrawableLightCorona> CoronasOf(IReadOnlyList<SceneModel> models, IReadOnlyList<DrawableLight>? fragmentLights = null)
+    {
+        var coronas = new List<DrawableLightCorona>();
+        foreach (SceneModel model in models)
+            foreach (DrawableLight light in model.Drawable.Lights)
+                coronas.Add(DrawableLightCorona.From(light.Attributes));
+        if (fragmentLights is { Count: > 0 } && models.Count > 0)
+            foreach (DrawableLight light in fragmentLights)
+                coronas.Add(DrawableLightCorona.From(light.Attributes));
+        return coronas;
+    }
+
     // The light's values, its position and directions placed; at no bone now (-1), as it is where its bone puts it.
     private static WorldLightDefinition Placed(LightAttrDef light, Matrix4x4 transform) =>
         new(Vector3.Transform(light.Position, transform), Vector3.TransformNormal(light.Direction, transform),

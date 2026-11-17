@@ -40,6 +40,8 @@ internal sealed class GtaWorldIndex : WorldIndex
     // Where each interior's placement is in its interior: an entity of it, or of one of its entity sets (Set from 0).
     private readonly Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities;
 
+    public override bool IsInInterior(WorldLodNode node) => interiorEntities.ContainsKey(node.Id);
+
     public override string? PlacementDetail(WorldLodNode node)
     {
         if (node.Id.Map == GtaWorldWater.Map)
@@ -282,6 +284,56 @@ internal sealed class GtaWorldIndex : WorldIndex
         {
             return (null, 0);
         }
+    }
+
+    /// <summary>
+    /// What the coronas are drawn with, as the game loads it: graphics.ytd's "corona" and "flare_animorphic",
+    /// visualsettings.dat's settings, the LOD lights of lodlights.rpf's maps (each lodlights_* map with
+    /// the distlodlights_* map it names as its parent, as the game pairs them) and the world height map
+    /// (heightmap.dat).
+    /// </summary>
+    public override GtaCoronaData? LoadCoronas()
+    {
+        TextureDictionary? graphics = Dictionary(new Hash32("graphics").Value);
+        FiveFury.Textures.Texture? Named(string name) => graphics?.Textures.FirstOrDefault(texture => string.Equals(texture.Name, name, StringComparison.OrdinalIgnoreCase));
+        var distant = new Dictionary<uint, Ymap>();
+        var lod = new List<Ymap>();
+        GtaHeightMap? heightMap = null;
+        lock (Gate)
+        {
+            foreach (Hash32 name in Game.FileSystem.EnumerateFiles(GameFileType.Ymap)
+                .Where(file => Path.GetFileName(file.VirtualPath).Contains("lodlights", StringComparison.OrdinalIgnoreCase))
+                .Select(file => file.NameHash).Distinct())
+            {
+                try
+                {
+                    if (Game.FileSystem.Resolve(name, GameFileType.Ymap).Value is not { } file)
+                        continue;
+                    Ymap ymap = Ymap.Read(file.ReadStandalone());
+                    if (ymap.DistantLights.Lights.Count > 0)
+                    {
+                        distant[file.NameHash.Value] = ymap;
+                        distant.TryAdd(ymap.Name.Value, ymap);
+                    }
+                    if (ymap.LodLights.Lights.Count > 0)
+                        lod.Add(ymap);
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+                    or OverflowException)
+                {
+                }
+            }
+            try
+            {
+                if (Game.FileSystem.Resolve(new Hash32("heightmap"), GameFileType.Heightmap).Value is { } file)
+                    heightMap = GtaHeightMap.Read(file.ReadStandalone());
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException)
+            {
+            }
+        }
+        var pairs = lod.Where(map => distant.ContainsKey(map.Parent.Value)).Select(map => (distant[map.Parent.Value], map));
+        return new GtaCoronaData(Named("corona"), Named("flare_animorphic"), GtaCoronaVisuals.From(visuals), GtaLodLights.From(pairs), heightMap);
     }
 
     /// <summary>

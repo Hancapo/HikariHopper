@@ -35,6 +35,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw GTA V's sky behind its world as the game draws it, from its own sky dome, textures, timecycle and visualsettings.dat: the sky's colours from the horizon to the zenith, the sun's glow and disc, its clouds and the light through them, the stars, the moon lit by its phase, and the fog over them. ([#280](https://github.com/Hancapo/HikariHopper/pull/280))
 - Draw GTA V's lens flare over its world when the sun is in view, as the game draws it from its own flare settings and textures: it fades as buildings, terrain or fog hide the sun, and with the time of day. ([#281](https://github.com/Hancapo/HikariHopper/pull/281))
 - Draw GTA V's cloud hats over its sky as the game draws them for clear weather: the weather's own hat of the game's cloud models and textures, lit from its cloud keyframes and the timecycle's sun and moon, turning and drifting over time, with its high layers fading in as the camera climbs. ([#282](https://github.com/Hancapo/HikariHopper/pull/282))
+- Draw the glow GTA V puts on its world's lights as the game draws it: each light's corona sized and faded with distance and with the way its light faces, hidden by what stands in front of it and fogged, and the coronas of the further lights at night, from the game's own textures, timecycle and visualsettings.dat. ([#PR](https://github.com/Hancapo/HikariHopper/pull/PR))
 
 ### Changed
 

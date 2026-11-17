@@ -184,6 +184,15 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// none, or whose files don't have it. On any thread.
     /// </summary>
     public virtual Rendering.GtaCloudHats? LoadCloudHats() => null;
+
+    /// <summary>
+    /// What the game draws its lights' coronas with, read from its files; null for a world whose coronas aren't drawn
+    /// (RDR2's, for now). On any thread.
+    /// </summary>
+    public virtual Rendering.GtaCoronaData? LoadCoronas() => null;
+
+    /// <summary>Whether a placement is inside an interior.</summary>
+    public virtual bool IsInInterior(WorldLodNode node) => false;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>

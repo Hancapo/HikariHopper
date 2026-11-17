@@ -59,6 +59,15 @@ internal sealed class WorldStreamer : IDisposable
     private readonly Task<GtaLensFlare?> lensFlare;
     // The cloud hat over it, read alongside.
     private readonly Task<GtaCloudHats?> cloudHats;
+    // What the lights' coronas are drawn with, read once, as the streaming starts; and what they were last made for:
+    // the cut's lights with coronas and where its lights are, the camera and the hour.
+    private readonly Task<GtaCoronaData?> coronas;
+    private IReadOnlyList<WorldCoronaLight> coronaLights = [];
+    private IReadOnlyList<Vector3> coronaScene = [];
+    private Vector3 coronaEye = new(float.NaN);
+    private int coronaHour = -1;
+    private bool coronasShown, coronasDue;
+    private readonly List<GtaCoronaInstance> coronaBuffer = [];
     private WorldAssetKey[] wanted = [];
     private readonly HashSet<WorldAssetKey> loading = [];
     private HashSet<WorldAssetKey> resident = [];
@@ -109,6 +118,7 @@ internal sealed class WorldStreamer : IDisposable
         sky = Task.Run(index.LoadSky);
         lensFlare = Task.Run(index.LoadLensFlare);
         cloudHats = Task.Run(index.LoadCloudHats);
+        coronas = Task.Run(index.LoadCoronas);
     }
 
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
@@ -280,6 +290,7 @@ internal sealed class WorldStreamer : IDisposable
             viewport.ShowWorldLensFlare(flare);
         if (cloudHats.IsCompletedSuccessfully && cloudHats.Result is { } hats && !viewport.HasWorldCloudHats)
             viewport.ShowWorldCloudHats(hats);
+        UpdateCoronas(viewport, hours);
         selectionTime += seconds;
         // Ten times a second, as RedFury's session has it (and at once for a new viewport); the uploads go on every frame.
         bool selectionDue = selectionTime >= .1f || firstSelection;
@@ -402,21 +413,67 @@ internal sealed class WorldStreamer : IDisposable
         viewport.SetWorldSelection(display);
         // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
         HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];
+        lightDisplay = (display, eye, hour);
         if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || !lightReady.SetEquals(ready)
             || lightsTruncated && lightEye != eye || lightHour != hour)
+            BindLights(viewport, display, eye, hour, ready);
+    }
+
+    // The cut last applied, which the lights are bound for.
+    private (WorldSelection Display, Vector3 Eye, int Hour)? lightDisplay;
+
+    // The cut's lights bound to their placements, with their coronas' once those can be drawn.
+    private void BindLights(ViewportRenderer viewport, WorldSelection display, Vector3 eye, int hour, HashSet<WorldAssetKey> ready)
+    {
+        bool withCoronas = coronas.IsCompletedSuccessfully && coronas.Result is not null;
+        WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour,
+            interior: withCoronas ? index.IsInInterior : null);
+        viewport.SetLocalLights(lighting.Lights);
+        if (withCoronas)
         {
-            WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour);
-            viewport.SetLocalLights(lighting.Lights);
-            LightCount = lighting.Lights.Count;
-            lightsTruncated = lighting.IsTruncated;
-            lightEye = eye;
-            lightHour = hour;
-            lightCoverage = display.Coverage;
-            lightReady = ready;
-            lock (gate)
-                foreach (string message in lighting.Diagnostics)
-                    Note(message);
+            coronaLights = lighting.Coronas;
+            coronaScene = lighting.Positions;
+            coronasDue = true;
         }
+        LightCount = lighting.Lights.Count;
+        lightsTruncated = lighting.IsTruncated;
+        lightEye = eye;
+        lightHour = hour;
+        lightCoverage = display.Coverage;
+        lightReady = ready;
+        lock (gate)
+            foreach (string message in lighting.Diagnostics)
+                Note(message);
+    }
+
+    // How far past their reach the LOD lights near the camera are taken, and how far the camera goes before they're
+    // taken again.
+    private const float CoronaMargin = 100, CoronaMove = 50;
+
+    // The coronas' textures once they're read, and their lights again when the cut's lights were bound again, the hour
+    // changed, or the camera went far enough for other LOD lights to be in reach.
+    private void UpdateCoronas(ViewportRenderer viewport, float hours)
+    {
+        if (!coronas.IsCompletedSuccessfully || coronas.Result is not { } data)
+            return;
+        if (!coronasShown || !viewport.HasWorldCoronas)
+        {
+            viewport.ShowWorldCoronas(data);
+            coronasShown = true;
+            coronasDue = true;
+            // The cut's lights again, with their coronas this time.
+            if (lightDisplay is var (display, eye0, hour0))
+                BindLights(viewport, display, eye0, hour0, [.. viewport.WorldResident.Where(viewport.IsWorldReady)]);
+        }
+        int hour = Math.Clamp((int)hours, 0, 23);
+        Vector3 eye = viewport.Camera.Eye;
+        if (!coronasDue && hour == coronaHour && Vector3.DistanceSquared(eye, coronaEye) < CoronaMove * CoronaMove)
+            return;
+        coronasDue = false;
+        coronaHour = hour;
+        coronaEye = eye;
+        GtaCoronas.Build(coronaBuffer, coronaLights, coronaScene, data.LodLights, data.Visuals, eye, hour, CoronaMargin);
+        viewport.SetWorldCoronas(coronaBuffer);
     }
 
     // The asset on its way up a frame's step further (let go when it's no longer wanted); then, while the frame's upload
