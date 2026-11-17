@@ -195,9 +195,17 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
+                // GTA V's fog over its world (gta_fog.wgsl, ViewportRenderer.WorldFog.cs).
+                new BindGroupLayoutEntry
+                {
+                    Binding = 9,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = GtaSky.FogBytes },
+                },
             ],
         });
         localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+        CreateWorldFogBuffer();
         localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
         CreateShadowMap();
 
@@ -363,8 +371,8 @@ internal sealed unsafe partial class ViewportRenderer
         hdrView = hdr.CreateView();
         hdrDepth = device.CreateTexture(new TextureDescriptor
         {
-            // Read by the lens flare's count of the sun's pixels (ViewportRenderer.LensFlare.cs) and by the coronas
-            // (ViewportRenderer.Coronas.cs).
+            // Read by the lens flare's count of the sun's pixels (ViewportRenderer.LensFlare.cs), by the coronas
+            // (ViewportRenderer.Coronas.cs) and by the world's fog (ViewportRenderer.WorldFog.cs) where it's attached.
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
@@ -551,6 +559,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
                 new BindGroupEntry { Binding = 7, TextureView = WaterBackgroundView() },
                 new BindGroupEntry { Binding = 8, TextureView = WaterDepthView() },
+                new BindGroupEntry { Binding = 9, Buffer = worldFogBuffer!, Size = GtaSky.FogBytes },
             ],
         });
         lightGroup = LightGroup(sceneMap!.View);

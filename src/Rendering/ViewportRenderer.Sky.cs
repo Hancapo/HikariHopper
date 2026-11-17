@@ -77,7 +77,7 @@ internal sealed unsafe partial class ViewportRenderer
         CreateSkyLayouts();
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_sky.wgsl"),
+            Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_sky.wgsl"),
         }));
         PipelineLayout skyPipelineLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, gtaSkyLayout!] });
         // At the far plane, behind whatever the world draws over it.
@@ -227,6 +227,7 @@ internal sealed unsafe partial class ViewportRenderer
         if (worldSky is not { } sky)
             return;
         worldSky = null;
+        ClearWorldFog();
         sky.Vertices.Destroy();
         sky.Indices.Destroy();
         foreach (WebGpuSharp.Texture texture in sky.Textures)
@@ -243,6 +244,7 @@ internal sealed unsafe partial class ViewportRenderer
             return false;
         skyPasses = GtaSky.Write(skyValues, sky.Visuals, Hours, Sky, Camera.Eye, waterClock.Elapsed.TotalSeconds);
         queue.WriteBuffer(skyUniforms!, 0, (ReadOnlySpan<Vector4>)skyValues);
+        WriteWorldFog(skyValues);
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
             ColorAttachments = [new RenderPassColorAttachment { View = perlinView!, LoadOp = LoadOp.Clear, StoreOp = StoreOp.Store, ClearValue = new Color(0, 0, 0, 0) }],

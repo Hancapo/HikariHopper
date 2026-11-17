@@ -92,7 +92,7 @@ internal sealed unsafe partial class ViewportRenderer
         {
             ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
             {
-                Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_sky.wgsl") + "\n" + Read("gta_cloud_hats.wgsl"),
+                Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_sky.wgsl") + "\n" + Read("gta_cloud_hats.wgsl"),
             });
             return new RenderPipelineDescriptor
             {

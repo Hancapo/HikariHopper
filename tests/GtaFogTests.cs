@@ -1,0 +1,147 @@
+using System.Numerics;
+using HikariHopper.Core;
+using HikariHopper.Rendering;
+
+namespace HikariHopper.Tests;
+
+// GTA V's fog over its world: its constants as the game sets them for the camera, none where no world's sky is shown,
+// and a frame of a far surface fogged by the world's fog pass.
+[Collection(ExplorerCollection.Name)]
+public sealed class GtaFogTests
+{
+    private static string Weather(params (string Field, float Value)[] fields) => $"""
+        <timecycle_keyframe_data version="1.000000">
+          <cycle name="EXTRASUNNY" regions="1">
+            <region name="GLOBAL">
+        {string.Join("\n", fields.Select(f => $"      <{f.Field}>{string.Join(' ', Enumerable.Repeat(f.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), 13))}</{f.Field}>"))}
+            </region>
+          </cycle>
+        </timecycle_keyframe_data>
+        """;
+
+    private static readonly GtaSkyVisuals Visuals = GtaSkyVisuals.From(null);
+
+    private static T WithWeather<T>(Func<T> read, params (string Field, float Value)[] fields)
+    {
+        try
+        {
+            Timecycle.Use(GameTimecycle.From(GameTimecycle.ParseWeather(Weather(fields)), []));
+            return read();
+        }
+        finally
+        {
+            Timecycle.Use(null);
+        }
+    }
+
+    // The fog's end (globalFogParams[0].y) for a camera at this height.
+    private static float FogEnd(float height, GtaSkyVisuals visuals) => WithWeather(() =>
+    {
+        var values = new Vector4[GtaSky.Bytes / 16];
+        GtaSky.Write(values, visuals, 13, null, new Vector3(0, 0, height), 0);
+        return values[GtaSky.FogStart].Y;
+    }, ("far_clip", 10000), ("fog_start", 0), ("fog_horizon_tint_scale", 4));
+
+    [Fact]
+    public void The_fog_ends_further_out_the_higher_the_camera_as_visualsettings_grows_the_far_clip()
+    {
+        // The game's defaults: twice as far from 100 metres up to 250.
+        Assert.Equal(10000, FogEnd(50, Visuals));
+        Assert.Equal(15000, FogEnd(175, Visuals), 1);
+        Assert.Equal(20000, FogEnd(400, Visuals));
+        // The file's own, where it has them.
+        GtaSkyVisuals file = GtaSkyVisuals.From(GameVisualSettings.Parse("misc.Multiplier.heightStart 0\nmisc.Multiplier.heightEnd 100\nmisc.Multiplier.farClipMultiplier 3\n"));
+        Assert.Equal(20000, FogEnd(50, file), 1);
+        Assert.Equal(30000, FogEnd(400, file));
+        // The horizon's tint is over that end.
+        WithWeather(() =>
+        {
+            var values = new Vector4[GtaSky.Bytes / 16];
+            GtaSky.Write(values, Visuals, 13, null, new Vector3(0, 0, 400), 0);
+            Assert.Equal(4f / 20000, values[GtaSky.FogStart + 1].Z, 9);
+            return 0;
+        }, ("far_clip", 10000), ("fog_horizon_tint_scale", 4));
+    }
+
+    [Fact]
+    public void With_no_worlds_sky_the_world_has_no_fog_and_its_sums_stay_finite()
+    {
+        var values = new Vector4[GtaSky.FogVectors];
+        values.AsSpan().Fill(new Vector4(7));
+        GtaSky.NoFog(values);
+        // No ground fog and no haze: their density and alpha nought; a falloff to divide by, and powers of one.
+        Assert.Equal(0, values[1].W);
+        Assert.Equal(0, values[1].Y);
+        Assert.Equal(0, values[2].Y);
+        Assert.Equal(1, values[2].Z);
+        Assert.Equal(new Vector4(0, 0, 1, 1), values[3]);
+        Assert.Equal(new Vector4(0, 0, 1, 1), values[4]);
+        Assert.All(values[5..], value => Assert.Equal(Vector4.Zero, value));
+    }
+
+    [Fact]
+    public void A_far_surface_is_fogged_by_the_worlds_fog_pass_with_no_GPU_errors()
+    {
+        // Thick red fog by day, and the same weather with none.
+        (string, float)[] sky = [("sky_hdr", 1), ("sky_zenith_col_b", 1), ("sky_zenith_col_inten", 1)];
+        (string, float)[] fog = [.. sky, ("fog_start", 0), ("far_clip", 10000), ("fog_density", 50), ("fog_falloff", .1f), ("fog_alpha", 1),
+            ("fog_haze_alpha", 1), ("fog_haze_density", 5), ("fog_hdr", 4), ("fog_haze_hdr", 4),
+            .. new[] { "fog_col", "fog_east_col", "fog_near_col", "fog_haze_col", "fog_moon_col" }.SelectMany(c => new[] { (c + "_r", 1f), (c + "_g", 0f), (c + "_b", 0f) })];
+        (string, float)[] clear = [.. sky, ("fog_start", 0), ("far_clip", 10000), ("fog_density", 0), ("fog_alpha", 0), ("fog_haze_alpha", 0)];
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            const int Width = 64, Height = 32;
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            renderer.Resize(Width, Height);
+            renderer.WorldShown = true;
+            var eye = new Vector3(0, 0, 1500);
+            renderer.Camera.Frame(eye, 20);
+            renderer.Camera.Free = true;
+            // Looking down at a great triangle on the ground, about one and a half kilometres away.
+            renderer.Camera.Place(eye, MathF.PI / 4, 1.2f);
+            renderer.SetTime(13);
+            FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
+            var key = new RedFury.World.WorldAssetKey(1, 2);
+            Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
+                new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            Matrix4x4 placed = Matrix4x4.CreateScale(20000) * Matrix4x4.CreateTranslation(-10000, -10000, 0);
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, placed, Vector3.Zero, 20000, 100000, 0, 0);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
+            renderer.ShowWorldSky(GtaSkyTests.Octahedron());
+            uint Middle(params (string, float)[] weather) => WithWeather(() =>
+            {
+                renderer.RenderTo(view);
+                return GtaSkyTests.Pixel(gpu, target, Width / 2, Height / 2);
+            }, weather);
+            uint clearPixel = Middle(clear);
+            Assert.True(renderer.WorldFogged);
+            uint foggedPixel = Middle(fog);
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            // Red fog over the white surface: its green all but gone, its red and blue apart.
+            static (int Low, int Green, int High) Channels(uint pixel) => ((int)(pixel & 0xFF), (int)((pixel >> 8) & 0xFF), (int)((pixel >> 16) & 0xFF));
+            var (clearLow, clearGreen, clearHigh) = Channels(clearPixel);
+            var (fogLow, fogGreen, fogHigh) = Channels(foggedPixel);
+            Assert.True(clearGreen > 128 && Math.Abs(clearLow - clearHigh) < 16, $"{clearPixel:X8}");
+            Assert.True(fogGreen < clearGreen / 2 && Math.Abs(fogLow - fogHigh) > 64, $"{clearPixel:X8} {foggedPixel:X8}");
+            renderer.ClearWorld();
+            Assert.False(renderer.HasWorldSky);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+}
