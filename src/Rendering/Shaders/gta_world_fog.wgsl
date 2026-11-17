@@ -1,34 +1,39 @@
-// GTA V's fog over its world, as the game's depth effects pass draws it (the postfx effect's pp_depthfx, PS_DepthEffects; the
-// same arithmetic in Enhanced's program): once the world's solid surfaces and decals are drawn, a triangle over the
-// frame takes each pixel's depth back to its point and blends the fog along the ray to it (gta_fog.wgsl, with the haze)
-// over it, by the fog's amount, into colour only. The sky, which nothing covers, fogs itself (gta_sky.wgsl); the water
-// and blended surfaces drawn after this fog themselves (gta_water.wgsl, the depth effects in gta_world.wgsl and
-// gta_world_terrain.wgsl), the water by its own surface, as the game's pass would over it.
-//   - The game skips what's nearer than the fog's start with a depth test against a plane there; nothing there has any
-//     fog, so here it's simply drawn over.
+// GTA V's fog over its world, as its shaders read it (ViewportRenderer.WorldFog.cs): the fog's constants (gta_fog.wgsl)
+// and the fog rays', through light.wgsl's group; and the fog rays' map, how much of each pixel's ray
+// through the fog the sun reaches (gta_world_fog_pass.wgsl), which darkens the fog's colour where it doesn't. With no
+// world's sky, no fog; with no sun's shadow, no rays.
 // Put after scene.wgsl, light.wgsl and gta_fog.wgsl.
 
-// The world's depth (reversed Z, infinitely far), read where it's attached.
-@group(1) @binding(0) var fog_depth: texture_depth_2d;
+struct WorldFog {
+    fog: GtaFog,
+    // The fog rays: fogray_intensity, then fogray_nearfade and fogray_farfade (over the last cascade's reach).
+    rays: vec4f,
+};
 
-@vertex
-fn vs_gta_world_fog(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
-    let corner = vec2f(f32((index << 1u) & 2u), f32(index & 2u));
-    return vec4f(corner * 2.0 - 1.0, 0.0, 1.0);
+@group(2) @binding(9) var<uniform> world_fog: WorldFog;
+// How much of each ray the sun reaches, and its depth along the view: half the frame's size.
+@group(2) @binding(10) var fog_ray_map: texture_2d<f32>;
+
+// globalFogRayIntensity: none without the sun's shadow.
+fn gta_fog_ray_strength() -> f32 {
+    return select(0.0, world_fog.rays.x, light.shadow_parameters.w > 0.5);
 }
 
-@fragment
-fn fs_gta_world_fog(@builtin(position) position: vec4f) -> @location(0) vec4f {
-    let depth = textureLoad(fog_depth, vec2i(position.xy), 0);
-    // The sky: nothing was drawn there.
-    if (depth == 0.0) {
-        discard;
+// The fog rays' intensity: what the fog's colour is taken by at a pixel, from the map as it is (filtered).
+fn gta_fog_ray_intensity(pixel: vec2f) -> f32 {
+    let strength = gta_fog_ray_strength();
+    if (strength <= 0.0) {
+        return 1.0;
     }
-    // The pixel's point: along its ray, as far along the view as the depth says (the near plane over it).
-    let size = vec2f(textureDimensions(fog_depth));
-    let ndc = vec2f(position.x / size.x * 2.0 - 1.0, 1.0 - position.y / size.y * 2.0);
-    let tan_half = scene.projection.y;
-    let ray = scene.forward.xyz + scene.right.xyz * (ndc.x * tan_half * scene.projection.x) + scene.up.xyz * (ndc.y * tan_half);
-    let fog = gta_fog(world_fog, ray * (light.water.z / depth), 1.0);
-    return fog;
+    let uv = pixel / (vec2f(textureDimensions(fog_ray_map)) * 2.0);
+    let ray = textureSampleLevel(fog_ray_map, reflection_sampler, uv, 0.0).x;
+    return saturate(mix(1.0, ray, strength));
+}
+
+// The depth effects (with the fog rays in the forward pass): a forward-drawn surface of the world taken through the world's fog, by
+// its place relative to the scene's origin (the camera, in the world) and its pixel.
+fn gta_world_fogged(colour: vec4f, place: vec3f, pixel: vec2f) -> vec4f {
+    var fog = gta_fog(world_fog.fog, place - (scene.eye.xyz - scene.origin.xyz), 1.0);
+    fog = vec4f(fog.rgb * gta_fog_ray_intensity(pixel), fog.a);
+    return vec4f(mix(colour.rgb, fog.rgb, fog.a), colour.a);
 }

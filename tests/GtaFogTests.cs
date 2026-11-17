@@ -80,12 +80,12 @@ public sealed class GtaFogTests
     }
 
     [Fact]
-    public void A_far_surface_is_fogged_by_the_worlds_fog_pass_with_no_GPU_errors()
+    public void A_far_surface_is_fogged_by_the_worlds_fog_pass_and_its_fog_rays_with_no_GPU_errors()
     {
         // Thick red fog by day, and the same weather with none.
         (string, float)[] sky = [("sky_hdr", 1), ("sky_zenith_col_b", 1), ("sky_zenith_col_inten", 1)];
         (string, float)[] fog = [.. sky, ("fog_start", 0), ("far_clip", 10000), ("fog_density", 50), ("fog_falloff", .1f), ("fog_alpha", 1),
-            ("fog_haze_alpha", 1), ("fog_haze_density", 5), ("fog_hdr", 4), ("fog_haze_hdr", 4),
+            ("fog_haze_alpha", 1), ("fog_haze_density", 5), ("fog_hdr", 4), ("fog_haze_hdr", 4), ("fogray_intensity", .9f), ("fogray_farfade", 200),
             .. new[] { "fog_col", "fog_east_col", "fog_near_col", "fog_haze_col", "fog_moon_col" }.SelectMany(c => new[] { (c + "_r", 1f), (c + "_g", 0f), (c + "_b", 0f) })];
         (string, float)[] clear = [.. sky, ("fog_start", 0), ("far_clip", 10000), ("fog_density", 0), ("fog_alpha", 0), ("fog_haze_alpha", 0)];
         GpuDevice gpu = TestGpu.Device();
@@ -106,6 +106,7 @@ public sealed class GtaFogTests
             gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
             renderer.Resize(Width, Height);
             renderer.WorldShown = true;
+            renderer.Shadows = true;
             var eye = new Vector3(0, 0, 1500);
             renderer.Camera.Frame(eye, 20);
             renderer.Camera.Free = true;
@@ -129,7 +130,10 @@ public sealed class GtaFogTests
             }, weather);
             uint clearPixel = Middle(clear);
             Assert.True(renderer.WorldFogged);
+            Assert.False(renderer.WorldFogRays);
             uint foggedPixel = Middle(fog);
+            // In the sun's shadow's reach, with the timecycle's fog rays: they're drawn.
+            Assert.True(renderer.WorldFogRays);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
             Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
             // Red fog over the white surface: its green all but gone, its red and blue apart.

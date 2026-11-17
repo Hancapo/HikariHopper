@@ -249,6 +249,16 @@ internal static class GtaSky
         values[3] = values[4] = new(0, 0, 1, 1);
     }
 
+    /// <summary>
+    /// The fog rays' settings at <paramref name="hours"/>: their intensity, then the near and
+    /// far fades over the last cascade's reach.
+    /// </summary>
+    internal static Vector4 FogRays(float hours)
+    {
+        TimecycleSample tc = Timecycle.Sample(hours);
+        return new(Field(tc, "fogray_intensity"), Field(tc, "fogray_nearfade"), Field(tc, "fogray_farfade"), 0);
+    }
+
     private static Vector3 Square(Vector3 colour) => colour * colour;
 
     /// <summary>A timecycle field, or the default the game's code gives it where the timecycle hasn't it.</summary>
@@ -292,6 +302,7 @@ internal static class GtaSky
         ["fog_near_col_r"] = 0.012f,
         ["fog_start"] = 73f,
         ["fog_sun_lighting_calc_pow"] = 8f,
+        ["fogray_farfade"] = 1f,
         ["sky_azimuth_east_col_b"] = 0.5f,
         ["sky_azimuth_east_col_g"] = 0.5f,
         ["sky_azimuth_east_col_inten"] = 1f,

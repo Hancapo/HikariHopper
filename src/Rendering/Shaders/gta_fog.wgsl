@@ -1,9 +1,9 @@
-// GTA V's fog (as Enhanced's programs have it): the height fog along a ray from the camera
-//, the haze past it, and their colour, towards the sun and the moon, of the
-// atmosphere and of the ground. The sky takes it without the haze; the world with it:
-// its opaque surfaces and water by the world's fog pass (gta_world_fog.wgsl, as the game's depth effects pass), its
-// blended ones in their own shaders. The constants are the game's (GtaSky.Fog).
-// Put after scene.wgsl.
+// GTA V's fog, as the game works it out (checked against Enhanced's shaders): the height fog along a ray
+// from the camera, the haze past it, and their colour, towards the sun and the
+// moon, of the atmosphere and of the ground. The sky takes it without the haze; the world with it:
+// its opaque surfaces by the world's fog pass (gta_world_fog_pass.wgsl, as the game's depth effects
+// pass), its water and blended surfaces in their own shaders (gta_world_fog.wgsl). The constants are
+// the game's (GtaSky.Fog).
 
 struct GtaFog {
     // globalFogParams: the fog's start and end; the haze's density (negated), alpha and the horizon tint's scale over
@@ -18,9 +18,6 @@ struct GtaFog {
     ground: vec4f,
     moon: vec4f,
 };
-
-// The world's fog, for the world's shaders: light.wgsl's group, after its own bindings. Nought where no fog is shown.
-@group(2) @binding(9) var<uniform> world_fog: GtaFog;
 
 // The height fog along a ray from the camera, and how far into the fog it goes.
 fn gta_ground_fog(fog: GtaFog, ray: vec3f) -> vec2f {
@@ -53,11 +50,4 @@ fn gta_fog(fog: GtaFog, ray: vec3f, haze_scale: f32) -> vec4f {
 // The fog without its haze, as the sky takes it.
 fn gta_fog_no_haze(fog: GtaFog, ray: vec3f) -> vec4f {
     return gta_fog(fog, ray, 0.0);
-}
-
-// The depth effects: a forward-drawn surface of the world taken through the world's fog, by its place relative to the scene's
-// origin (the camera, in the world).
-fn gta_world_fogged(colour: vec4f, place: vec3f) -> vec4f {
-    let fog = gta_fog(world_fog, place - (scene.eye.xyz - scene.origin.xyz), 1.0);
-    return vec4f(mix(colour.rgb, fog.rgb, fog.a), colour.a);
 }

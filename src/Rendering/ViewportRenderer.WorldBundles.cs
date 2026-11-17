@@ -218,10 +218,12 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.Rdr2Water => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
                 + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl") + "\n" + Read("water_common.wgsl") + "\n"
                 + Read("rdr2_water.wgsl"),
-            WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_water.wgsl"),
-            WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_world_terrain.wgsl"),
-            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_world.wgsl"),
+            WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_water.wgsl"),
+            WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world_terrain.wgsl"),
+            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world.wgsl"),
         };
+        // GTA V's fog over its world, which its shaders take (gta_world_fog.wgsl).
+        static string GtaFog() => Read("gta_fog.wgsl") + "\n" + Read("gta_world_fog.wgsl") + "\n";
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Code() }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool decal = false) =>
             Compile($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => Describe(cull, blend, decal), prepare);
@@ -589,6 +591,8 @@ internal sealed unsafe partial class ViewportRenderer
                 encoder.CopyTextureToTexture(new TexelCopyTextureInfo { Texture = hdrDepth!, Aspect = TextureAspect.DepthOnly },
                     new TexelCopyTextureInfo { Texture = waterDepth!, Aspect = TextureAspect.DepthOnly }, new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1));
             depthCopied = true;
+            if (fog)
+                DrawFogRays(encoder);
             pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
