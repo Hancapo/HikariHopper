@@ -104,8 +104,10 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // A surface of an asset: its part (with indexes into the asset's vertices as they are), and how it's drawn.
+    // Night-only: a _geomnightonly shader's, gone by day (SurfaceMaterial.NightOnly), which the shadow's bundles leave
+    // out, day and night.
     private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, WorldSlice Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
-        WorldFamily Family)
+        WorldFamily Family, bool NightOnly = false)
     {
         internal int Level => Part.Lod is >= 0 and < WorldAsset.Lods ? Part.Lod : 0;
 
@@ -117,7 +119,10 @@ internal sealed unsafe partial class ViewportRenderer
         internal bool Water => Family is WorldFamily.Rdr2Water or WorldFamily.GtaWater;
 
         // Solid without a cut-out: casts without its material, beside the others of its level.
-        internal bool Caster => Mode == AlphaMode.Opaque && !Decal;
+        internal bool Caster => Mode == AlphaMode.Opaque && !Decal && !NightOnly;
+
+        // A cut-out that casts through its material.
+        internal bool MaskedCaster => Mode == AlphaMode.Mask && !NightOnly;
     }
 
     // Adjacent solid surfaces of a level, cast into the shadow as one draw.
@@ -160,7 +165,7 @@ internal sealed unsafe partial class ViewportRenderer
     private sealed class WorldTexture(WebGpuSharp.Texture? gpu)
     {
         internal readonly WebGpuSharp.Texture? Gpu = gpu;
-        internal readonly TextureView? View = gpu?.CreateView();
+        internal readonly TextureView? View = gpu is null ? null : ShapedView(gpu);
         internal TextureView? Srgb;
         internal int Users;
     }

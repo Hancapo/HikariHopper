@@ -32,7 +32,7 @@ fn vs_surface_world(input: SurfaceInput, @location(8) source_index: u32) -> Surf
     }
     output.room = instance_room(instance);
     output.lod_fade = instance_lod_fade(instance);
-    output.position = scene.view_projection * vec4f(placed.position, 1.0);
+    output.position = scene.view_projection * vec4f(placed.position, 1.0) * day_night_vertex_scale();
     return output;
 }
 
