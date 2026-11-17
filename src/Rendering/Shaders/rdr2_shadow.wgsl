@@ -1,5 +1,5 @@
 // The key light's shadow of Red Dead Redemption 2's cut-out surfaces, as shadow.wgsl casts GTA V's: their depth where
-// RedFury's simple alpha test (rdr2_material.wgsl's simple_alpha_tested_out) keeps them. Standalone: the shadow's view,
+// the game's cascades keep them (rdr2_cutout.wgsl's rdr2_cutout_casts). Put after rdr2_cutout.wgsl: the shadow's view,
 // and the start of RDR2's material group.
 
 struct ShadowView {
@@ -43,7 +43,7 @@ fn fs_rdr2_shadow(input: MaskedOutput) {
     if (((material.flags.w >> 3u) & 3u) == 2u) {
         alpha *= input.alpha;
     }
-    if (alpha < material.emission_alpha_layers.y) {
+    if (!rdr2_cutout_casts(alpha, material.flags.w, material.emission_alpha_layers.y)) {
         discard;
     }
 }

@@ -488,7 +488,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (sky)
                 DrawWorldSky(hdrPass);
             if (drawable)
-                DrawSurfaces(hdrPass);
+                hdrPass = DrawSurfaces(hdrPass, encoder: encoder);
             if (worldShown)
                 hdrPass = DrawWorld(hdrPass, encoder);
             hdrPass.End();

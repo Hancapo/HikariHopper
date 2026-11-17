@@ -213,9 +213,9 @@ internal sealed unsafe partial class ViewportRenderer
         };
         string Code() => family switch
         {
-            WorldFamily.Rdr2 => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
+            WorldFamily.Rdr2 => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
                 + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl"),
-            WorldFamily.Rdr2Water => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
+            WorldFamily.Rdr2Water => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
                 + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl") + "\n" + Read("water_common.wgsl") + "\n"
                 + Read("rdr2_water.wgsl"),
             WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_water.wgsl"),
@@ -283,7 +283,7 @@ internal sealed unsafe partial class ViewportRenderer
         if (family == WorldFamily.GtaTerrain)
             return;
         bool gta = family != WorldFamily.Rdr2;
-        string test = gta ? Read("trees.wgsl") + "\n" + Read("gta_world_shadow.wgsl") : Read("rdr2_world_shadow.wgsl");
+        string test = gta ? Read("trees.wgsl") + "\n" + Read("gta_world_shadow.wgsl") : Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_world_shadow.wgsl");
         worldMaskedShadow[f] = Compile($"{name}-shadow-masked", () =>
         {
             ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("world_shadow.wgsl") + "\n" + test });
@@ -587,6 +587,9 @@ internal sealed unsafe partial class ViewportRenderer
         if (listedAssets.Count == 0 || worldInstanceLayout is null)
             return DrawCloudHats(pass, encoder, depthCopied: false);
         DrawWorldPass(pass, OpaqueBundle);
+        // RDR2's sub-sampled cut-outs put together before anything is drawn over them.
+        if (WorldSubSampled())
+            pass = CombineSubSampledAlpha(pass, encoder);
         DrawWorldPass(pass, DecalBundle);
         // GTA V's fog over what's drawn so far, once its sky is shown (ViewportRenderer.WorldFog.cs): the rest of the
         // pass reads the depth, which nothing after writes.

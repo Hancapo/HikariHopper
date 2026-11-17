@@ -40,6 +40,15 @@ internal sealed class Rdr2Material
     /// <summary>River water, whose COLOR1 (flow, blend, ripple scale) rides in the second and third UV sets.</summary>
     public bool WaterVertexFlow { get; private set; }
 
+    /// <summary>
+    /// A cut-out drawn with sub-sampled alpha (rdr2_cutout.wgsl), as the game draws its cut-outs on PC without MSAA:
+    /// all but grass, whose programs have their own alpha test.
+    /// </summary>
+    public bool SubSampled => (MemoryMarshal.Cast<byte, uint>(Uniforms.AsSpan())[19] & SubSampledFlag) != 0;
+
+    // rdr2_cutout.wgsl's RDR2_SUB_SAMPLED and RDR2_TREE_CUTOUT, in flags.w.
+    internal const uint SubSampledFlag = 256, TreeCutoutFlag = 512;
+
     /// <summary>The alpha mode rdr2.wgsl reads: 0 opaque, 1 cut out, 2 blended.</summary>
     public int AlphaMode => (int)(Floats[11] + .5f);
 
@@ -172,6 +181,9 @@ internal sealed class Rdr2Material
             | ((vertexMode switch { "RGB" => 1u, "ALPHA" => 2u, "DIRT" => 3u, _ => 0u }) << 3)
             | (m.Textures[11] is not null ? 32u : 0) | (m.Textures[12] is not null ? 64u : 0)
             | (State("material_encoding", "AUTO") == "SPECULAR_ONLY" ? 128u : 0);
+        // Cut-outs but grass (grass_batch, grass_imposter_slod) with sub-sampled alpha; the trees' with their own ramp.
+        if (f[11] == 1 && !m.Decal && !material.ShaderName.StartsWith("grass", StringComparison.OrdinalIgnoreCase))
+            u[19] |= SubSampledFlag | (material.ShaderName.StartsWith("trees", StringComparison.OrdinalIgnoreCase) ? TreeCutoutFlag : 0);
         int count = 1;
         uint normals = 0, materials = 0;
         for (int layer = 0; layer < 4; layer++)
@@ -249,7 +261,7 @@ internal sealed class Rdr2Material
         int waterKind = State("water_kind", "") switch { "STILL" => 1, "RIVER" => 2, "FALL" => 3, _ => 0 };
         if (waterKind != 0)
         {
-            m.Water = true; m.Blend = true; m.Decal = false; m.DoubleSided = true; f[11] = 2;
+            m.Water = true; m.Blend = true; m.Decal = false; m.DoubleSided = true; f[11] = 2; u[19] &= ~(SubSampledFlag | TreeCutoutFlag);
             float[] colour = Values("water_colour", .12f, .25f, .19f, .35f);
             for (int i = 0; i < 3; i++)
             {
