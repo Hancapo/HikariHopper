@@ -26,7 +26,8 @@ internal sealed unsafe partial class ViewportRenderer
         waterDepth?.Destroy();
         waterBackground = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            // Read back by the sub-sampled alpha's tests, as the frame was before its combine.
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = HdrFormat,

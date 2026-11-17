@@ -97,7 +97,8 @@ internal sealed unsafe partial class ViewportRenderer
         subSampled?.Destroy();
         subSampled = device.CreateTexture(new TextureDescriptor
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
+            // Read back by its tests.
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
             Format = SubSampledFormat,
