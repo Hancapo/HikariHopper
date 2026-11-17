@@ -57,10 +57,11 @@ internal sealed record GtaSkyDome(float[] Vertices, uint[] Indices, GameTexture?
 
 /// <summary>
 /// The sky's settings in visualsettings.dat: the clouds' edge and overlay detail scales,
-/// and the speeds of the large clouds, the small ones, the overall detail and the edge detail.
+/// and the speeds of the large clouds, the small ones, the overall detail and the edge detail; and the timecycle's:
+/// the heights the far clip grows between, and what it's multiplied by above them.
 /// </summary>
 internal sealed record GtaSkyVisuals(float EdgeDetailScale, float OverallDetailScale, float CloudSpeed, float SmallCloudSpeed, float OverallDetailSpeed,
-    float EdgeDetailSpeed)
+    float EdgeDetailSpeed, float FarClipHeightStart = 100, float FarClipHeightEnd = 250, float FarClipMultiplier = 2)
 {
     /// <summary>The game's file's settings, each with the default the game's code reads it with where the file hasn't it.</summary>
     public static GtaSkyVisuals From(Core.GameVisualSettings? file) => new(
@@ -69,7 +70,10 @@ internal sealed record GtaSkyVisuals(float EdgeDetailScale, float OverallDetailS
         file?.Get("cloud.speed.large", 5) ?? 5,
         file?.Get("cloud.speed.small", 1) ?? 1,
         file?.Get("cloud.speed.overall", 1) ?? 1,
-        file?.Get("cloud.speed.edge", 1) ?? 1);
+        file?.Get("cloud.speed.edge", 1) ?? 1,
+        file?.Get("misc.Multiplier.heightStart", 100) ?? 100,
+        file?.Get("misc.Multiplier.heightEnd", 250) ?? 250,
+        file?.Get("misc.Multiplier.farClipMultiplier", 2) ?? 2);
 }
 
 /// <summary>
@@ -84,6 +88,12 @@ internal static class GtaSky
 {
     /// <summary>The constants' size: gta_sky.wgsl's GtaSky.</summary>
     public const int Bytes = 39 * 16;
+
+    /// <summary>Where the fog's constants (gta_fog.wgsl's GtaFog) are among the sky's, in vectors, and how many.</summary>
+    public const int FogStart = 29, FogVectors = 9;
+
+    /// <summary>The fog's constants' size: gta_fog.wgsl's GtaFog.</summary>
+    public const int FogBytes = FogVectors * 16;
 
     // The dome's scale (DOME_RADIUS) and the discs' (the sun's by its disc size multiplier, the moon's by 250).
     private const float DomeScale = 20000, DiscScale = 250;
@@ -185,7 +195,7 @@ internal static class GtaSky
         values[26] = new(Get("sky_cloud_gen_frequency"), Get("sky_cloud_gen_scale"), Get("sky_cloud_gen_threshold"), Get("sky_cloud_gen_softness"));
         values[27] = new(Get("sky_cloud_gen_density_offset"), phase.X, phase.Y, 0);
         values[28] = new(passes.Sun ? 1 : 0, passes.Moon ? 1 : 0, passes.Clouds ? 1 : 0, passes.Stars ? 1 : 0);
-        Fog(values[29..38], tc, hours, path, camera.Z, sunSprite, moonSprite);
+        Fog(values.Slice(FogStart, FogVectors), tc, visuals, hours, path, camera.Z, sunSprite, moonSprite);
         values[38] = new(camera, 0);
         return passes;
     }
@@ -193,13 +203,18 @@ internal static class GtaSky
     /// <summary>
     /// The fog's constants, as the game sets them for a camera at this height: globalFogParams, then
     /// the fog's colours towards the sun, of the atmosphere and of the ground (each with a channel of the haze's), and
-    /// towards the moon.
+    /// towards the moon. The far clip, which the fog ends at, grows with the camera's height as
+    /// the game grows it.
     /// </summary>
-    private static void Fog(Span<Vector4> values, TimecycleSample tc, float hours, SkyPath? path, float height, Vector3 sun, Vector3 moon)
+    private static void Fog(Span<Vector4> values, TimecycleSample tc, GtaSkyVisuals visuals, float hours, SkyPath? path, float height, Vector3 sun,
+        Vector3 moon)
     {
         float Get(string name) => Field(tc, name);
         float start = Get("fog_start");
-        float end = MathF.Max(Get("far_clip"), start);
+        float range = visuals.FarClipHeightEnd - visuals.FarClipHeightStart;
+        float scaler = range > 0 ? Math.Clamp((height - visuals.FarClipHeightStart) / range, 0, 1) : 0;
+        float farClip = Get("far_clip") * (1 + (visuals.FarClipMultiplier - 1) * scaler);
+        float end = MathF.Max(farClip, start);
         float nearDensity = Get("fog_density") / 10000, falloff = Get("fog_falloff") / 1000;
         // Kept from exploding under the fog's base.
         float atViewer = MathF.Exp(MathF.Min(-falloff * (height - Get("fog_base_height")), 20));
@@ -221,6 +236,17 @@ internal static class GtaSky
         values[6] = new(atmosphere, haze.Y);
         values[7] = new(ground, haze.Z);
         values[8] = new(moonColour, 0);
+    }
+
+    /// <summary>
+    /// No fog, for the world's shaders where no world's sky is shown: none of it anywhere, its sums all finite (a
+    /// falloff to divide by, powers of one towards a direction).
+    /// </summary>
+    internal static void NoFog(Span<Vector4> values)
+    {
+        values[..FogVectors].Clear();
+        values[2] = new(0, 0, 1, 0);
+        values[3] = values[4] = new(0, 0, 1, 1);
     }
 
     private static Vector3 Square(Vector3 colour) => colour * colour;

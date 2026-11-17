@@ -118,7 +118,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_sky.wgsl") + "\n" + Read("gta_lens_flare.wgsl"),
+            Code = Read("scene.wgsl") + "\n" + Read("sky_system.wgsl") + "\n" + Read("gta_fog.wgsl") + "\n" + Read("gta_sky.wgsl") + "\n" + Read("gta_lens_flare.wgsl"),
         }));
         RenderPipelineDescriptor Describe(BindGroupLayout layout, string vertex, string fragment, BlendState? blend, ColorWriteMask mask) => new()
         {

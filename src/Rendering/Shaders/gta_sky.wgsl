@@ -5,13 +5,13 @@
 //   - The dome is the game's model, 20 km across, centred under the camera at the water's level. Its gradient and fog
 //     are worked out per vertex, as the game's are; the sun's glow, the clouds, their light, the stars and the dither
 //     per pixel.
-//   - Fog is the game's height fog without its haze, as the sky's passes take it.
+//   - Fog is the game's height fog without its haze (gta_fog.wgsl's gta_fog_no_haze), as the sky's passes take it.
 //   - The game draws the sky after the world, at the far plane, where nothing else was; here it goes first and the world
 //     over it. Its alpha says how much of the sun and moon shows through (the horizon and the clouds hide them); once
 //     they're drawn the sky covers the frame, which the tone map then takes whole.
 //   - Left out: the sky plane under the horizon (the ocean covers it) and the fog rays. The cloud hats, the game's own
 //     models drawn after the sky, are gta_cloud_hats.wgsl's.
-// Put after scene.wgsl and sky_system.wgsl.
+// Put after scene.wgsl, sky_system.wgsl and gta_fog.wgsl.
 
 struct GtaSky {
     // azimuthEastColor, with azimuthTransitionPosition in w.
@@ -68,16 +68,8 @@ struct GtaSky {
     noise_phase: vec4f,
     // Which of the game's passes are on: the sun, the moon, the clouds, the stars (one or nought each).
     passes: vec4f,
-    // globalFogParams: the fog's start and end; the haze's density (negated), alpha and the horizon tint's scale over
-    // the fog's end, the ground fog's density at the camera (negated); the haze's start, the ground fog's alpha and its
-    // height falloff; where the sun is and the power its glow in the fog falls off by; the moon's.
-    fog: array<vec4f, 5>,
-    // The fog's colours: towards the sun, the atmosphere, the ground (with the haze's red, green and blue in w),
-    // towards the moon.
-    fog_sun: vec4f,
-    fog_atmosphere: vec4f,
-    fog_ground: vec4f,
-    fog_moon: vec4f,
+    // The fog (gta_fog.wgsl), as the game sets it.
+    fog: GtaFog,
     // The camera, in the world.
     camera: vec4f,
 };
@@ -99,29 +91,6 @@ const DISC_FOG_DISTANCE: f32 = 25000.0;
 fn sky_clip(world: vec3f) -> vec4f {
     let clip = scene.view_projection * vec4f(world - scene.origin.xyz, 1.0);
     return vec4f(clip.xy, 0.0, clip.w);
-}
-
-// The height fog along a ray from the camera, and how far into the fog it goes.
-fn gta_ground_fog(ray: vec3f) -> vec2f {
-    let full = length(ray);
-    let dist = max(0.0, full - sky.fog[0].x);
-    let delta_z = ray.z * (dist / max(full, 1e-6));
-    let t = sky.fog[2].z * delta_z;
-    let along = select(1.0, (1.0 - exp(-t)) / t, abs(delta_z) > 0.01);
-    let value = min(1.0, sky.fog[1].w * dist * along);
-    return vec2f(1.0 - saturate(exp(value)), dist);
-}
-
-// The fog without its haze: the fog's colour along a ray from the camera, and how much of it there is.
-fn gta_fog_no_haze(ray: vec3f) -> vec4f {
-    let ground = gta_ground_fog(ray);
-    let amount = ground.x * sky.fog[2].y;
-    let d = normalize(ray);
-    let moon_amount = pow(saturate(dot(d, sky.fog[4].xyz)), sky.fog[4].w);
-    let sun_amount = pow(saturate(dot(d, sky.fog[3].xyz)), sky.fog[3].w);
-    let atmosphere_blend = 1.0 - exp(-sky.fog[1].z * ground.y);
-    let atmosphere = mix(mix(sky.fog_atmosphere.rgb, sky.fog_moon.rgb, moon_amount), sky.fog_sun.rgb, sun_amount);
-    return vec4f(mix(sky.fog_ground.rgb, atmosphere, atmosphere_blend), saturate(amount));
 }
 
 // sphericalWarpOffset.
@@ -210,7 +179,7 @@ fn vs_gta_sky(in: DomeIn) -> DomeVarying {
     let world = centre + in.position * DOME_RADIUS;
     var out: DomeVarying;
     out.position = sky_clip(world);
-    out.fog = gta_fog_no_haze(world - camera);
+    out.fog = gta_fog_no_haze(sky.fog, world - camera);
     let view = normalize(world - centre);
     out.colour = sky_gradient(sky.azimuth_east.rgb, sky.azimuth_transition.rgb, sky.azimuth_west.rgb, sky.azimuth_east.w,
         sky.zenith.rgb, sky.zenith_transition.rgb, sky.zenith_constants, azimuth_blend(view), abs(view.z)) * sky.azimuth_west.w;
@@ -321,7 +290,7 @@ fn vs_gta_moon(@builtin(vertex_index) index: u32) -> MoonVarying {
     // The fan's coordinates (half its radius across the map), flipped as vs_moon flips them.
     let uv = corner * 0.5 + 0.5;
     out.uv = vec2f(uv.x, 1.0 - uv.y);
-    let fogged = saturate(1.0 - gta_fog_no_haze(normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE).a);
+    let fogged = saturate(1.0 - gta_fog_no_haze(sky.fog, normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE).a);
     out.shown = fogged * saturate(saturate(dot(normalize(world), vec3f(0.0, 0.0, 1.0))) / 0.2);
     return out;
 }
@@ -347,7 +316,7 @@ fn vs_gta_sun(@builtin(vertex_index) index: u32) -> SunVarying {
     let world = disc_world(sky.sun_position.xyz, sky.sun_colour.w, disc_corner(index));
     var out: SunVarying;
     out.position = sky_clip(world);
-    out.fog = gta_fog_no_haze(normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE);
+    out.fog = gta_fog_no_haze(sky.fog, normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE);
     return out;
 }
 

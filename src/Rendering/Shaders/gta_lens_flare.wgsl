@@ -42,7 +42,7 @@ fn vs_gta_sun_visibility(@builtin(vertex_index) index: u32) -> SunVisibilityVary
     let world = disc_world(sky.sun_position.xyz, flare_visibility.disc.x, place);
     var out: SunVisibilityVarying;
     out.position = sky_clip(world);
-    out.fog_blend = 1.0 - gta_fog_no_haze(normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE).a * flare_visibility.disc.y;
+    out.fog_blend = 1.0 - gta_fog_no_haze(sky.fog, normalize(world - sky.camera.xyz) * DISC_FOG_DISTANCE).a * flare_visibility.disc.y;
     return out;
 }
 

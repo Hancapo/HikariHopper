@@ -186,7 +186,7 @@ public sealed class GtaSkyTests
     }
 
     // A dome of eight triangles, its coordinates across it, with no textures: each is the renderer's stand-in.
-    private static GtaSkyDome Octahedron()
+    internal static GtaSkyDome Octahedron()
     {
         Vector3[] corners = [Vector3.UnitX, Vector3.UnitY, -Vector3.UnitX, -Vector3.UnitY, Vector3.UnitZ, -Vector3.UnitZ];
         float[] vertices = [.. corners.SelectMany(c => new[] { c.X, c.Y, c.Z, c.X * .5f + .5f, c.Y * .5f + .5f, c.X * .5f + .5f, c.Z * .5f + .5f })];
@@ -194,7 +194,7 @@ public sealed class GtaSkyTests
         return new GtaSkyDome(vertices, indices, null, null, null, null, null, Visuals);
     }
 
-    private static uint Pixel(GpuDevice gpu, WebGpuSharp.Texture target, int x, int y)
+    internal static uint Pixel(GpuDevice gpu, WebGpuSharp.Texture target, int x, int y)
     {
         const uint Row = 256;
         WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
