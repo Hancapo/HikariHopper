@@ -18,7 +18,8 @@ struct Light {
     directional_ambient_direction: vec4f,
     // The exposure curve: scale, power and offset (visualsettings.dat), and the timecycle's exposure plus the viewer's.
     exposure_curve: vec4f,
-    // The timecycle's exposure range, then the exposures of the bright and dark filmic curves.
+    // The timecycle's exposure range, then TonemapParams: how far the filmic curve is from the bright one to the dark
+    // one is saturate(exposure * z + w), one over the dark exposure less the bright one, and minus the bright one over that.
     exposure_range: vec4f,
     // The bright and dark filmic curves: A, B, C, D; then E, F and the white point W. The bright one's w is
     // PS_Composite's Gamma, which the tone-mapped colour is raised to: one over the display gamma.
@@ -186,7 +187,7 @@ fn exposure_stops(mean: f32) -> f32 {
 // How far the filmic curve has moved from the bright one to the dark one at this exposure.
 fn filmic_blend(stops: f32) -> f32 {
     let range = light.exposure_range;
-    return saturate((stops - range.z) / (range.w - range.z));
+    return saturate(stops * range.z + range.w);
 }
 
 // PS_directional_ambient's natural ambient for a unit normal: the down light on what faces up, the up light on what

@@ -51,29 +51,32 @@ public sealed class SunlightTests
     [Fact]
     public void The_exposure_follows_the_games_curve_darker_by_day_brighter_by_night()
     {
+        GtaToneMapVisuals game = ToneMapVisualsTests.GameFile;
         TimecycleLight day = Timecycle.Evaluate(DayCycle.DefaultHours);
-        // visualsettings.dat's curve: a luminance of one is a stop and a half down.
-        Assert.Equal(-1.5f, Timecycle.ExposureFor(1, day), 3);
-        float afternoon = Timecycle.Exposure(day, DayCycle.Evaluate(DayCycle.DefaultHours).Direction);
+        // The game's visualsettings.dat's curve: a luminance of one is a stop and a half down.
+        Assert.Equal(-1.5f, game.ExposureFor(1, day), 3);
+        float Exposure(float hours) => Timecycle.Exposure(game, Timecycle.Evaluate(hours), DayCycle.Evaluate(hours).Direction);
+        float afternoon = Exposure(DayCycle.DefaultHours);
         Assert.InRange(afternoon, -3.5f, -2);
-        float night = Timecycle.Exposure(Timecycle.Evaluate(1), DayCycle.Evaluate(1).Direction);
+        float night = Exposure(1);
         Assert.True(night > afternoon + 2, $"night {night}, afternoon {afternoon}");
         Assert.InRange(night, -3.5f, 5);
         // Daylight uses the bright curve.
-        Assert.Equal(Timecycle.Bright, Timecycle.FilmicFor(afternoon));
+        Assert.Equal(game.Bright, game.FilmicFor(afternoon));
     }
 
     [Fact]
     public void The_filmic_curve_maps_black_to_black_and_the_white_point_to_one()
     {
-        Filmic curve = Timecycle.Bright;
+        GtaToneMapVisuals game = ToneMapVisualsTests.GameFile;
+        Filmic curve = game.Bright;
         Assert.Equal(0, curve.Map(0), 4);
         Assert.Equal(1, curve.Map(curve.W), 4);
         Assert.Equal(1, curve.Map(curve.W * 10));
         // A shoulder: steeper in the mid-tones than near white.
         Assert.True(curve.Map(.5f) - curve.Map(.25f) > curve.Map(3.75f) - curve.Map(3.5f));
         // Dark scenes use a curve without the bright one's toe offset.
-        Assert.Equal(Timecycle.Dark, Timecycle.FilmicFor(Timecycle.DarkExposure + 1));
+        Assert.Equal(game.Dark, game.FilmicFor(game.DarkExposure + 1));
     }
 
     [Fact]
