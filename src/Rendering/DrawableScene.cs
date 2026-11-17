@@ -141,6 +141,9 @@ internal sealed class DrawableScene
     /// <summary>The lights the drawables carry (GTA V's), in their own coordinates: what lights them in the viewer.</summary>
     public IReadOnlyList<RedFury.World.WorldLightDefinition> Lights { get; init; } = [];
 
+    /// <summary>Each of <see cref="Lights"/>' corona values, in their order.</summary>
+    public IReadOnlyList<DrawableLightCorona> LightCoronas { get; init; } = [];
+
     /// <summary>What can be drawn over the drawables: their skeletons, bounds and lights.</summary>
     public DrawableOverlays Overlays { get; init; } = DrawableOverlays.None;
 
@@ -326,6 +329,7 @@ internal sealed class DrawableScene
             EmbeddedTextureCount = own.Count,
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
             Lights = DrawableLights.Of(models, fragmentLights),
+            LightCoronas = DrawableLights.CoronasOf(models, fragmentLights),
             Materials = materials,
             Sources = sources,
             SourceLists = sourceLists,
