@@ -245,19 +245,17 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Module = shader.Value,
                     EntryPoint = Fragment(blend, decal),
-                    Targets = new[]
+                    // GTA V's solid surfaces and its terrain leave their sub-sampled alpha, or none.
+                    Targets = HdrTargets(new ColorTargetState
                     {
-                        new ColorTargetState
+                        Format = HdrFormat,
+                        Blend = blend ? new BlendState
                         {
-                            Format = HdrFormat,
-                            Blend = blend ? new BlendState
-                            {
-                                Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                                Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                            } : null,
-                            WriteMask = ColorWriteMask.All,
-                        },
-                    },
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                        } : null,
+                        WriteMask = ColorWriteMask.All,
+                    }, subSampled: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain),
                 },
                 DepthStencil = new DepthStencilState
                 {
@@ -483,7 +481,7 @@ internal sealed unsafe partial class ViewportRenderer
         bool shadow = bundle >= ShadowBundle;
         RenderBundleEncoder encoder = device.CreateRenderBundleEncoder(new RenderBundleEncoderDescriptor
         {
-            ColorFormats = shadow ? [] : [HdrFormat],
+            ColorFormats = shadow ? [] : [HdrFormat, SubSampledFormat],
             DepthStencilFormat = DepthFormat,
             SampleCount = 1,
         });
@@ -611,7 +609,7 @@ internal sealed unsafe partial class ViewportRenderer
                 DrawFogRays(encoder);
             pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
-                ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                ColorAttachments = HdrAttachments(clear: false),
                 DepthStencilAttachment = fog
                     ? new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthReadOnly = true }
                     : new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthLoadOp = LoadOp.Load, DepthStoreOp = StoreOp.Store },

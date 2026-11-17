@@ -469,10 +469,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             bool sky = DrawWorldSkyNoise(encoder);
             RenderPassEncoder hdrPass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
-                ColorAttachments =
-                [
-                    new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Clear, StoreOp = StoreOp.Store, ClearValue = new Color(0, 0, 0, 0) },
-                ],
+                ColorAttachments = HdrAttachments(clear: true),
                 DepthStencilAttachment = new RenderPassDepthStencilAttachment
                 {
                     View = hdrDepthView!,
@@ -496,6 +493,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DrawWorldCoronas(encoder);
             if (sky)
                 DrawWorldLensFlare(encoder);
+            // Then GTA V's sub-sampled cut-outs are blended with what is behind them (ViewportRenderer.SubSampleAlpha.cs).
+            CombineSubSampledAlpha(encoder, drawable);
             MeasureFrame(encoder);
             if (Bloom)
                 DrawBloom(encoder);
@@ -636,6 +635,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         depth?.Destroy();
         hdr?.Destroy();
         hdrDepth?.Destroy();
+        subSampled?.Destroy();
         bloom?.Destroy();
         bloomUnfiltered?.Destroy();
         shadowMap?.Destroy();

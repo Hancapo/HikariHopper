@@ -126,20 +126,17 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Module = shader,
                     EntryPoint = "fs_gta_cloud_hat",
-                    Targets = new[]
+                    Targets = HdrTargets(new ColorTargetState
                     {
-                        new ColorTargetState
+                        Format = HdrFormat,
+                        // BS_Normal over the colour; the target's alpha is the sky's cover, kept.
+                        Blend = new BlendState
                         {
-                            Format = HdrFormat,
-                            // BS_Normal over the colour; the target's alpha is the sky's cover, kept.
-                            Blend = new BlendState
-                            {
-                                Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                                Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.One },
-                            },
-                            WriteMask = ColorWriteMask.All,
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.One },
                         },
-                    },
+                        WriteMask = ColorWriteMask.All,
+                    }),
                 },
                 // DSS_TestOnly_LessEqual_Invert: tested against the world's depth, not written.
                 DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.GreaterEqual },
@@ -265,7 +262,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new TexelCopyTextureInfo { Texture = waterDepth!, Aspect = TextureAspect.DepthOnly }, size);
             pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
-                ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+                ColorAttachments = HdrAttachments(clear: false),
                 DepthStencilAttachment = new RenderPassDepthStencilAttachment
                 {
                     View = hdrDepthView!,

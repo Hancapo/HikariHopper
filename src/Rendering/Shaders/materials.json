@@ -40,6 +40,7 @@
     "specular_intensity": ["specularIntensityMult"],
     "specular_mask": ["specMapIntMask"],
     "bumpiness": ["bumpiness"],
+    "hard_alpha_blend": ["HardAlphaBlend"],
     "emissive_multiplier": ["emissiveMultiplier"],
     "reflectivity": ["reflectivePower", "Reflectivity"],
     "tint_palette_selector": ["tintPaletteSelector"],

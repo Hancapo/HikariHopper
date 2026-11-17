@@ -255,20 +255,18 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 Module = module.Value,
                 EntryPoint = reflected ? $"fs_{name}_reflected" : $"fs_{name}",
-                Targets = new[]
+                // Into the view, GTA V's solid surfaces and terrain leave their sub-sampled alpha, or none.
+                Targets = ViewTargets(new ColorTargetState
                 {
-                    new ColorTargetState
+                    // Linear HDR with coverage, for the tone map.
+                    Format = HdrFormat,
+                    Blend = blend ? new BlendState
                     {
-                        // Linear HDR with coverage, for the tone map.
-                        Format = HdrFormat,
-                        Blend = blend ? new BlendState
-                        {
-                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                        } : null,
-                        WriteMask = ColorWriteMask.All,
-                    },
-                },
+                        Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                        Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                    } : null,
+                    WriteMask = ColorWriteMask.All,
+                }, reflected, subSampled: !blend && kind is PartKind.Surface or PartKind.Terrain),
             },
             DepthStencil = new DepthStencilState
             {

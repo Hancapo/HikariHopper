@@ -52,7 +52,7 @@ fn fs_surface_world_fogged(input: SurfaceOutput, @builtin(front_facing) front: b
     use_local_lights(input.position.xy, input.place);
     use_room(input.room);
     // Left out after shading, which needs uniform control flow.
-    let colour = shade_surface(input, front);
+    let colour = shade_surface(input, front, false);
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }

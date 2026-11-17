@@ -1,7 +1,8 @@
-// GTA V's cut-outs in the world's picking: their holes aren't them, what's behind is picked, by shadow.wgsl's test.
+// GTA V's cut-outs in the world's picking: their holes aren't them, what's behind is picked, where the alpha is under
+// their reference (hair's, at half).
 // Put after world_pick.wgsl.
 
-// The start of surface.wgsl's Material: the alpha cutoff is extra.x.
+// The start of surface.wgsl's Material: the alpha reference is extra.x.
 struct GtaPickMaterial {
     specular: vec4f,
     mask: vec4f,

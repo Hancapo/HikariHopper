@@ -92,7 +92,7 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 Module = shader.Value,
                 EntryPoint = fragment,
-                Targets = new[] { new ColorTargetState { Format = HdrFormat, Blend = blend, WriteMask = mask } },
+                Targets = HdrTargets(new ColorTargetState { Format = HdrFormat, Blend = blend, WriteMask = mask }),
             },
             DepthStencil = Far(),
         };

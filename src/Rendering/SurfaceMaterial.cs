@@ -146,6 +146,12 @@ internal sealed partial class SurfaceMaterial
     /// <summary>Where hair counts as solid, for its first pass: what is less is blended in its second.</summary>
     internal const float HairSolid = .95f;
 
+    /// <summary>The game's cut-out alpha reference (global_alphaRef, which its code sets to 90 of 255).</summary>
+    internal const float GlobalAlphaRef = 90f / 255;
+
+    /// <summary>The vehicles' cut-out alpha reference (vehicle_alphaRef): all but nought.</summary>
+    internal const float VehicleAlphaRef = 1f / 255;
+
     /// <summary>
     /// A _geomnightonly shader's geometry, which the game's vertex programs collapse by day: it's there only while the
     /// night's emissives are on at all.
@@ -398,8 +404,8 @@ internal sealed partial class SurfaceMaterial
         // A tinted shader's vertex blue picks the palette's column, and a vehicle's is its dirt, so neither is an
         // emissive mask there.
         u[11] = Pattern(shader, "emissive") == "true" && result.TintPalette is null && !result.Vehicle ? 1 : 0;
-        // GTA's alpha test passes at about half coverage.
-        u[12] = .5f;
+        // The cut-outs' alpha reference: the game's global one, 90 of 255, but the vehicles' own, 1 of 255.
+        u[12] = result.Vehicle ? VehicleAlphaRef : GlobalAlphaRef;
         u[13] = result.TintPalette is not null ? 1 : 0;
         u[14] = Constant("tint_palette_selector", 0)[0];
         u[15] = result.Vehicle ? 1 : 0;
@@ -417,6 +423,8 @@ internal sealed partial class SurfaceMaterial
         }
         // The decals' PS_DeferredTextured blends all four targets by the diffuse map's alpha times the vertex colour's.
         u[73] = result.Decal ? 1 : 0;
+        // How hard a cut-out's sub-sampled alpha is (HardAlphaBlend): a ramp a tenth of the way from the reference to whole.
+        u[74] = Constant("hard_alpha_blend", 1)[0];
         // Where the specular comes from besides the constants and a specular map: the diffuse map's luminance
         // (emissive_speclum), or an overlay of its colour by SpecDesaturateIntensity and SpecDesaturateExponent (diffspec).
         string? source = Pattern(shader, "specular_source");

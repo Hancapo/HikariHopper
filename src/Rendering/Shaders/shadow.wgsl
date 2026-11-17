@@ -1,6 +1,6 @@
 // The key light's shadow map: drawables' depth seen from the sun, through an orthographic view fitted to them.
 // Standalone (no scene.wgsl): its inputs are the view below and the vertices' positions; cut-out (masked) surfaces
-// also read their diffuse map, so only what the main pass keeps casts a shadow, as the game's shadow pass clips them. A
+// also read their diffuse map, and cast only where the game's shadow pass keeps them. A
 // tree's cut-outs are moved first as the game's tree shaders move them into the cascades (trees.wgsl, put before this).
 
 struct ShadowView {
@@ -15,7 +15,7 @@ fn vs_shadow(@location(0) position: vec3f) -> @builtin(position) vec4f {
     return shadow_view.matrix * vec4f(position, 1.0);
 }
 
-// surface.wgsl's Material, what of it is read: the alpha cutoff is extra.x; then the trees' settings.
+// surface.wgsl's Material, what of it is read: the trees' settings.
 struct ShadowMaterial {
     specular: vec4f,
     mask: vec4f,
@@ -54,13 +54,12 @@ fn vs_shadow_masked(@location(0) position: vec3f, @location(2) tangent: vec4f, @
     return output;
 }
 
-// A cut-out surface casts only where its diffuse alpha passes the cutoff, as in the main pass; hair, solid in its first
-// pass only where it is all but opaque, casts where it covers at least half; a tree by the cascades' own test for trees.
+// A cut-out casts by the cascades' test for cut-outs, hair as the rest; a tree by their own test for trees.
 @fragment
 fn fs_shadow_masked(input: MaskedOutput) {
     let alpha = textureSample(diffuse_map, surface_sampler, input.uv).a;
     let tree = material.tree.x > 0.5;
-    if (select((alpha < min(material.extra.x, 128.5 / 255.0)), !tree_casts(alpha), tree)) {
+    if (select(!cut_out_casts(alpha), !tree_casts(alpha), tree)) {
         discard;
     }
 }

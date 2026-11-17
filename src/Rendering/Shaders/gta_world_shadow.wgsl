@@ -1,8 +1,8 @@
-// GTA V's cut-outs into the sun's shadow, where their diffuse alpha passes the cutoff, as shadow.wgsl's
+// GTA V's cut-outs into the sun's shadow, where their diffuse alpha passes the cascades' test, as shadow.wgsl's
 // fs_shadow_masked has them; a tree's moved first as the game's tree shaders move them into the cascades, and cut by
 // their test. Put after world_shadow.wgsl and trees.wgsl.
 
-// surface.wgsl's Material, what of it is read: the alpha cutoff is extra.x; then the trees' settings.
+// surface.wgsl's Material, what of it is read: the trees' settings.
 struct ShadowMaterial {
     specular: vec4f,
     mask: vec4f,
@@ -43,7 +43,7 @@ fn vs_gta_world_shadow_masked(@location(0) position: vec3f, @location(2) tangent
 fn fs_world_shadow_masked(input: MaskedOutput) {
     let alpha = textureSample(diffuse_map, surface_sampler, input.uv).a;
     let tree = material.tree.x > 0.5;
-    if (select((alpha < min(material.extra.x, 128.5 / 255.0)), !tree_casts(alpha), tree)) {
+    if (select(!cut_out_casts(alpha), !tree_casts(alpha), tree)) {
         discard;
     }
 }
