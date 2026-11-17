@@ -564,7 +564,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-8";
+    private const string CacheVersion = "hh-gta-world-9";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -908,21 +908,28 @@ internal static class GtaWorldCatalog
 
     /// <summary>
     /// The rooms of an interior seen from outside it: its limbo (room nought, the outside), and every room a portal
-    /// opens onto from one seen. A one-way portal is seen through only from its own room, out: the room beyond it
-    /// looks out but can't be looked into. An interior without rooms is all outside.
+    /// opens onto from one seen. A portal is always seen through from its room-from side to its room-to side, and back
+    /// only when it isn't one-way, except that the game turns a portal from the limbo round so that it leads from its
+    /// room out: a one-way portal to or from the limbo lets its room look out but never lets the outside look in. An
+    /// interior without rooms is all outside.
     /// </summary>
     internal static HashSet<MloRoomDef> SeenFromOutside(MloArchetypeDef interior)
     {
         var seen = new HashSet<MloRoomDef>(ReferenceEqualityComparer.Instance);
         if (interior.Rooms.Count == 0)
             return seen;
-        seen.Add(interior.Rooms[0]);
+        MloRoomDef limbo = interior.Rooms[0];
+        seen.Add(limbo);
         var next = new Queue<MloRoomDef>(seen);
         while (next.TryDequeue(out MloRoomDef? from))
             foreach (MloPortalDef portal in interior.Portals)
             {
-                MloRoomDef? to = ReferenceEquals(portal.RoomFrom.Target, from) ? portal.RoomTo.Target
-                    : ReferenceEquals(portal.RoomTo.Target, from) && (portal.Flags & PortalFlags.OneWay) == 0 ? portal.RoomFrom.Target : null;
+                // The game's ends: the room it leads from (its room-from, or its room-to when that is the limbo) and
+                // the one it leads to.
+                (MloRoomDef? back, MloRoomDef? ahead) = ReferenceEquals(portal.RoomFrom.Target, limbo)
+                    ? (portal.RoomTo.Target, portal.RoomFrom.Target) : (portal.RoomFrom.Target, portal.RoomTo.Target);
+                MloRoomDef? to = ReferenceEquals(back, from) ? ahead
+                    : ReferenceEquals(ahead, from) && (portal.Flags & PortalFlags.OneWay) == 0 ? back : null;
                 if (to is not null && seen.Add(to))
                     next.Enqueue(to);
             }
