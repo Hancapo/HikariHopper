@@ -106,8 +106,10 @@ fn gta_ground_fog(ray: vec3f) -> vec2f {
     let full = length(ray);
     let dist = max(0.0, full - sky.fog[0].x);
     let delta_z = ray.z * (dist / max(full, 1e-6));
-    let t = sky.fog[2].z * delta_z;
-    let along = select(1.0, (1.0 - exp(-t)) / t, abs(delta_z) > 0.01);
+    // Held to what a float can raise e to, looking far down through a thin fog; and its limit, one, where the falloff
+    // is all but nought.
+    let t = max(sky.fog[2].z * delta_z, -80.0);
+    let along = select(1.0, (1.0 - exp(-t)) / t, abs(delta_z) > 0.01 && abs(t) > 1e-4);
     let value = min(1.0, sky.fog[1].w * dist * along);
     return vec2f(1.0 - saturate(exp(value)), dist);
 }
