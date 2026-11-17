@@ -41,14 +41,9 @@ internal sealed record GtaCloudHatGeometry(float[] Vertices, uint[] Indices, Clo
     /// <summary>A vertex's floats: place, normal, colour (red, green, blue, alpha), coordinates, tangent.</summary>
     public const int Floats = 16;
 
-    // The texture parameters, in the order the shader binds them.
-    private static readonly uint[] Samplers =
-    [
-        new Hash32("densitysampler").Value, new Hash32("normalsampler").Value, new Hash32("detaildensitysampler").Value,
-        new Hash32("detailnormalsampler").Value, new Hash32("detaildensity2sampler").Value, new Hash32("detailnormal2sampler").Value,
-    ];
-
-    private static uint Name(string name) => new Hash32(name.ToLowerInvariant()).Value;
+    // The texture parameters, by their Legacy names, in the order the shader binds them.
+    private static readonly string[] Samplers =
+        ["DensitySampler", "NormalSampler", "DetailDensitySampler", "DetailNormalSampler", "DetailDensity2Sampler", "DetailNormal2Sampler"];
 
     /// <summary>
     /// A drawable's cloud geometries, the high level of detail's, as the game draws them: those whose material is a cloud
@@ -74,8 +69,26 @@ internal sealed record GtaCloudHatGeometry(float[] Vertices, uint[] Indices, Clo
                 DrawableMaterial material = drawable.Materials[geometry.MaterialIndex];
                 if (CloudHatEffect.Of(material.ShaderHash.Value) is not { } effect)
                     continue;
-                Vector4 Value(string name, Vector4 fallback) =>
-                    material.FindParameter(new Hash32(Name(name))) is NumericShaderParameter { Values.Length: > 0 } numeric ? numeric.Values[0] : fallback;
+                // The material's values by their Legacy names: Enhanced's own names are aliases of them in FiveFury's
+                // shader catalogue, as SurfaceMaterial reads them.
+                bool enhanced = material.Gen9Parameters is not null;
+                ShaderDefinition? definition = (enhanced ? ShaderCatalog.Enhanced : ShaderCatalog.Legacy).Find(material.ShaderHash)
+                    ?? ShaderCatalog.Legacy.Find(material.ShaderHash) ?? ShaderCatalog.Enhanced.Find(material.ShaderHash);
+                var named = new Dictionary<string, MaterialParameterValue>(StringComparer.OrdinalIgnoreCase);
+                foreach (MaterialParameterValue parameter in material.GetParameters())
+                {
+                    ShaderParameterDefinition? known = definition?.FindParameter(parameter.NameHash);
+                    if (((enhanced ? known?.LegacyName : null) ?? known?.Name ?? parameter.Name) is { } name)
+                        named.TryAdd(name, parameter);
+                }
+                // A value the material doesn't set is its shader's default, else the effect's.
+                Vector4 Value(string name, Vector4 fallback)
+                {
+                    float[]? found = named.TryGetValue(name, out MaterialParameterValue? value) && value.Values.Length > 0 ? value.Values.ToArray()
+                        : definition?.FindParameter(name) is { Defaults.Count: > 0 } parameter ? [.. parameter.Defaults] : null;
+                    return found is null ? fallback
+                        : new Vector4(found[0], found.Length > 1 ? found[1] : fallback.Y, found.Length > 2 ? found[2] : fallback.Z, found.Length > 3 ? found[3] : fallback.W);
+                }
                 Vector2 Pair(string name, Vector2 fallback)
                 {
                     Vector4 value = Value(name, new Vector4(fallback, 0, 0));
@@ -94,8 +107,8 @@ internal sealed record GtaCloudHatGeometry(float[] Vertices, uint[] Indices, Clo
                     new(soft, envMap, anim1.X, anim1.Y),
                     new(anim2, anim3.X, anim3.Y),
                 ];
-                GameTexture?[] textures = [.. Samplers.Select(hash => material.FindParameter(new Hash32(hash)) is TextureShaderParameter texture
-                    ? texture.Texture?.EmbeddedTexture ?? Find(texture.Texture?.Name) : null)];
+                GameTexture?[] textures = [.. Samplers.Select(name => named.TryGetValue(name, out MaterialParameterValue? value) && value.Texture is { } texture
+                    ? texture.EmbeddedTexture ?? Find(texture.Name) : null)];
 
                 VertexBuffer buffer = geometry.Vertices;
                 bool colours = buffer.Layout.TryFind(VertexSemantic.Color0, out _), coordinates = buffer.Layout.TryFind(VertexSemantic.TexCoord0, out _);

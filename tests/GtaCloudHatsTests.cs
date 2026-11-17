@@ -379,6 +379,62 @@ public sealed class GtaCloudHatsTests
     }
 
     // With no world in view, the hat's soft geometry has the scene's depth copied for it in the frame.
+    // Both editions' cloud hats, as the world index finds them: every layer's model through its archetype among the
+    // level's permanent archetype files, then its cloud geometries with their textures and values. Enhanced names its
+    // materials' parameters its own way; the hats are the same art, so each layer reads as Legacy's does.
+    [Fact]
+    public void Every_layer_of_the_games_hats_reads_the_same_textures_and_values_in_both_editions()
+    {
+        const string EnhancedRoot = @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced";
+        if (!File.Exists(Path.Combine(EnhancedRoot, "GTA5_Enhanced.exe")))
+        {
+            Assert.Skip($"No GTA V Enhanced at {EnhancedRoot}.");
+            return;
+        }
+        var legacy = Layers(TestGames.Legacy(), enhanced: false);
+        var enhanced = Layers(EnhancedRoot, enhanced: true);
+        Assert.True(legacy.Count > 10, $"{legacy.Count} layers");
+        foreach (var (name, geometries) in legacy)
+        {
+            GtaCloudHatGeometry[] other = enhanced[name];
+            Assert.Equal(geometries.Length, other.Length);
+            for (int i = 0; i < geometries.Length; i++)
+            {
+                // Each geometry has its density map in both, and the same values.
+                Assert.NotNull(geometries[i].Textures[0]);
+                Assert.NotNull(other[i].Textures[0]);
+                Assert.Equal(geometries[i].Textures.Select(texture => texture?.Name), other[i].Textures.Select(texture => texture?.Name));
+                Assert.Equal(geometries[i].Material, other[i].Material);
+            }
+        }
+    }
+
+    private static Dictionary<string, GtaCloudHatGeometry[]> Layers(string root, bool enhanced)
+    {
+        var keys = new Rpf7Keys(GameKeys.Load(Path.Combine(root, enhanced ? "GTA5_Enhanced.exe" : "GTA5.exe")));
+        FiveFury.GameTarget target = enhanced ? FiveFury.GameTarget.Enhanced : FiveFury.GameTarget.Legacy;
+        GameClouds clouds = GameClouds.Read(new LoadedGame(root, target, keys.Crypto))!;
+        using var game = FiveFury.Assets.GameInstallation.Open(root, target, keys.Crypto,
+            new FiveFury.Assets.GameInstallationOptions { DlcLevel = FiveFury.Assets.DlcLevel.Base });
+        static uint Name(string name) => new CommonFury.Hashing.Hash32(name.ToLowerInvariant()).Value;
+        var archetypes = new Dictionary<uint, FiveFury.Ytyp.BaseArchetypeDef>();
+        foreach (string file in clouds.ArchetypeFiles)
+            if (game.FileSystem.Resolve(new CommonFury.Hashing.Hash32(Name(file)), FiveFury.Assets.GameFileType.Ytyp).Value is { } found)
+                foreach (FiveFury.Ytyp.BaseArchetypeDef archetype in FiveFury.Ytyp.Ytyp.Read(found.ReadStandalone()).Archetypes.OfType<FiveFury.Ytyp.BaseArchetypeDef>())
+                    archetypes.TryAdd(archetype.Name.Value, archetype);
+        var layers = new Dictionary<string, GtaCloudHatGeometry[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (CloudHatLayerDefinition layer in clouds.Hats.SelectMany(hat => hat.Layers).DistinctBy(layer => layer.Filename.ToLowerInvariant()))
+        {
+            FiveFury.Ytyp.BaseArchetypeDef archetype = archetypes[Name(layer.Filename)];
+            uint asset = archetype.AssetName.Value != 0 ? archetype.AssetName.Value : archetype.Name.Value;
+            var drawable = FiveFury.Ydr.Ydr.Read(game.FileSystem.Resolve(new CommonFury.Hashing.Hash32(asset), FiveFury.Assets.GameFileType.Ydr).Value!.ReadStandalone()).Drawable;
+            FiveFury.Textures.TextureDictionary[] dictionaries = game.FileSystem.Resolve(archetype.TextureDictionary, FiveFury.Assets.GameFileType.Ytd).Value is { } ytd
+                ? [FiveFury.Ytd.Ytd.Read(ytd.ReadStandalone()).Dictionary] : [];
+            layers[layer.Filename] = GtaCloudHatGeometry.From(drawable, dictionaries);
+        }
+        return layers;
+    }
+
     [Fact]
     public void A_cloud_hat_is_drawn_over_the_worlds_sky_with_no_GPU_errors_until_the_world_goes()
     {
