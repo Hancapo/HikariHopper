@@ -252,6 +252,38 @@ public sealed class TimecyclePlaceTests
     }
 
     [Fact]
+    public void A_world_without_timecycle_zones_drops_the_place_the_last_world_left_in_the_view()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        try
+        {
+            Timecycle.Use(Game);
+            lock (gpu.Gate)
+            {
+                var renderer = new ViewportRenderer(gpu);
+                renderer.Resize(64, 32);
+                renderer.WorldShown = true;
+                renderer.SetTime(13);
+                // A GTA V world's tunnel, then RDR2's world streamed into the same view.
+                renderer.SetTimecyclePlace(Place(1, ("tunnel", 1)));
+                Assert.Equal(.5f * 9 + .5f * 2, renderer.TimecycleSample.Get("light_dir_mult"), 4);
+                renderer.ClearWorld();
+                var crypto = Rdr2Keys.Bundled.Crypto;
+                var rdr2 = new Rdr2WorldIndex(Path.GetTempPath(), 0, new RedFury.World.WorldLodGraph([]), new RedFury.Textures.RpfTextureCatalog([]),
+                    new RedFury.Rpf.RpfReadSession(crypto), crypto);
+                using (var streamer = new Rendering.World.WorldStreamer(rdr2))
+                    streamer.Update(renderer, 1 / 60f, 13);
+                Assert.Equal(6, renderer.TimecycleSample.Get("light_dir_mult"), 4);
+                renderer.Dispose();
+            }
+        }
+        finally
+        {
+            Timecycle.Use(null);
+        }
+    }
+
+    [Fact]
     public void The_game_s_clear_weather_has_its_urban_region_lighting_the_city_differently()
     {
         string root = TestGames.Legacy();
