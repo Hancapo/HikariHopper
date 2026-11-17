@@ -206,7 +206,11 @@ internal sealed unsafe partial class ViewportRenderer
         {
             worldShown = value;
             if (!value)
+            {
                 ClearWorld();
+                // Outside a world, GLOBAL's timecycle again.
+                SetTimecyclePlace(null);
+            }
         }
     }
 

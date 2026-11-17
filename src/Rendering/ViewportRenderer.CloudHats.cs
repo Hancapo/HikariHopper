@@ -247,8 +247,8 @@ internal sealed unsafe partial class ViewportRenderer
         float step = double.IsNaN(cloudHatClock) ? 0 : (float)(now - cloudHatClock);
         cloudHatClock = now;
         Vector3 camera = Camera.Eye;
-        cloudHatAnimation.Advance(hats.Hats, step, hats.Hats.Wind(camera.Z, Hours));
-        CloudFrame frame = GtaCloudHats.Frame(hats.Hats.Settings, Hours, Sky);
+        cloudHatAnimation.Advance(hats.Hats, step, hats.Hats.Wind(camera.Z, Hours, timecycle));
+        CloudFrame frame = GtaCloudHats.Frame(hats.Hats.Settings, Hours, Sky, timecycle);
         bool[] drawn = cloudHatDrawn;
         if (hats.Hats.Write(cloudHatValues, drawn, frame, cloudHatAnimation, camera, Camera.Near, GtaSky.WaterLevel) == 0)
             return pass;

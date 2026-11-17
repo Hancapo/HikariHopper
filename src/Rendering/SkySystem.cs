@@ -32,11 +32,12 @@ internal readonly record struct SkySystem(
 {
     /// <summary>
     /// The sky at this time of day. <paramref name="reflection"/> is the sky as the game draws it into its reflection
-    /// map, brightened by the timecycle's reflection HDR multiplier.
+    /// map, brightened by the timecycle's reflection HDR multiplier. <paramref name="timecycle"/> is the timecycle worked
+    /// out at the camera's place, where there's one; else GLOBAL's at that hour.
     /// </summary>
-    internal static SkySystem At(float hours, bool reflection = false)
+    internal static SkySystem At(float hours, bool reflection = false, TimecycleSample? timecycle = null)
     {
-        TimecycleSample tc = Timecycle.Sample(hours);
+        TimecycleSample tc = timecycle ?? Timecycle.Sample(hours);
         Vector3 Colour(string name) => Square(tc.Colour(name)) * tc.Get(name + "_inten");
         float k = reflection ? tc.Get("reflection_hdr_mult") : 1;
         return new(

@@ -129,6 +129,12 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// <summary>Every placement in it: an entity, or one of a batch's instances.</summary>
     public long Placements { get; } = lod.Nodes.Sum(node => (long)Math.Max(1, node.Instances.Count));
 
+    /// <summary>
+    /// The timecycle's boxes over the world, which the camera's place in it is worked out from; none for a world whose
+    /// timecycle doesn't change with place.
+    /// </summary>
+    public virtual Rendering.TimecycleZones? TimecycleZones => null;
+
     /// <summary>Held while the game's archives are read: by whichever streamer reads them, and for finding files.</summary>
     public object Gate { get; } = new();
 

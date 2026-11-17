@@ -203,7 +203,7 @@ internal sealed unsafe partial class ViewportRenderer
         Vector3 eye = Camera.Eye;
         float ground = data.HeightMap?.MinimumInterpolated(eye.X, eye.Y) ?? 0;
         GtaCoronas.Write(coronaValues, data.Visuals, Hours, Camera.Right, Camera.Up, Camera.Forward, OrbitCamera.TanHalf, Aspect, hdrWidth,
-            waterClock.Elapsed.TotalSeconds, MathF.Max(0, eye.Z - ground), coronaCount);
+            waterClock.Elapsed.TotalSeconds, MathF.Max(0, eye.Z - ground), coronaCount, timecycle);
         queue.WriteBuffer(coronaUniforms!, 0, (ReadOnlySpan<Vector4>)coronaValues);
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {
