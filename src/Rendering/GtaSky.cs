@@ -91,14 +91,20 @@ internal static class GtaSky
     // The noise's phase moves by the wind's direction times the cloud speed times g_NoisePhaseMult squared a second.
     private const float NoisePhaseMult = .01f;
 
-    // The water's level, which the dome is centred at and the horizon is.
-    private const float WaterLevel = 0;
+    /// <summary>The water's level, which the dome is centred at and the horizon is.</summary>
+    internal const float WaterLevel = 0;
 
     /// <summary>
     /// Where the viewer is in the game's lunar cycle (fmod(time, 27) / 26): with
     /// its light straight from the viewer, the moon is full, as DayCycle puts it opposite the sun.
     /// </summary>
     private const float LunarCycle = 2.9f / 5.6f;
+
+    // The lunar cycle's angle: the Y axis turned about Z across the cycle.
+    private static float LunarAngle => float.Lerp(-2.9f, 2.9f - .2f, LunarCycle);
+
+    /// <summary>How bright the moon's phase makes its light: the lunar cycle's Y, half from one.</summary>
+    internal static float MoonPhaseIntensity => MathF.Cos(LunarAngle) * .5f + .5f;
 
     /// <summary>Whether the game draws each of its sky passes: the sun, the moon, the clouds, the stars.</summary>
     internal readonly record struct Passes(bool Sun, bool Moon, bool Clouds, bool Stars);
@@ -140,8 +146,8 @@ internal static class GtaSky
         // The sun's glow: Cornette-Shanks with g from the mie phase.
         float g = -.49f - Get("sky_sun_miephase") / 2, g2 = g * g;
 
-        // The lunar cycle's light: the Y axis turned about Z across the cycle.
-        float lunar = float.Lerp(-2.9f, 2.9f - .2f, LunarCycle);
+        // The lunar cycle's light.
+        float lunar = LunarAngle;
         var lunarLight = new Vector3(-MathF.Sin(lunar), MathF.Cos(lunar), 0);
 
         // The cloud noise's phase: from one, along the wind (none: +X), wrapped.
