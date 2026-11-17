@@ -106,6 +106,12 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.True(ocean.WorldFog);
             Assert.All(ocean.Textures, Assert.NotNull);
             Assert.Equal(1118, ocean.SpecularFalloff);
+            // The sky: the game's dome, a sphere of radius one, with every texture its sky is drawn with.
+            Rendering.GtaSkyDome sky = index.LoadSky()!;
+            Assert.Equal(469 * Rendering.GtaSkyDome.Stride / sizeof(float), sky.Vertices.Length);
+            Assert.Equal(0, sky.Indices.Length % 3);
+            Assert.InRange(sky.Vertices.Chunk(7).Max(vertex => new Vector3(vertex[0], vertex[1], vertex[2]).Length()), .99f, 1.01f);
+            Assert.All(new[] { sky.Noise, sky.HighDetail, sky.Dither, sky.Stars, sky.Moon }, Assert.NotNull);
         }
         finally
         {

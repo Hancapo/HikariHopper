@@ -446,6 +446,7 @@ internal sealed unsafe partial class ViewportRenderer
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
         foreach (WorldBufferPages? pages in new[] { worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages })
             pages?.Clear();
+        ClearWorldSky();
     }
 
     private void RemoveWorldAsset(WorldAssetKey key)
