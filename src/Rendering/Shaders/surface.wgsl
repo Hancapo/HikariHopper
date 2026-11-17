@@ -795,9 +795,14 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     return colour + glow;
 }
 
-// The game's tree shaders' pixel programs, then their light. What they write to the G-buffer:
+// The game's tree shaders' pixel programs, then their light. The game draws its cut-outs with sub-sampled alpha (its
+// default on PC, with no MSAA): the _SubSampleAlpha programs, checked against Enhanced's. What they write to the G-buffer:
+//   - Coverage: the diffuse map's alpha ramped from nought at 0.1 to whole at 0.75, a pixel kept where it is above the
+//     game's 3x3 dither (tree_dither), which its TAA then averages. So a far billboard, whose atlas's small mips have
+//     blurred every cell's alpha to a little above nought, keeps only the few pixels its blur leaves above 0.1.
 //   - Colour and alpha: the diffuse map, tinted by the palette (the foliage's tint takes the palette's alpha too); the
-//     alpha AlphaScale times the map's (times the tint's), doubled, and cut out where it is no more than AlphaTest.
+//     alpha (the foliage's ramped as above) AlphaScale times the map's (times the tint's), doubled, and cut out where it
+//     is no more than AlphaTest.
 //   - The normal: the normal map's in the vertex frame (the foliage's with one), else the vertex's, pulled up towards Z
 //     by one less UseTreeNormals; the billboards' as their vertex shader left it.
 //   - Specular: the specular map's mask by specularIntensityMult and its alpha by specularFalloffMult, the intensity
@@ -813,7 +818,14 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
 // way to white from the albedo (trees store a skin blend of one), the ambient and reflection by the normal as it was.
 fn shade_tree(input: SurfaceOutput, diffuse: vec4f, bump: vec4f, specular_sample: vec4f) -> vec4f {
     let program = u32(material.tree.x + 0.5);
+    if (tree_dither(input.position.xy) > saturate((diffuse.a - 0.1) / 0.65)) {
+        discard;
+    }
     var colour = diffuse;
+    // The foliage's alpha test takes the ramped alpha, a 255th over.
+    if (program == 1u) {
+        colour.a = saturate((diffuse.a - 0.1) / 0.65 + 1.0 / 255.0);
+    }
     var alpha_tint = 1.0;
     if (material.extra.y > 0.5 && program != 3u) {
         alpha_tint = input.tint_alpha;
