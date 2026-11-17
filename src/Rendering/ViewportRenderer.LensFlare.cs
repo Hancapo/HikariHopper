@@ -249,7 +249,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     // The exposure in stops the tone map took from this mean luminance (light.wgsl's exposure_stops).
     private float ExposureStops(float mean) => Math.Clamp(
-        Timecycle.ExposureScale * MathF.Pow(MathF.Max(mean, 1e-6f), Timecycle.ExposurePower) + Timecycle.ExposureOffset + cycle.Exposure + Exposure,
+        toneMap.ExposureScale * MathF.Pow(MathF.Max(mean, 1e-6f), toneMap.ExposurePower) + toneMap.ExposureOffset + cycle.Exposure + Exposure,
         cycle.ExposureMin, cycle.ExposureMax);
 
     /// <summary>
