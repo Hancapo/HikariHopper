@@ -59,7 +59,8 @@ public sealed class GtaSkyTests
         var camera = new Vector3(100, -200, 60);
         var values = new Vector4[GtaSky.Bytes / 16];
         GtaSky.Passes passes = WithWeather(() => GtaSky.Write(values, Visuals, 13, null, camera, 0),
-            ("sky_sun_hdr", 255), ("sky_sun_disc_col_r", .5f), ("sky_sun_disc_size", 2), ("sky_moon_iten", 2), ("sky_stars_iten", .8f));
+            ("sky_sun_hdr", 255), ("sky_sun_disc_col_r", .5f), ("sky_sun_disc_size", 2), ("sky_moon_iten", 2), ("sky_stars_iten", .8f),
+            ("sky_cloud_density_mult", 0), ("sky_small_cloud_detail_strength", 0));
         Vector3 sun = DayCycle.SunDirection(13), moon = DayCycle.MoonDirection(13);
         var centre = new Vector3(camera.X, camera.Y, 0);
         Assert.True(Vector3.Distance(centre + sun * 20000, values[12].AsVector3()) < .1f);
@@ -78,7 +79,7 @@ public sealed class GtaSkyTests
     {
         var values = new Vector4[GtaSky.Bytes / 16];
         Assert.True(WithWeather(() => GtaSky.Write(values, Visuals, 13, null, Vector3.Zero, 0), ("sky_cloud_density_mult", 3), ("sky_cloud_density_bias", .8f)).Clouds);
-        Assert.False(WithWeather(() => GtaSky.Write(values, Visuals, 13, null, Vector3.Zero, 0), ("sky_cloud_density_mult", 0), ("sky_cloud_density_bias", .13f)).Clouds);
+        Assert.False(WithWeather(() => GtaSky.Write(values, Visuals, 13, null, Vector3.Zero, 0), ("sky_cloud_density_mult", 0), ("sky_cloud_density_bias", .13f), ("sky_small_cloud_detail_strength", 0)).Clouds);
         // The small filler clouds alone, where their detail has any strength.
         Assert.True(WithWeather(() => GtaSky.Write(values, Visuals, 13, null, Vector3.Zero, 0),
             ("sky_small_cloud_density_mult", 2), ("sky_small_cloud_density_bias", 1), ("sky_small_cloud_detail_strength", .5f)).Clouds);
@@ -90,7 +91,7 @@ public sealed class GtaSkyTests
     {
         var values = new Vector4[GtaSky.Bytes / 16];
         (string, float)[] fog = [("fog_density", 10), ("fog_falloff", 10), ("fog_base_height", 0), ("far_clip", 10000), ("fog_horizon_tint_scale", 4),
-            ("fog_hdr", 2), ("fog_east_col_r", 1), ("fog_near_col_g", 1)];
+            ("fog_hdr", 2), ("fog_east_col_r", 1), ("fog_east_col_g", 0), ("fog_east_col_b", 0), ("fog_near_col_r", 0), ("fog_near_col_g", 1), ("fog_near_col_b", 0)];
         WithWeather(() => GtaSky.Write(values, Visuals, 13, null, new Vector3(0, 0, 0), 0), fog);
         // At the fog's base the camera is in it all: the ground fog's density there, negated, and its colours alone.
         Assert.Equal(-.001f, values[30].W, 6);
@@ -100,6 +101,18 @@ public sealed class GtaSkyTests
         // A kilometre up there's next to none of it, and the far colour stays mostly its own.
         Assert.Equal(-.001f * MathF.Exp(-10), values[30].W, 9);
         Assert.True(values[35].X > 1.5f && values[35].Y < .5f, $"{values[35]}");
+    }
+
+    [Fact]
+    public void Fields_a_timecycle_hasnt_take_the_games_own_defaults_so_the_fog_never_divides_by_nought()
+    {
+        // The app's stand-in timecycle has the sky's gradient but none of its fog.
+        var values = new Vector4[GtaSky.Bytes / 16];
+        GtaSky.Write(values, Visuals, 13, null, new Vector3(0, 0, 50), 0);
+        Assert.All(values, value => Assert.True(float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z) && float.IsFinite(value.W), $"{value}"));
+        // far_clip's 1500 past fog_start's 73; fog_falloff's 0.5, per kilometre.
+        Assert.Equal(new Vector2(73, 1500), new Vector2(values[29].X, values[29].Y));
+        Assert.Equal(.0005f, values[31].Z, 6);
     }
 
     [Fact]

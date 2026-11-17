@@ -92,6 +92,9 @@ internal static class Timecycle
         Values = values;
     }
 
+    /// <summary>Whether the timecycle in use has this field, the game's or the kept copy's.</summary>
+    internal static bool Has(string name) => Values.ContainsKey(name);
+
     /// <summary>
     /// The timecycle at <paramref name="hours"/> after midnight, each field interpolated between the keyframes either
     /// side, as the game blends them; any finite value wraps to the day.
