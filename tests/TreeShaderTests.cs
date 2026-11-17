@@ -11,10 +11,10 @@ namespace HikariHopper.Tests;
 public sealed class TreeShaderTests
 {
     private static byte[] Tree(GameTarget target, IEnumerable<(string Shader, DrawableMeshInput Mesh, DrawableRenderMask Mask)> parts,
-        Action<DrawableMaterialInput>? setup = null)
+        Action<DrawableMaterialInput>? setup = null, byte alpha = 255)
     {
         var builder = new DrawableBuilder { Name = "tree" };
-        builder.AdditionalTextures.Add(TextureTestKit.Bgra("leaves", 4, 4, [40, 160, 60, 255]));
+        builder.AdditionalTextures.Add(TextureTestKit.Bgra("leaves", 4, 4, [40, 160, 60, alpha]));
         foreach (var (shader, mesh, mask) in parts)
         {
             var material = new DrawableMaterialInput { Name = mesh.Material, Shader = shader };
@@ -28,8 +28,8 @@ public sealed class TreeShaderTests
         return new Ydr(builder.Build(target), target).Write();
     }
 
-    private static byte[] Tree(GameTarget target, string shader, DrawableMeshInput mesh, Action<DrawableMaterialInput>? setup = null) =>
-        Tree(target, [(shader, mesh, DrawableRenderMask.Default | DrawableRenderMask.Shadow)], setup);
+    private static byte[] Tree(GameTarget target, string shader, DrawableMeshInput mesh, Action<DrawableMaterialInput>? setup = null, byte alpha = 255) =>
+        Tree(target, [(shader, mesh, DrawableRenderMask.Default | DrawableRenderMask.Shadow)], setup, alpha);
 
     private static DrawableScene Read(byte[] ydr) => ModelContent.Read("tree.ydr", ydr).Surfaces!;
 
@@ -183,6 +183,19 @@ public sealed class TreeShaderTests
             Centre(Tree(GameTarget.Legacy, shader, Card()), out error);
             Assert.True(error is null, $"{shader}: {error}");
         }
+    }
+
+    [Fact]
+    public void A_billboard_whose_alpha_has_blurred_to_a_little_above_nought_is_cut_out_by_the_game_s_sub_sampled_alpha()
+    {
+        // As the far billboards' atlas reads at its small mips: alpha a little above nought everywhere. The material's
+        // AlphaTest of nought would keep it all; the game's sub-sampled alpha keeps nothing under 0.1.
+        var empty = Centre(null, out _);
+        var faint = Centre(Tree(GameTarget.Legacy, "trees_lod2", Billboard(), m => m.Parameters["AlphaTest"] = [0], alpha: 20), out string? error);
+        Assert.Null(error);
+        Assert.Equal(empty, faint);
+        // Whole, it is drawn.
+        Assert.NotEqual(empty, Centre(Tree(GameTarget.Legacy, "trees_lod2", Billboard(), alpha: 255), out _));
     }
 
     // The drawable at the middle of a small view, with shadows: the middle's colour, and the frames' GPU error, if any.

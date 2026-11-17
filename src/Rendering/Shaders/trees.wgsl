@@ -122,6 +122,14 @@ fn tree_shadow_view(matrix: mat4x4f) -> TreeView {
     return view;
 }
 
+// The game's sub-sampled alpha dither, as Enhanced's _SubSampleAlpha tree programs read it without their TAA's frame
+// offset: a 3x3 pattern over the frame's pixels, a pixel dropped where its value is above the coverage.
+fn tree_dither(pixel: vec2f) -> f32 {
+    var pattern = array<f32, 9>(0.9, 0.2, 0.5, 0.3, 0.6, 0.7, 0.4, 0.8, 0.1);
+    let cell = vec2u(max(pixel, vec2f(0.0))) % vec2u(3u);
+    return pattern[cell.x + 3u * cell.y];
+}
+
 // The cascades' alpha test for trees (PS_CascadeShadows_texture with its tree boost): twice the diffuse alpha, less
 // 90/255, kept from nought.
 fn tree_casts(alpha: f32) -> bool {
