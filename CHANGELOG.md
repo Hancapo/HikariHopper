@@ -34,6 +34,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Pick what's in GTA V's world as in Red Dead Redemption 2's: a click outlines it, and a right click names it, an interior's contents by where they are in it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#261](https://github.com/Hancapo/HikariHopper/pull/261))
 - Draw GTA V's sky behind its world as the game draws it, from its own sky dome, textures, timecycle and visualsettings.dat: the sky's colours from the horizon to the zenith, the sun's glow and disc, its clouds and the light through them, the stars, the moon lit by its phase, and the fog over them. ([#289](https://github.com/Hancapo/HikariHopper/pull/289))
 - Draw GTA V's lens flare over its world when the sun is in view, as the game draws it from its own flare settings and textures: it fades as buildings, terrain or fog hide the sun, and with the time of day. ([#290](https://github.com/Hancapo/HikariHopper/pull/290))
+- Draw GTA V's cloud hats over its sky as the game draws them for clear weather: the weather's own hat of the game's cloud models and textures, lit from its cloud keyframes and the timecycle's sun and moon, turning and drifting over time, with its high layers fading in as the camera climbs. ([#PR](https://github.com/Hancapo/HikariHopper/pull/PR))
 
 ### Changed
 

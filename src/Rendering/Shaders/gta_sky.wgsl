@@ -9,8 +9,8 @@
 //   - The game draws the sky after the world, at the far plane, where nothing else was; here it goes first and the world
 //     over it. Its alpha says how much of the sun and moon shows through (the horizon and the clouds hide them); once
 //     they're drawn the sky covers the frame, which the tone map then takes whole.
-//   - Left out: the sky plane under the horizon (the ocean covers it), the fog rays, and the cloud hats (their own
-//     models, drawn after the sky).
+//   - Left out: the sky plane under the horizon (the ocean covers it) and the fog rays. The cloud hats, the game's own
+//     models drawn after the sky, are gta_cloud_hats.wgsl's.
 // Put after scene.wgsl and sky_system.wgsl.
 
 struct GtaSky {

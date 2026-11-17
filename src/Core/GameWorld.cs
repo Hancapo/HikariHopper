@@ -178,6 +178,12 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// without one (RDR2's, for now) or whose files don't have it. On any thread.
     /// </summary>
     public virtual Rendering.GtaLensFlare? LoadLensFlare() => null;
+
+    /// <summary>
+    /// The cloud hat the game draws over that sky for the viewer's weather, read from its files; null for a world with
+    /// none, or whose files don't have it. On any thread.
+    /// </summary>
+    public virtual Rendering.GtaCloudHats? LoadCloudHats() => null;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>

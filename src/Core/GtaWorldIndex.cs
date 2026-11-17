@@ -27,11 +27,15 @@ namespace HikariHopper.Core;
 internal sealed class GtaWorldIndex : WorldIndex
 {
     private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients,
-        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water, GameVisualSettings? visuals)
-        : base(root, mapCount, lod) => (Game, this.ambients, this.interiorEntities, this.water, this.visuals) = (game, ambients, interiorEntities, water, visuals);
+        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water, GameVisualSettings? visuals, GameClouds? clouds)
+        : base(root, mapCount, lod) =>
+        (Game, this.ambients, this.interiorEntities, this.water, this.visuals, this.clouds) = (game, ambients, interiorEntities, water, visuals, clouds);
 
     // The game's visualsettings.dat, read with the index.
     private readonly GameVisualSettings? visuals;
+
+    // The game's cloud hats and its clear weather's clouds, read with the index.
+    private readonly GameClouds? clouds;
 
     // Where each interior's placement is in its interior: an entity of it, or of one of its entity sets (Set from 0).
     private readonly Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities;
@@ -340,6 +344,74 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
     }
 
+    /// <summary>
+    /// The cloud hat as the game shows it for clear weather (clouds.xml's CloudHatManager): the hat EXTRASUNNY's cloud list
+    /// picks (GtaCloudHats.Select), each layer's model found as the game finds it: its
+    /// archetype by name among the level's permanent archetype files (v_clouds.ityp's, in the game's), its drawable,
+    /// and its textures from the drawable's own dictionary, then the archetype's and that one's gtxd parents.
+    /// </summary>
+    public override GtaCloudHats? LoadCloudHats()
+    {
+        if (clouds is not { Settings: { } settings } found)
+            return null;
+        int chosen = GtaCloudHats.Select(settings, found.Hats.Length);
+        if (chosen >= found.Hats.Length || !found.Hats[chosen].Enabled)
+            return null;
+        CloudHatDefinition hat = found.Hats[chosen];
+        try
+        {
+            static uint Name(string name) => new Hash32(name.ToLowerInvariant()).Value;
+            var wanted = hat.Layers.Select(layer => Name(layer.Filename)).ToHashSet();
+            var archetypes = new Dictionary<uint, BaseArchetypeDef>();
+            foreach (string file in found.ArchetypeFiles)
+            {
+                if (wanted.All(archetypes.ContainsKey))
+                    break;
+                byte[]? data;
+                lock (Gate)
+                    data = Game.FileSystem.Resolve(new Hash32(Name(file)), GameFileType.Ytyp).Value?.ReadStandalone();
+                if (data is null)
+                    continue;
+                Ytyp types;
+                try
+                {
+                    types = Ytyp.Read(data);
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException or NotSupportedException or OverflowException)
+                {
+                    continue;
+                }
+                foreach (BaseArchetypeDef archetype in types.Archetypes.OfType<BaseArchetypeDef>())
+                    if (wanted.Contains(archetype.Name.Value))
+                        archetypes.TryAdd(archetype.Name.Value, archetype);
+            }
+            GtaCloudHatGeometry[] Geometries(CloudHatLayerDefinition layer)
+            {
+                // No archetype, or not a plain drawable: the game draws nothing for the layer.
+                if (!archetypes.TryGetValue(Name(layer.Filename), out BaseArchetypeDef? archetype) || archetype.AssetType != ArchetypeAssetType.Drawable)
+                    return [];
+                uint asset = archetype.AssetName.Value != 0 ? archetype.AssetName.Value : archetype.Name.Value;
+                byte[]? data;
+                lock (Gate)
+                    data = Game.FileSystem.Resolve(new Hash32(asset), GameFileType.Ydr).Value?.ReadStandalone();
+                if (data is null)
+                    return [];
+                FiveFury.Drawables.Drawable drawable = Ydr.Read(data).Drawable;
+                uint dictionary = archetype.TextureDictionary.Value;
+                TextureDictionary[] dictionaries = dictionary == 0 ? [] : [.. Chain(dictionary).Select(Dictionary).OfType<TextureDictionary>()];
+                return GtaCloudHatGeometry.From(drawable, dictionaries);
+            }
+            GtaCloudHatLayer[] layers = [.. hat.Layers.Select(layer => new GtaCloudHatLayer(layer, Geometries(layer)))];
+            return new GtaCloudHats(hat, layers, settings, found.CamPositionScaler, found.AltitudeScrollScaler, visuals?.Get("cloud.speed.hats", 1) ?? 1,
+                found.WindMin, found.WindMax);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+            or OverflowException)
+        {
+            return null;
+        }
+    }
+
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => ExpandGrass;
 
     // The maps grass was read from lately, by name hash: neighbouring batches are in the same map.
@@ -487,9 +559,10 @@ internal sealed class GtaWorldIndex : WorldIndex
             // The open water, read from the game each time (its placements are none of the cache's).
             GtaWorldWater water = GtaWorldWater.Read(new LoadedGame(root, target, keys.Crypto));
             GameVisualSettings? visuals = GameVisualSettings.Read(new LoadedGame(root, target, keys.Crypto));
+            GameClouds? clouds = GameClouds.Read(new LoadedGame(root, target, keys.Crypto));
             lod = new WorldLodGraph([.. catalog.Value.Nodes, .. water.Nodes()]);
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water, visuals);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water, visuals, clouds);
         }
         catch
         {
