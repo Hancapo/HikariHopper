@@ -37,12 +37,17 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly Buffer?[] flareReadbacks = new Buffer?[FlareReadbacks];
     private readonly FlareReadback[] flareReadbackStates = new FlareReadback[FlareReadbacks];
     private readonly long[] flareReadbackFrames = new long[FlareReadbacks];
+    // The pixels the whole sun disc would have covered on each count's frame, which the count is measured against.
+    private readonly float[] flareReadbackExpected = new float[FlareReadbacks];
     // Each readback's map, as its callback says it ended (nought while under way, one mapped, two failed): WebGpuSharp
     // lets go of the buffer before it calls back, while Dawn may say it's mapped sooner, so this is what's polled.
     private readonly int[] flareReadbackEnds = new int[FlareReadbacks];
     private Action<MapAsyncStatus, ReadOnlySpan<byte>>[]? flareReadbackCallbacks;
-    private long flareFrame, flareResultFrame = -1;
+    // The frame; the first frame whose counts the flare shown goes by (those drawn before it was shown are the last
+    // flare's, another world's); and the frame of the count it goes by.
+    private long flareFrame, flareFirstFrame, flareResultFrame = -1;
     private uint flarePixelsCounted;
+    private float flarePixelsExpected;
     private float flareMeanLuminance;
     private BindGroupLayout? flareVisibilityLayout, flareSpriteLayout;
     private BindGroup? flareVisibilityGroup;
@@ -149,6 +154,9 @@ internal sealed unsafe partial class ViewportRenderer
     public void ShowWorldLensFlare(GtaLensFlare? flare)
     {
         ClearWorldLensFlare();
+        // Counts still being read back are the flare's before.
+        flareFirstFrame = flareFrame + 1;
+        flareResultFrame = -1;
         if (flare is null)
             return;
         CreateLensFlarePipelines();
@@ -197,7 +205,6 @@ internal sealed unsafe partial class ViewportRenderer
             });
         }
         worldLensFlare = new WorldLensFlareResources(flare, state, [.. owned], groups, buffer, new Vector4[sprites * GtaLensFlareState.SpriteVectors], layout);
-        flareResultFrame = -1;
     }
 
     // The flare's GPU memory goes now, not whenever the handles are collected.
@@ -211,7 +218,7 @@ internal sealed unsafe partial class ViewportRenderer
             texture.Destroy();
     }
 
-    // The counts read back since the last frame: the newest one drawn is the one the flare goes by.
+    // The counts read back since the last frame: the newest one drawn since the flare was shown is the one it goes by.
     private void ReadLensFlareCounts()
     {
         for (int i = 0; i < FlareReadbacks; i++)
@@ -226,8 +233,9 @@ internal sealed unsafe partial class ViewportRenderer
                 (uint pixels, float mean) = readback.GetConstMappedRange<(uint, float), uint>(0, 2,
                     span => (span[0], BitConverter.UInt32BitsToSingle(span[1])));
                 readback.Unmap();
-                if (flareReadbackFrames[i] > flareResultFrame)
-                    (flareResultFrame, flarePixelsCounted, flareMeanLuminance) = (flareReadbackFrames[i], pixels, mean);
+                long frame = flareReadbackFrames[i];
+                if (frame >= flareFirstFrame && frame > flareResultFrame)
+                    (flareResultFrame, flarePixelsCounted, flarePixelsExpected, flareMeanLuminance) = (frame, pixels, flareReadbackExpected[i], mean);
             }
             flareReadbackStates[i] = FlareReadback.Free;
         }
@@ -286,8 +294,10 @@ internal sealed unsafe partial class ViewportRenderer
         float radius = state.VisibilityRadius(skyValues[6].W);
         float aspect = (float)width / Math.Max(height, 1);
         var view = new GtaLensFlareView(sceneViewProjection, origin, Camera.Eye, Camera.Forward, OrbitCamera.TanHalf * aspect, aspect, hdrWidth);
+        // The count goes by the disc as it was on its own frame (the target's size may have changed since).
+        float expected = GtaLensFlareState.ExpectedPixels(sun, radius, view);
         if (flareResultFrame >= 0)
-            state.UpdateVisibility(flarePixelsCounted, sun, radius, view, tc.Get("Lensflare_visibility", 1));
+            state.UpdateVisibility(flarePixelsCounted, flarePixelsExpected, tc.Get("Lensflare_visibility", 1));
         queue.WriteBuffer(flareVisibilityUniforms!, 0, (ReadOnlySpan<Vector4>)[new Vector4(radius, flare.Flare.Settings.SunFogFactor, 0, 0)]);
         encoder.ClearBuffer(flarePixels!, 0, 16);
 
@@ -303,7 +313,8 @@ internal sealed unsafe partial class ViewportRenderer
         double seconds = flareClock.Elapsed.TotalSeconds;
         float step = (float)(seconds - flareLastSeconds);
         flareLastSeconds = seconds;
-        if (GtaLensFlareState.ScreenPosition(sun, view) is { } place && state.Advance(place, seconds * 1000))
+        Vector2? onScreen = GtaLensFlareState.ScreenPosition(sun, view);
+        if (state.Advance(onScreen, seconds * 1000) && onScreen is { } place)
         {
             float exposure = flareResultFrame >= 0 ? GtaLensFlareState.LinearExposure(ExposureStops(flareMeanLuminance), cycle.ExposureMin, cycle.ExposureMax) : 0;
             int[] written = state.Build(flare.Values, place, tc.Colour("sky_sun_col"), aspect, exposure, step, seconds * 1000);
@@ -329,6 +340,7 @@ internal sealed unsafe partial class ViewportRenderer
             encoder.CopyBufferToBuffer(measured!, 0, flareReadbacks[slot]!, 4, 4);
             flareReadbackStates[slot] = FlareReadback.Copied;
             flareReadbackFrames[slot] = flareFrame;
+            flareReadbackExpected[slot] = expected;
         }
     }
 }

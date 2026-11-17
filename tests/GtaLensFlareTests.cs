@@ -117,13 +117,16 @@ public sealed class GtaLensFlareTests
         var sun = new Vector3(0, 20000, 0);
         // A disc 100 m across at 20 km: 2.5 pixels across half a 1000-pixel width at tan 45.
         float whole = MathF.PI * 2.5f * 2.5f;
-        state.UpdateVisibility(whole / 2, sun, 100, view, 1);
+        Assert.Equal(whole, GtaLensFlareState.ExpectedPixels(sun, 100, view), 4);
+        // On a target twice as wide, four times the pixels.
+        Assert.Equal(whole * 4, GtaLensFlareState.ExpectedPixels(sun, 100, view with { PixelWidth = 2000 }), 3);
+        state.UpdateVisibility(whole / 2, whole, 1);
         Assert.Equal(.5f, state.SunVisibility, 4);
-        state.UpdateVisibility(whole, sun, 100, view, .3f);
+        state.UpdateVisibility(whole, whole, .3f);
         Assert.Equal(.3f, state.SunVisibility, 4);
-        state.UpdateVisibility(whole * 3, sun, 100, view, 1);
+        state.UpdateVisibility(whole * 3, whole, 1);
         Assert.Equal(1, state.SunVisibility);
-        state.UpdateVisibility(0, sun, 100, view, 1);
+        state.UpdateVisibility(0, whole, 1);
         Assert.Equal(0, state.SunVisibility);
         Assert.Equal(1, state.CachedVisibility);
         Assert.Equal(40, state.VisibilityRadius(100));
@@ -153,7 +156,7 @@ public sealed class GtaLensFlareTests
         // Hidden: none.
         Assert.False(state.Advance(new(.5f, .5f), 0));
         // In view: whole at once.
-        state.UpdateVisibility(100, sun, 100, view, 1);
+        state.UpdateVisibility(100, 50, 1);
         Assert.True(state.Advance(new(.5f, .5f), 10));
         Assert.Equal(0, state.CurrentFade);
         // Off the screen: out over the hide length.
@@ -167,11 +170,31 @@ public sealed class GtaLensFlareTests
     }
 
     [Fact]
+    public void A_sun_behind_the_camera_has_no_place_on_the_screen_and_its_flare_fades_out_undrawn_as_off_the_screen()
+    {
+        var state = new GtaLensFlareState(Flare());
+        GtaLensFlareView view = View();
+        var sun = new Vector3(0, 20000, 0);
+        // Behind the camera the projection would mirror it onto the centre: it has no place.
+        Assert.Null(GtaLensFlareState.ScreenPosition(-sun, view));
+        Assert.Null(GtaLensFlareState.ScreenPosition(Vector3.Zero, view));
+        state.UpdateVisibility(100, 50, 1);
+        Assert.True(state.Advance(new(.5f, .5f), 0));
+        // Turned away, with the last count still saying the sun shows: nothing drawn, the fade out under way.
+        Assert.False(state.Advance(null, 100));
+        Assert.False(state.Advance(null, 600));
+        Assert.Equal(.5f, state.CurrentFade, 3);
+        // Back before the fade ends, and seen: whole again.
+        Assert.True(state.Advance(new(.5f, .5f), 700));
+        Assert.Equal(0, state.CurrentFade);
+    }
+
+    [Fact]
     public void The_elements_lie_along_the_line_through_the_centre_the_rings_twice_the_artefacts_dark_at_the_centre()
     {
         var state = new GtaLensFlareState(Flare());
         GtaLensFlareView view = View();
-        state.UpdateVisibility(1000, new Vector3(0, 20000, 0), 100, view, 1);
+        state.UpdateVisibility(1000, 10, 1);
         (int First, int Count)[] layout = state.Layout();
         Assert.Equal([(0, 1), (1, 1), (2, 2), (4, 1)], layout);
         var sprites = new Vector4[5 * GtaLensFlareState.SpriteVectors];
@@ -226,7 +249,54 @@ public sealed class GtaLensFlareTests
     }
 
     [Fact]
-    public void A_worlds_flare_counts_the_suns_pixels_and_is_drawn_over_its_sky_with_no_GPU_errors()
+    public void A_worlds_flare_counts_the_suns_pixels_and_is_drawn_over_its_sky_with_no_GPU_errors() =>
+        WithFlareOverSky((renderer, _) =>
+        {
+            Assert.True(renderer.WorldSunVisibility > .5f, $"visibility {renderer.WorldSunVisibility}");
+            Assert.Equal(5, renderer.WorldLensFlareSprites);
+            renderer.ClearWorld();
+            Assert.False(renderer.HasWorldLensFlare);
+        });
+
+    [Fact]
+    public void A_count_is_measured_against_the_disc_of_its_own_frame_so_a_new_render_scale_leaves_the_sun_as_visible() =>
+        WithFlareOverSky((renderer, render) =>
+        {
+            // Settled at the window's size: every count since is the whole sun's.
+            for (int frame = 0; frame < 8; frame++)
+                render();
+            float settled = renderer.WorldSunVisibility;
+            Assert.True(settled > .5f, $"visibility {settled}");
+            // Twice the size: four times the pixels, while counts from the smaller target are still coming back.
+            renderer.RenderScale = 2;
+            for (int frame = 0; frame < 8; frame++)
+            {
+                render();
+                Assert.True(renderer.WorldSunVisibility > settled * .8f, $"frame {frame}: visibility {renderer.WorldSunVisibility}, {settled} before");
+            }
+        });
+
+    [Fact]
+    public void A_flare_shown_in_place_of_another_goes_by_none_of_the_counts_drawn_before_it() =>
+        WithFlareOverSky((renderer, render) =>
+        {
+            Assert.True(renderer.WorldSunVisibility > .5f, $"visibility {renderer.WorldSunVisibility}");
+            // A new world's flare, the sun now behind the camera: the last world's counts still being read back say
+            // it showed, its own that it doesn't.
+            renderer.ShowWorldLensFlare(Flare());
+            Vector3 sun = DayCycle.SunDirection(14);
+            renderer.Camera.Place(new Vector3(0, 0, 50), MathF.Atan2(sun.Y, sun.X), MathF.Asin(sun.Z));
+            for (int frame = 0; frame < 8; frame++)
+            {
+                render();
+                Assert.Equal(0, renderer.WorldSunVisibility);
+                Assert.Equal(0, renderer.WorldLensFlareSprites);
+            }
+        });
+
+    // A world's sky looking straight at the sun with the flare over it, drawn until the flare shows (its count comes
+    // back a frame or so later, never waited for), then the test, with no validation errors throughout.
+    private static void WithFlareOverSky(Action<ViewportRenderer, Action> test)
     {
         try
         {
@@ -259,18 +329,16 @@ public sealed class GtaLensFlareTests
                 renderer.ShowWorldLensFlare(Flare());
                 Assert.True(renderer.HasWorldLensFlare);
                 WebGpuSharp.TextureView view = target.CreateView();
-                // The count comes back a frame or so later, never waited for.
-                for (int frame = 0; frame < 60 && renderer.WorldLensFlareSprites == 0; frame++)
+                void Render()
                 {
                     renderer.RenderTo(view);
                     Thread.Sleep(5);
                 }
-                Assert.True(renderer.WorldSunVisibility > .5f, $"visibility {renderer.WorldSunVisibility}");
-                Assert.Equal(5, renderer.WorldLensFlareSprites);
+                for (int frame = 0; frame < 60 && renderer.WorldLensFlareSprites == 0; frame++)
+                    Render();
+                test(renderer, Render);
                 var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
                 Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
-                renderer.ClearWorld();
-                Assert.False(renderer.HasWorldLensFlare);
                 renderer.Dispose();
                 target.Destroy();
             }

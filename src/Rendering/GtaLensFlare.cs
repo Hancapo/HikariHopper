@@ -198,17 +198,25 @@ internal sealed class GtaLensFlareState(GtaLensFlare flare)
     public float VisibilityRadius(float sunRadius) => settings.SunVisibilityFactor * sunRadius;
 
     /// <summary>
-    /// The visibility from a count of the sun disc's pixels the sky shows: over the pixels the whole disc would cover
-    /// (its radius in pixels at its distance, the area of that circle, over the cosine of the camera's forward with the
-    /// sun's position, made unit from the world's origin, as the game has it), times the timecycle's visibility, at most
-    /// one. The last value above nought is kept for a fade out.
+    /// The pixels the whole sun disc would cover on this frame's target: its radius in pixels at its distance, the area
+    /// of that circle, over the cosine of the camera's forward with the sun's position, made unit from the world's
+    /// origin, as the game has it. Kept with the frame's count, which comes back a frame or more later.
     /// </summary>
-    public void UpdateVisibility(float pixels, Vector3 sunPosition, float radius, in GtaLensFlareView view, float timecycleVisibility)
+    public static float ExpectedPixels(Vector3 sunPosition, float radius, in GtaLensFlareView view)
     {
         float distance = Vector3.Dot(sunPosition - view.Eye, view.Forward);
         float pixelRadius = radius / (view.TanHalfWidth * distance) * (view.PixelWidth >> 1);
-        float estimate = MathF.PI * pixelRadius * pixelRadius / MathF.Abs(Vector3.Dot(view.Forward, Vector3.Normalize(sunPosition)));
-        float visibility = pixels / estimate * timecycleVisibility;
+        return MathF.PI * pixelRadius * pixelRadius / MathF.Abs(Vector3.Dot(view.Forward, Vector3.Normalize(sunPosition)));
+    }
+
+    /// <summary>
+    /// The visibility from a count of the sun disc's pixels the sky shows: over the pixels the whole disc would have
+    /// covered on the frame it was counted on (<see cref="ExpectedPixels"/> for that frame), times the timecycle's
+    /// visibility, at most one. The last value above nought is kept for a fade out.
+    /// </summary>
+    public void UpdateVisibility(float pixels, float expected, float timecycleVisibility)
+    {
+        float visibility = pixels / expected * timecycleVisibility;
         SunVisibility = float.IsFinite(visibility) ? MathF.Min(1, visibility) : 0;
         if (SunVisibility > 0)
             CachedVisibility = SunVisibility;
@@ -238,13 +246,13 @@ internal sealed class GtaLensFlareState(GtaLensFlare flare)
     }
 
     /// <summary>
-    /// The sun's place on the screen, nought to one across and down, as the game projects it; null where it can't
-    /// be (at the camera's plane).
+    /// The sun's place on the screen, nought to one across and down, as the game projects it; null where it has none:
+    /// behind the camera (where the projection would mirror it onto the screen) or at its plane.
     /// </summary>
     public static Vector2? ScreenPosition(Vector3 sunPosition, in GtaLensFlareView view)
     {
         Vector4 clip = Vector4.Transform(new Vector4(sunPosition - view.Origin, 1), view.ViewProjection);
-        if (clip.W == 0)
+        if (!(clip.W > 0))
             return null;
         return new Vector2(clip.X / clip.W * .5f + .5f, .5f - clip.Y / clip.W * .5f);
     }
@@ -253,9 +261,10 @@ internal sealed class GtaLensFlareState(GtaLensFlare flare)
     /// The fade for this frame, at <paramref name="milliseconds"/> on the game's clock, with the sun at
     /// <paramref name="sun"/> on the screen: the transition under way goes on; on the screen the flare snaps back in
     /// while the sun shows and goes at once when it doesn't; off it, it fades out over visualsettings.dat's hide length.
-    /// True where the flare is drawn.
+    /// A sun behind the camera (null) has left the view as one off the screen has, as the game takes it, but has no
+    /// place to draw the flare at. True where the flare is drawn.
     /// </summary>
-    public bool Advance(Vector2 sun, double milliseconds)
+    public bool Advance(Vector2? sun, double milliseconds)
     {
         if (transition != Transition.None)
         {
@@ -268,7 +277,7 @@ internal sealed class GtaLensFlareState(GtaLensFlare flare)
             else
                 CurrentFade = (float)(transition == Transition.Out ? progress : 1 - progress);
         }
-        bool onScreen = sun.X > 0 && sun.X < 1 && sun.Y > 0 && sun.Y < 1;
+        bool onScreen = sun is { X: > 0 and < 1, Y: > 0 and < 1 };
         if (onScreen)
         {
             if (SunVisibility < .001f)
@@ -289,7 +298,7 @@ internal sealed class GtaLensFlareState(GtaLensFlare flare)
             transitionStart = milliseconds;
             transitionLength = flare.Visuals.HideMilliseconds;
         }
-        return CurrentFade < 1;
+        return sun is not null && CurrentFade < 1;
     }
 
     /// <summary>
