@@ -492,6 +492,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (worldShown)
                 hdrPass = DrawWorld(hdrPass, encoder);
             hdrPass.End();
+            // GTA V's lens flare over its world and sky, before the post-process.
+            if (sky)
+                DrawWorldLensFlare(encoder);
             MeasureFrame(encoder);
             if (Bloom)
                 DrawBloom(encoder);
@@ -546,6 +549,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         Antialias(encoder);
         Present(encoder, target);
         queue.Submit(encoder.Finish());
+        MapLensFlareCount();
     }
 
     /// <summary>Draws a frame offscreen, to a target in the window's format, for tests.</summary>
