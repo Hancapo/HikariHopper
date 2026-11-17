@@ -79,6 +79,108 @@ public sealed class GtaFogTests
         Assert.All(values[5..], value => Assert.Equal(Vector4.Zero, value));
     }
 
+    // The fog along each ray (gta_fog.wgsl's gta_fog, with its haze) for these constants, worked out on the GPU.
+    private static Vector4[] Fog(ReadOnlySpan<Vector4> constants, Vector3[] rays)
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            WebGpuSharp.Device device = gpu.Device;
+            device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            WebGpuSharp.ShaderModule shader = device.CreateShaderModuleWGSL(new WebGpuSharp.ShaderModuleWGSLDescriptor
+            {
+                Code = ViewportRenderer.Read("gta_fog.wgsl") + """
+
+                    @group(0) @binding(0) var<uniform> fog: GtaFog;
+                    @group(0) @binding(1) var<storage, read> rays: array<vec4f>;
+                    @group(0) @binding(2) var<storage, read_write> fogged: array<vec4f>;
+
+                    @compute @workgroup_size(1)
+                    fn cs_fog(@builtin(global_invocation_id) id: vec3u) {
+                        fogged[id.x] = gta_fog(fog, rays[id.x].xyz, 1.0);
+                    }
+                    """,
+            });
+            WebGpuSharp.BindGroupLayout layout = device.CreateBindGroupLayout(new WebGpuSharp.BindGroupLayoutDescriptor
+            {
+                Entries =
+                [
+                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 0, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.Uniform } },
+                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 1, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.ReadOnlyStorage } },
+                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 2, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.Storage } },
+                ],
+            });
+            WebGpuSharp.ComputePipeline pipeline = device.CreateComputePipelineSync(new WebGpuSharp.ComputePipelineDescriptor
+            {
+                Layout = device.CreatePipelineLayout(new WebGpuSharp.PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),
+                Compute = new WebGpuSharp.ComputeState { Module = shader, EntryPoint = "cs_fog" },
+            });
+            ulong bytes = (ulong)rays.Length * 16;
+            WebGpuSharp.Buffer uniforms = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = (ulong)constants.Length * 16, Usage = WebGpuSharp.BufferUsage.Uniform | WebGpuSharp.BufferUsage.CopyDst });
+            WebGpuSharp.Buffer input = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.Storage | WebGpuSharp.BufferUsage.CopyDst });
+            WebGpuSharp.Buffer output = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.Storage | WebGpuSharp.BufferUsage.CopySrc });
+            WebGpuSharp.Buffer readback = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead });
+            gpu.Queue.WriteBuffer(uniforms, 0, constants);
+            gpu.Queue.WriteBuffer(input, 0, (ReadOnlySpan<Vector4>)[.. rays.Select(ray => new Vector4(ray, 0))]);
+            WebGpuSharp.BindGroup group = device.CreateBindGroup(new WebGpuSharp.BindGroupDescriptor
+            {
+                Layout = layout,
+                Entries =
+                [
+                    new WebGpuSharp.BindGroupEntry { Binding = 0, Buffer = uniforms, Size = uniforms.GetSize() },
+                    new WebGpuSharp.BindGroupEntry { Binding = 1, Buffer = input, Size = bytes },
+                    new WebGpuSharp.BindGroupEntry { Binding = 2, Buffer = output, Size = bytes },
+                ],
+            });
+            WebGpuSharp.CommandEncoder encoder = device.CreateCommandEncoder();
+            WebGpuSharp.ComputePassEncoder pass = encoder.BeginComputePass();
+            pass.SetPipeline(pipeline);
+            pass.SetBindGroup(0, group);
+            pass.DispatchWorkgroups((uint)rays.Length, 1, 1);
+            pass.End();
+            encoder.CopyBufferToBuffer(output, 0, readback, 0, bytes);
+            gpu.Queue.Submit(encoder.Finish());
+            readback.MapSync(WebGpuSharp.MapMode.Read);
+            Vector4[] fogged = readback.GetConstMappedRange<Vector4[], Vector4>(0, (nuint)rays.Length, span => span.ToArray());
+            readback.Unmap();
+            var (type, message) = device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            foreach (WebGpuSharp.Buffer buffer in new[] { uniforms, input, output, readback })
+                buffer.Destroy();
+            return fogged;
+        }
+    }
+
+    // Rays far down, level, a little down and up, as a camera high over the world casts them.
+    private static readonly Vector3[] Rays = [new(0, 0, -5000), new(3000, 0, -4000), new(5000, 0, 0), new(5000, 0, -20), new(0, 3000, 1000)];
+
+    [Fact]
+    public void With_no_fog_none_is_drawn_along_any_ray_even_far_down()
+    {
+        var values = new Vector4[GtaSky.FogVectors];
+        GtaSky.NoFog(values);
+        // The falloff of one would raise e past what a float holds looking five kilometres down.
+        Assert.All(Fog(values, Rays), fog =>
+        {
+            Assert.True(float.IsFinite(fog.X) && float.IsFinite(fog.Y) && float.IsFinite(fog.Z), $"{fog}");
+            Assert.Equal(0, fog.W);
+        });
+    }
+
+    [Fact]
+    public void A_ground_fog_with_no_falloff_is_as_thick_along_a_ray_as_its_density_makes_it()
+    {
+        // Ground fog only, half as dense as would fill a kilometre: no haze, no falloff with height.
+        var values = new Vector4[GtaSky.FogVectors];
+        GtaSky.NoFog(values);
+        const float Density = .5f / 1000;
+        values[1].W = -Density;
+        values[2] = new(0, 1, 0, 0);
+        Vector4[] fogged = Fog(values, Rays);
+        for (int i = 0; i < Rays.Length; i++)
+            Assert.Equal(1 - MathF.Exp(-Density * Rays[i].Length()), fogged[i].W, 4);
+    }
+
     [Fact]
     public void A_far_surface_is_fogged_by_the_worlds_fog_pass_and_its_fog_rays_with_no_GPU_errors()
     {
