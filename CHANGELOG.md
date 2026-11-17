@@ -32,7 +32,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Show GTA V's interiors in its world: each interior's contents and the entity sets it turns on by default, every room lit by its own ambient from the game's timecycle modifiers. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 - Draw water in both games' worlds over the scene behind it, refracting and reflecting it: Red Dead Redemption 2's rivers and lakes with RedFury's water, and GTA V's ocean, lakes and pools from its water.xml and its water shaders' rivers and fountains, shaded as its own water shader does with the game's water textures and tuning. ([#260](https://github.com/Hancapo/HikariHopper/pull/260))
 - Pick what's in GTA V's world as in Red Dead Redemption 2's: a click outlines it, and a right click names it, an interior's contents by where they are in it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#261](https://github.com/Hancapo/HikariHopper/pull/261))
-- Draw GTA V's sky behind its world as the game draws it, from its own sky dome, textures, timecycle and visualsettings.dat: the sky's colours from the horizon to the zenith, the sun's glow and disc, its clouds and the light through them, the stars, the moon lit by its phase, and the fog over them. ([#PR](https://github.com/Hancapo/HikariHopper/pull/PR))
+- Draw GTA V's sky behind its world as the game draws it, from its own sky dome, textures, timecycle and visualsettings.dat: the sky's colours from the horizon to the zenith, the sun's glow and disc, its clouds and the light through them, the stars, the moon lit by its phase, and the fog over them. ([#280](https://github.com/Hancapo/HikariHopper/pull/280))
 
 ### Changed
 
