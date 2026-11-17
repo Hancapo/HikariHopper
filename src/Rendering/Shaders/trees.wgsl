@@ -3,9 +3,11 @@
 // material's tree settings, the camera's axes and the placement's are passed in.
 //   - trees_lod2's billboards (VS_PropFoliageDeferredLod2): each corner of a quad is stored at its middle, with where it
 //     is on the quad in the first UV set; the quad is spread across the camera (or upright and turned to it, as TEXCOORD3.x
-//     says) by treeLod2Params times its own size (TEXCOORD2), then turned back by the placement's rotation, which its
-//     matrix applies again. The cascades' version (VS_Cascade_PropFoliageLod2) spreads it across the sun's view, pushed
-//     away from the sun by 0.3 of its width.
+//     says) by treeLod2Params times its own size (TEXCOORD2), then turned back by the placement's matrix, which places it
+//     again. trees_lod2's middle is turned back with it, so, as in the game, a placement leaves the middle unturned and
+//     scales it twice; trees_lod2d's (the drawables' LODs) is turned by the placement first, and the scale taken out. The
+//     cascades' version (VS_Cascade_PropFoliageLod2) spreads it across the sun's view, pushed away from the sun by 0.3 of
+//     its width.
 //   - The cards turned to the camera (VS_PropFoliageDeferred of the _camera_facing and _camera_aligned shaders): _camera_facing turns the card's model X, Z and Y to the
 //     camera's right, up and back; _camera_aligned keeps it upright, turned about the vertical towards the camera. The
 //     cascades leave the cards as they are, pushed along the sun's back by ShadowFacingOffset (VS_Cascade_Micromovments).
@@ -25,8 +27,8 @@ struct TreeVertex {
 };
 
 // The Material's tree settings (surface.wgsl): program (1 foliage, 2 lod, 3 billboard), alignment (1 facing, 2 aligned),
-// AlphaScale, AlphaTest; UseTreeNormals, SelfShadowing, ShadowFalloff; treeLod2Params.xy, ShadowFacingOffset;
-// treeLod2Normal.
+// AlphaScale, AlphaTest; UseTreeNormals, SelfShadowing, ShadowFalloff; treeLod2Params.xy, ShadowFacingOffset, whether the
+// billboards are trees_lod2d's; treeLod2Normal.
 struct TreeSettings {
     tree: vec4f,
     shade: vec4f,
@@ -79,7 +81,9 @@ fn tree_vertex(settings: TreeSettings, position: vec3f, normal: vec3f, tangent: 
 
 // A billboard's corner: its middle, plus where it is on the quad across the view (or upright, as alignment says), by
 // treeLod2Params and its size; in the cascades, by the same and pushed away from the sun by 0.3 of its width. Then turned
-// back by the placement's rotation (dot with each axis), which its matrix applies again.
+// back by the placement's matrix (dot with each axis), which its matrix applies again. trees_lod2d's middle is turned by
+// the placement's matrix with its diagonal unscaled first, as the game's, and the scale taken out after; its cascades
+// turn back by that matrix too.
 fn tree_billboard(settings: TreeSettings, middle: vec3f, size: vec2f, corner: vec2f, alignment: f32, axes: mat3x3f, view: TreeView,
     cascade: bool) -> vec3f {
     let extent = settings.size.xy * size;
@@ -89,6 +93,20 @@ fn tree_billboard(settings: TreeSettings, middle: vec3f, size: vec2f, corner: ve
     var offset = uvs.x * across + uvs.y * down;
     if (cascade) {
         offset -= 0.3 * extent.x * view.back;
+    }
+    if (settings.size.w > 0.5) {
+        // The placement's scale across and up: its axes' lengths, as the entity's scaleXY and scaleZ.
+        let unscale = vec3f(vec2f(1.0 / max(length(axes[0]), 1e-6)), 1.0 / max(length(axes[2]), 1e-6));
+        var turned = axes;
+        turned[0].x *= unscale.x;
+        turned[1].y *= unscale.y;
+        turned[2].z *= unscale.z;
+        offset += turned * middle;
+        var back = axes;
+        if (cascade) {
+            back = turned;
+        }
+        return vec3f(dot(offset, back[0]), dot(offset, back[1]), dot(offset, back[2])) * unscale;
     }
     offset += middle;
     return vec3f(dot(offset, axes[0]), dot(offset, axes[1]), dot(offset, axes[2]));

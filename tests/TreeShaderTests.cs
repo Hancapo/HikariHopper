@@ -50,9 +50,9 @@ public sealed class TreeShaderTests
 
     // A billboard as the game's SLOD trees store theirs: every corner at its middle (0, 0, 1), where it is on the quad in
     // the first UV set, its cell of the atlas in the second, its size in the third and its alignment in the fourth.
-    private static DrawableMeshInput Billboard(float alignment = 0)
+    private static DrawableMeshInput Billboard(float alignment = 0, Vector3? middle = null)
     {
-        Vector3[] positions = [.. Enumerable.Repeat(new Vector3(0, 0, 1), 4)];
+        Vector3[] positions = [.. Enumerable.Repeat(middle ?? new Vector3(0, 0, 1), 4)];
         var mesh = new DrawableMeshInput(positions, [0, 1, 2, 0, 2, 3], "billboard");
         mesh.SetChannel(VertexSemantic.Normal, [.. Enumerable.Repeat(-Vector4.UnitY, 4)]);
         mesh.SetChannel(VertexSemantic.Color0, [.. Enumerable.Repeat(Vector4.One, 4)]);
@@ -163,8 +163,154 @@ public sealed class TreeShaderTests
         Assert.False(tree.Casts);
         Assert.False(proxy.Shown);
         Assert.True(proxy.Casts);
-        // A mask that names neither pass, as some made outside the game have, is drawn in both.
-        Assert.Equal(DrawableRenderMask.Default | DrawableRenderMask.Shadow, DrawableScene.Passes(DrawableRenderMask.None));
+        // A mask that names neither pass, as some made outside the game have, is drawn in every one, the reflection map's
+        // among them.
+        Assert.Equal(DrawableScene.EveryPass, DrawableScene.Passes(DrawableRenderMask.None));
+        Assert.True(ViewportRenderer.Drawn(new SurfacePart(0, 0, 3, 0, Vector3.Zero, Passes: DrawableScene.Passes(DrawableRenderMask.None)), reflected: true));
+        // The game's own masks still keep a model out of the reflection map: a tree's proxy.
+        Assert.False(ViewportRenderer.Drawn(proxy, reflected: true));
+    }
+
+    [Fact]
+    public void A_part_of_a_format_without_render_masks_is_drawn_in_every_pass()
+    {
+        // RDR2's parts are made without a mask: the main view, the shadow and the 3D viewer's reflection map.
+        var part = new SurfacePart(0, 0, 3, 0, Vector3.Zero);
+        Assert.True(part.Shown);
+        Assert.True(part.Casts);
+        Assert.True(ViewportRenderer.Drawn(part, reflected: true));
+        Assert.True(ViewportRenderer.Drawn(part, reflected: false));
+    }
+
+    [Theory]
+    [InlineData(GameTarget.Legacy, "trees_lod2", 0)]
+    [InlineData(GameTarget.Legacy, "trees_lod2d", 1)]
+    [InlineData(GameTarget.Enhanced, "trees_lod2", 0)]
+    [InlineData(GameTarget.Enhanced, "trees_lod2d", 1)]
+    public void The_drawables_billboards_are_told_from_the_others(GameTarget target, string shader, int drawable)
+    {
+        SurfaceMaterial material = Assert.Single(Read(Tree(target, shader, Billboard())).Materials);
+        Assert.Equal(TreeProgram.Billboard, material.Tree);
+        Assert.Equal(drawable, material.Uniforms[115]);
+    }
+
+    // Where a placement of a tree lands, looked at along +Y from 30 m away: its middle and its width on the screen, as the
+    // game's vertex shader moves it and the placement's matrix places it.
+    [Theory]
+    // trees_lod2's billboards as the game's own: the middle (0, 3, 1) turned back with the corner, so a turned placement
+    // leaves it where it was, and a scaled one scales it twice.
+    [InlineData("trees_lod2", 0f, 1f, 0f, 3f, 1f, 2f)]
+    [InlineData("trees_lod2", 90f, 1f, 0f, 3f, 1f, 2f)]
+    [InlineData("trees_lod2", 0f, 2f, 0f, 12f, 4f, 8f)]
+    // trees_lod2d's, the drawables' LODs: the middle turned by the placement, and scaled once; turned and scaled, its
+    // middle's turned part keeps the scale the game takes out of the matrix's diagonal alone.
+    [InlineData("trees_lod2d", 0f, 1f, 0f, 3f, 1f, 2f)]
+    [InlineData("trees_lod2d", 90f, 1f, -3f, 0f, 1f, 2f)]
+    [InlineData("trees_lod2d", 0f, 2f, 0f, 6f, 2f, 4f)]
+    [InlineData("trees_lod2d", 90f, 2f, -12f, 0f, 2f, 4f)]
+    // A card turned to the camera, two metres square, its middle (0, 0, 1): facing the camera, then placed, as the
+    // game's: a turned placement turns it from the camera after, as it does the game's own camera-facing cards (60 degrees
+    // leaves half its width; a quarter, none).
+    [InlineData("trees_normal_spec_camera_facing", 0f, 1f, 0f, 0f, 1f, 2f)]
+    [InlineData("trees_normal_spec_camera_facing", 0f, 2f, 0f, 0f, 2f, 4f)]
+    [InlineData("trees_normal_spec_camera_facing", 60f, 1f, 0f, 0f, 1f, 1f)]
+    public void A_placed_tree_lands_where_the_game_s_vertex_shader_puts_it(string shader, float heading, float scale, float x, float y, float z,
+        float width)
+    {
+        byte[] ydr = Tree(GameTarget.Legacy, shader, shader.StartsWith("trees_lod2") ? Billboard(middle: new Vector3(0, 3, 1)) : Card());
+        Matrix4x4 placement = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateRotationZ(heading * MathF.PI / 180);
+        var (box, project, error) = Placed(ydr, placement);
+        Assert.Null(error);
+        Assert.NotNull(box);
+        var (min, max) = box.Value;
+        Vector2 middle = project(new Vector3(x, y, z));
+        // Its middle, to a pixel or so.
+        Assert.InRange((min.X + max.X) / 2, middle.X - 1.5f, middle.X + 1.5f);
+        Assert.InRange((min.Y + max.Y) / 2, middle.Y - 1.5f, middle.Y + 1.5f);
+        // Its width: the distance between its sides projected at its depth.
+        float across = project(new Vector3(x + width / 2, y, z)).X - project(new Vector3(x - width / 2, y, z)).X;
+        Assert.InRange(max.X - min.X + 1, across - 2.5f, across + 2.5f);
+    }
+
+    private const int PlacedWidth = 384, PlacedHeight = 288;
+
+    // A drawable placed once in an otherwise empty world, its frame against the world's without it: the box of the pixels
+    // it changes, how a point of the world projects to the frame's pixels, and the frames' GPU error, if any.
+    private static ((Vector2 Min, Vector2 Max)? Box, Func<Vector3, Vector2> Project, string? Error) Placed(byte[] ydr, Matrix4x4 placement)
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(PlacedWidth, PlacedHeight, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(PlacedWidth, PlacedHeight);
+            renderer.WorldShown = true;
+            renderer.SetTime(13);
+            var eye = new Vector3(0, -30, 1);
+            renderer.Camera.Frame(eye, 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(eye, -MathF.PI / 2, 0);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            byte[] Frame()
+            {
+                for (int i = 0; i < 3; i++)
+                    renderer.RenderTo(view);
+                WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+                {
+                    Size = PlacedWidth * PlacedHeight * 4,
+                    Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                });
+                WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+                encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
+                    new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = PlacedWidth * 4, RowsPerImage = PlacedHeight } },
+                    new WebGpuSharp.Extent3D(PlacedWidth, PlacedHeight, 1));
+                gpu.Queue.Submit(encoder.Finish());
+                readback.MapSync(WebGpuSharp.MapMode.Read);
+                byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, PlacedWidth * PlacedHeight * 4, span => span.ToArray());
+                readback.Unmap();
+                readback.Destroy();
+                return pixels;
+            }
+            byte[] empty = Frame();
+            FiveFury.Drawables.Drawable drawable = Ydr.Read(ydr).Drawable;
+            var key = new RedFury.World.WorldAssetKey(1, 2);
+            Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
+                new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, placement, Vector3.Zero, 50, 1000, 0, 0);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
+            byte[] placed = Frame();
+            var (matrix, origin) = renderer.SceneView;
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            renderer.Dispose();
+            target.Destroy();
+            Vector2 Project(Vector3 point)
+            {
+                Vector4 clip = Vector4.Transform(new Vector4(point - origin, 1), matrix);
+                return new Vector2((clip.X / clip.W * .5f + .5f) * PlacedWidth - .5f, (.5f - clip.Y / clip.W * .5f) * PlacedHeight - .5f);
+            }
+            (Vector2 Min, Vector2 Max)? box = null;
+            for (int y = 0; y < PlacedHeight; y++)
+                for (int x = 0; x < PlacedWidth; x++)
+                {
+                    int at = (y * PlacedWidth + x) * 4;
+                    if (Math.Abs(placed[at] - empty[at]) + Math.Abs(placed[at + 1] - empty[at + 1]) + Math.Abs(placed[at + 2] - empty[at + 2]) <= 12)
+                        continue;
+                    var here = new Vector2(x, y);
+                    box = box is var (min, max) ? (Vector2.Min(min, here), Vector2.Max(max, here)) : (here, here);
+                }
+            return (box, Project, type == WebGpuSharp.ErrorType.NoError ? null : $"{type}: {message}");
+        }
     }
 
     [Fact]

@@ -633,7 +633,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     // Whether a part's model is drawn into the main view, or into the reflection map, by its render mask.
-    private static bool Drawn(SurfacePart part, bool reflected) =>
+    internal static bool Drawn(SurfacePart part, bool reflected) =>
         reflected ? (part.Passes & FiveFury.Drawables.DrawableRenderMask.Reflection) != 0 : part.Shown;
 
     /// <summary>The size of the missing-texture checkerboard, and how many of its squares cross a texture.</summary>

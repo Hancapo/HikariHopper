@@ -75,7 +75,8 @@ struct Material {
     // (and a decal's alpha) is night-only (the emissivenight shaders), whether the geometry is (_geomnightonly).
     environment: vec4f,
     // Trees (trees.wgsl's TreeSettings): program (0 not a tree, 1 foliage, 2 lod, 3 billboard), alignment, AlphaScale,
-    // AlphaTest; UseTreeNormals, SelfShadowing, ShadowFalloff; treeLod2Params.xy, ShadowFacingOffset; treeLod2Normal.
+    // AlphaTest; UseTreeNormals, SelfShadowing, ShadowFalloff; treeLod2Params.xy, ShadowFacingOffset, whether the
+    // billboards are trees_lod2d's; treeLod2Normal.
     tree: vec4f,
     tree_shade: vec4f,
     tree_size: vec4f,

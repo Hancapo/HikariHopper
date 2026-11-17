@@ -464,8 +464,8 @@ internal sealed partial class SurfaceMaterial
         // PS_PropFoliageDeferredLod_AlphaClip and PS_PropFoliageDeferredLod2_AlphaClip write: the specular map's mask by specularIntensityMult (unsquared) and its alpha by
         // specularFalloffMult, specularFresnel, or none of them without SPECULAR (the _lod shaders write none, and the
         // billboards an exponent of 512 and a fresnel of 0.4999); the alpha test, AlphaScale times the diffuse alpha,
-        // doubled, against AlphaTest; UseTreeNormals, SelfShadowing and ShadowFalloff; the billboards' size and normal;
-        // the cards' alignment and their shadow's offset; and umGlobalParams. The _tnt shaders read their palette at
+        // doubled, against AlphaTest; UseTreeNormals, SelfShadowing and ShadowFalloff; the billboards' size and normal,
+        // and whether they are trees_lod2d's; the cards' alignment and their shadow's offset; and umGlobalParams. The _tnt shaders read their palette at
         // the second vertex colour's blue.
         void TreeUniforms(Span<float> v)
         {
@@ -493,6 +493,8 @@ internal sealed partial class SurfaceMaterial
             v[112] = size.ElementAtOrDefault(0);
             v[113] = size.ElementAtOrDefault(1);
             v[114] = Constant("tree_shadow_facing", 0)[0];
+            // trees_lod2d's billboards (the drawables' LODs) take their placement's turn and scale as the game's do.
+            v[115] = shader.Equals("trees_lod2d", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
             Fill(v[116..119], Constant("tree_lod2_normal", 0, 0, 1));
         }
 

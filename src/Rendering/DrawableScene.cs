@@ -18,11 +18,12 @@ namespace HikariHopper.Rendering;
 /// <param name="EdgeCount">Its triangles' distinct edges.</param>
 /// <param name="Passes">
 /// The passes its drawable model is drawn in (its render mask): the main view, the sun's shadow and the rest. The game
-/// draws a model only into the passes its mask names: a tree's shadow proxy, say, only into the shadow.
+/// draws a model only into the passes its mask names: a tree's shadow proxy, say, only into the shadow. A format without
+/// render masks (RDR2's) is drawn into every pass: the main view, the shadow and the reflection map.
 /// </param>
 internal readonly record struct SurfacePart(int Material, uint FirstIndex, uint IndexCount, int BaseVertex, Vector3 Center,
     int Model = 0, int Lod = 0, string Group = "", bool Primary = true, int VertexCount = 0, int EdgeCount = 0,
-    DrawableRenderMask Passes = DrawableRenderMask.Default | DrawableRenderMask.Shadow)
+    DrawableRenderMask Passes = DrawableScene.EveryPass)
 {
     public int TriangleCount => (int)(IndexCount / 3);
 
@@ -436,12 +437,15 @@ internal sealed class DrawableScene
         static ulong Edge(uint a, uint b) => a < b ? (ulong)a << 32 | b : (ulong)b << 32 | a;
     }
 
+    /// <summary>The passes the viewer draws a model in: the main view, the sun's shadow and the reflection map.</summary>
+    internal const DrawableRenderMask EveryPass = DrawableRenderMask.Default | DrawableRenderMask.Shadow | DrawableRenderMask.Reflection;
+
     /// <summary>
     /// The passes a drawable model is drawn in, from its render mask; a mask naming neither the main view nor the shadow
-    /// (none set, as some made outside the game have) is taken as both.
+    /// (none set, as some made outside the game have) is taken as every pass.
     /// </summary>
     internal static DrawableRenderMask Passes(DrawableRenderMask mask) =>
-        (mask & (DrawableRenderMask.Default | DrawableRenderMask.Shadow)) == 0 ? mask | DrawableRenderMask.Default | DrawableRenderMask.Shadow : mask;
+        (mask & (DrawableRenderMask.Default | DrawableRenderMask.Shadow)) == 0 ? mask | EveryPass : mask;
 
     /// <summary>A drawable model's name: the bone it is bound to, "skinned" for one weighted to the skeleton, else its number.</summary>
     private static string ModelName(Drawable drawable, DrawableModel model, int index) =>
