@@ -278,6 +278,38 @@ fn sun_shadow(p: vec3f, n: vec3f) -> f32 {
     return sum / 9.0 * terminator;
 }
 
+// How deep under the sun's first caster a point is, as the game's PS_directional_scatter measures it for its foliage's
+// scatter: the point pulled 0.073 m back along its normal, its depth in the cascade it falls in against the mean of the
+// four texels around it, in the cascade's depth (0 to 1). Nought without shadows, or outside every cascade.
+fn tree_scatter_depth(p: vec3f, n: vec3f) -> f32 {
+    if (light.shadow_parameters.w < 0.5) {
+        return 0.0;
+    }
+    let shrunk = p - 0.073 * n;
+    let distance = (scene.view_projection * vec4f(shrunk, 1.0)).w;
+    var cascade = 3u;
+    if (distance < light.shadow_splits.z) {
+        cascade = 2u;
+    }
+    if (distance < light.shadow_splits.y) {
+        cascade = 1u;
+    }
+    if (distance < light.shadow_splits.x) {
+        cascade = 0u;
+    }
+    let clip = light.shadow[cascade] * vec4f(shrunk, 1.0);
+    let uvz = vec3f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5, clip.z);
+    if (any(uvz.xy <= vec2f(0.0)) || any(uvz.xy >= vec2f(1.0)) || uvz.z >= 1.0 || uvz.z <= 0.0) {
+        return 0.0;
+    }
+    let size = i32(light.shadow_parameters.z);
+    let texel = clamp(vec2i(uvz.xy * light.shadow_parameters.z), vec2i(1), vec2i(size - 2));
+    let layer = i32(cascade);
+    let mean = 0.25 * (textureLoad(shadow_map, texel - vec2i(1, 0), layer, 0) + textureLoad(shadow_map, texel + vec2i(1, 0), layer, 0)
+        + textureLoad(shadow_map, texel - vec2i(0, 1), layer, 0) + textureLoad(shadow_map, texel + vec2i(0, 1), layer, 0));
+    return abs(uvz.z - mean);
+}
+
 // Where PS_directional_ambient looks a direction up in the reflection map: a dual paraboloid, the upper hemisphere on
 // the right half of the map and the lower on the left.
 fn paraboloid_uv(r: vec3f) -> vec2f {

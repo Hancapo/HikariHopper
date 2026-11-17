@@ -220,7 +220,7 @@ internal sealed unsafe partial class ViewportRenderer
                 + Read("rdr2_water.wgsl"),
             WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_water.wgsl"),
             WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world_terrain.wgsl"),
-            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world.wgsl"),
+            _ => LitShader("trees.wgsl") + "\n" + Read("surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world.wgsl"),
         };
         // GTA V's fog over its world, which its shaders take (gta_world_fog.wgsl).
         static string GtaFog() => Read("gta_fog.wgsl") + "\n" + Read("gta_world_fog.wgsl") + "\n";
@@ -282,28 +282,40 @@ internal sealed unsafe partial class ViewportRenderer
         // Cut-outs into the shadow through their material's alpha; terrain is never cut out.
         if (family == WorldFamily.GtaTerrain)
             return;
-        string test = family == WorldFamily.Rdr2 ? "rdr2_world_shadow.wgsl" : "gta_world_shadow.wgsl";
+        bool gta = family != WorldFamily.Rdr2;
+        string test = gta ? Read("trees.wgsl") + "\n" + Read("gta_world_shadow.wgsl") : Read("rdr2_world_shadow.wgsl");
         worldMaskedShadow[f] = Compile($"{name}-shadow-masked", () =>
         {
-            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("world_shadow.wgsl") + "\n" + Read(test) });
+            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("world_shadow.wgsl") + "\n" + test });
             return new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, material, worldEmptyLayout!, worldInstanceLayout!] }),
                 Vertex = new VertexState
                 {
                     Module = module,
-                    EntryPoint = "vs_world_shadow_masked",
+                    // GTA V's trees are moved into the cascades by their billboards' size and alignment, or cards' centre.
+                    EntryPoint = gta ? "vs_gta_world_shadow_masked" : "vs_world_shadow_masked",
                     Buffers =
                     [
                         new VertexBufferLayout
                         {
                             ArrayStride = SurfaceVertex.Size,
-                            Attributes = new[]
-                            {
-                                new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
-                                new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
-                                new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
-                            },
+                            Attributes = gta
+                                ? new[]
+                                {
+                                    new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                                    new VertexAttribute { ShaderLocation = 2, Offset = 24, Format = VertexFormat.Float32x4 },
+                                    new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                                    new VertexAttribute { ShaderLocation = 4, Offset = 48, Format = VertexFormat.Float32x2 },
+                                    new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
+                                    new VertexAttribute { ShaderLocation = 7, Offset = 64, Format = VertexFormat.Float32x2 },
+                                }
+                                : new[]
+                                {
+                                    new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                                    new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                                    new VertexAttribute { ShaderLocation = 5, Offset = 56, Format = VertexFormat.Unorm8x4 },
+                                },
                         },
                         WorldInstanceLayout(),
                     ],
@@ -441,7 +453,7 @@ internal sealed unsafe partial class ViewportRenderer
             }
             else if (bundle == DecalBundle)
             {
-                if (!mesh.Decal)
+                if (!mesh.Decal || !mesh.Part.Shown)
                     continue;
                 pipeline = worldDecal[family];
             }
@@ -449,8 +461,9 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 if (!mesh.Opaque)
                     continue;
-                // Cut-outs, two-sided surfaces and mirrored placements aren't culled, as RedFury has them.
-                pipeline = mesh.Mode == AlphaMode.Mask || mesh.DoubleSided || asset.Reflected ? worldUnculled[family] : worldSolid[family];
+                // Cut-outs (but the trees, which cull their backs as the game does), two-sided surfaces and mirrored
+                // placements aren't culled, as RedFury has them.
+                pipeline = mesh.Mode == AlphaMode.Mask && !mesh.CullsBack || mesh.DoubleSided || asset.Reflected ? worldUnculled[family] : worldSolid[family];
             }
             if (pipeline != current)
             {
