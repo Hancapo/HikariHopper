@@ -209,6 +209,33 @@ public sealed class GtaCoronaTests
     }
 
     [Fact]
+    public void A_height_map_whose_cells_or_runs_arent_all_in_it_isnt_read()
+    {
+        static byte[] Edited(bool runs, Action<byte[]> edit)
+        {
+            byte[] file = HeightMap(runs);
+            edit(file);
+            return file;
+        }
+        // Its data a cell short.
+        Assert.Null(GtaHeightMap.Read(Edited(false, file => BinaryPrimitives.WriteUInt32LittleEndian(file.AsSpan(40), 2 * 16 - 1))));
+        // More rows' runs than there is data.
+        Assert.Null(GtaHeightMap.Read(Edited(true, file => BinaryPrimitives.WriteUInt16LittleEndian(file.AsSpan(14), 200))));
+        // A run past the row's columns, one starting past the data, and one whose offset reads as negative.
+        Assert.Null(GtaHeightMap.Read(Edited(true, file => BinaryPrimitives.WriteUInt16LittleEndian(file.AsSpan(46), 5))));
+        Assert.Null(GtaHeightMap.Read(Edited(true, file => BinaryPrimitives.WriteInt32LittleEndian(file.AsSpan(48 + 8), 13))));
+        Assert.Null(GtaHeightMap.Read(Edited(true, file => BinaryPrimitives.WriteInt32LittleEndian(file.AsSpan(48 + 8), -4))));
+        // An empty run, wherever it says it starts, is fine.
+        GtaHeightMap map = GtaHeightMap.Read(Edited(true, file =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(file.AsSpan(46 + 8), 0);
+            BinaryPrimitives.WriteInt32LittleEndian(file.AsSpan(48 + 8), 1000);
+        }))!;
+        Assert.Equal(0, map.MinimumAt(2, 1));
+        Assert.Equal(22, map.MinimumAt(2, 2), 3);
+    }
+
+    [Fact]
     public void The_frames_constants_take_the_timecycles_sprites_with_the_games_defaults_where_it_hasnt_them()
     {
         var values = new Vector4[GtaCoronas.Bytes / 16];

@@ -236,7 +236,7 @@ internal sealed class GtaHeightMap
         this.lowestAt = lowestAt;
     }
 
-    /// <summary>A height map file; null when it isn't one of byte cells.</summary>
+    /// <summary>A height map file; null when it isn't one of byte cells, or its cells aren't all in it.</summary>
     public static GtaHeightMap? Read(byte[] file)
     {
         if (file.Length < 44)
@@ -257,16 +257,25 @@ internal sealed class GtaHeightMap
         byte[] data = file.AsSpan(44, size).ToArray();
         if ((flags & 1) != 0)
         {
-            // Each row's first column, how many it has, and where they start in the max and min data after the runs.
+            // Each row's first column, how many it has, and where they start in the max and min data after the runs:
+            // each within the map's columns and that data.
+            if ((long)rows * 8 > size)
+                return null;
+            long half = (size - rows * 8) / 2;
             var runs = new (int, int, int)[rows];
             for (int j = 0; j < rows; j++)
             {
                 int at = 44 + j * 8;
-                runs[j] = (U16(at), U16(at + 2), (int)U32(at + 4));
+                uint offset = U32(at + 4);
+                runs[j] = (U16(at), U16(at + 2), (int)offset);
+                var (start, count, _) = runs[j];
+                if (count > 0 && (start + count > columns || offset + (long)start + count > half))
+                    return null;
             }
-            int rest = size - rows * 8;
-            return new GtaHeightMap(columns, rows, minX, minY, minZ, maxX, maxY, maxZ, runs, data, rows * 8 + rest / 2);
+            return new GtaHeightMap(columns, rows, minX, minY, minZ, maxX, maxY, maxZ, runs, data, (int)(rows * 8 + half));
         }
+        if (2L * columns * rows > size)
+            return null;
         return new GtaHeightMap(columns, rows, minX, minY, minZ, maxX, maxY, maxZ, null, data, size / 2);
     }
 
@@ -279,7 +288,7 @@ internal sealed class GtaHeightMap
             if (runs is not null)
             {
                 var (start, count, offset) = runs[j];
-                if (i >= start && i <= start + count - 1 && lowestAt + offset + i < lowest.Length)
+                if (i >= start && i <= start + count - 1)
                     z = lowest[lowestAt + offset + i];
             }
             else if (i >= 0 && i < columns)
