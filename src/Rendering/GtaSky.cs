@@ -121,13 +121,15 @@ internal static class GtaSky
 
     /// <summary>
     /// The sky's constants at <paramref name="hours"/>, with visualsettings.dat's <paramref name="visuals"/>, seen from
-    /// <paramref name="camera"/> (in the world), with the cloud noise <paramref name="seconds"/> into its drift.
+    /// <paramref name="camera"/> (in the world), with the cloud noise <paramref name="seconds"/> into its drift; the
+    /// timecycle is <paramref name="timecycle"/> where it was worked out at the camera's place, else GLOBAL's at that hour.
     /// </summary>
-    internal static Passes Write(Span<Vector4> values, GtaSkyVisuals visuals, float hours, SkyPath? path, Vector3 camera, double seconds)
+    internal static Passes Write(Span<Vector4> values, GtaSkyVisuals visuals, float hours, SkyPath? path, Vector3 camera, double seconds,
+        TimecycleSample? timecycle = null)
     {
         if (values.Length < Bytes / 16)
             throw new ArgumentException("Too small for the sky's constants.", nameof(values));
-        TimecycleSample tc = Timecycle.Sample(hours);
+        TimecycleSample tc = timecycle ?? Timecycle.Sample(hours);
         float Get(string name) => Field(tc, name);
         Vector3 Colour(string name) => FieldColour(tc, name);
         Vector3 Linear(string name) => Square(Colour(name));
@@ -253,9 +255,9 @@ internal static class GtaSky
     /// The fog rays' settings at <paramref name="hours"/>: their intensity, then the near and
     /// far fades over the last cascade's reach.
     /// </summary>
-    internal static Vector4 FogRays(float hours)
+    internal static Vector4 FogRays(float hours, TimecycleSample? timecycle = null)
     {
-        TimecycleSample tc = Timecycle.Sample(hours);
+        TimecycleSample tc = timecycle ?? Timecycle.Sample(hours);
         return new(Field(tc, "fogray_intensity"), Field(tc, "fogray_nearfade"), Field(tc, "fogray_farfade"), 0);
     }
 

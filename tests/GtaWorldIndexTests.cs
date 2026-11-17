@@ -81,11 +81,12 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.All(plants.Instances, plant => Assert.Equal(grass.Distance, plant.Grass!.Value.FadeEnd));
             Assert.True(grass.Distance <= GtaWorldCatalog.GrassReach);
             // Interiors: Michael's house's contents are placed, each in a room taking its ambient from the game's
-            // timecycle modifiers (v_michael lets a fifth of the natural ambient in).
+            // timecycle modifiers, its secondary over its primary as the game takes them (the lounge's v_michael_lounge lets a
+            // tenth of the natural ambient in, over the house's v_michael's fifth).
             WorldLodNode armchair = index.Lod.Nodes.First(node => node.Asset.Hash == new CommonFury.Hashing.Hash32("v_res_m_armchair").Value
                 && Vector3.Distance(node.Center, new Vector3(-804.8f, 175.1f, 72.4f)) < 2);
             Assert.Contains("interior_v_michael", index.NameOf(armchair.Id.Map));
-            Assert.Equal(.2f, index.AmbientOf(armchair)!.Value.Natural, 3);
+            Assert.Equal(.1f, index.AmbientOf(armchair)!.Value.Natural, 3);
             Assert.Null(index.AmbientOf(placed));
             // The interior takes its placement's place under the interior's LOD model, which gives way to all of it.
             WorldLodNode interiorLod = index.Lod.Nodes.Single(node => node.Id == armchair.Parent);
@@ -106,6 +107,8 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.True(ocean.WorldFog);
             Assert.All(ocean.Textures, Assert.NotNull);
             Assert.Equal(1118, ocean.SpecularFalloff);
+            // The timecycle's boxes: the maps' modifier boxes (tunnels, zones), applied by the camera's place.
+            Assert.True(index.TimecycleZones!.ModifierBoxes > 100, $"{index.TimecycleZones.ModifierBoxes} timecycle boxes");
             // The sky: the game's dome, a sphere of radius one, with every texture its sky is drawn with.
             Rendering.GtaSkyDome sky = index.LoadSky()!;
             Assert.Equal(469 * Rendering.GtaSkyDome.Stride / sizeof(float), sky.Vertices.Length);
@@ -127,6 +130,7 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.Equal(index.Lod.Nodes.Count, cached.Lod.Nodes.Count);
             Assert.Equal(index.Lod.Nodes[^1].Transform, cached.Lod.Nodes[^1].Transform);
             Assert.Equal(index.Lod.Nodes[^1].Parent, cached.Lod.Nodes[^1].Parent);
+            Assert.Equal(index.TimecycleZones!.ModifierBoxes, cached.TimecycleZones!.ModifierBoxes);
             TestContext.Current.SendDiagnosticMessage($"GTA world: {index.MapCount} maps, {index.Lod.Nodes.Count} placements, made in {made.Elapsed.TotalSeconds:0.0} s, read back in {read.Elapsed.TotalSeconds:0.0} s");
         }
         finally

@@ -27,9 +27,13 @@ namespace HikariHopper.Core;
 internal sealed class GtaWorldIndex : WorldIndex
 {
     private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients,
-        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water, GameVisualSettings? visuals, GameClouds? clouds)
-        : base(root, mapCount, lod) =>
-        (Game, this.ambients, this.interiorEntities, this.water, this.visuals, this.clouds) = (game, ambients, interiorEntities, water, visuals, clouds);
+        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water, GameVisualSettings? visuals, GameClouds? clouds,
+        Rendering.TimecycleZones? zones)
+        : base(root, mapCount, lod) => (Game, this.ambients, this.interiorEntities, this.water, this.visuals, this.clouds, TimecycleZones) =
+            (game, ambients, interiorEntities, water, visuals, clouds, zones);
+
+    /// <summary>The timecycle's region boxes and the maps' modifier boxes, with the game's timecycle; none where it can't be read.</summary>
+    public override Rendering.TimecycleZones? TimecycleZones { get; }
 
     // The game's visualsettings.dat, read with the index.
     private readonly GameVisualSettings? visuals;
@@ -557,7 +561,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-6";
+    private const string CacheVersion = "hh-gta-world-7";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)
@@ -572,7 +576,8 @@ internal sealed class GtaWorldIndex : WorldIndex
         try
         {
             string fingerprint = GameWorld.Fingerprint(root, $"{CacheVersion}|{target}"), cache = GameWorld.CachePath(root, "gta-world");
-            (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)? catalog = null;
+            (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors,
+        TimecycleBox[] Boxes)? catalog = null;
             if (File.Exists(cache))
             {
                 report(new WorldProgress("Reading the world from the cache", null));
@@ -590,16 +595,17 @@ internal sealed class GtaWorldIndex : WorldIndex
                     catalog = null;
                 }
             }
+            GameTimecycle? timecycle = GameTimecycle.ForGame(new LoadedGame(root, target, keys.Crypto));
             if (catalog is null)
             {
-                GameTimecycle? timecycle = GameTimecycle.ForGame(new LoadedGame(root, target, keys.Crypto));
                 catalog = GtaWorldCatalog.Load(game.FileSystem, timecycle, report, cancellation);
                 // Made into a graph before it's cached, so only a good index is.
                 lod = new WorldLodGraph(catalog.Value.Nodes);
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
-                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes, catalog.Value.Ambients, catalog.Value.Interiors);
+                    GtaWorldCache.Write(cache, fingerprint, catalog.Value.Maps, catalog.Value.Nodes, catalog.Value.Ambients, catalog.Value.Interiors,
+                        catalog.Value.Boxes);
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
@@ -611,7 +617,8 @@ internal sealed class GtaWorldIndex : WorldIndex
             GameClouds? clouds = GameClouds.Read(new LoadedGame(root, target, keys.Crypto));
             lod = new WorldLodGraph([.. catalog.Value.Nodes, .. water.Nodes()]);
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water, visuals, clouds);
+            Rendering.TimecycleZones? zones = timecycle is null ? null : new Rendering.TimecycleZones(timecycle, catalog.Value.Boxes);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water, visuals, clouds, zones);
         }
         catch
         {
@@ -631,10 +638,12 @@ internal static class GtaWorldCatalog
     private sealed record Archetype(WorldAssetKey Asset, Vector3 Center, float Radius, float Distance, ArchetypeFlags Flags, ArchetypeAssetType Type,
         bool Animated, uint TimeFlags);
 
-    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors,
+        TimecycleBox[] Boxes)
         Load(GameFileSystem files, GameTimecycle? timecycle, Action<WorldProgress> report, CancellationToken cancellation)
     {
         var ambients = new Dictionary<WorldEntityId, InteriorAmbient>();
+        var boxes = new List<TimecycleBox>();
         var interiorEntities = new Dictionary<WorldEntityId, (int Set, int Entity)>();
         // How many more children each LOD model an interior is placed under has than it expects.
         var adopted = new Dictionary<WorldEntityId, int>();
@@ -709,6 +718,10 @@ internal static class GtaWorldCatalog
             // By its file's name, which finds it again: two files can carry the same name inside.
             uint map = file.NameHash.Value, parentMap = ymap.Parent.Value;
             read++;
+            // Its timecycle modifier boxes, which the game adds as it loads the map (CMapData's timeCycleModifiers).
+            foreach (TimeCycleModifier modifier in ymap.TimeCycleModifiers)
+                boxes.Add(new TimecycleBox(modifier.Name.Value, modifier.Bounds.Minimum, modifier.Bounds.Maximum, modifier.Percentage,
+                    modifier.Range, (int)modifier.StartHour, (int)modifier.EndHour));
             var placedInteriors = new List<(MloInstanceDef Instance, WorldEntityId? Parent)>();
             // Each entity's place in its map, which a local LOD parent is found by.
             var indexes = new Dictionary<YmapEntity, int>(ReferenceEqualityComparer.Instance);
@@ -750,7 +763,7 @@ internal static class GtaWorldCatalog
                     nodes[n] = nodes[n] with { ExpectedChildren = Math.Max(0, nodes[n].ExpectedChildren + extra) };
         if (nodes.Count == 0)
             throw new InvalidDataException("No readable world placements were found in the game's maps.");
-        return (read, [.. nodes], ambients, interiorEntities);
+        return (read, [.. nodes], ambients, interiorEntities, [.. boxes]);
     }
 
     /// <summary>The longest a grass batch is drawn from, whatever it says (RedFury's near-field tier).</summary>
@@ -933,7 +946,7 @@ internal static class GtaWorldCache
     private const uint Magic = 0x57474848; // "HHGW"
 
     public static void Write(string path, string fingerprint, int maps, IReadOnlyList<WorldLodNode> nodes, IReadOnlyDictionary<WorldEntityId, InteriorAmbient> ambients,
-        IReadOnlyDictionary<WorldEntityId, (int Set, int Entity)> interiors)
+        IReadOnlyDictionary<WorldEntityId, (int Set, int Entity)> interiors, IReadOnlyList<TimecycleBox> boxes)
     {
         string temporary = path + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary)))
@@ -1010,6 +1023,17 @@ internal static class GtaWorldCache
                 writer.Write(inside.Set);
                 writer.Write(inside.Entity);
             }
+            writer.Write(boxes.Count);
+            foreach (TimecycleBox box in boxes)
+            {
+                writer.Write(box.Name);
+                Write(writer, box.Min);
+                Write(writer, box.Max);
+                writer.Write(box.Percentage);
+                writer.Write(box.Range);
+                writer.Write(box.StartHour);
+                writer.Write(box.EndHour);
+            }
         }
         File.Move(temporary, path, overwrite: true);
     }
@@ -1024,7 +1048,8 @@ internal static class GtaWorldCache
     private static Vector3 Read(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 
     /// <summary>The cached index; null when there's none for the game as it is, or it can't be read.</summary>
-    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors)? Read(
+    public static (int Maps, WorldLodNode[] Nodes, Dictionary<WorldEntityId, InteriorAmbient> Ambients, Dictionary<WorldEntityId, (int Set, int Entity)> Interiors,
+        TimecycleBox[] Boxes)? Read(
         string path, string fingerprint)
     {
         try
@@ -1085,7 +1110,13 @@ internal static class GtaWorldCache
             var interiors = new Dictionary<WorldEntityId, (int Set, int Entity)>(placed);
             for (int i = 0; i < placed; i++)
                 interiors[new WorldEntityId(reader.ReadUInt32(), reader.ReadInt32())] = (reader.ReadInt32(), reader.ReadInt32());
-            return (maps, nodes, ambients, interiors);
+            int boxCount = reader.ReadInt32();
+            if (boxCount is < 0 or > 10_000_000)
+                return null;
+            var boxes = new TimecycleBox[boxCount];
+            for (int i = 0; i < boxCount; i++)
+                boxes[i] = new TimecycleBox(reader.ReadUInt32(), Read(reader), Read(reader), reader.ReadSingle(), reader.ReadSingle(), reader.ReadInt32(), reader.ReadInt32());
+            return (maps, nodes, ambients, interiors, boxes);
         }
         catch (Exception error) when (error is IOException or EndOfStreamException or UnauthorizedAccessException or ArgumentException)
         {

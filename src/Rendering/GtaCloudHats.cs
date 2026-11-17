@@ -210,7 +210,7 @@ internal sealed record GtaCloudHats(CloudHatDefinition Hat, GtaCloudHatLayer[] L
     /// by how far each is faded in, squared, then both it and the scattering scaled by the moon's phase while the moon
     /// shows; from the sun while it's up, else from the moon.
     /// </summary>
-    internal static CloudFrame Frame(CloudSettings settings, float hours, SkyPath? path)
+    internal static CloudFrame Frame(CloudSettings settings, float hours, SkyPath? path, TimecycleSample? timecycle = null)
     {
         // The hour stretched as the timecycle blends its keyframes, which Timecycle.Sample
         // does by the hour.
@@ -221,7 +221,7 @@ internal sealed record GtaCloudHats(CloudHatDefinition Hat, GtaCloudHatLayer[] L
         Vector4 density = settings.DensityShiftScaleScatteringConstScale.Query(time);
         Vector4 lighting = settings.ScaleDiffuseFillAmbientWrapAmount.Query(time);
 
-        TimecycleSample tc = Timecycle.Sample(hours);
+        TimecycleSample tc = timecycle ?? Timecycle.Sample(hours);
         var (sunFade, moonFade) = DayCycle.Fades(hours, path);
         // The timecycle's own defaults where its file hasn't them (its variable table).
         Vector3 light = new Vector3(tc.Get("sky_moon_col_r", 1), tc.Get("sky_moon_col_g", 1), tc.Get("sky_moon_col_b", 1)) * moonFade
@@ -254,13 +254,13 @@ internal sealed record GtaCloudHats(CloudHatDefinition Hat, GtaCloudHatLayer[] L
     /// to 200 m up, at most one) times its strongest speed and the timecycle's wind_speed_mult, from no scroll at
     /// <see cref="WindEffectMin"/> metres a second to full at <see cref="WindEffectMax"/>.
     /// </summary>
-    internal float Wind(float height, float hours)
+    internal float Wind(float height, float hours, TimecycleSample? timecycle = null)
     {
         float wind = WindMin + (WindMax - WindMin) * WindInterp;
         if (height > WindMultZMin)
             wind *= height > WindMultZMax ? WindMultValue : (height - WindMultZMin) / (WindMultZMax - WindMultZMin) * (WindMultValue - 1) + 1;
         wind = MathF.Min(wind, 1);
-        float speed = wind * WindSpeedMax * Timecycle.Sample(hours).Get("wind_speed_mult", 1);
+        float speed = wind * WindSpeedMax * (timecycle ?? Timecycle.Sample(hours)).Get("wind_speed_mult", 1);
         return Math.Clamp((speed - WindEffectMin) / (WindEffectMax - WindEffectMin), 0, 1);
     }
 

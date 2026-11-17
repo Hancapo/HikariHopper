@@ -281,7 +281,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         // The sun as the game registers it: where the sky put it on the dome, its disc's radius, as the sky has them.
         GtaLensFlareState state = flare.State;
-        TimecycleSample tc = Timecycle.Sample(Hours);
+        TimecycleSample tc = timecycle;
         Vector3 sun = skyValues[12].AsVector3();
         float radius = state.VisibilityRadius(skyValues[6].W);
         float aspect = (float)width / Math.Max(height, 1);

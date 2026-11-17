@@ -4,8 +4,9 @@ namespace HikariHopper.Rendering.World;
 
 /// <summary>
 /// An interior room's ambient, as GTA V lights what's in it: its artificial ambient from above and below, and how much
-/// of the natural ambient still reaches it. The room's timecycle modifiers set them (its secondary one, then its
-/// primary over it), over the weather's own interior values, which are the same at every hour; a room without
+/// of the natural ambient still reaches it. The room's timecycle modifiers set them, its secondary one over its primary
+/// (as the game's interior ambient cache and its ambient scales take them: the secondary's value wherever it has one),
+/// over the weather's own interior values, which are the same at every hour and in every region; a room without
 /// modifiers has the weather's, whose interior multiplier is nought. All of it from the game's timecycle files.
 /// </summary>
 /// <param name="Down">The artificial ambient on what faces up: its colour by its intensity and the interior multiplier.</param>
@@ -18,9 +19,9 @@ internal readonly record struct InteriorAmbient(Vector3 Down, Vector3 Up, float 
     {
         float Get(string name)
         {
-            if (primary != 0 && timecycle.Modifiers.TryGetValue(primary, out var first) && first.TryGetValue(name, out float value))
+            if (secondary != 0 && timecycle.Modifiers.TryGetValue(secondary, out var second) && second.TryGetValue(name, out float value))
                 return value;
-            if (secondary != 0 && timecycle.Modifiers.TryGetValue(secondary, out var second) && second.TryGetValue(name, out value))
+            if (primary != 0 && timecycle.Modifiers.TryGetValue(primary, out var first) && first.TryGetValue(name, out value))
                 return value;
             // The weather's interior values are the same at every hour.
             return timecycle.Weather.TryGetValue(name, out float[]? keyframes) && keyframes.Length > 0 ? keyframes[0] : 0;

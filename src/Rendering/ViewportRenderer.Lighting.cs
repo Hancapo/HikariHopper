@@ -349,13 +349,65 @@ internal sealed unsafe partial class ViewportRenderer
     {
         // Evaluated first: an hour that isn't a number throws and changes nothing.
         key = DayCycle.Evaluate(hours, Sky);
-        cycle = Timecycle.Evaluate(hours);
+        timecycle = TimecycleAt(hours);
+        cycle = Timecycle.Evaluate(timecycle);
         toneMap = Timecycle.ToneMap;
         Hours = hours;
         // A drawable's shadow follows the sun.
         if (shadowRadius > 0)
             FitShadow(shadowRadius);
         DrawReflections(hours);
+        reflectedPlace.CopyFrom(place ?? NoPlace);
+    }
+
+    // The timecycle at the hour and place the view is lit at: worked out once each time either changes, and read from
+    // then on by the light, the sky, its reflections, the exposure and the bloom.
+    private TimecycleSample timecycle;
+    private readonly TimecycleFrame timecycleFrame = new();
+    // The camera's place in the game's world, the timecycle's regions and box modifiers there; none outside a world.
+    private TimecyclePlace? place;
+    // The place the sky's reflection maps were last drawn at.
+    private readonly TimecyclePlace reflectedPlace = new();
+    private static readonly TimecyclePlace NoPlace = new();
+
+    /// <summary>
+    /// How far a place's strengths move from where the sky's reflection maps were drawn before they're drawn again: the
+    /// light follows each change, the maps (a pass and their mips) a change this size, below what their colours show.
+    /// </summary>
+    internal const float ReflectionStep = 1 / 256f;
+
+    private TimecycleSample TimecycleAt(float hours) =>
+        place is { IsGlobal: false } at ? Timecycle.Resolve(hours, at, timecycleFrame) : Timecycle.Sample(hours);
+
+    /// <summary>The timecycle the view is lit with, at its hour and place.</summary>
+    internal TimecycleSample TimecycleSample => timecycle;
+
+    /// <summary>
+    /// Takes the timecycle at the camera's place in the game's world (<paramref name="at"/>, copied; null outside one,
+    /// GLOBAL's alone), as the game does each frame: the light, the sky, the exposure and the bloom follow it at once.
+    /// The same place again changes nothing.
+    /// </summary>
+    internal void SetTimecyclePlace(TimecyclePlace? at)
+    {
+        if (at is null)
+        {
+            if (place is null)
+                return;
+            place = null;
+        }
+        else
+        {
+            if (place is not null && place.Matches(at))
+                return;
+            (place ??= new TimecyclePlace()).CopyFrom(at);
+        }
+        timecycle = TimecycleAt(Hours);
+        cycle = Timecycle.Evaluate(timecycle);
+        if (skyMap is not null && (place ?? NoPlace).Distance(reflectedPlace) >= ReflectionStep)
+        {
+            DrawReflections(Hours);
+            reflectedPlace.CopyFrom(place ?? NoPlace);
+        }
     }
 
     /// <summary>The HDR target drawables are drawn to, sized to the window, its bloom, and the tone map's view of them.</summary>

@@ -52,7 +52,7 @@ internal sealed unsafe partial class ViewportRenderer
     private void WriteWorldFog(ReadOnlySpan<Vector4> skyValues)
     {
         skyValues.Slice(GtaSky.FogStart, GtaSky.FogVectors).CopyTo(worldFogValues);
-        worldFogValues[GtaSky.FogVectors] = GtaSky.FogRays(Hours);
+        worldFogValues[GtaSky.FogVectors] = GtaSky.FogRays(Hours, timecycle);
         queue.WriteBuffer(worldFogBuffer!, 0, (ReadOnlySpan<Vector4>)worldFogValues);
     }
 
