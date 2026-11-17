@@ -69,6 +69,9 @@ struct Material {
     glass: vec4f,
     // Glass: matDiffuseColorTint, which the vertex alpha blends the diffuse towards, and whose alpha it adds.
     glass_tint: vec4f,
+    // The _reflect shaders' environment (0 none, 1 a sphere map, 2 a cube) and reflectivePower; whether the emissive
+    // (and a decal's alpha) is night-only (the emissivenight shaders), whether the geometry is (_geomnightonly).
+    environment: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> material: Material;
@@ -86,6 +89,9 @@ struct Material {
 // Hair: the noise map that breaks up its highlights and its alpha, and the _mask shaders' mask, on the second UV set.
 @group(1) @binding(12) var hair_noise_map: texture_2d<f32>;
 @group(1) @binding(13) var diffuse_mask: texture_2d<f32>;
+// The _reflect shaders' environment: a sphere map, or a cube for the _cubemap_reflect ones.
+@group(1) @binding(14) var environment_map: texture_2d<f32>;
+@group(1) @binding(15) var environment_cube: texture_cube<f32>;
 
 struct SurfaceInput {
     @location(0) position: vec3f,
@@ -134,8 +140,14 @@ struct ReflectionView {
 @vertex
 fn vs_surface(input: SurfaceInput) -> SurfaceOutput {
     var output = surface_vertex(input);
-    output.position = scene.view_projection * vec4f(input.position, 1.0);
+    output.position = scene.view_projection * vec4f(input.position, 1.0) * day_night_vertex_scale();
     return output;
+}
+
+// A _geomnightonly shader's vertices all go to nought by day, as its vertex programs scale them (one while the day/night
+// balance, globalScalars2.y, is above nought, else nought), so it draws nothing; any other's stay where they are.
+fn day_night_vertex_scale() -> f32 {
+    return select(1.0, select(0.0, 1.0, light.reflection.y > 0.0), material.environment.w > 0.5);
 }
 
 // A drawable into the reflection map, as GTA draws its world into its own: a paraboloid projection of the
@@ -150,7 +162,7 @@ fn vs_surface_paraboloid(input: SurfaceInput) -> SurfaceOutput {
     let side = reflection_view.side.x;
     let z = d.z * side;
     let p = d.xy / max(1.0 + z, 1e-3);
-    output.position = vec4f(p.x * side, p.y, saturate(distance / reflection_view.eye.w), 1.0);
+    output.position = vec4f(p.x * side, p.y, saturate(distance / reflection_view.eye.w), 1.0) * day_night_vertex_scale();
     output.hemisphere = z;
     return output;
 }
@@ -291,6 +303,10 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
         surface = textured_surface(input, diffuse, specular_sample, normal);
         surface.base *= detail_scale;
         surface.intensity *= detail_scale;
+        // The _reflect shaders' environment, added to the diffuse the G-buffer stores (and so kept within one).
+        if (material.environment.x > 0.5) {
+            surface.base = saturate(surface.base + environment_reflection(normal, view));
+        }
     }
     surface.alpha = select(1.0, surface.alpha, mode == 2u);
     // With the parallax self-shadow, which the game's directional pass multiplies the sun by.
@@ -407,7 +423,25 @@ fn textured_surface(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f
     surface.artificial = input.colour0.g;
     surface.reflection = 1.0;
     surface.alpha = diffuse.a * select(1.0, input.colour0.a, material.parallax_global.y > 0.5);
+    // A night-only emissive decal fades with its emissive.
+    if (material.parallax_global.y > 0.5 && material.environment.z > 0.5) {
+        surface.alpha *= light.reflection.y;
+    }
     return surface;
+}
+
+// The _reflect shaders' environment, as their programs compute it: the view mirrored about the surface normal, read
+// from a sphere map at its X and Z, each one more and halved the other way (the sampler wraps them), or from a cube
+// along it with Y and Z swapped; by reflectivePower.
+fn environment_reflection(normal: vec3f, view: vec3f) -> vec3f {
+    let r = normalize(reflect(-view, normal));
+    var colour: vec3f;
+    if (material.environment.x > 1.5) {
+        colour = textureSample(environment_cube, surface_sampler, r.xzy).rgb;
+    } else {
+        colour = textureSample(environment_map, surface_sampler, (r.xz + 1.0) * -0.5).rgb;
+    }
+    return colour * material.environment.y;
 }
 
 // PS_DeferredTextured's parallax occlusion mapping, as the _pxm programs compile it: the height map marched along
@@ -701,12 +735,13 @@ fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_l
     let colour = gta_lit(surface.base, surface.normal, view, surface.intensity, surface.power, surface.fresnel, scale * scale, shadow,
         surface.reflection, artificial * artificial);
 
-    // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, stored as a sixteenth and
-    // brought back, facing the camera.
+    // Emissive: the vertex colour's blue by the diffuse alpha and emissiveMultiplier, and the night-only shaders' by
+    // the day/night balance, stored as a sixteenth and brought back, facing the camera.
     var glow = vec3f(0.0);
     if (material.options.w > 0.5) {
         let albedo = surface.base * surface.base;
-        let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w);
+        let night = select(1.0, light.reflection.y, material.environment.z > 0.5);
+        let stored = saturate(input.colour0.b / 16.0 * diffuse.a * material.mask.w * night);
         glow = albedo * stored * 16.0 * saturate(dot(surface.normal, view));
     }
     return colour + glow;

@@ -549,7 +549,8 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[9] = new Vector4(bright.E, bright.F, bright.W, 1 / Timecycle.DisplayGamma);
         vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
         vectors[11] = new Vector4(dark.E, dark.F, dark.W, 0);
-        vectors[12] = new Vector4(ReflectionMips, 0, 0, 0);
+        // With the day/night balance the night emissives and night-only geometry go by (globalScalars2.y).
+        vectors[12] = new Vector4(ReflectionMips, NightEmissives.Balance(Hours), 0, 0);
         for (int i = 0; i < ShadowCascades; i++)
             MemoryMarshal.Write(MemoryMarshal.AsBytes(values[(52 + i * 16)..(68 + i * 16)]), in shadowMatrices[i]);
         vectors[29] = shadowSplits;
@@ -629,6 +630,8 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>The sun's shadow of the drawables, a cascade at a time: their solid and masked parts' depth from the sun.</summary>
     private void DrawShadow(CommandEncoder encoder)
     {
+        // Night-only geometry casts only while it's there, as the game's shadow programs have it.
+        bool night = NightEmissives.Balance(Hours) > 0;
         for (int cascade = 0; cascade < ShadowCascades; cascade++)
         {
             RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
@@ -647,12 +650,12 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetVertexBuffer(0, surfaceVertices!);
             pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
             for (int i = 0; i < surfaceParts.Length; i++)
-                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i])
+                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i] && (night || !partNightOnly[i]))
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
             // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
             pass.SetPipeline(maskedShadowPipeline!);
             for (int i = 0; i < surfaceParts.Length; i++)
-                if (CutOut(i) && partsShown[i])
+                if (CutOut(i) && partsShown[i] && (night || !partNightOnly[i]))
                 {
                     pass.SetBindGroup(1, surfaceParts[i].Material);
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
