@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -25,7 +26,7 @@ public sealed class FlickScrolling
     private double velocity;
     private Point lastPoint;
     private ulong lastTimestamp;
-    private DateTime flickTick;
+    private long flickTick;
 
     private FlickScrolling(ScrollViewer viewer)
     {
@@ -83,7 +84,7 @@ public sealed class FlickScrolling
         e.Pointer.Capture(null);
         if (e.Timestamp - lastTimestamp < 100 && Math.Abs(velocity) > 1)
         {
-            flickTick = DateTime.UtcNow;
+            flickTick = Ui.MotionClock.Timestamp;
             flickTimer.Start();
         }
         e.Handled = true;
@@ -91,8 +92,8 @@ public sealed class FlickScrolling
 
     private void OnFlickTick(object? sender, EventArgs e)
     {
-        DateTime now = DateTime.UtcNow;
-        double dt = (now - flickTick).TotalSeconds;
+        long now = Ui.MotionClock.Timestamp;
+        double dt = Stopwatch.GetElapsedTime(flickTick, now).TotalSeconds;
         flickTick = now;
         double step = velocity * dt;
         double slowed = Math.Abs(velocity) - Deceleration * dt;

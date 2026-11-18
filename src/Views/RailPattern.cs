@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -42,7 +41,7 @@ public sealed class RailPattern : Control
     internal enum Icon { Track, Engine, Signal }
 
     private readonly RailField field = new();
-    private readonly Stopwatch clock = new();
+    private long movingSince;
     private readonly DispatcherTimer ticker;
     // While it should drift with motion reduced, a slow look at the Windows setting, so turning animations back on
     // sets it going again.
@@ -158,7 +157,7 @@ public sealed class RailPattern : Control
         if (moving && !ticker.IsEnabled)
         {
             // From where it stopped, so starting again doesn't jump.
-            clock.Restart();
+            movingSince = MotionClock.Timestamp;
             motionCheckedAt = 0;
             startedAt = offset;
             ticker.Start();
@@ -179,16 +178,17 @@ public sealed class RailPattern : Control
     {
         // Animations turned off in Windows while it drifts: it stops where it is, and waits for them to come back. Looked
         // at twice a second, as the watcher does, not every frame.
-        if (clock.ElapsedMilliseconds - motionCheckedAt >= 500)
+        TimeSpan elapsed = MotionClock.Since(movingSince);
+        if ((long)elapsed.TotalMilliseconds - motionCheckedAt >= 500)
         {
-            motionCheckedAt = clock.ElapsedMilliseconds;
+            motionCheckedAt = (long)elapsed.TotalMilliseconds;
             if (Motion.Reduced)
             {
                 Restart();
                 return;
             }
         }
-        offset = (startedAt + clock.Elapsed.TotalSeconds * Speed) % Repeat;
+        offset = (startedAt + elapsed.TotalSeconds * Speed) % Repeat;
         Place();
     }
 
