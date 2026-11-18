@@ -10,20 +10,23 @@
 //     CS_GatherScatteringVolume and added up by CS_AccumulateScatteringVolume): over a 64 by 36 grid of the frame, each
 //     cell's ray in 64 slices out to the far clip, finer near the camera; at each, the fog's density, its timecycle
 //     density times (1 - saturate((height - its height) / its falloff))^3, lighting it with the key light through
-//     Henyey-Greenstein's phase by its anisotropy and the sky's ambient (its ambient cube's mean) by their tints, plus its
-//     fill ambient; each slice's light added as (S - S T) / density times the transmittance before it.
+//     Henyey-Greenstein's phase by its anisotropy, less where the sun's shadow falls (the sunbeams between the shadows of
+//     hills and trees), the shadow lifted by the timecycle's fog shadow amount as the game's shadow volume eases it
+//     back towards the light (CS_GatherShadowVolume), and the sky's ambient (its ambient cube's mean) by their
+//     tints, plus its fill ambient; each slice's light added as (S - S T) / density times the transmittance before it.
+//     The shadow is the world's (light.wgsl's cascades), at each slice's middle.
 //   - Over the frame, where something's drawn: its colour times the transmittance from the camera to it, then the light
 //     scattered in on the way, from the slices its distance falls at: the fog's in front of the air's.
 // In the game's own units, as its world and sky are drawn in. Put after scene.wgsl, rdr2_atmosphere.wgsl and
-// rdr2_sky.wgsl.
+// rdr2_sky.wgsl; the fog's pass after light.wgsl too, its light group at group 2.
 
-@group(2) @binding(0) var aerial_transmittance_out: texture_storage_3d<rgba16float, write>;
-@group(2) @binding(1) var aerial_inscatter_out: texture_storage_3d<rgba16float, write>;
-@group(2) @binding(2) var fog_transmittance_out: texture_storage_3d<rgba16float, write>;
-@group(2) @binding(3) var fog_inscatter_out: texture_storage_3d<rgba16float, write>;
+@group(3) @binding(0) var aerial_transmittance_out: texture_storage_3d<rgba16float, write>;
+@group(3) @binding(1) var aerial_inscatter_out: texture_storage_3d<rgba16float, write>;
+@group(3) @binding(2) var fog_transmittance_out: texture_storage_3d<rgba16float, write>;
+@group(3) @binding(3) var fog_inscatter_out: texture_storage_3d<rgba16float, write>;
 
 const RDR2_AERIAL_SIZE: u32 = 32u;
-const RDR2_FOG_GRID: vec3u = vec3u(64u, 36u, 64u);
+const RDR2_FOG_GRID: vec3u = vec3u(128u, 72u, 64u);
 // The fog's slices: the distance at a fraction t of the way out is RDR2_FOG_NEAR ((1 + far / RDR2_FOG_NEAR)^t - 1).
 const RDR2_FOG_NEAR: f32 = 32.0;
 // The most a half float holds, which the light scattered in is kept to.
@@ -42,6 +45,33 @@ fn rdr2_fog_density(height: f32) -> f32 {
     let fog = dome.night.fog[0];
     let thinned = 1.0 - saturate((height - fog.y) * fog.z);
     return fog.x * thinned * thinned * thinned;
+}
+
+// How much of the sun reaches a place relative to the scene's origin, this far along the view: the world's shadow
+// there, a single compare in the first cascade that reaches it; all of it outside them, or without shadows.
+fn rdr2_fog_sun_shadow(place: vec3f, distance: f32) -> f32 {
+    if (light.shadow_parameters.w < 0.5) {
+        return 1.0;
+    }
+    var cascade = 3u;
+    if (distance < light.shadow_splits.z) {
+        cascade = 2u;
+    }
+    if (distance < light.shadow_splits.y) {
+        cascade = 1u;
+    }
+    if (distance < light.shadow_splits.x) {
+        cascade = 0u;
+    }
+    if (distance >= light.shadow_splits.w) {
+        return 1.0;
+    }
+    let clip = light.shadow[cascade] * vec4f(place, 1.0);
+    let uvz = vec3f(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5, clip.z);
+    if (any(uvz.xy <= vec2f(0.0)) || any(uvz.xy >= vec2f(1.0)) || uvz.z >= 1.0 || uvz.z <= 0.0) {
+        return 1.0;
+    }
+    return textureSampleCompareLevel(shadow_map, shadow_compare, uvz.xy, i32(cascade), uvz.z);
 }
 
 // Henyey-Greenstein's phase, as the game's: (1 - g^2) / (1 + g^2 - 2 g cos)^1.5 over 4 pi.
@@ -67,7 +97,12 @@ fn cs_rdr2_fog(@builtin(global_invocation_id) id: vec3u) {
     for (var face = 1; face < 7; face++) {
         ambient += sky_light[face].rgb;
     }
-    let lit = key + ambient / 6.0 * fog[2].rgb + fog[3].rgb;
+    let ambient_lit = ambient / 6.0 * fog[2].rgb + fog[3].rgb;
+    // Where the slices are relative to the scene's origin, for the sun's shadow.
+    let eye = night.relative_camera.xyz;
+    let along = dot(view, night.rays[0].xyz);
+    // The sun's shadow in the fog, lifted by the timecycle's amount; none from the moon.
+    let shadowed = select(0.0, 1.0 - fog[1].w, night.key_light.w > 0.5);
     var transmittance = 1.0;
     var inscattered = vec3f(0.0);
     var behind = 0.0;
@@ -76,6 +111,8 @@ fn cs_rdr2_fog(@builtin(global_invocation_id) id: vec3u) {
         let middle = (behind + ahead) * 0.5;
         let density = rdr2_fog_density(night.camera.z + view.z * middle);
         let through = exp(-density * (ahead - behind));
+        let sunlit = 1.0 - shadowed * (1.0 - rdr2_fog_sun_shadow(eye + view * middle, middle * along));
+        let lit = key * sunlit + ambient_lit;
         // (S - S T) / density, S the light scattered in a metre: density times what lights it.
         inscattered += lit * (1.0 - through) * transmittance;
         transmittance *= through;

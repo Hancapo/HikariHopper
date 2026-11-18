@@ -32,8 +32,8 @@ internal sealed unsafe partial class ViewportRenderer
     // The aerial perspective's grid: 32 by 32 over the frame, 32 slices out to its far clip.
     private static readonly Extent3D Rdr2AerialSize = new(32, 32, 32);
 
-    // The height fog's: 64 by 36 over the frame, 64 slices out to the far clip.
-    private static readonly Extent3D Rdr2FogSize = new(64, 36, 64);
+    // The height fog's: 128 by 72 over the frame, 64 slices out to the far clip.
+    private static readonly Extent3D Rdr2FogSize = new(128, 72, 64);
 
     // Which of the gathered light's sums the last order was added into, as the orders are always as many.
     private const int Rdr2GatheredSum = (Rdr2Sky.Orders - 2) % 2;
@@ -46,8 +46,10 @@ internal sealed unsafe partial class ViewportRenderer
     private ComputePipeline? rdr2TransmittancePipeline, rdr2SinglePipeline, rdr2GatherPipeline, rdr2OrderPipeline, rdr2AccumulatePipeline;
     private RenderPipeline? rdr2DomePipeline;
     private ComputePipeline? rdr2SkyLightPipeline, rdr2AerialPipeline, rdr2FogPipeline;
-    private BindGroupLayout? rdr2NothingLayout, rdr2AerialOutLayout, rdr2AerialApplyLayout;
-    private BindGroup? rdr2Nothing, rdr2AerialApply;
+    private BindGroupLayout? rdr2NothingLayout, rdr2AerialOutLayout, rdr2AerialApplyLayout, rdr2FogLightLayout;
+    private BindGroup? rdr2Nothing, rdr2AerialApply, rdr2FogLight;
+    // The shadow map the fog's light group reads, made again only when the map is (its resolution).
+    private TextureView? rdr2FogShadow;
     private RenderPipeline? rdr2AerialTransmittancePipeline, rdr2AerialInscatterPipeline;
     // The depth the aerial perspective's apply group reads, made again only when the depth is (a resize).
     private TextureView? rdr2AerialDepth;
@@ -140,6 +142,13 @@ internal sealed unsafe partial class ViewportRenderer
         }, Table(11, TextureViewDimension.D3, ShaderStage.Fragment), Table(12, TextureViewDimension.D3, ShaderStage.Fragment),
             Table(13, TextureViewDimension.D3, ShaderStage.Fragment), Table(14, TextureViewDimension.D3, ShaderStage.Fragment));
         rdr2NothingLayout = Layout();
+        // The world's light and its shadow, for the fog's sunbeams.
+        rdr2FogLightLayout = Layout(Constants(0, Compute, LightBytes), new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = Compute,
+            Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2Array },
+        }, new BindGroupLayoutEntry { Binding = 2, Visibility = Compute, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } });
         rdr2Nothing = device.CreateBindGroup(new BindGroupDescriptor { Layout = rdr2NothingLayout, Entries = [] });
 
         Lazy<ShaderModule> tables = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
@@ -167,16 +176,23 @@ internal sealed unsafe partial class ViewportRenderer
         }));
         Lazy<ShaderModule> aerial = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("scene.wgsl") + "\n" + Read("rdr2_atmosphere.wgsl") + "\n" + Read("rdr2_sky.wgsl") + "\n" + Read("rdr2_aerial.wgsl"),
+            Code = Read("scene.wgsl") + "\n" + Read("light.wgsl") + "\n" + Read("rdr2_atmosphere.wgsl") + "\n" + Read("rdr2_sky.wgsl") + "\n"
+                + Read("rdr2_aerial.wgsl"),
         }));
         rdr2AerialPipeline = gpu.Compute("rdr2-sky/aerial", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
-            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2AerialOutLayout] }),
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
+            {
+                BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2NothingLayout, rdr2AerialOutLayout],
+            }),
             Compute = new ComputeState { Module = aerial.Value, EntryPoint = "cs_rdr2_aerial" },
         }));
         rdr2FogPipeline = gpu.Compute("rdr2-sky/fog", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
-            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2AerialOutLayout] }),
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor
+            {
+                BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2FogLightLayout, rdr2AerialOutLayout],
+            }),
             Compute = new ComputeState { Module = aerial.Value, EntryPoint = "cs_rdr2_fog" },
         }));
         // The frame times the transmittance, then plus the light scattered in; colour alone, the sky's cover kept.
@@ -368,6 +384,7 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2Values[Rdr2Sky.CameraRays] = new Vector4(Camera.Forward, sky.Sky.AerialFarClip);
         rdr2Values[Rdr2Sky.CameraRays + 1] = new Vector4(Camera.Right * (Aspect * OrbitCamera.TanHalf), 0);
         rdr2Values[Rdr2Sky.CameraRays + 2] = new Vector4(Camera.Up * OrbitCamera.TanHalf, Camera.Near);
+        rdr2Values[Rdr2Sky.RelativeCamera] = new Vector4(Camera.Eye - origin, 0);
         queue.WriteBuffer(sky.Dome, 0, (ReadOnlySpan<Vector4>)rdr2Values);
         if (!rdr2TablesBuilt || !Rdr2Sky.SameTables(rdr2Values, rdr2Built))
             BuildRdr2SkyTables(encoder, sky);
@@ -379,10 +396,12 @@ internal sealed unsafe partial class ViewportRenderer
         light.DispatchWorkgroups(1, 1, 1);
         // The aerial perspective's grid, from the camera.
         light.SetPipeline(rdr2AerialPipeline!);
-        light.SetBindGroup(2, sky.AerialOut);
+        light.SetBindGroup(2, rdr2Nothing!);
+        light.SetBindGroup(3, sky.AerialOut);
         light.DispatchWorkgroups(Rdr2AerialSize.Width / 8, Rdr2AerialSize.Height / 8, 1);
         // And the height fog's, lit by the sky's light just worked out.
         light.SetPipeline(rdr2FogPipeline!);
+        light.SetBindGroup(2, Rdr2FogLight());
         light.DispatchWorkgroups((Rdr2FogSize.Width + 7) / 8, (Rdr2FogSize.Height + 7) / 8, 1);
         light.End();
         encoder.CopyBufferToBuffer(sky.Light, 0, lightBuffer!, LightWrittenBytes, Rdr2SkyLightBytes);
@@ -444,6 +463,26 @@ internal sealed unsafe partial class ViewportRenderer
             Groups(Rdr2ScatteringSize.Height, 4), Groups(Rdr2ScatteringSize.DepthOrArrayLayers, 4));
         static void DispatchGathered(ComputePassEncoder pass) => pass.DispatchWorkgroups(Groups(Rdr2GatherSize.Width, 4),
             Groups(Rdr2GatherSize.Height, 4), Groups(Rdr2GatherSize.DepthOrArrayLayers, 4));
+    }
+
+    // The fog's light group: the world's light and its shadow map, made again only when the map is.
+    private BindGroup Rdr2FogLight()
+    {
+        if (rdr2FogLight is null || !ReferenceEquals(rdr2FogShadow, shadowView))
+        {
+            rdr2FogShadow = shadowView;
+            rdr2FogLight = device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = rdr2FogLightLayout!,
+                Entries =
+                [
+                    new BindGroupEntry { Binding = 0, Buffer = lightBuffer!, Size = LightBytes },
+                    new BindGroupEntry { Binding = 1, TextureView = shadowView! },
+                    new BindGroupEntry { Binding = 2, Sampler = shadowCompare! },
+                ],
+            });
+        }
+        return rdr2FogLight;
     }
 
     /// <summary>Whether the aerial perspective is laid over the world's solid surfaces: an RDR2 world shown with its sky.</summary>

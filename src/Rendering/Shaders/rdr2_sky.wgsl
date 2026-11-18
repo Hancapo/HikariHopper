@@ -60,9 +60,11 @@ struct Rdr2Night {
     // frame's edge, the latter with the near plane.
     rays: array<vec4f, 3>,
     // The height fog (the local atmosphere's): its density a metre, the height it's thickest below and one over the
-    // height it thins out over, its anisotropy; the tints of the key light and of the sky's ambient through it, and its
-    // fill ambient.
+    // height it thins out over, its anisotropy; the tint of the key light through it, with how much the sun's shadow in
+    // it is lifted; the tint of the sky's ambient through it, and its fill ambient.
     fog: array<vec4f, 4>,
+    // The camera relative to the scene's origin, where the world's shadow is cast from.
+    relative_camera: vec4f,
 };
 
 struct Rdr2Dome {
