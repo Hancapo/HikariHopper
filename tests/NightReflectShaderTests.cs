@@ -136,7 +136,7 @@ public sealed class NightReflectShaderTests
 
     // The square drawn from above at the centre of a small view at an hour; the centre's colour, and whether the frame
     // raised no GPU error.
-    private static (byte R, byte G, byte B) Centre(byte[]? ydr, float hours)
+    internal static (byte R, byte G, byte B) Centre(byte[]? ydr, float hours)
     {
         GpuDevice gpu = TestGpu.Device();
         const int Size = 64;

@@ -411,6 +411,13 @@ internal sealed partial class SurfaceMaterial
         u[15] = result.Vehicle ? 1 : 0;
         // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
         u[41] = 1;
+        // The _texdecal and _vertdecal shaders' decal, DiffuseSampler2 on the second UV set, over the diffuse by its own
+        // alpha or by one less the vertex colour's.
+        if (!result.Vehicle && result.DiffuseLayer is not null && Pattern(shader, "overlay") is { } overlay)
+        {
+            u[42] = overlay == "vertex" ? 2 : 1;
+            u[43] = 1;
+        }
         // The _pxm shaders' parallax: heightScale, heightBias and parallaxSelfShadowAmount (the decals' programs cast no
         // self-shadow); globalHeightScale, which the game leaves at one.
         if (Pattern(shader, "parallax") == "true" && result.Height is not null)
