@@ -138,6 +138,21 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void The_height_fog_is_the_local_atmospheres_from_the_timecycle()
+    {
+        Rdr2Sky sky = Sky(("local_atmosphere_fog_density", [.0005f]), ("local_atmosphere_fog_height", [100]), ("local_atmosphere_fog_falloff", [500]),
+            ("local_atmosphere_anisotropy_high_density", [.9f]), ("local_atmosphere_sky_col_r", [.5f]), ("local_atmosphere_sky_intensity", [2]),
+            ("local_atmosphere_fill_ambient_light_color_b", [.2f]), ("local_atmosphere_fill_ambient_light_intensity", [1]));
+        var values = new Vector4[Rdr2Sky.Vectors];
+        sky.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
+        // Its density, the height it's thickest below, one over its falloff, its anisotropy.
+        Assert.Equal(new Vector4(.0005f, 100, 1 / 500f, .9f), values[Rdr2Sky.Fog]);
+        // The sky's ambient through it by its colour and intensity; its fill over a thousand, as the air glow's.
+        Assert.Equal(new Vector3(1, 2, 2), new Vector3(values[Rdr2Sky.Fog + 2].X, values[Rdr2Sky.Fog + 2].Y, values[Rdr2Sky.Fog + 2].Z));
+        Assert.Equal(.2f / 1000, values[Rdr2Sky.Fog + 3].Z, 7);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
 

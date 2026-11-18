@@ -32,6 +32,9 @@ internal sealed unsafe partial class ViewportRenderer
     // The aerial perspective's grid: 32 by 32 over the frame, 32 slices out to its far clip.
     private static readonly Extent3D Rdr2AerialSize = new(32, 32, 32);
 
+    // The height fog's: 64 by 36 over the frame, 64 slices out to the far clip.
+    private static readonly Extent3D Rdr2FogSize = new(64, 36, 64);
+
     // Which of the gathered light's sums the last order was added into, as the orders are always as many.
     private const int Rdr2GatheredSum = (Rdr2Sky.Orders - 2) % 2;
 
@@ -42,7 +45,7 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroupLayout? rdr2TransmittanceLayout, rdr2SingleLayout, rdr2GatherLayout, rdr2OrderLayout, rdr2AccumulateLayout, rdr2DomeLayout;
     private ComputePipeline? rdr2TransmittancePipeline, rdr2SinglePipeline, rdr2GatherPipeline, rdr2OrderPipeline, rdr2AccumulatePipeline;
     private RenderPipeline? rdr2DomePipeline;
-    private ComputePipeline? rdr2SkyLightPipeline, rdr2AerialPipeline;
+    private ComputePipeline? rdr2SkyLightPipeline, rdr2AerialPipeline, rdr2FogPipeline;
     private BindGroupLayout? rdr2NothingLayout, rdr2AerialOutLayout, rdr2AerialApplyLayout;
     private BindGroup? rdr2Nothing, rdr2AerialApply;
     private RenderPipeline? rdr2AerialTransmittancePipeline, rdr2AerialInscatterPipeline;
@@ -127,13 +130,15 @@ internal sealed unsafe partial class ViewportRenderer
                 Visibility = ShaderStage.Compute,
                 Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage, MinBindingSize = Rdr2SkyLightBytes },
             }, Table(9, TextureViewDimension.D3, Fragment));
-        rdr2AerialOutLayout = Layout(Output(0, TextureViewDimension.D3), Output(1, TextureViewDimension.D3));
+        rdr2AerialOutLayout = Layout(Output(0, TextureViewDimension.D3), Output(1, TextureViewDimension.D3), Output(2, TextureViewDimension.D3),
+            Output(3, TextureViewDimension.D3));
         rdr2AerialApplyLayout = Layout(Constants(0, ShaderStage.Fragment, Rdr2Sky.Bytes), Filtering(1, ShaderStage.Fragment), new BindGroupLayoutEntry
         {
             Binding = 10,
             Visibility = ShaderStage.Fragment,
             Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
-        }, Table(11, TextureViewDimension.D3, ShaderStage.Fragment), Table(12, TextureViewDimension.D3, ShaderStage.Fragment));
+        }, Table(11, TextureViewDimension.D3, ShaderStage.Fragment), Table(12, TextureViewDimension.D3, ShaderStage.Fragment),
+            Table(13, TextureViewDimension.D3, ShaderStage.Fragment), Table(14, TextureViewDimension.D3, ShaderStage.Fragment));
         rdr2NothingLayout = Layout();
         rdr2Nothing = device.CreateBindGroup(new BindGroupDescriptor { Layout = rdr2NothingLayout, Entries = [] });
 
@@ -168,6 +173,11 @@ internal sealed unsafe partial class ViewportRenderer
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2AerialOutLayout] }),
             Compute = new ComputeState { Module = aerial.Value, EntryPoint = "cs_rdr2_aerial" },
+        }));
+        rdr2FogPipeline = gpu.Compute("rdr2-sky/fog", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout, rdr2AerialOutLayout] }),
+            Compute = new ComputeState { Module = aerial.Value, EntryPoint = "cs_rdr2_fog" },
         }));
         // The frame times the transmittance, then plus the light scattered in; colour alone, the sky's cover kept.
         RenderPipeline Apply(string entry, BlendState blend) => gpu.Pipeline($"rdr2-sky/{entry}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
@@ -270,14 +280,14 @@ internal sealed unsafe partial class ViewportRenderer
         WebGpuSharp.Texture transmittance = Table(Rdr2TransmittanceSize), delta = Table(Rdr2ScatteringSize, TextureUsage.CopySrc),
             gathered = Table(Rdr2GatherSize, TextureUsage.CopySrc);
         WebGpuSharp.Texture[] gatheredSums = [Table(Rdr2GatherSize, TextureUsage.CopyDst), Table(Rdr2GatherSize, TextureUsage.CopyDst)];
-        WebGpuSharp.Texture[] aerial = [Table(Rdr2AerialSize), Table(Rdr2AerialSize)];
+        WebGpuSharp.Texture[] aerial = [Table(Rdr2AerialSize), Table(Rdr2AerialSize), Table(Rdr2FogSize), Table(Rdr2FogSize)];
         WebGpuSharp.Texture[] totals = [Table(Rdr2ScatteringSize, TextureUsage.CopyDst), Table(Rdr2ScatteringSize, TextureUsage.CopyDst)];
         Buffer tables = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.TableBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         Buffer dome = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.Bytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         TextureView transmittanceView = transmittance.CreateView(), deltaView = delta.CreateView(), gatheredView = gathered.CreateView();
         TextureView[] totalViews = [totals[0].CreateView(), totals[1].CreateView()];
         TextureView[] sumViews = [gatheredSums[0].CreateView(), gatheredSums[1].CreateView()];
-        TextureView[] aerialViews = [aerial[0].CreateView(), aerial[1].CreateView()];
+        TextureView[] aerialViews = [.. aerial.Select(texture => texture.CreateView())];
         BindGroup Group(BindGroupLayout layout, params BindGroupEntry[] entries) =>
             device.CreateBindGroup(new BindGroupDescriptor { Layout = layout, Entries = entries });
         BindGroupEntry Uniform(Buffer buffer, ulong size = Rdr2Sky.TableBytes) => new() { Binding = 0, Buffer = buffer, Size = size };
@@ -299,7 +309,8 @@ internal sealed unsafe partial class ViewportRenderer
             Group(rdr2AccumulateLayout!, Uniform(tables), View(3, sumViews[0]), View(4, gatheredView), View(6, sumViews[1])),
             Group(rdr2AccumulateLayout!, Uniform(tables), View(3, sumViews[1]), View(4, gatheredView), View(6, sumViews[0])),
         ];
-        BindGroup aerialOut = Group(rdr2AerialOutLayout!, View(0, aerialViews[0]), View(1, aerialViews[1]));
+        BindGroup aerialOut = Group(rdr2AerialOutLayout!, View(0, aerialViews[0]), View(1, aerialViews[1]), View(2, aerialViews[2]),
+            View(3, aerialViews[3]));
         // The game's dome and its textures, or a sphere where its files haven't them, with nothing on it.
         Rdr2SkyDome shape = sky.Dome ?? Rdr2SkyDome.Sphere();
         var owned = new List<WebGpuSharp.Texture>();
@@ -370,6 +381,9 @@ internal sealed unsafe partial class ViewportRenderer
         light.SetPipeline(rdr2AerialPipeline!);
         light.SetBindGroup(2, sky.AerialOut);
         light.DispatchWorkgroups(Rdr2AerialSize.Width / 8, Rdr2AerialSize.Height / 8, 1);
+        // And the height fog's, lit by the sky's light just worked out.
+        light.SetPipeline(rdr2FogPipeline!);
+        light.DispatchWorkgroups((Rdr2FogSize.Width + 7) / 8, (Rdr2FogSize.Height + 7) / 8, 1);
         light.End();
         encoder.CopyBufferToBuffer(sky.Light, 0, lightBuffer!, LightWrittenBytes, Rdr2SkyLightBytes);
         return true;
@@ -456,6 +470,8 @@ internal sealed unsafe partial class ViewportRenderer
                     new BindGroupEntry { Binding = 10, TextureView = hdrDepthView! },
                     new BindGroupEntry { Binding = 11, TextureView = sky.AerialViews[0] },
                     new BindGroupEntry { Binding = 12, TextureView = sky.AerialViews[1] },
+                    new BindGroupEntry { Binding = 13, TextureView = sky.AerialViews[2] },
+                    new BindGroupEntry { Binding = 14, TextureView = sky.AerialViews[3] },
                 ],
             });
         }
