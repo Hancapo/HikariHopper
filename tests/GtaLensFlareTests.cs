@@ -231,21 +231,18 @@ public sealed class GtaLensFlareTests
     {
         string root = TestGames.Legacy();
         string executable = Path.Combine(root, File.Exists(Path.Combine(root, "GTA5.exe")) ? "GTA5.exe" : "GTA5_Enhanced.exe");
-        GtaWorldIndex index = GtaWorldIndex.Build(root, new Rpf7Keys(GameKeys.Load(executable)), _ => { }, CancellationToken.None);
-        try
-        {
-            GtaLensFlare flare = index.LoadLensFlare()!;
-            Assert.Equal(114, flare.Settings.Elements.Length);
-            Assert.Equal(.4f, flare.Settings.SunVisibilityFactor);
-            Assert.Equal(.5f, flare.Settings.SunFogFactor);
-            Assert.All(flare.Textures, Assert.NotNull);
-            Assert.Equal((256, 512), (flare.Textures[GtaLensFlare.Artefact]!.Width, flare.Textures[GtaLensFlare.Artefact]!.Height));
-            Assert.Contains(flare.Settings.Elements, element => element.Texture == GtaLensFlare.Chromatic);
-        }
-        finally
-        {
-            index.Game.Dispose();
-        }
+        // Its own two files, as the world index reads them, without making the whole world's index.
+        var keys = new Rpf7Keys(GameKeys.Load(executable));
+        FiveFury.GameTarget target = executable.EndsWith("GTA5.exe", StringComparison.OrdinalIgnoreCase) ? FiveFury.GameTarget.Legacy : FiveFury.GameTarget.Enhanced;
+        using var game = FiveFury.Assets.GameInstallation.Open(root, target, keys.Crypto,
+            new FiveFury.Assets.GameInstallationOptions { DlcLevel = FiveFury.Assets.DlcLevel.Base });
+        GtaLensFlare flare = GtaWorldIndex.ReadLensFlare(game.FileSystem, GameVisualSettings.Read(new LoadedGame(root, target, keys.Crypto)))!;
+        Assert.Equal(114, flare.Settings.Elements.Length);
+        Assert.Equal(.4f, flare.Settings.SunVisibilityFactor);
+        Assert.Equal(.5f, flare.Settings.SunFogFactor);
+        Assert.All(flare.Textures, Assert.NotNull);
+        Assert.Equal((256, 512), (flare.Textures[GtaLensFlare.Artefact]!.Width, flare.Textures[GtaLensFlare.Artefact]!.Height));
+        Assert.Contains(flare.Settings.Elements, element => element.Texture == GtaLensFlare.Chromatic);
     }
 
     [Fact]

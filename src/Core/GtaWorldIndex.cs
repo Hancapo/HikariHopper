@@ -317,14 +317,17 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// </summary>
     public override GtaLensFlare? LoadLensFlare()
     {
+        lock (Gate)
+            return ReadLensFlare(Game.FileSystem, visuals);
+    }
+
+    /// <summary>The sun's lens flare (<see cref="LoadLensFlare"/>) from a game's files, with its visualsettings.dat's settings.</summary>
+    internal static GtaLensFlare? ReadLensFlare(GameFileSystem files, GameVisualSettings? visuals)
+    {
         try
         {
-            byte[]? settings, textures;
-            lock (Gate)
-            {
-                settings = Game.FileSystem.Resolve("common:/data/lensflare_m.xml").Value?.ReadStandalone();
-                textures = Game.FileSystem.Resolve("platform:/textures/graphics.ytd", GameFileType.Ytd).Value?.ReadStandalone();
-            }
+            byte[]? settings = files.Resolve("common:/data/lensflare_m.xml").Value?.ReadStandalone();
+            byte[]? textures = files.Resolve("platform:/textures/graphics.ytd", GameFileType.Ytd).Value?.ReadStandalone();
             if (settings is null)
                 return null;
             return new GtaLensFlare(GtaLensFlareSettings.Parse(System.Text.Encoding.UTF8.GetString(settings)), GtaLensFlareVisuals.From(visuals),
