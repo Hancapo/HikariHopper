@@ -1,12 +1,11 @@
-// Drawables' HDR colour to the display, as GTA V's post-process does it: the exposure from the frame's measured mean
-// luminance (exposure.wgsl) through PS_CalculateExposure's curve and the timecycle's range, the bloom (bloom.wgsl)
+// Drawables' HDR colour to the display, as GTA V's post-process does it: the exposure exposure.wgsl works out
+// (PS_CalculateExposure's, eased over the frames towards what the frame's mean luminance asks for), the bloom (bloom.wgsl)
 // added as PS_Composite adds it, then PS_Composite's filmic curve (Hable's, visualsettings.dat's bright and dark settings, blended by the exposure) scaled so its white
 // point is one. The game's colour correction, shift and desaturation are neutral in clear weather. Then its gamma:
 // the game raises the colour to its Gamma itself (one over 2.2 at the brightness slider's middle) for a plain 8-bit
 // target. Its dither is the window's, once the frame is done (present.wgsl). The HDR target holds premultiplied colour and coverage, so
 // this is blended over what is already drawn (the backdrop) where there is a drawable; past its edges, its glow is
-// added over the backdrop. The game also eases the exposure towards its target over time; here it is the target at
-// once.
+// added over the backdrop.
 // Scene and the colour helpers come from scene.wgsl, the light from light.wgsl.
 
 @group(1) @binding(0) var hdr_texture: texture_2d<f32>;
@@ -38,7 +37,8 @@ fn filmic(x: vec3f, p0: vec4f, p1: vec4f) -> vec3f {
 
 @fragment
 fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let stops = exposure_stops(frame_mean[0]);
+    // The exposure exposure.wgsl eased towards the frame's.
+    let stops = frame_mean[1];
     let t = filmic_blend(stops);
     let p0 = mix(light.filmic_bright0, light.filmic_dark0, t);
     let p1 = mix(light.filmic_bright1, light.filmic_dark1, t);

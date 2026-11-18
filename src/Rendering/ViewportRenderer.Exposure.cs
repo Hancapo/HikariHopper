@@ -1,17 +1,42 @@
+using System.Numerics;
 using WebGpuSharp;
 using Buffer = WebGpuSharp.Buffer;
 
 namespace HikariHopper.Rendering;
 
-// The mean luminance the tone map turns into GTA's exposure (exposure.wgsl): of a fixed view of the world at the hour
-// shown, all round the horizon, not of the frame, so where the camera is doesn't change it. Measured each frame, laid
-// out over the frame's size: per 16 by 16 tile, then their sum.
+// The exposure, as GTA V's post-process works it out (exposure.wgsl): a world's frame measured as it is, the viewer's
+// fixed view of the world at the hour shown; the target from the mean, and the exposure eased towards it over the
+// frames, as PS_CalculateExposure does. Laid out over the frame's size: per 16 by 16 tile, then their sum and the
+// exposure, which stays on the GPU from frame to frame.
 internal sealed unsafe partial class ViewportRenderer
 {
     private const int MeasuredBytes = 16;
     private const uint LuminanceTile = 16;
+    private const int ExposureSettingsBytes = 64;
 
-    private Buffer? measured, partialSums, frameSkyBuffer;
+    /// <summary>How many frames' times the exposure's easing averages, as the game's post-process does.</summary>
+    internal const int AdaptationFrames = 30;
+
+    /// <summary>
+    /// A camera moving this far in one frame has cut, and the exposure takes its target at once, as the game's does at a
+    /// camera cut.
+    /// </summary>
+    internal const float ExposureCutDistance = 250;
+
+    private Buffer? measured, partialSums, frameSkyBuffer, exposureSettings;
+    private readonly float[] frameTimes = new float[AdaptationFrames];
+    private int frameTimeCount, frameTimeNext;
+    private bool exposureReset = true, exposureWasWorld;
+    private Vector3? lastExposureEye;
+
+    /// <summary>
+    /// The time since the last frame, in seconds, which the exposure eases over; none (the default, and a test's) takes
+    /// the target exposure at once on that frame.
+    /// </summary>
+    public float FrameSeconds { get; set; }
+
+    /// <summary>Takes the target exposure at once on the next frame, as the game does at a camera cut.</summary>
+    public void ResetExposure() => exposureReset = true;
     private BindGroupLayout? exposureLayout;
     private BindGroup? exposureGroup;
     private ComputePipeline? luminancePipeline, meanPipeline;
@@ -19,6 +44,7 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateExposure()
     {
         measured = device.CreateBuffer(new BufferDescriptor { Size = MeasuredBytes, Usage = BufferUsage.Storage | BufferUsage.CopySrc });
+        exposureSettings = device.CreateBuffer(new BufferDescriptor { Size = ExposureSettingsBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         frameSkyBuffer = device.CreateBuffer(new BufferDescriptor { Size = SkyBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         exposureLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
         {
@@ -42,6 +68,12 @@ internal sealed unsafe partial class ViewportRenderer
                     Binding = 3,
                     Visibility = ShaderStage.Compute,
                     Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage, MinBindingSize = MeasuredBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 4,
+                    Visibility = ShaderStage.Compute,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = ExposureSettingsBytes },
                 },
             ],
         });
@@ -79,6 +111,7 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 1, Buffer = partialSums, Size = partialSums.GetSize() },
                 new BindGroupEntry { Binding = 2, Buffer = frameSkyBuffer!, Size = SkyBytes },
                 new BindGroupEntry { Binding = 3, Buffer = measured!, Size = MeasuredBytes },
+                new BindGroupEntry { Binding = 4, Buffer = exposureSettings!, Size = ExposureSettingsBytes },
             ],
         });
     }
@@ -97,9 +130,69 @@ internal sealed unsafe partial class ViewportRenderer
         return mean;
     }
 
-    /// <summary>Measures the world's light at the hour shown, for the tone map that follows.</summary>
+    /// <summary>The mean luminance, the exposure and its target last worked out, read back, for tests.</summary>
+    internal (float Mean, float Exposure, float Target) MeasuredExposure()
+    {
+        Buffer readback = device.CreateBuffer(new BufferDescriptor { Size = MeasuredBytes, Usage = BufferUsage.CopyDst | BufferUsage.MapRead });
+        CommandEncoder encoder = device.CreateCommandEncoder();
+        encoder.CopyBufferToBuffer(measured!, 0, readback, 0, MeasuredBytes);
+        queue.Submit(encoder.Finish());
+        readback.MapSync(MapMode.Read);
+        float[] values = readback.GetConstMappedRange<float[], float>(0, 3, span => span.ToArray());
+        readback.Unmap();
+        readback.Destroy();
+        return (values[0], values[1], values[2]);
+    }
+
+    // The frame time the exposure eases over: the mean of the last frames', as the game averages them; none for a frame
+    // given no time.
+    private float AverageFrameSeconds()
+    {
+        float seconds = FrameSeconds;
+        FrameSeconds = 0;
+        if (seconds <= 0)
+            return 0;
+        frameTimes[frameTimeNext] = seconds;
+        frameTimeNext = (frameTimeNext + 1) % AdaptationFrames;
+        frameTimeCount = Math.Min(frameTimeCount + 1, AdaptationFrames);
+        float sum = 0;
+        for (int i = 0; i < frameTimeCount; i++)
+            sum += frameTimes[i];
+        return sum / frameTimeCount;
+    }
+
+    // What exposure.wgsl works the exposure out with this frame: a world's frame measured as it is and eased towards, the
+    // viewer's reference taken at once; the curve and the tweak (the timecycle's, the viewer's, and the push towards the
+    // sun the lens flare sees), the range, and how fast it eases.
+    private void WriteExposureSettings()
+    {
+        // GTA V's world, with its sky: an RDR2 world keeps the viewer's reference, as its own exposure isn't ported.
+        bool world = worldShown && HasWorldSky;
+        float dt = AverageFrameSeconds();
+        Vector3 eye = Camera.Eye;
+        bool cut = lastExposureEye is { } last && Vector3.Distance(last, eye) > ExposureCutDistance;
+        lastExposureEye = eye;
+        // The first frame of a world takes its target at once, as the game's first frame does.
+        bool reset = exposureReset || cut || !world || !exposureWasWorld;
+        exposureWasWorld = world;
+        exposureReset = false;
+        Span<Vector4> values = stackalloc Vector4[4];
+        values[0] = new Vector4(world ? 1 : 0, reset ? 1 : 0, dt, 0);
+        values[1] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure + SunExposurePush(reset));
+        values[2] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, 0, 0);
+        values[3] = new Vector4(toneMap.AdaptationStepMult, toneMap.AdaptationMaxStep, toneMap.AdaptationMinStep, 0);
+        queue.WriteBuffer(exposureSettings!, 0, (ReadOnlySpan<Vector4>)values);
+    }
+
+    // The game's push of the exposure when the camera looks at the sun: Adaptation.sun.exposure.tweak, by how much of the
+    // sun the lens flare sees, and by the directional light's intensity over 64; none on a reset, as the game's.
+    private float SunExposurePush(bool reset) =>
+        reset ? 0 : toneMap.SunExposureTweak * WorldSunVisibility * Math.Clamp(cycle.DirectionalIntensity / 64, 0, 1);
+
+    /// <summary>Measures the frame (or the viewer's reference) and works out the exposure, for the passes that follow.</summary>
     private void MeasureFrame(CommandEncoder encoder)
     {
+        WriteExposureSettings();
         var (x, y) = LuminanceTiles;
         ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetBindGroup(0, sceneGroup);

@@ -466,6 +466,8 @@ internal sealed partial class ViewportHost : NativeControlHost
                 float seconds = lastFrame == 0 ? 0 : (float)Math.Min(Stopwatch.GetElapsedTime(lastFrame, now).TotalSeconds, .25);
                 lastFrame = now;
                 Drawing?.Invoke(renderer, seconds);
+                // The exposure eases over the frames' times, as the game's does.
+                renderer.FrameSeconds = seconds;
                 renderer.Draw();
                 drew = true;
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)

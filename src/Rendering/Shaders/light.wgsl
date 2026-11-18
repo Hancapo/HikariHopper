@@ -177,14 +177,6 @@ fn gta_local_lights(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_
     return radiance;
 }
 
-// The exposure in stops for the frame's measured mean luminance (exposure.wgsl), as PS_CalculateExposure works it
-// out: scale * L^power + offset + the timecycle's exposure, kept in the timecycle's range.
-fn exposure_stops(mean: f32) -> f32 {
-    let curve = light.exposure_curve;
-    let range = light.exposure_range;
-    return clamp(curve.x * pow(max(mean, 1e-6), curve.y) + curve.z + curve.w, range.x, range.y);
-}
-
 // How far the filmic curve has moved from the bright one to the dark one at this exposure.
 fn filmic_blend(stops: f32) -> f32 {
     let range = light.exposure_range;

@@ -15,7 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
     // The counts in flight: the game's buffered occlusion queries (as many as it keeps on PC, for one GPU).
     private const int FlareReadbacks = 4;
 
-    // A count's readback: the pixels counted and the mean luminance the exposure came from, the frame it was drawn.
+    // A count's readback: the pixels counted and the exposure the frame was drawn with, the frame it was drawn.
     private const uint FlareReadbackBytes = 8;
 
     // The disc's fan: 22 triangles.
@@ -48,7 +48,7 @@ internal sealed unsafe partial class ViewportRenderer
     private long flareFrame, flareFirstFrame, flareResultFrame = -1;
     private uint flarePixelsCounted;
     private float flarePixelsExpected;
-    private float flareMeanLuminance;
+    private float flareExposureStops;
     private BindGroupLayout? flareVisibilityLayout, flareSpriteLayout;
     private BindGroup? flareVisibilityGroup;
     private TextureView? flareVisibilityDepth;
@@ -230,12 +230,12 @@ internal sealed unsafe partial class ViewportRenderer
                 continue;
             if (end == 1)
             {
-                (uint pixels, float mean) = readback.GetConstMappedRange<(uint, float), uint>(0, 2,
+                (uint pixels, float stops) = readback.GetConstMappedRange<(uint, float), uint>(0, 2,
                     span => (span[0], BitConverter.UInt32BitsToSingle(span[1])));
                 readback.Unmap();
                 long frame = flareReadbackFrames[i];
                 if (frame >= flareFirstFrame && frame > flareResultFrame)
-                    (flareResultFrame, flarePixelsCounted, flarePixelsExpected, flareMeanLuminance) = (frame, pixels, flareReadbackExpected[i], mean);
+                    (flareResultFrame, flarePixelsCounted, flarePixelsExpected, flareExposureStops) = (frame, pixels, flareReadbackExpected[i], stops);
             }
             flareReadbackStates[i] = FlareReadback.Free;
         }
@@ -254,11 +254,6 @@ internal sealed unsafe partial class ViewportRenderer
                 flareReadbacks[i]!.Map(MapMode.Read, flareReadbackCallbacks[i]);
             }
     }
-
-    // The exposure in stops the tone map took from this mean luminance (light.wgsl's exposure_stops).
-    private float ExposureStops(float mean) => Math.Clamp(
-        toneMap.ExposureScale * MathF.Pow(MathF.Max(mean, 1e-6f), toneMap.ExposurePower) + toneMap.ExposureOffset + cycle.Exposure + Exposure,
-        cycle.ExposureMin, cycle.ExposureMax);
 
     /// <summary>
     /// After the world's HDR pass, with its sky: the sun's visibility counted for a later frame, then the flare as the
@@ -316,7 +311,7 @@ internal sealed unsafe partial class ViewportRenderer
         Vector2? onScreen = GtaLensFlareState.ScreenPosition(sun, view);
         if (state.Advance(onScreen, seconds * 1000) && onScreen is { } place)
         {
-            float exposure = flareResultFrame >= 0 ? GtaLensFlareState.LinearExposure(ExposureStops(flareMeanLuminance), cycle.ExposureMin, cycle.ExposureMax) : 0;
+            float exposure = flareResultFrame >= 0 ? GtaLensFlareState.LinearExposure(flareExposureStops, cycle.ExposureMin, cycle.ExposureMax) : 0;
             int[] written = state.Build(flare.Values, place, tc.Colour("sky_sun_col"), aspect, exposure, step, seconds * 1000);
             queue.WriteBuffer(flare.Sprites, 0, (ReadOnlySpan<Vector4>)flare.Values);
             for (int texture = 0; texture < written.Length; texture++)
@@ -332,12 +327,12 @@ internal sealed unsafe partial class ViewportRenderer
         }
         pass.End();
 
-        // The count and the mean luminance the exposure came from, to be read back once they're done.
+        // The count and the exposure the tone map last took (exposure.wgsl's), to be read back once they're done.
         int slot = Array.IndexOf(flareReadbackStates, FlareReadback.Free);
         if (slot >= 0)
         {
             encoder.CopyBufferToBuffer(flarePixels!, 0, flareReadbacks[slot]!, 0, 4);
-            encoder.CopyBufferToBuffer(measured!, 0, flareReadbacks[slot]!, 4, 4);
+            encoder.CopyBufferToBuffer(measured!, 4, flareReadbacks[slot]!, 4, 4);
             flareReadbackStates[slot] = FlareReadback.Copied;
             flareReadbackFrames[slot] = flareFrame;
             flareReadbackExpected[slot] = expected;

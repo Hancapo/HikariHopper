@@ -31,13 +31,26 @@ public sealed class ToneMapVisualsTests
         Exposure.curve.scale	-106.200
         Exposure.curve.power	0.007
         Exposure.curve.offset	104.700
+
+        # Adaptation
+        Adaptation.min.step.size	0.15
+        Adaptation.max.step.size	3.0
+        Adaptation.step.size.mult	1.5
+        Adaptation.sun.exposure.tweak	-2.0
         """;
 
-    /// <summary>The tone map the game's own file gives, in both editions.</summary>
+    /// <summary>The tone map the game's own file gives, Legacy's (Enhanced's only differs in its smallest adaptation step).</summary>
     internal static GtaToneMapVisuals GameFile { get; } = GtaToneMapVisuals.From(GameVisualSettings.Parse(FileText));
 
     private static readonly GtaToneMapVisuals Expected = new(-106.2f, .007f, 104.7f,
-        new Filmic(.22f, .3f, .1f, .2f, .01f, .3f, 4), -.5f, new Filmic(.22f, .3f, .1f, .2f, 0, .3f, 4), 3);
+        new Filmic(.22f, .3f, .1f, .2f, .01f, .3f, 4), -.5f, new Filmic(.22f, .3f, .1f, .2f, 0, .3f, 4), 3)
+    {
+        // The exposure eases far slower than the game's code defaults (9 and 15), and is pulled down two stops at the sun.
+        AdaptationStepMult = 1.5f,
+        AdaptationMaxStep = 3,
+        AdaptationMinStep = .15f,
+        SunExposureTweak = -2,
+    };
 
     [Fact]
     public void The_tone_map_and_exposure_curve_are_read_from_visualsettings()
@@ -96,7 +109,8 @@ public sealed class ToneMapVisualsTests
         string enhanced = @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced";
         if (!File.Exists(Path.Combine(enhanced, "GTA5_Enhanced.exe")))
             Assert.Skip("No GTA V Enhanced installed.");
-        Assert.Equal(Expected, Read(enhanced, GameTarget.Enhanced));
+        // Enhanced's takes the target at once only for a step under 0.0001 stops a second, Legacy's under 0.15.
+        Assert.Equal(Expected with { AdaptationMinStep = .0001f }, Read(enhanced, GameTarget.Enhanced));
 
         static GtaToneMapVisuals Read(string root, GameTarget target)
         {

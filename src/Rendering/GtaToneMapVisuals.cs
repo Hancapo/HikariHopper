@@ -31,8 +31,33 @@ internal sealed record GtaToneMapVisuals(float ExposureScale, float ExposurePowe
             Curve("bright"),
             Get("Tonemapping.bright.filmic.exposure", -2),
             Curve("dark"),
-            Get("Tonemapping.dark.filmic.exposure", 1));
+            Get("Tonemapping.dark.filmic.exposure", 1))
+        {
+            AdaptationStepMult = Get("Adaptation.step.size.mult", 9),
+            AdaptationMaxStep = Get("Adaptation.max.step.size", 15),
+            AdaptationMinStep = Get("Adaptation.min.step.size", .15f),
+            SunExposureTweak = Get("Adaptation.sun.exposure.tweak", 0),
+        };
     }
+
+    /// <summary>
+    /// How fast PS_CalculateExposure moves the exposure towards its target: by the gap in stops times this, in stops a
+    /// second (Adaptation.step.size.mult), each frame's step at most <see cref="AdaptationMaxStep"/> stops a second, and
+    /// the target taken at once when the step would be no more than <see cref="AdaptationMinStep"/>.
+    /// </summary>
+    public float AdaptationStepMult { get; init; } = 9;
+
+    /// <summary>The most the exposure moves in a second, in stops (Adaptation.max.step.size).</summary>
+    public float AdaptationMaxStep { get; init; } = 15;
+
+    /// <summary>A step this small or smaller takes the target at once (Adaptation.min.step.size).</summary>
+    public float AdaptationMinStep { get; init; } = .15f;
+
+    /// <summary>
+    /// The stops the exposure is pushed by when the camera looks at the sun, times the lens flare's sun visibility and
+    /// the directional light's intensity over 64 (Adaptation.sun.exposure.tweak).
+    /// </summary>
+    public float SunExposureTweak { get; init; }
 
     /// <summary>
     /// PS_CalculateExposure: the exposure in stops for a scene of this luminance, from the curve plus the timecycle's
