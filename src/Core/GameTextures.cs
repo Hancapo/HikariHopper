@@ -32,7 +32,8 @@ public sealed class GameTextures
     // 7: the DLC packs' map updates are run, so their archetypes and gtxd parents are in the tables.
     // 8: vehicle mod parts have their vehicle's dictionaries, and wheels vehshare.ytd; the DLC packs' title update
     // streaming changes are run.
-    private const int FormatVersion = 8;
+    // 9: a dictionary name in two archives at the same rank is the copy in the archive the game's level registers.
+    private const int FormatVersion = 9;
 
     /// <summary>
     /// Where the RPFs the game doesn't mount itself start to rank: over every file of the game (its DLC packs rank from
@@ -489,7 +490,7 @@ public sealed class GameTextures
             cache.TextureGraph.Rebuild();
             GameFileSystem files = game.FileSystem;
             foreach (Hash32 name in files.EnumerateFiles(GameFileType.Ytd).Select(file => file.NameHash).Distinct())
-                if (files.Resolve(name, GameFileType.Ytd).Value is { } winner && GamePath(root, winner.SourcePath) is { } path)
+                if (files.ResolveRegistered(name, GameFileType.Ytd) is { } winner && GamePath(root, winner.SourcePath) is { } path)
                     tables.Files[name.Value] = (path, winner.Size);
             var dictionaries = new HashSet<uint>(tables.Files.Keys);
             foreach (GameFileType type in new[] { GameFileType.Ydr, GameFileType.Yft, GameFileType.Ydd })
