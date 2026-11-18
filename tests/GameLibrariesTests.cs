@@ -16,4 +16,17 @@ public sealed class GameLibrariesTests
         Assert.Equal(typeof(CommonFury.Hashing.Hash32).Assembly.FullName, Common(gta));
         Assert.Single(AppDomain.CurrentDomain.GetAssemblies(), assembly => assembly.GetName().Name == "CommonFury");
     }
+
+    [Fact]
+    public void The_game_libraries_are_optimised_in_every_build()
+    {
+        // Unoptimised, reading a game's files is about ten times slower; a Debug build of the app and its tests takes
+        // their Release builds.
+        foreach (System.Reflection.Assembly library in new[] { typeof(FiveFury.Rpf.RpfArchive).Assembly, typeof(RedFury.Rpf.RpfArchive).Assembly,
+            typeof(RedFury.World.WorldLodGraph).Assembly, typeof(CommonFury.Hashing.Hash32).Assembly })
+        {
+            var debuggable = (System.Diagnostics.DebuggableAttribute?)Attribute.GetCustomAttribute(library, typeof(System.Diagnostics.DebuggableAttribute));
+            Assert.False(debuggable?.IsJITOptimizerDisabled ?? false, $"{library.GetName().Name} is built unoptimised");
+        }
+    }
 }
