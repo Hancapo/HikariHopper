@@ -12,6 +12,10 @@
 //     saturate(Adaptation.step.size.mult x dt) / dt stops a second, at most Adaptation.max.step.size, over the frame
 //     time averaged over the last frames (dt); the target at once when that step is no more than
 //     Adaptation.min.step.size, and on a reset (a camera cut, the first frame, the viewer's frames).
+// Red Dead Redemption 2's world, lit in its own units, is exposed as its own post-process does instead
+// (Rdr2Exposure.cs): its curve, scale ln(L + horizontal offset) + vertical offset - 10 + bending L, blended with its blend
+// curve, plus its tweak, in its range; and its adaptation, the step at least its least and at most its most, the target
+// at once at its threshold.
 // The work is laid out over the frame's size: per 16 by 16 tile, then their sum and the exposure. The tone map, the
 // bloom and the lens flare take the exposure from here.
 // Put after scene.wgsl and sky_system.wgsl.
@@ -23,15 +27,20 @@
 
 // What the exposure is worked out with, written each frame.
 struct ExposureSettings {
-    // Whether the frame is measured as it is (a world's), whether the exposure takes its target at once, and the
-    // frame time averaged over the last frames, in seconds.
+    // Whether the frame is measured as it is (a world's), whether the exposure takes its target at once, the frame
+    // time averaged over the last frames, in seconds, and whether it's RDR2's exposure.
     mode: vec4f,
-    // Exposure.curve.scale, Exposure.curve.power and Exposure.curve.offset, then the tweak.
+    // Exposure.curve.scale, Exposure.curve.power and Exposure.curve.offset, then the tweak; RDR2's: its curve's scale,
+    // vertical offset, horizontal offset and bending.
     curve: vec4f,
     // The timecycle's least and most exposure.
     range: vec4f,
-    // Adaptation.step.size.mult, Adaptation.max.step.size and Adaptation.min.step.size.
+    // Adaptation.step.size.mult, Adaptation.max.step.size and Adaptation.min.step.size, then RDR2's threshold.
     adaptation: vec4f,
+    // RDR2's blend curve, as its curve.
+    blend_curve: vec4f,
+    // RDR2's blend curve's weight, and its tweak.
+    rdr2: vec4f,
 };
 @group(1) @binding(4) var<uniform> exposure_settings: ExposureSettings;
 
@@ -114,7 +123,17 @@ fn cs_luminance_mean(@builtin(local_invocation_index) local: u32) {
 fn target_exposure(mean: f32) -> f32 {
     let curve = exposure_settings.curve;
     let range = exposure_settings.range;
+    if (exposure_settings.mode.w > 0.5) {
+        let main = rdr2_curve(curve, mean);
+        let blended = main + (rdr2_curve(exposure_settings.blend_curve, mean) - main) * exposure_settings.rdr2.x;
+        return clamp(blended + exposure_settings.rdr2.y, range.x, range.y);
+    }
     return clamp(curve.x * pow(max(mean, 1e-6), curve.y) + curve.z + curve.w, range.x, range.y);
+}
+
+// RDR2's curve for a luminance: scale ln(L + horizontal offset) + vertical offset - 10 + bending L.
+fn rdr2_curve(curve: vec4f, luminance: f32) -> f32 {
+    return curve.x * log(max(luminance + curve.z, 1e-30)) + curve.y - 10.0 + curve.w * luminance;
 }
 
 // PS_CalculateExposure: last frame's exposure moved towards the target, as fast as the gap times the step multiplier
@@ -129,6 +148,15 @@ fn adapted_exposure(previous: f32, target_stops: f32) -> f32 {
     let adaptation = exposure_settings.adaptation;
     let multiplier = saturate(adaptation.x * dt) / dt;
     let gap = target_stops - previous;
+    if (exposure_settings.mode.w > 0.5) {
+        // RDR2's: at least the least step and at most the most, the target at once at the threshold.
+        let step = clamp(abs(gap) * multiplier, adaptation.z, adaptation.y);
+        if (step <= adaptation.w || gap == 0.0) {
+            return clamp(target_stops, range.x, range.y);
+        }
+        let moved = previous + sign(gap) * step * dt;
+        return clamp(select(min(moved, target_stops), max(moved, target_stops), gap < 0.0), range.x, range.y);
+    }
     let rate = min(adaptation.y, abs(gap) * multiplier);
     var exposure = target_stops;
     if (rate > adaptation.z && gap != 0.0) {

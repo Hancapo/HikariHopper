@@ -10,7 +10,8 @@ namespace HikariHopper.Rendering;
 /// at the keyframes) and visualsettings.dat's sky.* settings. Works out, for an hour, what the game's sky update puts in
 /// its frame's constants for the sky tables (rdr2_sky_tables.wgsl) and the dome (rdr2_sky.wgsl): the wavelengths'
 /// Rayleigh scattering, the aerosols' extinction, the ozone's absorption, the scale heights, and the sun's light; and by
-/// night the moon's light, its disc, the stars (their layers, how they turn and twinkle) and the air glow.
+/// night the moon's light, its disc, the stars (their layers, how they turn and twinkle) and the air glow; and what the
+/// game lights its world with from them (the key light's tint) and exposes and tone-maps it with.
 /// </summary>
 internal sealed class Rdr2Sky
 {
@@ -18,7 +19,7 @@ internal sealed class Rdr2Sky
     public const int TableVectors = 9, TableBytes = TableVectors * 16;
 
     /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
-    public const int Vectors = TableVectors + 15, Bytes = Vectors * 16;
+    public const int Vectors = TableVectors + 17, Bytes = Vectors * 16;
 
     /// <summary>
     /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
@@ -90,6 +91,11 @@ internal sealed class Rdr2Sky
         ["sky_air_glow_intensity"] = .2f,
         ["sky_air_glow_base_color_r"] = .072f, ["sky_air_glow_base_color_g"] = .35f, ["sky_air_glow_base_color_b"] = 1,
         ["sky_air_glow_base_intensity"] = .1f,
+        ["light_dir_col_r"] = .89f, ["light_dir_col_g"] = .675f, ["light_dir_col_b"] = .392f,
+        ["light_dir_mult"] = 14.75f,
+        ["postfx_exposure"] = 0,
+        ["postfx_exposure_min"] = -11, ["postfx_exposure_max"] = 32,
+        ["postfx_exposure_blend_curve_weight"] = 0,
     };
 
     /// <summary>The dome it's drawn on and its textures, from the game's files; none without them (a sphere stands in).</summary>
@@ -157,11 +163,10 @@ internal sealed class Rdr2Sky
 
     /// <summary>
     /// The constants at <paramref name="hours"/>, with the sun towards <paramref name="sun"/> and the moon towards
-    /// <paramref name="moon"/> (unit vectors, Z up), the viewer's sky ambient <paramref name="ambient"/> (the light from
-    /// the sky the world is lit with), which the sky's zenith is scaled to, and <paramref name="seconds"/> of the stars'
-    /// twinkling.
+    /// <paramref name="moon"/> (unit vectors, Z up), the world lit by the sun (<paramref name="sunLights"/>) or else the
+    /// moon, the camera at <paramref name="eye"/>, and <paramref name="seconds"/> of the stars' twinkling.
     /// </summary>
-    public void Write(Span<Vector4> values, float hours, Vector3 sun, Vector3 moon, Vector3 ambient, double seconds)
+    public void Write(Span<Vector4> values, float hours, Vector3 sun, Vector3 moon, bool sunLights, Vector3 eye, double seconds)
     {
         TimecycleSample at = Timecycle.Sample(hours);
         Vector3 wavelengths = new(Field("sky_scattering_red_wavelength", at), Field("sky_scattering_green_wavelength", at),
@@ -174,7 +179,6 @@ internal sealed class Rdr2Sky
         float moonIntensity = visuals.Get("sky.MoonIntensity", 1) * Field("sky_scattering_moon_intensity_multiplier", at);
         float g = Field("sky_scattering_mie_scatter", at);
         float lit = sunIntensity + moonIntensity;
-        float luminance = Vector3.Dot(ambient, new Vector3(.2126f, .7152f, .0722f));
         values[0] = new(visuals.Get("sky.AltitudeRemapFactor", 1), visuals.Get("sky.AtmosphereThickness", 8) * 1000,
             Field("sky_scattering_aerosol_height", at) * 1000, Field("sky_scattering_altitude_bias", at, visuals.Get("sky.AltitudeBias", .01f)) * 1000);
         values[1] = new(Rayleigh(wavelengths.X), Rayleigh(wavelengths.Y), Rayleigh(wavelengths.Z), aerosols);
@@ -185,9 +189,28 @@ internal sealed class Rdr2Sky
         // The disc's angular radius as the moon's: its size times 250 at the dome's radius.
         values[6] = new(sun, Field("sky_sun_disc_size", at, 2.5f) * DiscScale / DomeRadius);
         values[7] = new(Field("sky_scattering_curved_transmittance_density_multiplier", at, 1),
-            Field("sky_scattering_curved_transmittance_density_multiplier_power", at, 1), 1, luminance);
+            Field("sky_scattering_curved_transmittance_density_multiplier_power", at, 1), 1, 1);
         values[8] = new(Field("sky_scattering_multiple_scattering_intensity", at) * visuals.Get("sky.MultipleScattering", 1), 0, 0, 0);
         WriteNight(values[TableVectors..], at, hours, sun, moon, moonIntensity, seconds);
+        // The camera, and the timecycle's tint of the key light the world's lit by.
+        values[TableVectors + 15] = new(eye, 0);
+        values[TableVectors + 16] = new(Colour("light_dir_col", at) * Field("light_dir_mult", at), sunLights ? 1 : 0);
+    }
+
+    /// <summary>
+    /// How the game exposes and tone-maps its world at an hour: PS_CalculateExposure's curve and blend curve
+    /// (visualsettings.dat's), the timecycle's tweak, range, blend weight and adaptation step, and the filmic curves.
+    /// </summary>
+    public Rdr2Exposure Exposure(float hours)
+    {
+        TimecycleSample at = Timecycle.Sample(hours);
+        Vector4 Curve(string name) => new(visuals.Get($"Exposure.curve{name}.scale", -1.15f), visuals.Get($"Exposure.curve{name}.verticalOffset", 6.9f),
+            visuals.Get($"Exposure.curve{name}.horizontalOffset", 0), visuals.Get($"Exposure.curve{name}.bending", 0));
+        return new Rdr2Exposure(Curve(""), Curve(".blend"), Field("postfx_exposure_blend_curve_weight", at), Field("postfx_exposure", at),
+            Field("postfx_exposure_min", at), Field("postfx_exposure_max", at),
+            Field("postfx_exposure_adaption_step_mult", at, visuals.Get("Adaptation.step.size.mult", .65f)),
+            visuals.Get("Adaptation.max.step.size", 100), visuals.Get("Adaptation.min.step.size", .01f), visuals.Get("Adaptation.threshold", 0),
+            GtaToneMapVisuals.From(visuals));
     }
 
     // The night's constants (rdr2_sky.wgsl's Rdr2Night), as the game's sky update fills its dome's: the passes it draws,

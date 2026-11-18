@@ -14,11 +14,15 @@
 //   - The sun's disc, where it's drawn: the transmittance along the view, curved towards the horizon (raised to
 //     1 + (1 - mu)^power (multiplier - 1)), lit by the sun's intensity times the sun colour times the disc's multiplier,
 //     its limb darkened, at most 50000, added to the dome.
-//   - The moon's disc, where it's drawn: its texture on a sphere lit from the sun, times its colour and intensity and
-//     the same curved transmittance, added to the dome.
-// The game works the scattering out at the dome's vertices and draws the discs as quads; here, each at its pixels. The
-// dome's radiance is then scaled into the light the viewer draws the world with: its zenith (the scattering, the air
-// glow's mean and the base colour there) to the viewer's sky ambient, as the world under it is lit by that.
+//   - The moon's disc, where it's drawn: its texture on a sphere lit from its phase's way, times its colour and
+//     intensity and the same curved transmittance, added to the dome. The viewer's moon is full, as its GTA V sky's
+//     is: lit from the camera.
+// The game works the scattering out at the dome's vertices and draws the discs as quads; here, each at its pixels, in
+// the game's own units, as its world is lit and exposed in them.
+// And the sky's light on the world, each frame (cs_rdr2_sky_light): the key light's illuminance (the sun's or the
+// moon's intensity and colour through the air from the camera, times the timecycle's light_dir tint), and the sky's
+// ambient cube, as the game's CS_AmbientCubeIBR builds it from 64 ways over the upper half of the sky, its ground face
+// the light a mid-grey ground under it sends back up.
 // Put after scene.wgsl and rdr2_atmosphere.wgsl.
 
 struct Rdr2Night {
@@ -47,6 +51,11 @@ struct Rdr2Night {
     // The air glow's colour by its intensity, then the sky's base colour by its intensity.
     air_glow: vec4f,
     sky_base: vec4f,
+    // The camera, in the world.
+    camera: vec4f,
+    // The timecycle's tint of the key light (light_dir_col times light_dir_mult), then whether the sun is the key light
+    // (else the moon).
+    key_light: vec4f,
 };
 
 struct Rdr2Dome {
@@ -179,24 +188,22 @@ fn rdr2_curved(transmittance: vec3f, view: vec3f) -> vec3f {
     return pow(transmittance, vec3f(1.0 + pow(1.0 - saturate(view.z), disc.y) * (disc.x - 1.0)));
 }
 
-// The dome's radiance at the zenith, without the stars and discs: what it's scaled by into the viewer's light.
-fn rdr2_zenith(height: f32) -> f32 {
+// The sky's radiance along a view, without the stars and discs: the sun's and the moon's scattering, clamped, then the
+// air glow (its mean, its smallest mip) and the base colour.
+fn rdr2_sky_radiance(view: vec3f, height: f32) -> vec3f {
     let night = dome.night;
     let at = dome.atmosphere;
-    let zenith = vec3f(0.0, 0.0, 1.0);
-    let scattered = rdr2_scattering(zenith, height);
-    let phases = rdr2_phases(at.sun.z);
+    let scattered = rdr2_scattering(view, height);
+    let phases = rdr2_phases(dot(view, at.sun.xyz));
     var colour = scattered.rgb * at.sun_sky.rgb * phases.x + rdr2_mie(scattered) * at.sun_sun.rgb * phases.y;
     if (night.flags.y > 0.5) {
-        let lit = rdr2_moon_scattering(zenith, height, night.moon.xyz);
-        let moon_phases = rdr2_phases(night.moon.z);
+        let lit = rdr2_moon_scattering(view, height, night.moon.xyz);
+        let moon_phases = rdr2_phases(dot(view, night.moon.xyz));
         colour += lit.rgb * night.moon_sky.rgb * moon_phases.x + rdr2_mie(lit) * night.moon_sun.rgb * moon_phases.y;
     }
     colour = clamp(colour, vec3f(0.0), vec3f(at.sun_sky.w));
-    // The air glow's mean: its smallest mip.
     let levels = f32(textureNumLevels(dome_air_glow) - 1u);
-    colour += night.air_glow.rgb * textureSampleLevel(dome_air_glow, dome_wrap, vec2f(0.5), levels).r + night.sky_base.rgb;
-    return dot(colour, vec3f(0.2126, 0.7152, 0.0722));
+    return colour + night.air_glow.rgb * textureSampleLevel(dome_air_glow, dome_wrap, vec2f(0.5), levels).r + night.sky_base.rgb;
 }
 
 @fragment
@@ -236,7 +243,7 @@ fn fs_rdr2_sky(input: Rdr2SkyVarying) -> @location(0) vec4f {
             colour += min(rdr2_curved(transmittance, view) * limb * at.sun_sun.rgb * at.sun_sun.w, vec3f(50000.0));
         }
     }
-    // The moon's, a sphere facing the camera lit from the sun: where the view meets the plane across it, by its radius.
+    // The moon's, a sphere facing the camera lit from it (full): where the view meets the plane across it, by its radius.
     let toward = -moon;
     let right = normalize(vec3f(-toward.y, toward.x, 0.0) + vec3f(1e-6, 0.0, 0.0));
     let up = cross(toward, right);
@@ -248,9 +255,69 @@ fn fs_rdr2_sky(input: Rdr2SkyVarying) -> @location(0) vec4f {
         let r2 = a * a + b * b;
         if (r2 < 1.0) {
             let normal = a * right + b * up + sqrt(1.0 - r2) * toward;
-            let lit = max(dot(normal, at.sun.xyz), 0.0);
+            let lit = max(dot(normal, toward), 0.0);
             colour += texel.rgb * night.moon_disc.rgb * lit * texel.a * rdr2_curved(transmittance, view);
         }
     }
-    return vec4f(colour * at.disc.w / max(rdr2_zenith(height), 1e-9), 1.0);
+    return vec4f(colour * at.disc.w, 1.0);
+}
+
+// What the world is lit with: the key light's illuminance, with one in w; then the ambient cube's faces (+x, -x, +z,
+// +y, -y, -z), each the irradiance over pi on what faces it.
+@group(1) @binding(8) var<storage, read_write> sky_light: array<vec4f, 7>;
+
+// Each way's share of the faces it's towards.
+var<workgroup> faces: array<array<vec3f, 6>, 64>;
+
+// Van der Corput's radical inverse in base two, as the game turns its sample's index round the sky.
+fn rdr2_radical_inverse(index: u32) -> f32 {
+    return f32(reverseBits(index)) * 2.3283064e-10;
+}
+
+@compute @workgroup_size(64)
+fn cs_rdr2_sky_light(@builtin(local_invocation_index) index: u32) {
+    let night = dome.night;
+    let at = dome.atmosphere;
+    let height = abs(at.heights.w - night.camera.z);
+    // A way over the upper half of the sky: evenly up from the horizon, round by the radical inverse.
+    let up = 1.0 - (f32(index) + 0.5) / 64.0;
+    let across = sqrt(1.0 - up * up);
+    let bearing = rdr2_radical_inverse(index) * 6.2831853;
+    let way = vec3f(across * cos(bearing), across * sin(bearing), up);
+    let radiance = rdr2_sky_radiance(way, height);
+    let weights = way * way * 0.046875;
+    var share: array<vec3f, 6>;
+    for (var face = 0; face < 6; face++) {
+        share[face] = vec3f(0.0);
+    }
+    share[select(0, 1, way.x <= 0.0)] += weights.x * radiance;
+    share[select(3, 4, way.y <= 0.0)] += weights.y * radiance;
+    share[2] += weights.z * radiance;
+    faces[index] = share;
+    workgroupBarrier();
+    if (index != 0u) {
+        return;
+    }
+    var cube: array<vec3f, 6>;
+    for (var face = 0; face < 6; face++) {
+        cube[face] = vec3f(0.0);
+    }
+    for (var i = 0; i < 64; i++) {
+        for (var face = 0; face < 6; face++) {
+            cube[face] += faces[i][face];
+        }
+    }
+    // The key light through the air from the camera, by the timecycle's tint.
+    let sun = night.key_light.w > 0.5;
+    let toward = select(night.moon.xyz, at.sun.xyz, sun);
+    let drawn = select(night.flags.y, night.flags.x, sun) > 0.5;
+    let intensity = select(night.moon_sun.rgb, at.sun_sun.rgb, sun) * rdr2_view_transmittance(toward, height) * night.key_light.rgb;
+    let illuminance = select(vec3f(0.0), intensity, drawn && toward.z > 0.0);
+    // The ground under it, a mid-grey: what it sends back up from the key light and the sky.
+    let ground = 0.25 * (illuminance * max(toward.z, 0.0) / 3.14159265 + cube[2]);
+    sky_light[0] = vec4f(illuminance, 1.0);
+    for (var face = 0; face < 5; face++) {
+        sky_light[face + 1] = vec4f(cube[face], 0.0);
+    }
+    sky_light[6] = vec4f(ground, 0.0);
 }

@@ -58,7 +58,7 @@ public sealed class Rdr2SkyTests
             ("sky_scattering_mie_intensity", [.75f]), ("sky_scattering_sun_intensity_multiplier", [.5f]), ("sky_scattering_moon_intensity_multiplier", [.2f]),
             ("sky_scattering_sky_col_r", [.5f]), ("sky_scattering_sun_col_b", [.25f]), ("sky_scattering_multiple_scattering_intensity", [.8f]));
         var values = new Vector4[Rdr2Sky.Vectors];
-        sky.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, new Vector3(2), 0);
+        sky.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
         // The Rayleigh scattering a metre over the wavelength's fourth power and the molecules; the aerosols' extinction.
         Assert.Equal(1169939.4332487835 / (Math.Pow(680, 4) * 1.5), values[1].X, 1e-12);
         Assert.Equal(1169939.4332487835 / (Math.Pow(440, 4) * 1.5), values[1].Z, 1e-12);
@@ -77,8 +77,8 @@ public sealed class Rdr2SkyTests
         Assert.Equal(Vector3.UnitZ, new Vector3(values[6].X, values[6].Y, values[6].Z));
         // Each later order by the timecycle's intensity times visualsettings.dat's.
         Assert.Equal(.4f, values[8].X, 6);
-        // The viewer's sky ambient's luminance, which the zenith's scaled to.
-        Assert.Equal(2, values[7].W, 5);
+        // In the game's own units: nothing scales it.
+        Assert.Equal(1, values[7].W);
     }
 
     [Fact]
@@ -87,9 +87,9 @@ public sealed class Rdr2SkyTests
         Rdr2Sky sky = Sky(("sky_scattering_sun_intensity_multiplier", [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]),
             ("sky_scattering_aerosol_density_scale", [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2]));
         Vector4[] noon = new Vector4[Rdr2Sky.Vectors], night = new Vector4[Rdr2Sky.Vectors], late = new Vector4[Rdr2Sky.Vectors];
-        sky.Write(noon, 14, Vector3.UnitZ, -Vector3.UnitZ, Vector3.One, 0);
-        sky.Write(night, 2, -Vector3.UnitZ, Vector3.UnitZ, Vector3.One, 0);
-        sky.Write(late, 23, -Vector3.UnitZ, Vector3.UnitZ, Vector3.One, 0);
+        sky.Write(noon, 14, Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
+        sky.Write(night, 2, -Vector3.UnitZ, Vector3.UnitZ, true, Vector3.Zero, 0);
+        sky.Write(late, 23, -Vector3.UnitZ, Vector3.UnitZ, true, Vector3.Zero, 0);
         Assert.Equal(100000, noon[3].X);
         Assert.Equal(0, night[3].X);
         Assert.True(Rdr2Sky.SameTables(noon, night));
@@ -120,6 +120,22 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void The_world_is_exposed_by_the_games_curve_its_tweak_and_its_range()
+    {
+        Rdr2Sky sky = Sky(("postfx_exposure", [-1]), ("postfx_exposure_min", [-11]), ("postfx_exposure_max", [32]),
+            ("postfx_exposure_adaption_step_mult", [.6475f]));
+        Rdr2Exposure exposure = sky.Exposure(12);
+        // scale ln(L) + vertical offset - 10, the game's defaults (-1.15 and 6.9), plus the tweak.
+        Assert.Equal(-1.15f * MathF.Log(1) + 6.9f - 10 - 1, exposure.TargetFor(1), 4);
+        Assert.Equal(-1.15f * MathF.Log(100) + 6.9f - 10 - 1, exposure.TargetFor(100), 4);
+        // Kept in the timecycle's range.
+        Assert.Equal(-11, exposure.TargetFor(1e6f));
+        Assert.Equal(.6475f, exposure.StepMult, 5);
+        // The filmic curves the file has.
+        Assert.Equal(.22f, exposure.ToneMap.Bright.A, 5);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
 
@@ -131,7 +147,7 @@ public sealed class Rdr2SkyTests
             ("sky_stars_dense_intensity_mult", [2]), ("sky_air_glow_intensity", [.25f]), ("sky_air_glow_base_intensity", [.5f]));
         var values = new Vector4[Rdr2Sky.Vectors];
         Vector3 moon = Vector3.Normalize(new Vector3(1, 0, 1));
-        sky.Write(values, 2, -Vector3.UnitZ, moon, Vector3.One, 0);
+        sky.Write(values, 2, -Vector3.UnitZ, moon, true, Vector3.Zero, 0);
         Span<Vector4> night = values.AsSpan(Rdr2Sky.TableVectors);
         // No sun under the horizon nor with its multiplier off; the moon and the stars on.
         Assert.Equal(new Vector4(0, 1, 1, Rdr2Sky.DomeRadius), night[0]);
@@ -151,7 +167,7 @@ public sealed class Rdr2SkyTests
         Assert.Equal(new Vector3(.549f, .627f, 1) * 2 * 3, new Vector3(night[6].X, night[6].Y, night[6].Z));
         // The moon under the horizon and the stars off: neither is drawn.
         Rdr2Sky dark = Sky(("sky_stars_iten", [0]));
-        dark.Write(values, 2, -Vector3.UnitZ, -Vector3.UnitZ, Vector3.One, 0);
+        dark.Write(values, 2, -Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
         Assert.Equal(Vector3.Zero, new Vector3(values[Rdr2Sky.TableVectors].Y, values[Rdr2Sky.TableVectors].Z, 0));
     }
 
@@ -248,6 +264,17 @@ public sealed class Rdr2SkyTests
             // The sky's blue: more blue than red (the frame's BGRA).
             Assert.True((day & 0xFF) > ((day >> 16) & 0xFF), $"{day:X8}");
             Assert.NotEqual(backdrop, day);
+            // The world's lit by the sky in the game's own units: the sun through the air, the sky above blue, the
+            // ground under it sending back a quarter of what falls on it; and exposed by the game's curve for what the
+            // frame measures.
+            static float Luminance(Vector4 colour) => Vector3.Dot(new Vector3(colour.X, colour.Y, colour.Z), new Vector3(.2126f, .7152f, .0722f));
+            Vector4[] noon = renderer.Rdr2SkyLight();
+            Assert.Equal(1, noon[0].W);
+            Assert.InRange(Luminance(noon[0]), 1e3f, 1e8f);
+            Assert.True(noon[3].Z > noon[3].X, $"{noon[3]}");
+            Assert.True(noon[6].X > 0 && noon[6].X < noon[0].X, $"{noon[6]}");
+            var (mean, _, aimed) = renderer.MeasuredExposure();
+            Assert.Equal(renderer.Rdr2WorldExposure!.TargetFor(mean), aimed, 2);
             // The sun lower, the same air: the tables stay; other air: they're built again.
             renderer.SetTime(15);
             Middle();
@@ -255,6 +282,8 @@ public sealed class Rdr2SkyTests
             renderer.SetTime(23);
             Middle();
             Assert.Equal(2, renderer.Rdr2SkyBuilds);
+            // By night, the moon's light: thousands of times less.
+            Assert.True(Luminance(renderer.Rdr2SkyLight()[0]) < Luminance(noon[0]) / 1000);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
             Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
             renderer.ClearWorld();

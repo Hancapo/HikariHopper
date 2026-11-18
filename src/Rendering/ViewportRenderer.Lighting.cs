@@ -15,7 +15,9 @@ internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
     // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
-    private const int LightBytes = 608, ShadowViewBytes = 80;
+    // light.wgsl's Light; the CPU writes all but its last, RDR2's sky's light, which the GPU writes from the sky
+    // (ViewportRenderer.Rdr2Sky.cs).
+    private const int LightBytes = 720, LightWrittenBytes = 608, ShadowViewBytes = 80;
     private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
     private Sampler? shadowCompare;
 
@@ -535,7 +537,7 @@ internal sealed unsafe partial class ViewportRenderer
             else
                 FitCascades();
         }
-        Span<float> values = stackalloc float[LightBytes / sizeof(float)];
+        Span<float> values = stackalloc float[LightWrittenBytes / sizeof(float)];
         Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
         vectors[0] = new Vector4(key.Direction, 0);
         vectors[1] = new Vector4(cycle.Directional, 0);
@@ -543,10 +545,12 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[3] = new Vector4(cycle.NaturalUp, cycle.OcclusionProp);
         vectors[4] = new Vector4(cycle.DirectionalAmbient, cycle.OcclusionVehicle);
         vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
+        // An RDR2 world with its sky is tone-mapped with its own filmic curves, from its own visualsettings.dat.
+        GtaToneMapVisuals mapping = Rdr2WorldExposure?.ToneMap ?? toneMap;
         vectors[6] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure);
-        var (blendScale, blendOffset) = toneMap.Blend;
+        var (blendScale, blendOffset) = mapping.Blend;
         vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, blendScale, blendOffset);
-        Filmic bright = toneMap.Bright, dark = toneMap.Dark;
+        Filmic bright = mapping.Bright, dark = mapping.Dark;
         vectors[8] = new Vector4(bright.A, bright.B, bright.C, bright.D);
         vectors[9] = new Vector4(bright.E, bright.F, bright.W, 1 / Timecycle.DisplayGamma);
         vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
