@@ -9,12 +9,31 @@ namespace HikariHopper.Rendering;
 /// Red Dead Redemption 2's sky as its files set it: the weather's timecycle (its GLOBAL region's sky_scattering_* fields,
 /// at the keyframes) and visualsettings.dat's sky.* settings. Works out, for an hour, what the game's sky update puts in
 /// its frame's constants for the sky tables (rdr2_sky_tables.wgsl) and the dome (rdr2_sky.wgsl): the wavelengths'
-/// Rayleigh scattering, the aerosols' extinction, the ozone's absorption, the scale heights, and the sun's light.
+/// Rayleigh scattering, the aerosols' extinction, the ozone's absorption, the scale heights, and the sun's light; and by
+/// night the moon's light, its disc, the stars (their layers, how they turn and twinkle) and the air glow.
 /// </summary>
 internal sealed class Rdr2Sky
 {
-    /// <summary>The constants' size: rdr2_atmosphere.wgsl's Rdr2Atmosphere then the tables' orders (Rdr2Tables).</summary>
-    public const int Vectors = 9, Bytes = Vectors * 16;
+    /// <summary>The tables' constants: rdr2_atmosphere.wgsl's Rdr2Atmosphere then the orders (Rdr2Tables).</summary>
+    public const int TableVectors = 9, TableBytes = TableVectors * 16;
+
+    /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
+    public const int Vectors = TableVectors + 15, Bytes = Vectors * 16;
+
+    /// <summary>
+    /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
+    /// draws its unit dome scaled round the camera).
+    /// </summary>
+    public const float DomeRadius = 20000;
+
+    // How far across a disc of size one is, in metres at the dome's radius, as the game sizes the moon's.
+    private const float DiscScale = 250;
+
+    // What the air glow's and the sky base's colours are over.
+    private const float AirGlowScale = 1000;
+
+    // Below what a multiplier is off, and how far under the horizon the sun and moon are still drawn (the game's).
+    private const float Off = .0001f, Below = -.1f;
 
     /// <summary>The scattering orders the tables add up: the single one and three more.</summary>
     public const int Orders = 4;
@@ -60,7 +79,21 @@ internal sealed class Rdr2Sky
         ["sky_scattering_blue_wavelength"] = 440,
         ["sky_scattering_sun_intensity_multiplier"] = 1,
         ["sky_scattering_moon_intensity_multiplier"] = 1,
+        ["sky_scattering_moon_col_r"] = 1, ["sky_scattering_moon_col_g"] = 1, ["sky_scattering_moon_col_b"] = 1,
+        ["sky_moon_col_r"] = 1, ["sky_moon_col_g"] = 1, ["sky_moon_col_b"] = 1,
+        ["sky_moon_disc_size"] = 2.5f,
+        ["sky_moon_iten"] = 1,
+        ["sky_stars_iten"] = 1,
+        ["sky_stars_cloud_intensity_mult"] = 1, ["sky_stars_dense_intensity_mult"] = 1, ["sky_stars_sparse_intensity_mult"] = 1,
+        ["sky_stars_frequency_mult"] = 1, ["sky_stars_height_blend_mult"] = 1, ["sky_stars_blink_height_blend_mult"] = 1,
+        ["sky_air_glow_color_r"] = .184f, ["sky_air_glow_color_g"] = 1, ["sky_air_glow_color_b"] = .494f,
+        ["sky_air_glow_intensity"] = .2f,
+        ["sky_air_glow_base_color_r"] = .072f, ["sky_air_glow_base_color_g"] = .35f, ["sky_air_glow_base_color_b"] = 1,
+        ["sky_air_glow_base_intensity"] = .1f,
     };
+
+    /// <summary>The dome it's drawn on and its textures, from the game's files; none without them (a sphere stands in).</summary>
+    public Rdr2SkyDome? Dome { get; init; }
 
     internal Rdr2Sky(IReadOnlyDictionary<string, float[]> weather, GameVisualSettings visuals)
     {
@@ -68,24 +101,40 @@ internal sealed class Rdr2Sky
         this.visuals = visuals;
     }
 
-    /// <summary>The sky from the game's files, through <paramref name="read"/> (a virtual path's bytes, or null); null without its weather.</summary>
-    public static Rdr2Sky? Read(Func<string, byte[]?> read)
+    /// <summary>
+    /// The sky from the game's files, through <paramref name="read"/> (a virtual path's bytes, or null), on the dome
+    /// <paramref name="dome"/> reads; null without its weather, and no dome where that can't be read.
+    /// </summary>
+    public static Rdr2Sky? Read(Func<string, byte[]?> read, Func<Rdr2SkyDome?>? dome = null)
     {
+        IReadOnlyDictionary<string, float[]> weather;
+        GameVisualSettings visuals;
         try
         {
             if (read(Weather) is not { } xml)
                 return null;
             byte[]? settings = read(VisualSettingsPath);
-            return new Rdr2Sky(GameTimecycle.ParseWeather(Text(xml)), GameVisualSettings.Parse(settings is null ? "" : Text(settings)));
+            weather = GameTimecycle.ParseWeather(Text(xml));
+            visuals = GameVisualSettings.Parse(settings is null ? "" : Text(settings));
         }
         catch (Exception error) when (error is IOException or InvalidDataException or System.Xml.XmlException or FormatException
             or ArgumentException or EndOfStreamException or NotSupportedException)
         {
             return null;
         }
+        Rdr2SkyDome? shape = null;
+        try
+        {
+            shape = dome?.Invoke();
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or System.Xml.XmlException or FormatException
+            or ArgumentException or EndOfStreamException or NotSupportedException or OverflowException)
+        {
+        }
+        return new Rdr2Sky(weather, visuals) { Dome = shape };
     }
 
-    private static string Text(byte[] bytes) => Encoding.UTF8.GetString(bytes).TrimStart('﻿');
+    private static string Text(byte[] bytes) => Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
 
     // A field at the hour, between the keyframes either side, or its default where the weather hasn't it.
     private float Field(string name, TimecycleSample at, float? fallback = null)
@@ -107,11 +156,12 @@ internal sealed class Rdr2Sky
     }
 
     /// <summary>
-    /// The constants at <paramref name="hours"/>, with the sun towards <paramref name="sun"/> (a unit vector, Z up) and
-    /// the viewer's directional light <paramref name="directional"/>, which the sky's radiance is scaled to as the world
-    /// is lit by it.
+    /// The constants at <paramref name="hours"/>, with the sun towards <paramref name="sun"/> and the moon towards
+    /// <paramref name="moon"/> (unit vectors, Z up), the viewer's sky ambient <paramref name="ambient"/> (the light from
+    /// the sky the world is lit with), which the sky's zenith is scaled to, and <paramref name="seconds"/> of the stars'
+    /// twinkling.
     /// </summary>
-    public void Write(Span<Vector4> values, float hours, Vector3 sun, Vector3 directional)
+    public void Write(Span<Vector4> values, float hours, Vector3 sun, Vector3 moon, Vector3 ambient, double seconds)
     {
         TimecycleSample at = Timecycle.Sample(hours);
         Vector3 wavelengths = new(Field("sky_scattering_red_wavelength", at), Field("sky_scattering_green_wavelength", at),
@@ -124,9 +174,7 @@ internal sealed class Rdr2Sky
         float moonIntensity = visuals.Get("sky.MoonIntensity", 1) * Field("sky_scattering_moon_intensity_multiplier", at);
         float g = Field("sky_scattering_mie_scatter", at);
         float lit = sunIntensity + moonIntensity;
-        // The viewer lights a surface facing the sun with its directional light as it is: an irradiance of pi times it.
-        float luminance = Vector3.Dot(directional, new Vector3(.2126f, .7152f, .0722f));
-        float scale = MathF.PI * luminance / MathF.Max(lit, 1e-3f);
+        float luminance = Vector3.Dot(ambient, new Vector3(.2126f, .7152f, .0722f));
         values[0] = new(visuals.Get("sky.AltitudeRemapFactor", 1), visuals.Get("sky.AtmosphereThickness", 8) * 1000,
             Field("sky_scattering_aerosol_height", at) * 1000, Field("sky_scattering_altitude_bias", at, visuals.Get("sky.AltitudeBias", .01f)) * 1000);
         values[1] = new(Rayleigh(wavelengths.X), Rayleigh(wavelengths.Y), Rayleigh(wavelengths.Z), aerosols);
@@ -134,11 +182,77 @@ internal sealed class Rdr2Sky
         values[3] = new(Colour("sky_scattering_sky_col", at) * sunIntensity, lit);
         values[4] = new(Colour("sky_scattering_sun_col", at) * sunIntensity, Field("sky_scattering_sun_disk_intensity_multiplier", at, 1));
         values[5] = new(3 / (8 * MathF.PI) * (1 - g * g) / (2 + g * g), -2 * g, 1 + g * g, Field("sky_scattering_mie_intensity", at));
-        // The disc's angular radius as GTA V's: its size times 250 at the dome's 20 km.
-        values[6] = new(sun, Field("sky_sun_disc_size", at, 2.5f) * 250 / 20000);
+        // The disc's angular radius as the moon's: its size times 250 at the dome's radius.
+        values[6] = new(sun, Field("sky_sun_disc_size", at, 2.5f) * DiscScale / DomeRadius);
         values[7] = new(Field("sky_scattering_curved_transmittance_density_multiplier", at, 1),
-            Field("sky_scattering_curved_transmittance_density_multiplier_power", at, 1), 1, scale);
+            Field("sky_scattering_curved_transmittance_density_multiplier_power", at, 1), 1, luminance);
         values[8] = new(Field("sky_scattering_multiple_scattering_intensity", at) * visuals.Get("sky.MultipleScattering", 1), 0, 0, 0);
+        WriteNight(values[TableVectors..], at, hours, sun, moon, moonIntensity, seconds);
+    }
+
+    // The night's constants (rdr2_sky.wgsl's Rdr2Night), as the game's sky update fills its dome's: the passes it draws,
+    // the moon, the stars and the air glow.
+    private void WriteNight(Span<Vector4> values, TimecycleSample at, float hours, Vector3 sun, Vector3 moon, float moonIntensity,
+        double seconds)
+    {
+        bool sunDrawn = Field("sky_scattering_sun_intensity_multiplier", at) >= Off && sun.Z >= Below;
+        bool moonDrawn = Field("sky_scattering_moon_intensity_multiplier", at) >= Off && moon.Z >= Below;
+        bool starsDrawn = Field("sky_stars_iten", at) >= Off;
+        values[0] = new(sunDrawn ? 1 : 0, moonDrawn ? 1 : 0, starsDrawn ? 1 : 0, DomeRadius);
+        // The disc as the game places it: its size times 250 across from its middle, the dome's radius away.
+        float across = Field("sky_moon_disc_size", at) * DiscScale / DomeRadius;
+        values[1] = new(moon, across);
+        values[2] = new(Colour("sky_scattering_sky_col", at) * moonIntensity, 1 / MathF.Sqrt(1 + across * across));
+        values[3] = new(Colour("sky_scattering_moon_col", at) * moonIntensity, 0);
+        values[4] = new(Colour("sky_moon_col", at) * Field("sky_moon_iten", at), 0);
+        // Each layer's intensity under the galaxy's light (the game's moonless night, its stars at their brightest),
+        // times its colour, the timecycle's multiplier and its multiplier under that light.
+        Vector3 Layer(string name) => visuals.Get($"stars.{name}.intensityGalaxy", 1) * Visual($"stars.{name}.color")
+            * Field($"sky_stars_{name}_intensity_mult", at) * MathF.Max(Field($"sky_stars_{name}_galaxy_light_mult", at, 1), 1);
+        values[5] = new(Layer("cloud"), visuals.Get("stars.cloud.axisBlend", 4));
+        values[6] = new(Layer("dense"), visuals.Get("stars.dense.axisBlend", 4));
+        values[7] = new(Layer("sparse"), visuals.Get("stars.sparse.axisBlend", .5f));
+        float time = (float)(seconds % 3600) * visuals.Get("stars.frequency", 2) * Field("sky_stars_frequency_mult", at);
+        values[8] = new(visuals.Get("stars.dense.tiling", 4), visuals.Get("stars.sparse.tiling", 4), time, visuals.Get("stars.noiseTiling", 4));
+        values[9] = new(1 / (visuals.Get("stars.heightBlend", 3000) * Field("sky_stars_height_blend_mult", at)),
+            1 / (visuals.Get("stars.blinkHeightBlend", 24000) * Field("sky_stars_blink_height_blend_mult", at)),
+            visuals.Get("stars.blinkGain.mult", 8), visuals.Get("stars.blinkGain.bias", .5f));
+        Matrix4x4 rotation = StarsRotation(hours);
+        values[10] = new(rotation.M11, rotation.M12, rotation.M13, 0);
+        values[11] = new(rotation.M21, rotation.M22, rotation.M23, 0);
+        values[12] = new(rotation.M31, rotation.M32, rotation.M33, 0);
+        // The air glow and the sky's base colour by their intensities, over a thousand as the game takes them, and by
+        // their multiplier under the galaxy's light.
+        float glow = MathF.Max(Field("sky_air_glow_galaxy_light_mult", at, 1), 1) / AirGlowScale;
+        values[13] = new(Colour("sky_air_glow_color", at) * Field("sky_air_glow_intensity", at) * glow, 0);
+        values[14] = new(Colour("sky_air_glow_base_color", at) * Field("sky_air_glow_base_intensity", at) * glow, 0);
+    }
+
+    // A colour visualsettings.dat gives as its .red, .green and .blue.
+    private Vector3 Visual(string name) => new(visuals.Get(name + ".red", 1), visuals.Get(name + ".green", 1), visuals.Get(name + ".blue", 1));
+
+    // An axis visualsettings.dat gives as its .x, .y and .z, made a unit vector.
+    private Vector3 Axis(string name, Vector3 fallback)
+    {
+        var axis = new Vector3(visuals.Get(name + ".x", fallback.X), visuals.Get(name + ".y", fallback.Y), visuals.Get(name + ".z", fallback.Z));
+        return axis.LengthSquared() > 0 ? Vector3.Normalize(axis) : Vector3.UnitZ;
+    }
+
+    /// <summary>
+    /// How the stars are turned at an hour, as the game turns them (a direction times it): about the north axis by its
+    /// angle and the rotation rate times the time of day in radians, then from the zenith to the galaxy's axis, then
+    /// about Z by the galaxy's angle.
+    /// </summary>
+    internal Matrix4x4 StarsRotation(float hours)
+    {
+        Vector3 north = Axis("stars.northAxis", new Vector3(0, .888f, .46f)), galaxy = Axis("stars.galaxyAxis", Vector3.UnitY);
+        float day = Timecycle.WrapHours(hours) * MathF.PI / 12;
+        float turn = day * visuals.Get("stars.rotationRate", .15f) % (2 * MathF.PI) + visuals.Get("stars.northAxisAngle", 2.048f);
+        Matrix4x4 rotation = Matrix4x4.CreateFromAxisAngle(north, turn);
+        Vector3 between = Vector3.Cross(Vector3.UnitZ, galaxy);
+        if (between.LengthSquared() > 1e-12f)
+            rotation *= Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(between), MathF.Acos(Math.Clamp(galaxy.Z, -1, 1)));
+        return rotation * Matrix4x4.CreateRotationZ(visuals.Get("stars.galaxyAxisAngle", 2.048f));
     }
 
     /// <summary>Whether the tables made from <paramref name="a"/> are those made from <paramref name="b"/>: the same air and orders.</summary>
