@@ -462,6 +462,7 @@ internal sealed unsafe partial class ViewportRenderer
         foreach (WorldBufferPages? pages in new[] { worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages })
             pages?.Clear();
         ClearWorldSky();
+        ClearRdr2Sky();
         ClearWorldLensFlare();
         ClearWorldCloudHats();
         ClearWorldCoronas();

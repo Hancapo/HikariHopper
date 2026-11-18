@@ -174,10 +174,16 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     public virtual string? PlacementDetail(WorldLodNode node) => null;
 
     /// <summary>
-    /// The sky the game draws behind its world, read from its files; null for a world whose sky isn't drawn (RDR2's,
-    /// for now) or whose files don't have it. On any thread.
+    /// GTA V's sky behind its world, read from its files; null for a world whose sky is drawn otherwise (RDR2's,
+    /// <see cref="LoadRdr2Sky"/>) or whose files don't have it. On any thread.
     /// </summary>
     public virtual Rendering.GtaSkyDome? LoadSky() => null;
+
+    /// <summary>
+    /// Red Dead Redemption 2's sky behind its world, as its files set it; null for a world without it (GTA V's, whose
+    /// sky is <see cref="LoadSky"/>) or whose files don't have it. On any thread.
+    /// </summary>
+    public virtual Rendering.Rdr2Sky? LoadRdr2Sky() => null;
 
     /// <summary>
     /// The lens flare the game draws over its world when the sun's in view, read from its files; null for a world
@@ -216,6 +222,9 @@ internal sealed class Rdr2WorldIndex(string root, int mapCount, WorldLodGraph lo
 
     public Rdr2Crypto Crypto { get; } = crypto;
 
+    /// <summary>The game's files by their virtual paths, its update's over its base's; none for an index made without them.</summary>
+    public WorldGameSource? Sources { get; init; }
+
     public override WorldAsset LoadAsset(WorldAssetKey key) => WorldAsset.LoadRdr2(key, Assets, Crypto, Reads);
 
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass()
@@ -227,6 +236,8 @@ internal sealed class Rdr2WorldIndex(string root, int mapCount, WorldLodGraph lo
     public override WorldFile? Locate(uint hash, byte extension) => Rdr2WorldFiles.Locate(this, hash, extension);
 
     public override string NameOf(uint hash) => Rdr2WorldFiles.NameOf(hash);
+
+    public override Rendering.Rdr2Sky? LoadRdr2Sky() => Sources is { } sources ? Rendering.Rdr2Sky.Read(sources.Read) : null;
 
     /// <summary>HikariHopper's RDR2 world cache format; RedFury checks its own inside the file.</summary>
     private const string CacheVersion = "hh-rdr2-world-1";
@@ -271,7 +282,7 @@ internal sealed class Rdr2WorldIndex(string root, int mapCount, WorldLodGraph lo
         }
         scanning.GetAwaiter().GetResult();
         report(new WorldProgress("Ready", 1));
-        return new Rdr2WorldIndex(root, catalog.MapCount, catalog.Lod, assets, reads, crypto);
+        return new Rdr2WorldIndex(root, catalog.MapCount, catalog.Lod, assets, reads, crypto) { Sources = sources };
     }
 }
 

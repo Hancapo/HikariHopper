@@ -54,6 +54,8 @@ internal sealed class WorldStreamer : IDisposable
 
     // The sky behind the world, read once, as the streaming starts.
     private readonly Task<GtaSkyDome?> sky;
+    // Or RDR2's.
+    private readonly Task<Rdr2Sky?> rdr2Sky;
 
     // The lens flare over it, read once, as the streaming starts.
     private readonly Task<GtaLensFlare?> lensFlare;
@@ -119,6 +121,7 @@ internal sealed class WorldStreamer : IDisposable
         workAvailable = new SemaphoreSlim(0, count);
         workers = [.. Enumerable.Range(0, count).Select(n => Task.Run(() => Work(grass: n == 0)))];
         sky = Task.Run(index.LoadSky);
+        rdr2Sky = Task.Run(index.LoadRdr2Sky);
         lensFlare = Task.Run(index.LoadLensFlare);
         cloudHats = Task.Run(index.LoadCloudHats);
         coronas = Task.Run(index.LoadCoronas);
@@ -298,6 +301,8 @@ internal sealed class WorldStreamer : IDisposable
         // The sky as soon as it's read, and again for a viewport that hasn't it.
         if (sky.IsCompletedSuccessfully && sky.Result is { } dome && !viewport.HasWorldSky)
             viewport.ShowWorldSky(dome);
+        if (rdr2Sky.IsCompletedSuccessfully && rdr2Sky.Result is { } air && !viewport.HasRdr2Sky)
+            viewport.ShowRdr2Sky(air);
         if (lensFlare.IsCompletedSuccessfully && lensFlare.Result is { } flare && !viewport.HasWorldLensFlare)
             viewport.ShowWorldLensFlare(flare);
         if (cloudHats.IsCompletedSuccessfully && cloudHats.Result is { } hats && !viewport.HasWorldCloudHats)
