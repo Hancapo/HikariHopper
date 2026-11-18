@@ -140,7 +140,14 @@ internal sealed unsafe partial class ViewportRenderer
             Visibility = ShaderStage.Fragment,
             Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
         }, Table(11, TextureViewDimension.D3, ShaderStage.Fragment), Table(12, TextureViewDimension.D3, ShaderStage.Fragment),
-            Table(13, TextureViewDimension.D3, ShaderStage.Fragment), Table(14, TextureViewDimension.D3, ShaderStage.Fragment));
+            Table(13, TextureViewDimension.D3, ShaderStage.Fragment), Table(14, TextureViewDimension.D3, ShaderStage.Fragment),
+            // The sky's light, whose ambient the far haze takes in.
+            new BindGroupLayoutEntry
+            {
+                Binding = 8,
+                Visibility = ShaderStage.Fragment,
+                Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage, MinBindingSize = Rdr2SkyLightBytes },
+            });
         rdr2NothingLayout = Layout();
         // The world's light and its shadow, for the fog's sunbeams.
         rdr2FogLightLayout = Layout(Constants(0, Compute, LightBytes), new BindGroupLayoutEntry
@@ -511,6 +518,7 @@ internal sealed unsafe partial class ViewportRenderer
                     new BindGroupEntry { Binding = 12, TextureView = sky.AerialViews[1] },
                     new BindGroupEntry { Binding = 13, TextureView = sky.AerialViews[2] },
                     new BindGroupEntry { Binding = 14, TextureView = sky.AerialViews[3] },
+                    new BindGroupEntry { Binding = 8, Buffer = sky.Light, Size = Rdr2SkyLightBytes },
                 ],
             });
         }

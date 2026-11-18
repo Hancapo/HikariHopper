@@ -156,6 +156,21 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void The_far_haze_builds_up_out_to_the_far_clip_from_the_timecycle()
+    {
+        Rdr2Sky sky = Sky(("far_haze_start", [100]), ("far_haze_power", [3]), ("far_haze_ambient_intensity", [1]), ("fog_isotropic_phase", [4]),
+            ("far_clip", [10000]));
+        var values = new Vector4[Rdr2Sky.Vectors];
+        sky.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
+        // Where it starts, one over the far clip less that, its power, its ambient over the isotropic phase's divisor.
+        Assert.Equal(new Vector4(100, 1 / 9900f, 3, .25f), values[Rdr2Sky.FarHaze]);
+        // At least as far again as it starts; the game's defaults where the weather hasn't it.
+        Rdr2Sky near = Sky(("far_haze_start", [1000]), ("far_clip", [1500]));
+        near.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, true, Vector3.Zero, 0);
+        Assert.Equal(new Vector4(1000, 1 / 1000f, 1, .5f / 4), values[Rdr2Sky.FarHaze]);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
 

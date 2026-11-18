@@ -251,6 +251,9 @@ struct Rdr2AerialCell {
     aerial: vec3f,
     fog: vec3f,
     drawn: f32,
+    // How much of the far haze there is, and the light it takes in.
+    haze: f32,
+    haze_light: vec3f,
 };
 
 fn rdr2_aerial_cells(input: Rdr2AerialVarying) -> Rdr2AerialCell {
@@ -269,24 +272,35 @@ fn rdr2_aerial_cells(input: Rdr2AerialVarying) -> Rdr2AerialCell {
     let slice = (saturate(rdr2_fog_fraction(distance, far)) * slices - 0.5) / slices;
     cell.fog = vec3f((vec2f(input.ndc.x * 0.5 + 0.5, 0.5 - input.ndc.y * 0.5) * (grid - 1.0) + 0.5) / grid, slice);
     cell.drawn = select(1.0, 0.0, depth <= 0.0);
+    // The far haze, as the game lays it: 1 - (1 - saturate((distance - its start) / its reach))^its power, taking in
+    // the sky's ambient (its cube's mean) and the fog's fill by its amount.
+    let haze = night.far_haze;
+    cell.haze = 1.0 - pow(max(1.0 - saturate(max(distance - haze.x, 0.0) * haze.y), 1e-6), haze.z);
+    var ambient = vec3f(0.0);
+    for (var face = 1; face < 7; face++) {
+        ambient += sky_light[face].rgb;
+    }
+    cell.haze_light = (ambient / 6.0 + night.fog[3].rgb / 3.14159265) * haze.w;
     return cell;
 }
 
-// The colour behind times the transmittance from the camera, through the fog and the air.
+// The colour behind times the transmittance from the camera, through the fog and the air, and less the far haze.
 @fragment
 fn fs_rdr2_aerial_transmittance(input: Rdr2AerialVarying) -> @location(0) vec4f {
     let cell = rdr2_aerial_cells(input);
     let air = textureSampleLevel(aerial_transmittance, dome_sampler, cell.aerial, 0.0).rgb;
     let fog = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
-    return vec4f(mix(vec3f(1.0), air * fog, cell.drawn), 1.0);
+    return vec4f(mix(vec3f(1.0), air * fog * (1.0 - cell.haze), cell.drawn), 1.0);
 }
 
-// Then the light scattered in on the way: the fog's, and the air's through it.
+// Then the light scattered in on the way: the fog's, and the air's through it; and the far haze's light through the
+// air.
 @fragment
 fn fs_rdr2_aerial_inscatter(input: Rdr2AerialVarying) -> @location(0) vec4f {
     let cell = rdr2_aerial_cells(input);
     let air = textureSampleLevel(aerial_inscatter, dome_sampler, cell.aerial, 0.0).rgb;
     let fog = textureSampleLevel(fog_inscatter, dome_sampler, cell.fog, 0.0).rgb;
     let through = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
-    return vec4f(min((fog + air * through) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
+    let clear = textureSampleLevel(aerial_transmittance, dome_sampler, cell.aerial, 0.0).rgb;
+    return vec4f(min((fog + air * through + cell.haze_light * cell.haze * clear) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
 }
