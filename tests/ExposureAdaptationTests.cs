@@ -51,14 +51,14 @@ public sealed class ExposureAdaptationTests
         GtaToneMapVisuals curve = Timecycle.ToneMap;
         // A frame given no time takes its target at once.
         render();
-        var (_, settled, target) = renderer.MeasuredExposure();
+        var (_, settled, target, _) = renderer.MeasuredExposure();
         Assert.Equal(target, settled, 4);
         // The target two stops lower: each frame moves the exposure by the gap times saturate(mult x dt) / dt stops a
         // second, at most the largest step, over the frame's time.
         renderer.Exposure = -2;
         renderer.FrameSeconds = Frame;
         render();
-        var (_, first, lower) = renderer.MeasuredExposure();
+        var (_, first, lower, _) = renderer.MeasuredExposure();
         Assert.True(lower < target - 1, $"{target} -> {lower}");
         float rate = MathF.Min(curve.AdaptationMaxStep, (settled - lower) * Math.Clamp(curve.AdaptationStepMult * Frame, 0, 1) / Frame);
         Assert.Equal(settled - rate * Frame, first, 3);
@@ -82,7 +82,7 @@ public sealed class ExposureAdaptationTests
         renderer.Camera.Place(new Vector3(1000, 0, 50), 0, 0);
         renderer.FrameSeconds = Frame;
         render();
-        var (_, cut, again) = renderer.MeasuredExposure();
+        var (_, cut, again, _) = renderer.MeasuredExposure();
         Assert.Equal(again, cut, 4);
     });
 
@@ -125,7 +125,7 @@ public sealed class ExposureAdaptationTests
             renderer.Exposure = -2;
             renderer.FrameSeconds = Frame;
             renderer.RenderTo(view);
-            var (_, exposure, wanted) = renderer.MeasuredExposure();
+            var (_, exposure, wanted, _) = renderer.MeasuredExposure();
             Assert.Equal(wanted, exposure, 4);
             renderer.Dispose();
             target.Destroy();

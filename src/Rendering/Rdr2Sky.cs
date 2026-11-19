@@ -238,7 +238,10 @@ internal sealed class Rdr2Sky
 
     /// <summary>
     /// How the game exposes and tone-maps its world at an hour: PS_CalculateExposure's curve and blend curve
-    /// (visualsettings.dat's), the timecycle's tweak, range, blend weight and adaptation step, and the filmic curves.
+    /// (visualsettings.dat's), the timecycle's tweak, range, blend weight and adaptation step, and the filmic curves; and
+    /// how it meters: the timecycle's spot meter (its middle and size, the frame -1 to 1 across), the lowlights and
+    /// highlights left out (the latter at most 0.99 less the former, as the game takes it), visualsettings.dat's least
+    /// luminance, and the timecycle's cubemap amount.
     /// </summary>
     public Rdr2Exposure Exposure(float hours)
     {
@@ -249,7 +252,23 @@ internal sealed class Rdr2Sky
             Field("postfx_exposure_min", at), Field("postfx_exposure_max", at),
             Field("postfx_exposure_adaption_step_mult", at, visuals.Get("Adaptation.step.size.mult", .65f)),
             visuals.Get("Adaptation.max.step.size", 100), visuals.Get("Adaptation.min.step.size", .01f), visuals.Get("Adaptation.threshold", 0),
-            GtaToneMapVisuals.From(visuals));
+            GtaToneMapVisuals.From(visuals))
+        {
+            SpotMeter = SpotMeter(at),
+            Lowlights = Field("postfx_exposure_lowlights_percent", at),
+            Highlights = MathF.Min(.99f - Field("postfx_exposure_lowlights_percent", at), Field("postfx_exposure_highlights_percent", at)),
+            AbsoluteMin = visuals.Get("Exposure.AbsoluteMinThreshod", 1e-6f),
+            CubemapAmount = Field("postfx_exposure_cubemap_amount", at),
+        };
+    }
+
+    // The spot meter over the frame (0 to 1) from its middle and size (-1 to 1), as the game's: middle less and plus half
+    // the size, then plus one over two.
+    private Vector4 SpotMeter(TimecycleSample at)
+    {
+        float x = Field("postfx_exposure_spot_meter_x", at), y = Field("postfx_exposure_spot_meter_y", at);
+        float width = Field("postfx_exposure_spot_meter_width", at, 2) / 2, height = Field("postfx_exposure_spot_meter_height", at, 2) / 2;
+        return (new Vector4(x - width, y - height, x + width, y + height) + Vector4.One) * .5f;
     }
 
     // The night's constants (rdr2_sky.wgsl's Rdr2Night), as the game's sky update fills its dome's: the passes it draws,
