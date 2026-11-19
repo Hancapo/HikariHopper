@@ -26,6 +26,8 @@ const RDR2_AERIAL_SIZE: u32 = 32u;
 const RDR2_FOG_GRID: vec3u = vec3u(64u, 36u, 64u);
 // The fog's slices: the distance at a fraction t of the way out is RDR2_FOG_NEAR ((1 + far / RDR2_FOG_NEAR)^t - 1).
 const RDR2_FOG_NEAR: f32 = 32.0;
+// The most a half float holds, which the light scattered in is kept to.
+const RDR2_HALF_MAX: f32 = 65504.0;
 
 fn rdr2_fog_distance(t: f32, far: f32) -> f32 {
     return RDR2_FOG_NEAR * (pow(1.0 + far / RDR2_FOG_NEAR, t) - 1.0);
@@ -80,7 +82,8 @@ fn cs_rdr2_fog(@builtin(global_invocation_id) id: vec3u) {
         behind = ahead;
         let cell = vec3u(id.xy, slice);
         textureStore(fog_transmittance_out, cell, vec4f(vec3f(transmittance), 1.0));
-        textureStore(fog_inscatter_out, cell, vec4f(inscattered, 1.0));
+        // Kept to half floats' range: towards the sun through thick fog it would pass it (and be infinite).
+        textureStore(fog_inscatter_out, cell, vec4f(min(inscattered, vec3f(RDR2_HALF_MAX)), 1.0));
     }
 }
 
@@ -248,5 +251,5 @@ fn fs_rdr2_aerial_inscatter(input: Rdr2AerialVarying) -> @location(0) vec4f {
     let air = textureSampleLevel(aerial_inscatter, dome_sampler, cell.aerial, 0.0).rgb;
     let fog = textureSampleLevel(fog_inscatter, dome_sampler, cell.fog, 0.0).rgb;
     let through = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
-    return vec4f((fog + air * through) * cell.drawn, 1.0);
+    return vec4f(min((fog + air * through) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
 }
