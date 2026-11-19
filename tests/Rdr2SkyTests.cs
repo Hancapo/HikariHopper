@@ -117,6 +117,10 @@ public sealed class Rdr2SkyTests
         Rdr2Sky? sky = Rdr2Sky.Read(files.GetValueOrDefault, () => throw new InvalidOperationException("a broken dome"));
         Assert.NotNull(sky);
         Assert.Null(sky.Dome);
+        // And the weather's colour tables, without grading by weather.
+        Rdr2Sky? ungraded = Rdr2Sky.Read(files.GetValueOrDefault, null, () => throw new InvalidOperationException("broken tables"));
+        Assert.NotNull(ungraded);
+        Assert.Null(ungraded.Grading);
     }
 
     [Fact]

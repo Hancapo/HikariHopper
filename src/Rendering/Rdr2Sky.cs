@@ -172,8 +172,8 @@ internal sealed class Rdr2Sky
         {
             tables = grading?.Invoke();
         }
-        catch (Exception error) when (error is IOException or InvalidDataException or FormatException or ArgumentException
-            or EndOfStreamException or NotSupportedException or OverflowException)
+        // The grading is optional too: whatever its files throw, the frame isn't graded by weather.
+        catch (Exception error) when (error is not OutOfMemoryException)
         {
         }
         return new Rdr2Sky(weather, visuals) { Dome = shape, Grading = tables };

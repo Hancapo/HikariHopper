@@ -19,7 +19,9 @@ internal sealed unsafe partial class ViewportRenderer
     private TextureView? rdr2LevelsView, rdr2WeatherView;
     // What the tables were last baked from, so they're baked again only when it changes.
     private (Vector4 Correct, Vector4 Shift, float Desaturation)? rdr2LevelsBaked;
-    private (Rdr2Grading Grading, string Weights)? rdr2WeatherBaked;
+    private (Rdr2Grading Grading, float[] Weights)? rdr2WeatherBaked;
+    // The grading of a sky without the game's weather tables: the identity, the same one every frame.
+    private static readonly Rdr2Grading NoRdr2WeatherTables = Rdr2Grading.Of(new float[]?[9]);
 
     private void CreateRdr2Grading()
     {
@@ -69,12 +71,11 @@ internal sealed unsafe partial class ViewportRenderer
             WriteRdr2Table(rdr2LevelsTable!, Rdr2Grading.Levels(grade.Correct, grade.Shift, grade.Desaturation));
             rdr2LevelsBaked = levels;
         }
-        Rdr2Grading tables = sky.Sky.Grading ?? Rdr2Grading.Of(new float[]?[9]);
-        string weights = string.Join(",", grade.WeatherWeights);
-        if (rdr2WeatherBaked is not { } baked || !ReferenceEquals(baked.Grading, tables) || baked.Weights != weights)
+        Rdr2Grading tables = sky.Sky.Grading ?? NoRdr2WeatherTables;
+        if (rdr2WeatherBaked is not { } baked || !ReferenceEquals(baked.Grading, tables) || !baked.Weights.AsSpan().SequenceEqual(grade.WeatherWeights))
         {
             WriteRdr2Table(rdr2WeatherTable!, tables.Weather(grade.WeatherWeights));
-            rdr2WeatherBaked = (tables, weights);
+            rdr2WeatherBaked = (tables, grade.WeatherWeights);
         }
         queue.WriteBuffer(rdr2GradeBuffer!, 0, (ReadOnlySpan<Vector4>)[Vector4.UnitX, grade.Scotopic,
             new Vector4(grade.ScotopicWeight, 0, 0)]);
