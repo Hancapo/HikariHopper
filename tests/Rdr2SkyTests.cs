@@ -107,6 +107,19 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void A_dome_that_fails_to_read_leaves_the_sky_on_its_sphere()
+    {
+        var files = new Dictionary<string, byte[]>
+        {
+            [Rdr2Sky.Weather] = Encoding.UTF8.GetBytes(Weather()),
+            [Rdr2Sky.VisualSettingsPath] = Encoding.UTF8.GetBytes(Visuals),
+        };
+        Rdr2Sky? sky = Rdr2Sky.Read(files.GetValueOrDefault, () => throw new InvalidOperationException("a broken dome"));
+        Assert.NotNull(sky);
+        Assert.Null(sky.Dome);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
 

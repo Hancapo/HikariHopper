@@ -127,8 +127,8 @@ internal sealed class Rdr2Sky
         {
             shape = dome?.Invoke();
         }
-        catch (Exception error) when (error is IOException or InvalidDataException or System.Xml.XmlException or FormatException
-            or ArgumentException or EndOfStreamException or NotSupportedException or OverflowException)
+        // The dome is optional: whatever its files throw, the sky's drawn on the sphere instead.
+        catch (Exception error) when (error is not OutOfMemoryException)
         {
         }
         return new Rdr2Sky(weather, visuals) { Dome = shape };
