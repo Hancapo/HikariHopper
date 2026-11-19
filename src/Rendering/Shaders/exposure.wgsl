@@ -203,7 +203,7 @@ fn cs_rdr2_histogram(@builtin(global_invocation_id) id: vec3u, @builtin(local_in
     workgroupBarrier();
     let size = textureDimensions(hdr_frame, 0);
     if (id.x < size.x && id.y < size.y && rdr2_metered(id.xy, size)) {
-        let least = rdr2_meter.least;
+        let least = max(rdr2_meter.least, 1e-30);
         let span = log(rdr2_meter.most / least);
         let l = rdr2_luminance(textureLoad(hdr_frame, vec2i(id.xy), 0).rgb);
         var bin = 0u;
@@ -224,9 +224,16 @@ fn cs_rdr2_histogram(@builtin(global_invocation_id) id: vec3u, @builtin(local_in
 // middle's, the highlights' last; the middle's mean, and the cube's, are what the exposure's worked out from.
 @compute @workgroup_size(1)
 fn cs_rdr2_exposure() {
-    let least = rdr2_meter.least;
-    let most = rdr2_meter.most;
-    let pixels = rdr2_meter.pixels;
+    // The pixels the histogram counted (the spot meter's within the frame); none metered keeps the exposure as it was.
+    var pixels = 0.0;
+    for (var bin = 0u; bin < 256u; bin++) {
+        pixels += f32(atomicLoad(&rdr2_meter.bins[bin]));
+    }
+    if (pixels < 1.0) {
+        return;
+    }
+    let least = max(rdr2_meter.least, 1e-30);
+    let most = max(rdr2_meter.most, least);
     let lows = round(pixels * exposure_settings.bands.x);
     let highs = round(pixels * exposure_settings.bands.y);
     let middles = round(pixels - (lows + highs));
