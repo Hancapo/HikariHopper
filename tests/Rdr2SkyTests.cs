@@ -177,6 +177,24 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void The_frame_is_graded_by_the_timecycles_correction_shift_desaturation_and_scotopic_shift()
+    {
+        Rdr2Sky sky = Sky(("postfx_correct_col_r", [.9f]), ("postfx_correct_cutoff", [0]), ("postfx_shift_col_b", [.8f]), ("postfx_shift_cutoff", [.1277f]),
+            ("postfx_desaturation", [.8f]), ("postfx_weather_color_correction", [1]), ("postfx_scotopic_col_r", [.37f]),
+            ("postfx_scotopic_blue_shift_intensity", [.7f]), ("postfx_scotopic_weight_scale", [.3f]), ("postfx_scotopic_weight_bias", [-.15f]));
+        Rdr2GradeValues grade = sky.GradeAt(12);
+        // The correction's cut-off at least 0.0001, as the game takes it.
+        Assert.Equal(new Vector4(.9f, 1, 1, .0001f), grade.Correct);
+        Assert.Equal(new Vector4(1, 1, .8f, .1277f), grade.Shift);
+        Assert.Equal(.8f, grade.Desaturation, 6);
+        // The viewer's climate is the middle of the game's base bands: the middle weather table alone.
+        Assert.Equal(1, grade.WeatherWeights[4], 6);
+        Assert.Equal(1, grade.WeatherWeights.Sum(), 6);
+        Assert.Equal(new Vector4(.37f, 1, 1, .7f), grade.Scotopic);
+        Assert.Equal(new Vector2(.3f, -.15f), grade.ScotopicWeight);
+    }
+
+    [Fact]
     public void The_far_haze_builds_up_out_to_the_far_clip_from_the_timecycle()
     {
         Rdr2Sky sky = Sky(("far_haze_start", [100]), ("far_haze_power", [3]), ("far_haze_ambient_intensity", [1]), ("fog_isotropic_phase", [4]),

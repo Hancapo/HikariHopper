@@ -1,5 +1,14 @@
 namespace HikariHopper.Rendering;
 
+/// <summary>How Red Dead Redemption 2 grades its frame at an hour (Rdr2Sky.GradeAt).</summary>
+/// <param name="Correct">The colour correction and its cut-off.</param>
+/// <param name="Shift">The colour shift and its cut-off.</param>
+/// <param name="WeatherWeights">The weather tables' weights, [temperature + 3 humidity].</param>
+/// <param name="Scotopic">The scotopic colour, and its blue shift's intensity.</param>
+/// <param name="ScotopicWeight">The scotopic weight's scale and bias.</param>
+internal sealed record Rdr2GradeValues(System.Numerics.Vector4 Correct, System.Numerics.Vector4 Shift, float Desaturation, float[] WeatherWeights,
+    System.Numerics.Vector4 Scotopic, System.Numerics.Vector2 ScotopicWeight);
+
 /// <summary>
 /// How Red Dead Redemption 2 exposes and tone-maps its world, as its post-process works the exposure out
 /// (PS_CalculateExposure): the stops for a scene of luminance L, scale ln(L + horizontal offset) + vertical offset - 10 +

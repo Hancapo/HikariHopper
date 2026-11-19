@@ -505,6 +505,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = frameView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
             });
+            WriteRdr2Grade();
             mapped.SetPipeline(tonemapPipeline!);
             mapped.SetBindGroup(0, sceneGroup);
             mapped.SetBindGroup(1, tonemapGroup!);

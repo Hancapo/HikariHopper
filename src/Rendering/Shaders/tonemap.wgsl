@@ -6,12 +6,53 @@
 // target. Its dither is the window's, once the frame is done (present.wgsl). The HDR target holds premultiplied colour and coverage, so
 // this is blended over what is already drawn (the backdrop) where there is a drawable; past its edges, its glow is
 // added over the backdrop.
+// Red Dead Redemption 2's world is graded after its tone map as its PS_Composite grades it (Rdr2Grading.cs): the colour
+// to the display's sRGB (the game's own transform, not GTA V's gamma); the scotopic shift, the colour's scotopic
+// luminance (from its XYZ: Y (1.33 (1 + (Y + Z) / X) - 1.68)) times the timecycle's scotopic colour and intensity,
+// mixed in by saturate(0.04 / (L + 0.04) scale + bias) for the scene's luminance L before its exposure; then its levels
+// table and its weather's, each a 16 by 16 by 16 table read as the game reads it.
 // Scene and the colour helpers come from scene.wgsl, the light from light.wgsl.
 
 @group(1) @binding(0) var hdr_texture: texture_2d<f32>;
 @group(1) @binding(1) var<storage, read> frame_mean: array<f32, 4>;
 @group(1) @binding(2) var bloom_texture: texture_2d<f32>;
 @group(1) @binding(3) var bloom_sampler: sampler;
+
+// RDR2's grading: whether it's on; the scotopic colour and its intensity; the scotopic weight's scale and bias.
+struct Rdr2Grade {
+    on: vec4f,
+    scotopic: vec4f,
+    scotopic_weight: vec4f,
+};
+@group(1) @binding(4) var<uniform> rdr2_grade: Rdr2Grade;
+@group(1) @binding(5) var rdr2_levels: texture_2d<f32>;
+@group(1) @binding(6) var rdr2_weather: texture_2d<f32>;
+
+// A colour through one of RDR2's tables: blue picks the two slices either side, red across and green down each.
+fn rdr2_table(table: texture_2d<f32>, colour: vec3f) -> vec3f {
+    let c = saturate(colour);
+    let slice = floor(c.b * 14.9999);
+    let along = c.b * 15.0 - slice;
+    let at = vec2f(slice * 0.0625 + c.r * 0.058594 + 0.001953, c.g * 0.9375 + 0.03125);
+    let below = textureSampleLevel(table, bloom_sampler, at, 0.0).rgb;
+    let above = textureSampleLevel(table, bloom_sampler, at + vec2f(0.0625, 0.0), 0.0).rgb;
+    return mix(below, above, along);
+}
+
+// RDR2's display colour for a tone-mapped one, at the scene's luminance before its exposure, as the window takes it.
+fn rdr2_display(mapped: vec3f, luminance: f32) -> vec3f {
+    var display = linear_to_srgb(saturate(mapped));
+    let x = max(dot(display, vec3f(0.5149, 0.3244, 0.1607)), 0.01);
+    let y = max(dot(display, vec3f(0.2654, 0.6704, 0.0642)), 0.0);
+    let z = max(dot(display, vec3f(0.0248, 0.1248, 0.8504)), 0.0);
+    let scotopic = y * (1.33 * (1.0 + (y + z) / x) - 1.68);
+    let night = saturate(scotopic * rdr2_grade.scotopic.rgb * rdr2_grade.scotopic.w);
+    let weight = saturate(0.04 / (luminance + 0.04) * rdr2_grade.scotopic_weight.x + rdr2_grade.scotopic_weight.y);
+    display = mix(display, night, weight);
+    display = rdr2_table(rdr2_levels, display);
+    display = rdr2_table(rdr2_weather, display);
+    return srgb_to_linear(display);
+}
 
 @vertex
 fn vs_tonemap(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
@@ -106,5 +147,9 @@ fn composite(stored: vec4f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f,
     // PS_Composite keeps the scene and its bloom to half-float range, then exposes it.
     let exposed = min(hdr + bloom, vec3f(65504.0)) * exposure;
     let mapped = saturate(filmic(exposed, p0, p1) / white);
+    if (rdr2_grade.on.x > 0.5) {
+        let display = rdr2_display(mapped, dot(hdr, vec3f(0.3, 0.59, 0.11)));
+        return vec4f(display * coverage + to_target(game_gamma(glow)) * (1.0 - coverage), coverage);
+    }
     return vec4f(to_target(game_gamma(mapped)) * coverage + to_target(game_gamma(glow)) * (1.0 - coverage), coverage);
 }
