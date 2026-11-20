@@ -119,6 +119,18 @@ internal sealed class Rdr2Sky
     /// <summary>The dome it's drawn on and its textures, from the game's files; none without them (a sphere stands in).</summary>
     public Rdr2SkyDome? Dome { get; init; }
 
+    /// <summary>The game's weather colour tables, from its files; none without them (the frame isn't graded by weather).</summary>
+    public Rdr2Grading? Grading { get; init; }
+
+    /// <summary>
+    /// The climate the weather's colour tables are blended for: the viewer simulates none, so the middle of the game's
+    /// base bands (WeatherColorCorrection.Humidity's and .Temperature's BaseMin to BaseMax) stands in, the temperate,
+    /// middling table alone.
+    /// </summary>
+    internal (float Humidity, float Temperature) Climate =>
+        ((visuals.Get("WeatherColorCorrection.Humidity.BaseMin", .49f) + visuals.Get("WeatherColorCorrection.Humidity.BaseMax", .51f)) / 2,
+         (visuals.Get("WeatherColorCorrection.Temperature.BaseMin", 14) + visuals.Get("WeatherColorCorrection.Temperature.BaseMax", 16)) / 2);
+
     internal Rdr2Sky(IReadOnlyDictionary<string, float[]> weather, GameVisualSettings visuals)
     {
         this.weather = weather;
@@ -129,7 +141,7 @@ internal sealed class Rdr2Sky
     /// The sky from the game's files, through <paramref name="read"/> (a virtual path's bytes, or null), on the dome
     /// <paramref name="dome"/> reads; null without its weather, and no dome where that can't be read.
     /// </summary>
-    public static Rdr2Sky? Read(Func<string, byte[]?> read, Func<Rdr2SkyDome?>? dome = null)
+    public static Rdr2Sky? Read(Func<string, byte[]?> read, Func<Rdr2SkyDome?>? dome = null, Func<Rdr2Grading?>? grading = null)
     {
         IReadOnlyDictionary<string, float[]> weather;
         GameVisualSettings visuals;
@@ -147,6 +159,7 @@ internal sealed class Rdr2Sky
             return null;
         }
         Rdr2SkyDome? shape = null;
+        Rdr2Grading? tables = null;
         try
         {
             shape = dome?.Invoke();
@@ -155,7 +168,15 @@ internal sealed class Rdr2Sky
         catch (Exception error) when (error is not OutOfMemoryException)
         {
         }
-        return new Rdr2Sky(weather, visuals) { Dome = shape };
+        try
+        {
+            tables = grading?.Invoke();
+        }
+        // The grading is optional too: whatever its files throw, the frame isn't graded by weather.
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+        }
+        return new Rdr2Sky(weather, visuals) { Dome = shape, Grading = tables };
     }
 
     private static string Text(byte[] bytes) => Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
@@ -260,6 +281,29 @@ internal sealed class Rdr2Sky
             AbsoluteMin = visuals.Get("Exposure.AbsoluteMinThreshod", 1e-6f),
             CubemapAmount = Field("postfx_exposure_cubemap_amount", at),
         };
+    }
+
+    /// <summary>
+    /// How the game grades its frame at an hour (Rdr2Grading.cs, tonemap.wgsl): the timecycle's colour correction (its
+    /// cut-off at least 0.0001, as the game takes it), shift and desaturation for the levels table; the weather tables'
+    /// weights for the climate (at postfx_weather_color_correction); the scotopic colour with its blue shift's intensity,
+    /// and the scotopic weight's scale and bias.
+    /// </summary>
+    public Rdr2GradeValues GradeAt(float hours)
+    {
+        TimecycleSample at = Timecycle.Sample(hours);
+        Vector4 Bands(string name) => new(visuals.Get($"WeatherColorCorrection.{name}.Min", name == "Humidity" ? 0 : -10),
+            visuals.Get($"WeatherColorCorrection.{name}.BaseMin", name == "Humidity" ? .49f : 14),
+            visuals.Get($"WeatherColorCorrection.{name}.BaseMax", name == "Humidity" ? .51f : 16),
+            visuals.Get($"WeatherColorCorrection.{name}.Max", name == "Humidity" ? 1 : 35));
+        var (humidity, temperature) = Climate;
+        return new Rdr2GradeValues(
+            new Vector4(Colour("postfx_correct_col", at, 1), MathF.Max(Field("postfx_correct_cutoff", at), .0001f)),
+            new Vector4(Colour("postfx_shift_col", at, 1), Field("postfx_shift_cutoff", at)),
+            Field("postfx_desaturation", at, 1),
+            Rdr2Grading.WeatherWeights(humidity, temperature, Bands("Humidity"), Bands("Temperature"), Field("postfx_weather_color_correction", at, 1)),
+            new Vector4(Colour("postfx_scotopic_col", at, 1), Field("postfx_scotopic_blue_shift_intensity", at)),
+            new Vector2(Field("postfx_scotopic_weight_scale", at), Field("postfx_scotopic_weight_bias", at)));
     }
 
     // The spot meter over the frame (0 to 1) from its middle and size (-1 to 1), as the game's: middle less and plus half

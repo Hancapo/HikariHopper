@@ -117,6 +117,10 @@ public sealed class Rdr2SkyTests
         Rdr2Sky? sky = Rdr2Sky.Read(files.GetValueOrDefault, () => throw new InvalidOperationException("a broken dome"));
         Assert.NotNull(sky);
         Assert.Null(sky.Dome);
+        // And the weather's colour tables, without grading by weather.
+        Rdr2Sky? ungraded = Rdr2Sky.Read(files.GetValueOrDefault, null, () => throw new InvalidOperationException("broken tables"));
+        Assert.NotNull(ungraded);
+        Assert.Null(ungraded.Grading);
     }
 
     [Fact]
@@ -174,6 +178,24 @@ public sealed class Rdr2SkyTests
         // Halfway from the frame's curve to the cube's.
         float frame = -1.15f * MathF.Log(10) + 6.9f - 10, cube = -1.15f * MathF.Log(1000) + 6.9f - 10;
         Assert.Equal((frame + cube) / 2, exposure.TargetFor(10, 1000), 4);
+    }
+
+    [Fact]
+    public void The_frame_is_graded_by_the_timecycles_correction_shift_desaturation_and_scotopic_shift()
+    {
+        Rdr2Sky sky = Sky(("postfx_correct_col_r", [.9f]), ("postfx_correct_cutoff", [0]), ("postfx_shift_col_b", [.8f]), ("postfx_shift_cutoff", [.1277f]),
+            ("postfx_desaturation", [.8f]), ("postfx_weather_color_correction", [1]), ("postfx_scotopic_col_r", [.37f]),
+            ("postfx_scotopic_blue_shift_intensity", [.7f]), ("postfx_scotopic_weight_scale", [.3f]), ("postfx_scotopic_weight_bias", [-.15f]));
+        Rdr2GradeValues grade = sky.GradeAt(12);
+        // The correction's cut-off at least 0.0001, as the game takes it.
+        Assert.Equal(new Vector4(.9f, 1, 1, .0001f), grade.Correct);
+        Assert.Equal(new Vector4(1, 1, .8f, .1277f), grade.Shift);
+        Assert.Equal(.8f, grade.Desaturation, 6);
+        // The viewer's climate is the middle of the game's base bands: the middle weather table alone.
+        Assert.Equal(1, grade.WeatherWeights[4], 6);
+        Assert.Equal(1, grade.WeatherWeights.Sum(), 6);
+        Assert.Equal(new Vector4(.37f, 1, 1, .7f), grade.Scotopic);
+        Assert.Equal(new Vector2(.3f, -.15f), grade.ScotopicWeight);
     }
 
     [Fact]

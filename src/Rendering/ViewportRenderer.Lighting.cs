@@ -315,8 +315,28 @@ internal sealed unsafe partial class ViewportRenderer
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
                 },
                 new BindGroupLayoutEntry { Binding = 3, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // RDR2's grading: its constants, its levels table and its weather's.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 4,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = Rdr2GradeBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 5,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 6,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
             ],
         });
+        CreateRdr2Grading();
         CreateExposure();
         CreateBloom();
         CreateSubSampledPipeline();
@@ -455,6 +475,9 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 1, Buffer = measured!, Size = MeasuredBytes },
                 new BindGroupEntry { Binding = 2, TextureView = bloomViews[0] },
                 new BindGroupEntry { Binding = 3, Sampler = bloomSampler! },
+                new BindGroupEntry { Binding = 4, Buffer = rdr2GradeBuffer!, Size = Rdr2GradeBytes },
+                new BindGroupEntry { Binding = 5, TextureView = rdr2LevelsView! },
+                new BindGroupEntry { Binding = 6, TextureView = rdr2WeatherView! },
             ],
         });
         CreateExposureGroup();
