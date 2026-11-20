@@ -133,7 +133,7 @@ $download = @"
 | --- | --- | --- |
 | **Windows, 64-bit** | [**$name.zip**]($repository/releases/download/v$version/$name.zip) | $([math]::Round((Get-Item $zip).Length / 1MB)) MB |
 
-Unzip it to a folder you can write to and run ``HikariHopper.exe``: no installer and no .NET needed, and it keeps itself up to date. The ``.nupkg`` files and ``releases.win.json`` are for the app's updater.
+Unzip it to a folder you can write to and run ``HikariHopper.exe``.
 "@
 $notes = Join-Path $Output "$name-notes.md"
 Set-Content $notes (($section -replace '^[^\n]*\n+', '') + "`n`n" + ($download -replace "`r`n", "`n") + "`n") -NoNewline
