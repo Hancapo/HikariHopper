@@ -1,14 +1,16 @@
 using System.Numerics;
 using WebGpuSharp;
 using Buffer = WebGpuSharp.Buffer;
+using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
 
 // Red Dead Redemption 2's sky behind its world (rdr2_sky_tables.wgsl, rdr2_sky.wgsl): the game's precomputed
 // atmosphere, its tables built on the GPU as its sky system builds them (the transmittance, the single scattering, then
-// each later order gathered, marched and added in) whenever the air they're made for changes, then the dome and the
-// sun's disc drawn from them first in the world's HDR pass, after which the sky covers the frame. Only once an RDR2
-// world has given its sky (ShowRdr2Sky); until then the backdrop shows behind it as before.
+// each later order gathered, marched and added in) whenever the air they're made for changes, then the game's dome drawn
+// from them first in the world's HDR pass, with the sun's and the moon's scattering, the stars, the air glow and the
+// discs, after which the sky covers the frame. Only once an RDR2 world has given its sky (ShowRdr2Sky); until then the
+// backdrop shows behind it as before.
 internal sealed unsafe partial class ViewportRenderer
 {
     private const TextureFormat Rdr2TableFormat = TextureFormat.RGBA16Float;
@@ -17,15 +19,19 @@ internal sealed unsafe partial class ViewportRenderer
     // 32 heights) and the gathered light's.
     private static readonly Extent3D Rdr2TransmittanceSize = new(128, 32, 1), Rdr2ScatteringSize = new(256, 64, 32), Rdr2GatherSize = new(32, 32, 32);
 
-    /// <summary>The RDR2 sky's GPU side: its tables, the totals' two (added into in turn), and the dome's group.</summary>
+    /// <summary>
+    /// The RDR2 sky's GPU side: its tables, the totals' two (added into in turn), the dome's mesh, its textures, and its
+    /// groups.
+    /// </summary>
     private sealed record Rdr2SkyResources(Rdr2Sky Sky, WebGpuSharp.Texture Transmittance, WebGpuSharp.Texture Delta, WebGpuSharp.Texture Gathered,
-        WebGpuSharp.Texture[] Totals, BindGroup[] Passes, BindGroup[] Domes, Buffer Tables, Buffer Dome);
+        WebGpuSharp.Texture[] Totals, BindGroup[] Passes, BindGroup[] Domes, Buffer Tables, Buffer Dome, Buffer Vertices, Buffer Indices,
+        uint IndexCount, WebGpuSharp.Texture[] Textures);
 
     private Rdr2SkyResources? rdr2Sky;
     private BindGroupLayout? rdr2TransmittanceLayout, rdr2SingleLayout, rdr2GatherLayout, rdr2OrderLayout, rdr2AccumulateLayout, rdr2DomeLayout;
     private ComputePipeline? rdr2TransmittancePipeline, rdr2SinglePipeline, rdr2GatherPipeline, rdr2OrderPipeline, rdr2AccumulatePipeline;
     private RenderPipeline? rdr2DomePipeline;
-    private Sampler? rdr2Sampler;
+    private Sampler? rdr2Sampler, rdr2Wrap;
     private readonly Vector4[] rdr2Values = new Vector4[Rdr2Sky.Vectors], rdr2Built = new Vector4[Rdr2Sky.Vectors];
     private bool rdr2TablesBuilt;
     // Which of the totals the last order was added into, which the dome reads.
@@ -41,11 +47,11 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (rdr2DomePipeline is not null)
             return;
-        static BindGroupLayoutEntry Constants(uint binding, ShaderStage stage) => new()
+        static BindGroupLayoutEntry Constants(uint binding, ShaderStage stage, ulong size = Rdr2Sky.TableBytes) => new()
         {
             Binding = binding,
             Visibility = stage,
-            Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = Rdr2Sky.Bytes },
+            Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = size },
         };
         static BindGroupLayoutEntry Filtering(uint binding, ShaderStage stage) =>
             new() { Binding = binding, Visibility = stage, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } };
@@ -69,8 +75,10 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2OrderLayout = rdr2GatherLayout;
         rdr2AccumulateLayout = Layout(Constants(0, Compute), Table(3, TextureViewDimension.D3, Compute), Table(4, TextureViewDimension.D3, Compute),
             Output(6, TextureViewDimension.D3));
-        rdr2DomeLayout = Layout(Constants(0, ShaderStage.Fragment), Filtering(1, ShaderStage.Fragment), Table(2, TextureViewDimension.D2, ShaderStage.Fragment),
-            Table(3, TextureViewDimension.D3, ShaderStage.Fragment));
+        const ShaderStage Fragment = ShaderStage.Fragment;
+        rdr2DomeLayout = Layout(Constants(0, ShaderStage.Vertex | Fragment, Rdr2Sky.Bytes), Filtering(1, Fragment), Table(2, TextureViewDimension.D2, Fragment),
+            Table(3, TextureViewDimension.D3, Fragment), Filtering(4, Fragment), Table(5, TextureViewDimension.D2, Fragment),
+            Table(6, TextureViewDimension.D2, Fragment), Table(7, TextureViewDimension.D2, Fragment));
 
         Lazy<ShaderModule> tables = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
@@ -93,7 +101,23 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2DomePipeline = gpu.Pipeline("rdr2-sky/dome", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, rdr2DomeLayout] }),
-            Vertex = new VertexState { Module = dome.Value, EntryPoint = "vs_rdr2_sky" },
+            Vertex = new VertexState
+            {
+                Module = dome.Value,
+                EntryPoint = "vs_rdr2_sky",
+                Buffers =
+                [
+                    new VertexBufferLayout
+                    {
+                        ArrayStride = Rdr2SkyDome.Stride,
+                        Attributes = new[]
+                        {
+                            new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 1, Offset = 12, Format = VertexFormat.Float32x2 },
+                        },
+                    },
+                ],
+            },
             Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
             Fragment = new FragmentState
             {
@@ -125,6 +149,18 @@ internal sealed unsafe partial class ViewportRenderer
             LodMaxClamp = 1,
             MaxAnisotropy = 1,
         });
+        rdr2Wrap ??= device.CreateSampler(new SamplerDescriptor
+        {
+            AddressModeU = AddressMode.Repeat,
+            AddressModeV = AddressMode.Repeat,
+            AddressModeW = AddressMode.Repeat,
+            MagFilter = FilterMode.Linear,
+            MinFilter = FilterMode.Linear,
+            MipmapFilter = MipmapFilterMode.Linear,
+            LodMinClamp = 0,
+            LodMaxClamp = 32,
+            MaxAnisotropy = 1,
+        });
         WebGpuSharp.Texture Table(Extent3D size, TextureUsage extra = TextureUsage.None) => device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.StorageBinding | TextureUsage.TextureBinding | extra,
@@ -137,13 +173,13 @@ internal sealed unsafe partial class ViewportRenderer
         WebGpuSharp.Texture transmittance = Table(Rdr2TransmittanceSize), delta = Table(Rdr2ScatteringSize, TextureUsage.CopySrc),
             gathered = Table(Rdr2GatherSize);
         WebGpuSharp.Texture[] totals = [Table(Rdr2ScatteringSize, TextureUsage.CopyDst), Table(Rdr2ScatteringSize, TextureUsage.CopyDst)];
-        Buffer tables = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.Bytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        Buffer tables = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.TableBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         Buffer dome = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.Bytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         TextureView transmittanceView = transmittance.CreateView(), deltaView = delta.CreateView(), gatheredView = gathered.CreateView();
         TextureView[] totalViews = [totals[0].CreateView(), totals[1].CreateView()];
         BindGroup Group(BindGroupLayout layout, params BindGroupEntry[] entries) =>
             device.CreateBindGroup(new BindGroupDescriptor { Layout = layout, Entries = entries });
-        BindGroupEntry Uniform(Buffer buffer) => new() { Binding = 0, Buffer = buffer, Size = Rdr2Sky.Bytes };
+        BindGroupEntry Uniform(Buffer buffer, ulong size = Rdr2Sky.TableBytes) => new() { Binding = 0, Buffer = buffer, Size = size };
         BindGroupEntry Sampling() => new() { Binding = 1, Sampler = rdr2Sampler };
         static BindGroupEntry View(uint binding, TextureView view) => new() { Binding = binding, TextureView = view };
         BindGroup[] passes =
@@ -156,12 +192,26 @@ internal sealed unsafe partial class ViewportRenderer
             Group(rdr2AccumulateLayout!, Uniform(tables), View(3, totalViews[0]), View(4, deltaView), View(6, totalViews[1])),
             Group(rdr2AccumulateLayout!, Uniform(tables), View(3, totalViews[1]), View(4, deltaView), View(6, totalViews[0])),
         ];
-        BindGroup[] domes =
-        [
-            Group(rdr2DomeLayout!, Uniform(dome), Sampling(), View(2, transmittanceView), View(3, totalViews[0])),
-            Group(rdr2DomeLayout!, Uniform(dome), Sampling(), View(2, transmittanceView), View(3, totalViews[1])),
-        ];
-        rdr2Sky = new Rdr2SkyResources(sky, transmittance, delta, gathered, totals, passes, domes, tables, dome);
+        // The game's dome and its textures, or a sphere where its files haven't them, with nothing on it.
+        Rdr2SkyDome shape = sky.Dome ?? Rdr2SkyDome.Sphere();
+        var owned = new List<WebGpuSharp.Texture>();
+        TextureView Own(GameTexture? source)
+        {
+            if (source is null || CreateTexture(source) is not var (texture, block))
+                return clear!;
+            for (int level = 0; level < source.MipCount; level++)
+                WriteLevel(source, texture, block, level);
+            owned.Add(texture);
+            return texture.CreateView();
+        }
+        TextureView stars = Own(shape.Stars), airGlow = Own(shape.AirGlow), moon = Own(shape.Moon);
+        Buffer vertices = Upload((ReadOnlySpan<float>)shape.Vertices, sizeof(float));
+        Buffer indices = Upload((ReadOnlySpan<uint>)shape.Indices, sizeof(uint), BufferUsage.Index);
+        BindGroup Dome(TextureView total) => Group(rdr2DomeLayout!, Uniform(dome, Rdr2Sky.Bytes), Sampling(), View(2, transmittanceView),
+            View(3, total), new BindGroupEntry { Binding = 4, Sampler = rdr2Wrap }, View(5, stars), View(6, airGlow), View(7, moon));
+        BindGroup[] domes = [Dome(totalViews[0]), Dome(totalViews[1])];
+        rdr2Sky = new Rdr2SkyResources(sky, transmittance, delta, gathered, totals, passes, domes, tables, dome, vertices, indices,
+            (uint)shape.Indices.Length, [.. owned]);
         rdr2TablesBuilt = false;
     }
 
@@ -171,10 +221,10 @@ internal sealed unsafe partial class ViewportRenderer
         if (rdr2Sky is not { } sky)
             return;
         rdr2Sky = null;
-        foreach (WebGpuSharp.Texture texture in (ReadOnlySpan<WebGpuSharp.Texture>)[sky.Transmittance, sky.Delta, sky.Gathered, .. sky.Totals])
+        foreach (WebGpuSharp.Texture texture in (ReadOnlySpan<WebGpuSharp.Texture>)[sky.Transmittance, sky.Delta, sky.Gathered, .. sky.Totals, .. sky.Textures])
             texture.Destroy();
-        sky.Tables.Destroy();
-        sky.Dome.Destroy();
+        foreach (Buffer buffer in (ReadOnlySpan<Buffer>)[sky.Tables, sky.Dome, sky.Vertices, sky.Indices])
+            buffer.Destroy();
     }
 
     /// <summary>
@@ -185,14 +235,15 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (!worldShown || rdr2Sky is not { } sky)
             return false;
-        sky.Sky.Write(rdr2Values, Hours, DayCycle.SunDirection(Hours, Sky), cycle.Directional);
+        sky.Sky.Write(rdr2Values, Hours, DayCycle.SunDirection(Hours, Sky), DayCycle.MoonDirection(Hours, Sky), cycle.NaturalDown,
+            waterClock.Elapsed.TotalSeconds);
         queue.WriteBuffer(sky.Dome, 0, (ReadOnlySpan<Vector4>)rdr2Values);
         if (rdr2TablesBuilt && Rdr2Sky.SameTables(rdr2Values, rdr2Built))
             return true;
         rdr2Values.CopyTo(rdr2Built.AsSpan());
         rdr2TablesBuilt = true;
         Rdr2SkyBuilds++;
-        queue.WriteBuffer(sky.Tables, 0, (ReadOnlySpan<Vector4>)rdr2Values);
+        queue.WriteBuffer(sky.Tables, 0, ((ReadOnlySpan<Vector4>)rdr2Values)[..Rdr2Sky.TableVectors]);
         static uint Groups(uint size, uint kernel) => (size + kernel - 1) / kernel;
         ComputePassEncoder pass = encoder.BeginComputePass();
         pass.SetPipeline(rdr2TransmittancePipeline!);
@@ -227,7 +278,7 @@ internal sealed unsafe partial class ViewportRenderer
             Groups(Rdr2ScatteringSize.Height, 4), Groups(Rdr2ScatteringSize.DepthOrArrayLayers, 4));
     }
 
-    /// <summary>The sky, first in the HDR pass: the dome and the sun's disc, covering the frame.</summary>
+    /// <summary>The sky, first in the HDR pass: the game's dome with the night and the discs, covering the frame.</summary>
     private void DrawRdr2Sky(RenderPassEncoder pass)
     {
         if (rdr2Sky is not { } sky)
@@ -235,6 +286,8 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetPipeline(rdr2DomePipeline!);
         pass.SetBindGroup(0, sceneGroup);
         pass.SetBindGroup(1, sky.Domes[rdr2Total]);
-        pass.Draw(3);
+        pass.SetVertexBuffer(0, sky.Vertices);
+        pass.SetIndexBuffer(sky.Indices, IndexFormat.Uint32);
+        pass.DrawIndexed(sky.IndexCount);
     }
 }

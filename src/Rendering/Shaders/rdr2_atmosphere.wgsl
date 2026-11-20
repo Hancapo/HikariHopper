@@ -29,8 +29,8 @@ struct Rdr2Atmosphere {
     phase: vec4f,
     // The unit way towards the sun (Z up), then the tangent of the disc's angular radius.
     sun: vec4f,
-    // The curved transmittance's density multiplier and its power, the disc's limb sharpness, and what the dome's
-    // radiance is scaled by into the viewer's light.
+    // The curved transmittance's density multiplier and its power, the disc's limb sharpness, and the luminance of the
+    // viewer's sky ambient, which the dome's zenith is scaled to.
     disc: vec4f,
 };
 

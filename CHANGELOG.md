@@ -42,6 +42,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Lay the decal that GTA V's _texdecal and _vertdecal shaders paint over their own surface, as the game does, in its world and the 3D viewer: the graffiti on Vespucci beach's palm trunks now shows. ([#302](https://github.com/Hancapo/HikariHopper/pull/302))
 - Expose GTA V's world for the frame in view, eased towards it over a second or two as the game does, instead of for a fixed view of its sky at the hour: a view in shade comes up as the game's does, a building's shade at dusk from a mean brightness of 31 to 70. ([#304](https://github.com/Hancapo/HikariHopper/pull/304))
 - Draw Red Dead Redemption 2's sky behind its world by day as the game draws it, from its own timecycle and visualsettings.dat: the blue of the air from the horizon to the zenith, the haze and glow round the sun, and the sun's disc. ([#305](https://github.com/Hancapo/HikariHopper/pull/305))
+- Draw Red Dead Redemption 2's night sky over its world as the game draws it, from its own sky dome, textures, timecycle and visualsettings.dat: the stars and the Milky Way turning with the time of day, the moon and its light in the sky, the air glow, and the twilight after sunset. ([#306](https://github.com/Hancapo/HikariHopper/pull/306))
 
 ### Changed
 

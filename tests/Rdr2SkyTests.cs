@@ -27,6 +27,10 @@ public sealed class Rdr2SkyTests
         """;
 
     private const string Visuals = """
+        stars.dense.intensityGalaxy 3.0
+        stars.dense.color.red 		0.549
+        stars.dense.color.green 	0.627
+        stars.dense.color.blue 		1.0
         #Config for static values for skyhat
         sky.MultipleScattering 0.5
         sky.SunIntensity 100000.0
@@ -54,7 +58,7 @@ public sealed class Rdr2SkyTests
             ("sky_scattering_mie_intensity", [.75f]), ("sky_scattering_sun_intensity_multiplier", [.5f]), ("sky_scattering_moon_intensity_multiplier", [.2f]),
             ("sky_scattering_sky_col_r", [.5f]), ("sky_scattering_sun_col_b", [.25f]), ("sky_scattering_multiple_scattering_intensity", [.8f]));
         var values = new Vector4[Rdr2Sky.Vectors];
-        sky.Write(values, 12, Vector3.UnitZ, new Vector3(2));
+        sky.Write(values, 12, Vector3.UnitZ, -Vector3.UnitZ, new Vector3(2), 0);
         // The Rayleigh scattering a metre over the wavelength's fourth power and the molecules; the aerosols' extinction.
         Assert.Equal(1169939.4332487835 / (Math.Pow(680, 4) * 1.5), values[1].X, 1e-12);
         Assert.Equal(1169939.4332487835 / (Math.Pow(440, 4) * 1.5), values[1].Z, 1e-12);
@@ -73,8 +77,8 @@ public sealed class Rdr2SkyTests
         Assert.Equal(Vector3.UnitZ, new Vector3(values[6].X, values[6].Y, values[6].Z));
         // Each later order by the timecycle's intensity times visualsettings.dat's.
         Assert.Equal(.4f, values[8].X, 6);
-        // Into the viewer's light: pi times its directional light over the sky's.
-        Assert.Equal(MathF.PI * 2 / 50000.2f, values[7].W, 8);
+        // The viewer's sky ambient's luminance, which the zenith's scaled to.
+        Assert.Equal(2, values[7].W, 5);
     }
 
     [Fact]
@@ -83,9 +87,9 @@ public sealed class Rdr2SkyTests
         Rdr2Sky sky = Sky(("sky_scattering_sun_intensity_multiplier", [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]),
             ("sky_scattering_aerosol_density_scale", [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2]));
         Vector4[] noon = new Vector4[Rdr2Sky.Vectors], night = new Vector4[Rdr2Sky.Vectors], late = new Vector4[Rdr2Sky.Vectors];
-        sky.Write(noon, 14, Vector3.UnitZ, Vector3.One);
-        sky.Write(night, 2, -Vector3.UnitZ, Vector3.One);
-        sky.Write(late, 23, -Vector3.UnitZ, Vector3.One);
+        sky.Write(noon, 14, Vector3.UnitZ, -Vector3.UnitZ, Vector3.One, 0);
+        sky.Write(night, 2, -Vector3.UnitZ, Vector3.UnitZ, Vector3.One, 0);
+        sky.Write(late, 23, -Vector3.UnitZ, Vector3.UnitZ, Vector3.One, 0);
         Assert.Equal(100000, noon[3].X);
         Assert.Equal(0, night[3].X);
         Assert.True(Rdr2Sky.SameTables(noon, night));
@@ -103,8 +107,104 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void A_dome_that_fails_to_read_leaves_the_sky_on_its_sphere()
+    {
+        var files = new Dictionary<string, byte[]>
+        {
+            [Rdr2Sky.Weather] = Encoding.UTF8.GetBytes(Weather()),
+            [Rdr2Sky.VisualSettingsPath] = Encoding.UTF8.GetBytes(Visuals),
+        };
+        Rdr2Sky? sky = Rdr2Sky.Read(files.GetValueOrDefault, () => throw new InvalidOperationException("a broken dome"));
+        Assert.NotNull(sky);
+        Assert.Null(sky.Dome);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
+
+    [Fact]
+    public void By_night_the_moon_and_stars_are_drawn_from_the_weather_and_visualsettings_as_the_game_draws_them()
+    {
+        Rdr2Sky sky = Sky(("sky_scattering_sun_intensity_multiplier", [0]), ("sky_scattering_moon_intensity_multiplier", [.5f]),
+            ("sky_moon_disc_size", [2]), ("sky_moon_iten", [10]), ("sky_moon_col_r", [.5f]), ("sky_stars_iten", [.01f]),
+            ("sky_stars_dense_intensity_mult", [2]), ("sky_air_glow_intensity", [.25f]), ("sky_air_glow_base_intensity", [.5f]));
+        var values = new Vector4[Rdr2Sky.Vectors];
+        Vector3 moon = Vector3.Normalize(new Vector3(1, 0, 1));
+        sky.Write(values, 2, -Vector3.UnitZ, moon, Vector3.One, 0);
+        Span<Vector4> night = values.AsSpan(Rdr2Sky.TableVectors);
+        // No sun under the horizon nor with its multiplier off; the moon and the stars on.
+        Assert.Equal(new Vector4(0, 1, 1, Rdr2Sky.DomeRadius), night[0]);
+        // The moon's disc its size times 250 across from its middle at 20 km, its colour by its intensity, its sky lit by its own.
+        Assert.Equal(2 * 250 / 20000f, night[1].W, 6);
+        Assert.Equal(moon, new Vector3(night[1].X, night[1].Y, night[1].Z));
+        Assert.Equal(new Vector3(5, 10, 10), new Vector3(night[4].X, night[4].Y, night[4].Z));
+        Assert.Equal(.5f, night[2].X, 5);
+        // The dense stars by their colour and the timecycle's multiplier; the tilings, the fades and the blink's gain.
+        Assert.Equal(4, night[6].W);
+        Assert.Equal(1 / 3000f, night[9].X, 9);
+        Assert.Equal(new Vector2(8, .5f), new Vector2(night[9].Z, night[9].W));
+        // The air glow and the base colour (the game's defaults) by their intensities, over a thousand.
+        Assert.True(Vector3.Distance(new Vector3(.184f, 1, .494f) * .25f / 1000, new Vector3(night[13].X, night[13].Y, night[13].Z)) < 1e-9f);
+        Assert.True(Vector3.Distance(new Vector3(.072f, .35f, 1) * .5f / 1000, new Vector3(night[14].X, night[14].Y, night[14].Z)) < 1e-9f);
+        // The stars under the galaxy's light: the dense ones at its intensity.
+        Assert.Equal(new Vector3(.549f, .627f, 1) * 2 * 3, new Vector3(night[6].X, night[6].Y, night[6].Z));
+        // The moon under the horizon and the stars off: neither is drawn.
+        Rdr2Sky dark = Sky(("sky_stars_iten", [0]));
+        dark.Write(values, 2, -Vector3.UnitZ, -Vector3.UnitZ, Vector3.One, 0);
+        Assert.Equal(Vector3.Zero, new Vector3(values[Rdr2Sky.TableVectors].Y, values[Rdr2Sky.TableVectors].Z, 0));
+    }
+
+    [Fact]
+    public void The_stars_turn_with_the_time_of_day_about_the_north_axis()
+    {
+        Rdr2Sky sky = Sky();
+        Matrix4x4 midnight = sky.StarsRotation(0), dawn = sky.StarsRotation(6);
+        foreach (Vector3 axis in new[] { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ })
+            Assert.Equal(1, Vector3.Transform(axis, dawn).Length(), 5);
+        // Between them, a turn about the north axis by the rotation rate times a quarter of a day.
+        Assert.True(Matrix4x4.Invert(midnight, out Matrix4x4 back));
+        Matrix4x4 between = dawn * back;
+        Matrix4x4 expected = Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(new Vector3(0, .888f, .46f)), .15f * MathF.PI / 2);
+        Assert.Equal(expected.M11, between.M11, 4);
+        Assert.Equal(expected.M12, between.M12, 4);
+        Assert.Equal(expected.M23, between.M23, 4);
+        Assert.Equal(expected.M31, between.M31, 4);
+    }
+
+    [Fact]
+    public void The_domes_coordinates_are_the_skys_angle_from_the_zenith_round_by_its_bearing()
+    {
+        Assert.Equal(new Vector2(.5f), Rdr2SkyDome.Coordinates(Vector3.UnitZ));
+        Vector2 east = Rdr2SkyDome.Coordinates(Vector3.UnitX), south = Rdr2SkyDome.Coordinates(-Vector3.UnitY);
+        Assert.Equal(.5f, east.X, 5);
+        Assert.Equal(0, east.Y, 5);
+        Assert.Equal(1, south.X, 5);
+        Assert.Equal(.5f, south.Y, 5);
+        Rdr2SkyDome sphere = Rdr2SkyDome.Sphere(8, 16);
+        Assert.Equal(9 * 17 * 5, sphere.Vertices.Length);
+        Assert.Equal(8 * 16 * 6, sphere.Indices.Length);
+    }
+
+    [Fact]
+    public void The_games_dome_and_its_textures_are_read_from_its_files()
+    {
+        var sources = RedFury.World.WorldGameSource.ForGame(TestGames.Rdr2(), Rdr2Keys.Bundled.Crypto);
+        Rdr2SkyDome dome = Rdr2SkyDome.Read(sources, Rdr2Keys.Bundled.Crypto) ?? throw new InvalidOperationException("no dome");
+        Assert.True(dome.Indices.Length > 1000);
+        Assert.NotNull(dome.Stars);
+        Assert.NotNull(dome.AirGlow);
+        Assert.NotNull(dome.Moon);
+        // A unit sphere, its coordinates out from the middle by the angle from the zenith over pi.
+        for (int i = 0; i < dome.Vertices.Length; i += 5 * 97)
+        {
+            var place = new Vector3(dome.Vertices[i], dome.Vertices[i + 1], dome.Vertices[i + 2]);
+            Assert.Equal(1, place.Length(), 1);
+            if (place.Z > .05f)
+                Assert.Equal(MathF.Acos(Vector3.Normalize(place).Z) / MathF.PI,
+                    Vector2.Distance(new Vector2(dome.Vertices[i + 3], dome.Vertices[i + 4]), new Vector2(.5f)), .03f);
+        }
+    }
 
     [Fact]
     public void An_RDR2_worlds_sky_is_drawn_behind_it_with_no_GPU_errors_its_tables_built_once_for_each_air()

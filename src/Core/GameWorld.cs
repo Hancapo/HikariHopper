@@ -237,7 +237,8 @@ internal sealed class Rdr2WorldIndex(string root, int mapCount, WorldLodGraph lo
 
     public override string NameOf(uint hash) => Rdr2WorldFiles.NameOf(hash);
 
-    public override Rendering.Rdr2Sky? LoadRdr2Sky() => Sources is { } sources ? Rendering.Rdr2Sky.Read(sources.Read) : null;
+    public override Rendering.Rdr2Sky? LoadRdr2Sky() =>
+        Sources is { } sources ? Rendering.Rdr2Sky.Read(sources.Read, () => Rendering.Rdr2SkyDome.Read(sources, Crypto)) : null;
 
     /// <summary>HikariHopper's RDR2 world cache format; RedFury checks its own inside the file.</summary>
     private const string CacheVersion = "hh-rdr2-world-1";
