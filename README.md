@@ -9,13 +9,19 @@ Browse a game's folders and archives, then open, edit, extract and repack what i
 
 <table>
   <tr>
-    <td width="33%"><img src=".github/screenshots/explorer.png" alt="Browsing a nested archive in the explorer"></td>
-    <td width="33%"><img src=".github/screenshots/map-piece.png" alt="A map piece in the 3D viewer"></td>
-    <td width="33%"><img src=".github/screenshots/textures.png" alt="A texture dictionary in the texture viewer"></td>
+    <td width="50%"><img src=".github/screenshots/rdr2-world.jpg" alt="Red Dead Redemption 2's world at sunset, over a river valley"></td>
+    <td width="50%"><img src=".github/screenshots/gta-world.jpg" alt="GTA V's world over Los Santos by day"></td>
+  </tr>
+  <tr>
+    <td align="center">Fly through Red Dead Redemption 2's world</td>
+    <td align="center">Fly through GTA V's world</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/screenshots/explorer.png" alt="Browsing a nested archive in the explorer"></td>
+    <td width="50%"><img src=".github/screenshots/textures.png" alt="A texture dictionary in the texture viewer"></td>
   </tr>
   <tr>
     <td align="center">Browse folders and archives, nested ones too</td>
-    <td align="center">See models lit by the game's own time of day</td>
     <td align="center">Inspect and extract textures, channel by channel</td>
   </tr>
 </table>
@@ -23,13 +29,15 @@ Browse a game's folders and archives, then open, edit, extract and repack what i
 ## Features
 
 - Browse a game's folders and RPF archives in tabs, with search.
+- Fly through GTA V's and Red Dead Redemption 2's worlds, streamed around the camera and lit
+  by each game's own sky, fog and time of day.
 - Open models, vehicles, collisions and navmeshes in a 3D viewer that draws them with the
   game's own shaders and finds their textures wherever the game keeps them.
 - Pick a vehicle's colours, a level of detail or the time of day, and save models back.
 - View texture dictionaries by channel and mip, and extract textures as DDS.
 - Read and edit text files, loose or inside RPFs.
 
-Supported games: Grand Theft Auto V, Legacy and Enhanced.
+Supported games: Grand Theft Auto V (Legacy and Enhanced) and Red Dead Redemption 2.
 
 Built with .NET 10 and Avalonia.
 
