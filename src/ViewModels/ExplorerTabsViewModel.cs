@@ -66,15 +66,86 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     private void OpenInNewTab(ExplorerViewModel source, string path)
     {
         string game = source.HasGame ? source.GamePath : "";
+        string folder = source.HasFolder ? source.FolderPath : "";
         string archive = source.HasGame ? "" : source.Provider.ArchivePath;
         int row = NewTab();
         ExplorerViewModel tab = tabs[row];
         if (game.Length > 0)
+        {
             tab.OpenGame(game);
+            if (folder.Length > 0)
+                tab.OpenFolder(folder);
+        }
         else if (archive.Length > 0)
+        {
             tab.OpenArchive(archive);
+        }
         tab.GoToAddress(path);
     }
+
+    /// <summary>
+    /// The games a folder can be opened with: each edition whose installation is set up, with its folder, in the order
+    /// the start page lists them.
+    /// </summary>
+    public static IReadOnlyList<(GameEditionInfo Edition, string Root)> FolderGames() =>
+        [.. GameCatalog.Editions
+            .Select(edition => (Edition: edition, Root: GameSettings.ConfiguredGameRootToOpen(edition.Id)))
+            .Where(game => game.Root.Length > 0)];
+
+    /// <summary>
+    /// Opens <paramref name="folder"/> with the game at <paramref name="gameRoot"/> in a new tab just after the tab at
+    /// <paramref name="after"/> (at the end for -1), and shows it: at once when a tab has that game loaded, else once it
+    /// has loaded, behind the loading screen.
+    /// </summary>
+    public ExplorerViewModel OpenFolderInNewTab(string folder, string gameRoot, int after = -1)
+    {
+        bool loaded = tabs.Any(tab => tab.HasGame && SamePath(tab.GamePath, gameRoot));
+        int row = NewTab();
+        ExplorerViewModel opened = tabs[row];
+        if (after >= 0 && after + 1 < tabs.Count)
+            MoveTab(row, after + 1);
+        if (loaded)
+        {
+            opened.OpenGame(gameRoot);
+            opened.OpenFolder(folder);
+        }
+        else
+        {
+            opened.OpenFolderWithGame(folder, gameRoot);
+        }
+        return opened;
+    }
+
+    /// <summary>
+    /// Opens each of <paramref name="folders"/> in a new tab after the tab at <paramref name="after"/> (at the end for
+    /// -1), with the game at <paramref name="gameRoot"/>; with none given, with the one game set up. Returns the games
+    /// to choose from instead, opening nothing, when more than one is set up and none was given: the view asks, and
+    /// calls again with the answer. With no game set up, the status bar says so.
+    /// </summary>
+    public IReadOnlyList<(GameEditionInfo Edition, string Root)>? OpenFolders(IReadOnlyList<string> folders, string? gameRoot, int after = -1)
+    {
+        if (folders.Count == 0)
+            return null;
+        if (string.IsNullOrEmpty(gameRoot))
+        {
+            IReadOnlyList<(GameEditionInfo Edition, string Root)> games = FolderGames();
+            if (games.Count == 0)
+            {
+                ActiveBridge.ShowStatus("Set up a game in Settings to open a folder with it");
+                return null;
+            }
+            if (games.Count > 1)
+                return games;
+            gameRoot = games[0].Root;
+        }
+        foreach (string folder in folders)
+            after = tabs.IndexOf(OpenFolderInNewTab(folder, gameRoot, after));
+        return null;
+    }
+
+    private static bool SamePath(string left, string right) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Opens and activates an empty tab; returns its index.</summary>
     public int NewTab()

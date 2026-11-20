@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HikariHopper.Views.Controls"
+             xmlns:ui="using:HikariHopper.Ui"
+             x:Class="HikariHopper.Views.GameChoiceDialog"
+             Width="470">
+  <!-- Asked before a folder opens with no game to go by: which of the games set up it opens with. -->
+  <Border CornerRadius="{x:Static ui:Theme.PanelCorner}" ClipToBounds="True" Background="{x:Static ui:Theme.ChromeBg}">
+  <Panel>
+    <DockPanel>
+      <Panel DockPanel.Dock="Top" Height="{x:Static ui:Theme.HeaderHeight}" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Bevel}" />
+        <Border Height="1" VerticalAlignment="Bottom" Background="{x:Static ui:Theme.BorderHard}" />
+        <TextBlock Margin="10,0" VerticalAlignment="Center" Text="GAME TO USE" Foreground="{x:Static ui:Theme.TextDim}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}"
+                   FontWeight="Bold" LetterSpacing="1" />
+        <TextBlock Name="FolderText" Margin="10,0" HorizontalAlignment="Right" VerticalAlignment="Center" MaxWidth="300"
+                   TextTrimming="CharacterEllipsis" Foreground="{x:Static ui:Theme.Text}"
+                   FontFamily="{x:Static ui:Theme.MonoFont}" FontSize="{x:Static ui:Theme.SmallFontSize}" FontWeight="Bold" />
+      </Panel>
+
+      <Panel DockPanel.Dock="Bottom" Height="58" Background="{x:Static ui:Theme.ChromeRaised}">
+        <Border Height="1" VerticalAlignment="Top" Background="{x:Static ui:Theme.Border}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Center">
+          <c:ChromeToolButton Name="CancelButton" Width="80" Height="28" Raised="True" Text="Cancel" Click="OnCancel" />
+          <c:ChromeToolButton Name="OpenButton" Width="80" Height="28" Primary="True" Text="Open" Click="OnOpen" />
+        </StackPanel>
+      </Panel>
+
+      <Border Margin="16,14" Padding="2" Background="{x:Static ui:Theme.InsetBg}" CornerRadius="{x:Static ui:Theme.ControlCorner}">
+        <StackPanel Name="Rows" Spacing="2" />
+      </Border>
+    </DockPanel>
+    <Border BorderBrush="{x:Static ui:Theme.BorderHard}" BorderThickness="1" CornerRadius="{x:Static ui:Theme.PanelCorner}" IsHitTestVisible="False" />
+  </Panel>
+  </Border>
+</UserControl>

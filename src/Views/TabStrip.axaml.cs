@@ -12,6 +12,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using HikariHopper.ViewModels;
@@ -28,6 +29,12 @@ public partial class TabStrip : UserControl
     {
         InitializeComponent();
         TabList.SizeChanged += (_, _) => PositionActiveTab();
+        // Folders dragged in from outside: onto a game's tab, they open with its game; anywhere else, with the one asked.
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnFolderDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnFolderDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnFolderDragLeave);
+        AddHandler(DragDrop.DropEvent, OnFolderDrop);
         // A list that comes to overflow while tabs glide unclipped, narrowed or given more tabs, clips again at once.
         TabList.PropertyChanged += (_, e) =>
         {
@@ -213,6 +220,96 @@ public partial class TabStrip : UserControl
         return slot > 0 ? TabAt(order[slot - 1]) : null;
     }
 
+    // ---------------- Folders dropped on the strip ----------------
+
+    // The game's tab a folder is held over, lit; null over the rest of the strip.
+    private TabStripTab? dropTarget;
+
+    /// <summary>The game's tab a folder held over the strip would open beside, with its game; null when it would ask.</summary>
+    internal TabStripTab? DropTarget => dropTarget;
+
+    /// <summary>Whether the strip is lit for a folder held over it with no game's tab under it.</summary>
+    internal bool DropWashVisible => DropWash.IsVisible;
+
+    // Files from outside, not the explorer's own entries dragged up here.
+    private static bool AcceptsDrag(IDataTransfer data) =>
+        data.Contains(DataFormat.File) && !data.Contains(EntryPointerArea.EntryDragFormat);
+
+    /// <summary>The game's tab at <paramref name="point"/> (in the strip), or null over anything else.</summary>
+    internal TabStripTab? GameTabAt(Point point)
+    {
+        foreach (Control container in TabItems.GetRealizedContainers())
+        {
+            if (container is not ContentPresenter { Child: TabStripTab tab } || tab.Tab is not { HasGame: true })
+                continue;
+            if (tab.TranslatePoint(default, this) is { } at && new Rect(at, tab.Bounds.Size).Contains(point))
+                return tab;
+        }
+        return null;
+    }
+
+    /// <summary>Lights <paramref name="tab"/>, or, <paramref name="over"/> the strip with no tab, the strip.</summary>
+    internal void ShowDropTarget(TabStripTab? tab, bool over)
+    {
+        if (!ReferenceEquals(dropTarget, tab))
+        {
+            if (dropTarget is not null)
+                dropTarget.DropTarget = false;
+            dropTarget = tab;
+            if (tab is not null)
+                tab.DropTarget = true;
+        }
+        DropWash.IsVisible = over && tab is null;
+    }
+
+    private void OnFolderDragOver(object? sender, DragEventArgs e)
+    {
+        bool accepted = AcceptsDrag(e.DataTransfer) && Tabs is not null;
+        ShowDropTarget(accepted ? GameTabAt(e.GetPosition(this)) : null, accepted);
+        e.DragEffects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnFolderDragLeave(object? sender, DragEventArgs e)
+    {
+        // Moving from one tab to another inside the strip is not leaving it.
+        if (new Rect(Bounds.Size).Contains(e.GetPosition(this)))
+            return;
+        ShowDropTarget(null, false);
+    }
+
+    private void OnFolderDrop(object? sender, DragEventArgs e)
+    {
+        TabStripTab? target = GameTabAt(e.GetPosition(this));
+        ShowDropTarget(null, false);
+        e.Handled = true;
+        if (!AcceptsDrag(e.DataTransfer) || Tabs is not { } tabs)
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+        IStorageItem[] items = e.DataTransfer.TryGetFiles() ?? [];
+        string[] paths = [.. items.Select(item => item.TryGetLocalPath()).OfType<string>()];
+        e.DragEffects = DropFolders(tabs, paths, target?.Tab) ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    /// <summary>
+    /// Opens the folders among <paramref name="paths"/> each in a new tab: after <paramref name="onto"/> with its game
+    /// when dropped on a game's tab, else at the end with the game asked for. False when none of them is a folder.
+    /// </summary>
+    internal bool DropFolders(ExplorerTabsViewModel tabs, IReadOnlyList<string> paths, ExplorerViewModel? onto)
+    {
+        string[] folders = [.. paths.Where(Directory.Exists)];
+        if (folders.Length == 0)
+        {
+            tabs.ActiveBridge.ShowStatus("Only folders open from the tab strip");
+            return false;
+        }
+        ExplorerViewModel? with = onto is { HasGame: true } ? onto : null;
+        FolderOpening.Open(this, tabs, folders, with, with is null ? -1 : tabs.Tabs.IndexOf(with));
+        return true;
+    }
+
     // Dragging a tab: past a few pixels it follows the pointer along the strip, the tabs it passes
     // slide aside into the slot it left, and on release it eases into its new place.
     private const double DragThreshold = 5;
@@ -379,6 +476,7 @@ public sealed class TabStripTab : Decorator
     private ExplorerViewModel? subscribed;
     private bool pressed;
     private bool divider;
+    private bool dropTarget;
 
     public TabStripTab()
     {
@@ -441,6 +539,19 @@ public sealed class TabStripTab : Decorator
     /// <summary>The 1px rule drawn on the left edge, between two inactive tabs.</summary>
     public bool DividerVisible => divider;
 
+    /// <summary>Lit while a folder is held over it: dropped, it opens beside it with its game.</summary>
+    public bool DropTarget
+    {
+        get => dropTarget;
+        set
+        {
+            if (dropTarget == value)
+                return;
+            dropTarget = value;
+            InvalidateVisual();
+        }
+    }
+
     private TabStrip? Strip => this.FindAncestorOfType<TabStrip>();
 
     protected override Size MeasureOverride(Size availableSize)
@@ -475,7 +586,8 @@ public sealed class TabStripTab : Decorator
     private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ExplorerViewModel.TabTitle) or nameof(ExplorerViewModel.TabActive)
-            or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.HasArchive) or nameof(ExplorerViewModel.IsSearching))
+            or nameof(ExplorerViewModel.GameEdition) or nameof(ExplorerViewModel.HasArchive) or nameof(ExplorerViewModel.IsSearching)
+            or nameof(ExplorerViewModel.HasFolder))
             Refresh();
     }
 
@@ -514,7 +626,7 @@ public sealed class TabStripTab : Decorator
     private void RefreshTip()
     {
         ExplorerViewModel? tab = Tab;
-        tip.Text = tab is null ? "" : tab.HasGame ? tab.GamePath : tab.HasArchive ? tab.ArchivePath : "";
+        tip.Text = tab is null ? "" : tab.HasFolder ? tab.FolderPath : tab.HasGame ? tab.GamePath : tab.HasArchive ? tab.ArchivePath : "";
         // Built on the first tab that has something to say, the tooltip stays and follows the text.
         if (tip.Text.Length > 0 && ToolTip.GetTip(clickArea) is null)
         {
@@ -543,10 +655,14 @@ public sealed class TabStripTab : Decorator
             // tones.
             if (Active)
                 context.DrawGeometry(null, BevelPen, TopEdge(w));
-            return;
         }
-        if (divider)
+        else if (divider)
+        {
             context.FillRectangle(Ui.Theme.BorderSoft, new Rect(-1, Math.Floor(h / 2) - 8, 1, 16));
+        }
+        // A folder held over it: washed in the accent, outlined in it.
+        if (dropTarget)
+            context.DrawGeometry(Ui.Theme.AccentWash, DropPen, TopShape(w, h));
     }
 
     /// <summary>
@@ -554,6 +670,25 @@ public sealed class TabStripTab : Decorator
     /// both sides, extending <see cref="FootRadius"/> beyond the tab's bounds.
     /// </summary>
     private static readonly Pen BevelPen = new(Ui.Theme.Bevel, 1);
+    private static readonly Pen DropPen = new(Ui.Theme.BorderAccent, 1);
+
+    /// <summary>The tab's own outline without its feet: rounded on top, half a pixel in.</summary>
+    internal static Geometry TopShape(double w, double h)
+    {
+        double r = FootRadius - 0.5;
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext path = geometry.Open())
+        {
+            path.BeginFigure(new Point(0.5, h), true);
+            path.LineTo(new Point(0.5, r + 0.5));
+            path.ArcTo(new Point(r + 0.5, 0.5), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.LineTo(new Point(w - r - 0.5, 0.5));
+            path.ArcTo(new Point(w - 0.5, r + 0.5), new Size(r, r), 0, false, SweepDirection.Clockwise);
+            path.LineTo(new Point(w - 0.5, h));
+            path.EndFigure(false);
+        }
+        return geometry;
+    }
 
     /// <summary>The tab's top edge and rounded corners, half a pixel in so the 1px line is crisp.</summary>
     internal static Geometry TopEdge(double w)

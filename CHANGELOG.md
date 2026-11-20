@@ -53,6 +53,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Grade Red Dead Redemption 2's frame as the game does after its tone map: in its own sRGB, with its night-time blue shift, its timecycle's colour correction and desaturation, and its weather's colour table. ([#314](https://github.com/Hancapo/HikariHopper/pull/314))
 - Rebuild Red Dead Redemption 2's sky tables at most four times a second while the time of day is being dragged, not every frame; they're built for the exact hour once it holds still. ([#315](https://github.com/Hancapo/HikariHopper/pull/315))
 - Darken corners, creases and the ground under things in both games' worlds with ground-truth ambient occlusion, as RedFury's viewer works it out. ([#316](https://github.com/Hancapo/HikariHopper/pull/316))
+- Open a folder with a game, in a tab of its own, from File › Open folder… or by dropping it on the tab strip: dropped on a game's tab it takes that game, anywhere else it asks which. Its RPFs open with the game's keys, its models are drawn with the game's textures as well as those beside them, and it is searched and edited as the game's own files are. ([#336](https://github.com/Hancapo/HikariHopper/pull/336))
 
 ### Changed
 
