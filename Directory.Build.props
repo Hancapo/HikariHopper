@@ -10,7 +10,7 @@
     <!-- RedFury.NET checkout, for Red Dead Redemption 2: a sibling folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
     <RedFuryRoot Condition="'$(RedFuryRoot)' == '' and '$(REDFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(REDFURY_ROOT)'))</RedFuryRoot>
     <RedFuryRoot Condition="'$(RedFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../RedFury.NET/</RedFuryRoot>
-    <!-- Both libraries build on CommonFury; they share FiveFury's checkout of it, so the app has one. -->
-    <CommonFuryRoot>$(FiveFuryRoot)external/CommonFury/</CommonFuryRoot>
+    <!-- Both libraries build on CommonFury; they share this repository's submodule of it, so the app has one. -->
+    <CommonFuryRoot>$(MSBuildThisFileDirectory)external/CommonFury/</CommonFuryRoot>
   </PropertyGroup>
 </Project>

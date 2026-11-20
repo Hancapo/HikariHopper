@@ -1,10 +1,10 @@
 <Project>
   <!--
     The game libraries, for the app and its tests alike: FiveFury (GTA V) and RedFury (RDR2, with its world), consumed as managed .NET
-    libraries, and the CommonFury both build on. They share FiveFury's checkout of CommonFury (CommonFuryRoot, see
-    Directory.Build.props): each is built with CommonFuryRoot set alike and CommonFury is referenced directly, so it is
-    one project built once. The libraries' own references to it aren't brought in as well (they'd add RedFury's
-    submodule copy, and FiveFury's again without the setting).
+    libraries, and the CommonFury both build on. They share this repository's submodule of CommonFury (CommonFuryRoot,
+    see Directory.Build.props): each is built with CommonFuryRoot set alike and CommonFury is referenced directly, so it is
+    one project built once. The libraries' own references to it aren't brought in as well (they'd add FiveFury's and
+    RedFury's submodule copies).
     They're always built in their Release configuration, a Debug build of the app and its tests included: unoptimised,
     reading a game's files is about ten times slower, and the tests that read a real game took most of the suite's time.
   -->

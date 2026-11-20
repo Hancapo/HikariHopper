@@ -1,0 +1,3 @@
+[submodule "external/CommonFury"]
+	path = external/CommonFury
+	url = https://github.com/Hancapo/CommonFury.NET.git
