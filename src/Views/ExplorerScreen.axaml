@@ -12,7 +12,8 @@
        under the strip; the start page reaches up behind it, so the strip coming and going never moves the start
        page (ExplorerScreen.RefreshPage). The game loading view is placed on its own, before it shows: over the
        strip's row when there is no strip, and under the strip when there is one; it keeps its place while it shows,
-       so as it fades out over the opened game nothing moves under it (ExplorerScreen.PlaceLoadingView). -->
+       so as it fades out over the opened game nothing moves under it (ExplorerScreen.PlaceLoadingView). A load too
+       quick for the loading view to show fades the start page itself out instead (ExplorerScreen.FadeOut). -->
   <Grid RowDefinitions="Auto,*">
     <Panel Name="Pages" Grid.Row="1">
       <ContentControl Name="PageHost" />
@@ -20,6 +21,8 @@
       <v:ExplorerWorkView Name="WorkView" DataContext="{Binding ActiveBridge}" />
     </Panel>
     <v:TabStrip Name="Strip" Grid.Row="0" />
+    <!-- The start page a game or archive opened from, fading out over its workspace when no loading view showed. -->
+    <ContentControl Name="LeavingHost" Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False" IsVisible="False" />
     <v:GameLoadingView Name="LoadingView" Grid.Row="1" DataContext="{Binding ActiveBridge}" />
   </Grid>
 </UserControl>
