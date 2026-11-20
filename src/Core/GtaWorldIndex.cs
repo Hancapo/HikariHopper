@@ -139,7 +139,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         string name;
         lock (Gate)
         {
-            GameFile file = Game.FileSystem.Resolve(new Hash32(key.Hash), type).Value ?? throw new FileNotFoundException($"Asset {key} not found.");
+            GameFile file = Game.FileSystem.ResolveRegistered(new Hash32(key.Hash), type) ?? throw new FileNotFoundException($"Asset {key} not found.");
             data = file.ReadStandalone();
             name = Path.GetFileNameWithoutExtension(file.VirtualPath);
         }
@@ -274,7 +274,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         {
             byte[]? data = null;
             lock (Gate)
-                if (Game.FileSystem.Resolve(new Hash32(hash), GameFileType.Ytd).Value is { } file)
+                if (Game.FileSystem.ResolveRegistered(new Hash32(hash), GameFileType.Ytd) is { } file)
                     data = file.ReadStandalone();
             if (data is null)
                 return (null, 0);
@@ -311,7 +311,7 @@ internal sealed class GtaWorldIndex : WorldIndex
             {
                 try
                 {
-                    if (Game.FileSystem.Resolve(name, GameFileType.Ymap).Value is not { } file)
+                    if (Game.FileSystem.ResolveRegistered(name, GameFileType.Ymap) is not { } file)
                         continue;
                     Ymap ymap = Ymap.Read(file.ReadStandalone());
                     if (ymap.DistantLights.Lights.Count > 0)
@@ -329,7 +329,7 @@ internal sealed class GtaWorldIndex : WorldIndex
             }
             try
             {
-                if (Game.FileSystem.Resolve(new Hash32("heightmap"), GameFileType.Heightmap).Value is { } file)
+                if (Game.FileSystem.ResolveRegistered(new Hash32("heightmap"), GameFileType.Heightmap) is { } file)
                     heightMap = GtaHeightMap.Read(file.ReadStandalone());
             }
             catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException)
@@ -352,8 +352,8 @@ internal sealed class GtaWorldIndex : WorldIndex
             byte[]? model = null, textures = null;
             lock (Gate)
             {
-                model = Game.FileSystem.Resolve(name, GameFileType.Ydd).Value?.ReadStandalone();
-                textures = Game.FileSystem.Resolve(name, GameFileType.Ytd).Value?.ReadStandalone();
+                model = Game.FileSystem.ResolveRegistered(name, GameFileType.Ydd)?.ReadStandalone();
+                textures = Game.FileSystem.ResolveRegistered(name, GameFileType.Ytd)?.ReadStandalone();
             }
             if (model is null)
                 return null;
@@ -425,7 +425,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                     break;
                 byte[]? data;
                 lock (Gate)
-                    data = Game.FileSystem.Resolve(new Hash32(Name(file)), GameFileType.Ytyp).Value?.ReadStandalone();
+                    data = Game.FileSystem.ResolveRegistered(new Hash32(Name(file)), GameFileType.Ytyp)?.ReadStandalone();
                 if (data is null)
                     continue;
                 Ytyp types;
@@ -449,7 +449,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                 uint asset = archetype.AssetName.Value != 0 ? archetype.AssetName.Value : archetype.Name.Value;
                 byte[]? data;
                 lock (Gate)
-                    data = Game.FileSystem.Resolve(new Hash32(asset), GameFileType.Ydr).Value?.ReadStandalone();
+                    data = Game.FileSystem.ResolveRegistered(new Hash32(asset), GameFileType.Ydr)?.ReadStandalone();
                 if (data is null)
                     return [];
                 FiveFury.Drawables.Drawable drawable = Ydr.Read(data).Drawable;
@@ -525,7 +525,7 @@ internal sealed class GtaWorldIndex : WorldIndex
                 grassMaps.AddFirst(at);
                 return at.Value.Ymap;
             }
-        GameFile file = Game.FileSystem.Resolve(new Hash32(map), GameFileType.Ymap).Value ?? throw new FileNotFoundException("Grass map is unavailable.");
+        GameFile file = Game.FileSystem.ResolveRegistered(new Hash32(map), GameFileType.Ymap) ?? throw new FileNotFoundException("Grass map is unavailable.");
         Ymap ymap = Ymap.Read(file.ReadStandalone());
         grassMaps.AddFirst((map, ymap));
         if (grassMaps.Count > 8)
@@ -539,7 +539,7 @@ internal sealed class GtaWorldIndex : WorldIndex
         if (type is null)
             return null;
         lock (Gate)
-            return Game.FileSystem.Resolve(new Hash32(hash), type.Value).Value is { } file && GameTextures.GamePath(Root, file.SourcePath) is { } path
+            return Game.FileSystem.ResolveRegistered(new Hash32(hash), type.Value) is { } file && GameTextures.GamePath(Root, file.SourcePath) is { } path
                 ? new WorldFile(path, file.Size) : null;
     }
 
@@ -547,7 +547,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     {
         lock (Gate)
             foreach (GameFileType type in new[] { GameFileType.Ydr, GameFileType.Yft, GameFileType.Ydd, GameFileType.Ymap, GameFileType.Ytyp })
-                if (Game.FileSystem.Resolve(new Hash32(hash), type).Value is { } file)
+                if (Game.FileSystem.ResolveRegistered(new Hash32(hash), type) is { } file)
                     return Path.GetFileNameWithoutExtension(file.VirtualPath);
         return $"0x{hash:X8}";
     }
@@ -564,7 +564,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     };
 
     /// <summary>HikariHopper's GTA V world cache format: change it whenever what's cached changes.</summary>
-    private const string CacheVersion = "hh-gta-world-9";
+    private const string CacheVersion = "hh-gta-world-10";
 
     /// <summary>The index of the GTA V game at <paramref name="root"/>: read from the cache, or made and cached.</summary>
     public static GtaWorldIndex Build(string root, Rpf7Keys keys, Action<WorldProgress> report, CancellationToken cancellation)

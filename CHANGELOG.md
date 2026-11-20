@@ -69,6 +69,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Light GTA V's night-only lamps, windows and signs only by night, over the hours its visualsettings.dat sets, and show its night-only light shapes only then, and give its shiny metal and glass materials the environment map they reflect, in its world and the 3D viewer. ([#296](https://github.com/Hancapo/HikariHopper/pull/296))
 - Draw GTA V's surfaces that lay their own decal (the _vertdecal and _texdecal shaders, such as the palm trunks at Vespucci beach, and ped_nopeddamagedecals) solid, as the game does, instead of as see-through decals: a palm trunk no longer shows its inside or lets the sea and clouds through. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
 - Leave out the rooms of GTA V's interiors that can't be seen into from outside: the psychiatrist's office at Vespucci, a set with its own copy of the beach and streets around it, no longer lays a flat patch of sand over the beach. ([#279](https://github.com/Hancapo/HikariHopper/pull/279))
+- Read a GTA V file whose name two archives hold from the archive the game registers, in its world and the 3D viewer's textures, instead of from neither: the LOD pylons, poles and freight cars along the river in Legacy are no longer magenta. ([#303](https://github.com/Hancapo/HikariHopper/pull/303))
 
 ### Removed
 
