@@ -56,6 +56,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Extract all textures from the 3D viewer: every texture a model is drawn with, its own and the game's, rather than only those stored in it. ([#333](https://github.com/Hancapo/HikariHopper/pull/333))
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 - Take GTA V's exposure and filmic tone map from the game's own visualsettings.dat once a GTA V game is open, and from the game's own defaults before then. ([#293](https://github.com/Hancapo/HikariHopper/pull/293))
