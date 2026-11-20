@@ -56,6 +56,14 @@ internal sealed unsafe partial class ViewportRenderer
     private Sampler? rdr2Sampler, rdr2Wrap;
     private readonly Vector4[] rdr2Values = new Vector4[Rdr2Sky.Vectors], rdr2Built = new Vector4[Rdr2Sky.Vectors];
     private bool rdr2TablesBuilt;
+    // The air last frame asked for, and when the tables were last built: while the hour moves (the timecycle's air
+    // changes between every two keyframes) they're built at most every Rdr2TablesInterval, and for the air the hour
+    // settles on once it stops.
+    private readonly Vector4[] rdr2Wanted = new Vector4[Rdr2Sky.Vectors];
+    private readonly System.Diagnostics.Stopwatch rdr2SinceBuilt = new();
+
+    /// <summary>The least time between two builds of the sky's tables while the hour keeps moving (longer in tests).</summary>
+    internal TimeSpan Rdr2TablesInterval { get; set; } = TimeSpan.FromSeconds(.25);
     // Which of the totals the last order was added into, which the dome reads.
     private int rdr2Total;
 
@@ -392,9 +400,24 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2Values[Rdr2Sky.CameraRays + 1] = new Vector4(Camera.Right * (Aspect * OrbitCamera.TanHalf), 0);
         rdr2Values[Rdr2Sky.CameraRays + 2] = new Vector4(Camera.Up * OrbitCamera.TanHalf, Camera.Near);
         rdr2Values[Rdr2Sky.RelativeCamera] = new Vector4(Camera.Eye - origin, 0);
+        if (!rdr2TablesBuilt || Rdr2Sky.SameTables(rdr2Values, rdr2Built))
+        {
+            Rdr2Sky.CopyTables(rdr2Values, rdr2Wanted);
+            if (!rdr2TablesBuilt)
+                BuildRdr2SkyTables(encoder, sky);
+        }
+        else
+        {
+            // Other air: built again once the hour holds still, or while it moves once the interval's passed; till then
+            // the dome's drawn with the air the tables were built for, so the two agree.
+            bool settled = Rdr2Sky.SameTables(rdr2Values, rdr2Wanted);
+            Rdr2Sky.CopyTables(rdr2Values, rdr2Wanted);
+            if (settled || rdr2SinceBuilt.Elapsed >= Rdr2TablesInterval)
+                BuildRdr2SkyTables(encoder, sky);
+            else
+                Rdr2Sky.CopyTables(rdr2Built, rdr2Values);
+        }
         queue.WriteBuffer(sky.Dome, 0, (ReadOnlySpan<Vector4>)rdr2Values);
-        if (!rdr2TablesBuilt || !Rdr2Sky.SameTables(rdr2Values, rdr2Built))
-            BuildRdr2SkyTables(encoder, sky);
         // The sky's light on the world, from the tables, into the light the world's drawn with.
         ComputePassEncoder light = encoder.BeginComputePass();
         light.SetPipeline(rdr2SkyLightPipeline!);
@@ -420,6 +443,7 @@ internal sealed unsafe partial class ViewportRenderer
     {
         rdr2Values.CopyTo(rdr2Built.AsSpan());
         rdr2TablesBuilt = true;
+        rdr2SinceBuilt.Restart();
         Rdr2SkyBuilds++;
         queue.WriteBuffer(sky.Tables, 0, ((ReadOnlySpan<Vector4>)rdr2Values)[..Rdr2Sky.TableVectors]);
         static uint Groups(uint size, uint kernel) => (size + kernel - 1) / kernel;

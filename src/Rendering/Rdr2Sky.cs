@@ -383,4 +383,13 @@ internal sealed class Rdr2Sky
     /// <summary>Whether the tables made from <paramref name="a"/> are those made from <paramref name="b"/>: the same air and orders.</summary>
     public static bool SameTables(ReadOnlySpan<Vector4> a, ReadOnlySpan<Vector4> b) =>
         a[0].X == b[0].X && a[0].Y == b[0].Y && a[0].Z == b[0].Z && a[1] == b[1] && a[2] == b[2] && a[8] == b[8];
+
+    /// <summary>The constants the tables are built from (those <see cref="SameTables"/> compares), from one set to another.</summary>
+    public static void CopyTables(ReadOnlySpan<Vector4> from, Span<Vector4> to)
+    {
+        to[0] = new Vector4(from[0].X, from[0].Y, from[0].Z, to[0].W);
+        to[1] = from[1];
+        to[2] = from[2];
+        to[8] = from[8];
+    }
 }
