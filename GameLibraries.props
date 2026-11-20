@@ -10,12 +10,16 @@
   -->
   <PropertyGroup>
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <!-- A solution build drops the Configuration of projects outside the solution, here and in the libraries' own
+         references, so they'd build in Debug; this keeps it, and the libraries get it as a global property. -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+    <GameLibraryProperties>CommonFuryRoot=$(CommonFuryRoot);Configuration=Release;ShouldUnsetParentConfigurationAndPlatform=false</GameLibraryProperties>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="$(FiveFuryRoot)FiveFury/FiveFury.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
-    <ProjectReference Include="$(RedFuryRoot)RedFury/RedFury.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
+    <ProjectReference Include="$(FiveFuryRoot)FiveFury/FiveFury.csproj" AdditionalProperties="$(GameLibraryProperties)" />
+    <ProjectReference Include="$(RedFuryRoot)RedFury/RedFury.csproj" AdditionalProperties="$(GameLibraryProperties)" />
     <!-- RDR2's world: its index of maps and placements, and their levels of detail (no rendering of its own). -->
-    <ProjectReference Include="$(RedFuryRoot)RedFury.World/RedFury.World.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
-    <ProjectReference Include="$(CommonFuryRoot)CommonFury/CommonFury.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
+    <ProjectReference Include="$(RedFuryRoot)RedFury.World/RedFury.World.csproj" AdditionalProperties="$(GameLibraryProperties)" />
+    <ProjectReference Include="$(CommonFuryRoot)CommonFury/CommonFury.csproj" AdditionalProperties="$(GameLibraryProperties)" />
   </ItemGroup>
 </Project>
