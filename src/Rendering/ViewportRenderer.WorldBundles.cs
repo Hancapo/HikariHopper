@@ -218,13 +218,22 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.Rdr2Water => LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n"
                 + Read("rdr2_vertex.wgsl") + "\n" + instances + "\n" + Read("rdr2_world.wgsl") + "\n" + Read("water_common.wgsl") + "\n"
                 + Read("rdr2_water.wgsl"),
-            WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + Read("gta_water.wgsl"),
-            WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + Read("gta_world_terrain.wgsl"),
-            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + Read("gta_world.wgsl"),
+            WorldFamily.GtaWater => LitShader("water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_water.wgsl"),
+            WorldFamily.GtaTerrain => LitShader("terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world_terrain.wgsl"),
+            _ => LitShader("surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("gta_world.wgsl"),
         };
+        // GTA V's fog over its world, which its shaders take (gta_world_fog.wgsl).
+        static string GtaFog() => Read("gta_fog.wgsl") + "\n" + Read("gta_world_fog.wgsl") + "\n";
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Code() }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool decal = false) =>
             Compile($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => Describe(cull, blend, decal), prepare);
+        // GTA V's blended surfaces are drawn after its world's fog pass, and take the fog themselves.
+        string Fragment(bool blend, bool decal) => (family, blend && !decal) switch
+        {
+            (WorldFamily.Gta, true) => "fs_surface_world_fogged",
+            (WorldFamily.GtaTerrain, true) => "fs_terrain_world_fogged",
+            _ => fragment,
+        };
         // Decals are pulled towards the camera a little, as RedFury's are, over the surface they lie on.
         RenderPipelineDescriptor Describe(CullMode cull, bool blend, bool decal) => new()
         {
@@ -235,7 +244,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Fragment = new FragmentState
                 {
                     Module = shader.Value,
-                    EntryPoint = fragment,
+                    EntryPoint = Fragment(blend, decal),
                     Targets = new[]
                     {
                         new ColorTargetState
@@ -324,12 +333,13 @@ internal sealed unsafe partial class ViewportRenderer
     {
         foreach (WorldFamily family in families)
             CreateWorldFamily(family, prepare: true);
-        // GTA V's world has its sky behind it.
+        // GTA V's world has its sky behind it, and its fog over it.
         if (families.Contains(WorldFamily.Gta))
         {
             CreateSkyPipelines(prepare: true);
             CreateCloudHatPipeline(prepare: true);
             CreateCoronaPipeline(prepare: true);
+            CreateWorldFogPipeline(prepare: true);
         }
     }
 
@@ -565,21 +575,33 @@ internal sealed unsafe partial class ViewportRenderer
             return DrawCloudHats(pass, encoder, depthCopied: false);
         DrawWorldPass(pass, OpaqueBundle);
         DrawWorldPass(pass, DecalBundle);
-        // The water over what's behind it, which it refracts and reflects: the pass ends while that's copied.
-        if (worldWaterDraws.Count > 0)
+        // GTA V's fog over what's drawn so far, once its sky is shown (ViewportRenderer.WorldFog.cs): the rest of the
+        // pass reads the depth, which nothing after writes.
+        bool fog = worldSky is not null;
+        WorldFogged = fog;
+        // The water over what's behind it, which it refracts and reflects: the pass ends while that's copied. With the
+        // fog it ends here anyway, and the depth is copied for the cloud hats to fade against.
+        bool depthCopied = false;
+        if (worldWaterDraws.Count > 0 || fog)
         {
             pass.End();
-            CopyWaterBackground(encoder);
+            if (worldWaterDraws.Count > 0)
+                CopyWaterBackground(encoder);
+            else
+                encoder.CopyTextureToTexture(new TexelCopyTextureInfo { Texture = hdrDepth!, Aspect = TextureAspect.DepthOnly },
+                    new TexelCopyTextureInfo { Texture = waterDepth!, Aspect = TextureAspect.DepthOnly }, new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1));
+            depthCopied = true;
+            if (fog)
+                DrawFogRays(encoder);
             pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
-                DepthStencilAttachment = new RenderPassDepthStencilAttachment
-                {
-                    View = hdrDepthView!,
-                    DepthLoadOp = LoadOp.Load,
-                    DepthStoreOp = StoreOp.Store,
-                },
+                DepthStencilAttachment = fog
+                    ? new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthReadOnly = true }
+                    : new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthLoadOp = LoadOp.Load, DepthStoreOp = StoreOp.Store },
             });
+            if (fog)
+                DrawWorldFog(pass);
         }
         worldViewDraws += worldWaterDraws.Count + worldBlendedDraws.Count;
         // Bundles leave the pass's bindings cleared.
@@ -587,7 +609,7 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetBindGroup(2, lightGroup!);
         DrawBlended(pass, worldWaterDraws);
         // The cloud hats after the water, as the game draws them after its sky, before the other blended surfaces.
-        pass = DrawCloudHats(pass, encoder, depthCopied: worldWaterDraws.Count > 0);
+        pass = DrawCloudHats(pass, encoder, depthCopied);
         DrawBlended(pass, worldBlendedDraws);
         return pass;
     }

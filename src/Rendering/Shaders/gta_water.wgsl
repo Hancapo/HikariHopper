@@ -10,9 +10,12 @@
 //     through the refracted view.
 //   - Foam over the shallows, then the reflection map (the same paraboloid) by a fresnel on N.V, and the sun's highlight
 //     by the specular falloff, all faded in over the first metre of depth.
+//   - Then the world's fog along the view to the surface: the game draws its water before its fog pass, which fogs the
+//     water by its depth; here the fog pass goes first and the water, which covers what's behind it, fogs itself.
 // The game's ambient and directional water colours are taken as the timecycle's natural ambient and sun colour; its
 // BlendSampler (the fresnel and foam curves) as Schlick's fresnel and a steep foam ramp; its wet map isn't read.
-// Put after scene.wgsl, light.wgsl, water_common.wgsl and world_instances.wgsl.
+// Put after scene.wgsl, light.wgsl, water_common.wgsl, world_instances.wgsl, gta_fog.wgsl
+// and gta_world_fog.wgsl.
 
 struct Water {
     // FogMin and FogMax: the fog map's corners on the map, for the ocean.
@@ -164,5 +167,6 @@ fn fs_gta_water(input: WaterOutput, @builtin(front_facing) front: bool) -> @loca
     let half_vector = normalize(-view + sun);
     let highlight = pow(saturate(dot(half_vector, n)), water.scales.z) * water.scales.y * shadow;
     surface += directional * highlight;
-    return vec4f(mix(colour, surface, shore), 1.0);
+    // The world's fog at the water's surface, as the game's fog pass takes the water (gta_world_fog.wgsl).
+    return gta_world_fogged(vec4f(mix(colour, surface, shore), 1.0), input.place, input.position.xy);
 }

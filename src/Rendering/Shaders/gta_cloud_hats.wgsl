@@ -100,10 +100,10 @@ struct CloudHatVarying {
 // The cloud's fog: the sky's fog along the ray, at least as much as the cloud's haze, then the haze at the far
 // plane over it, as one colour added and one scale.
 fn cloud_fog(eye_ray: vec3f, haze_alpha: f32) -> vec4f {
-    var fog = gta_fog_no_haze(eye_ray);
+    var fog = gta_fog_no_haze(sky.fog, eye_ray);
     fog.w = max(fog.w, haze_alpha);
-    let haze = haze_alpha * sky.fog[2].w;
-    let haze_colour = vec3f(sky.fog_sun.w, sky.fog_atmosphere.w, sky.fog_ground.w);
+    let haze = haze_alpha * sky.fog.params[2].w;
+    let haze_colour = vec3f(sky.fog.sun.w, sky.fog.atmosphere.w, sky.fog.ground.w);
     return vec4f(fog.rgb * fog.a * (1.0 - haze) + haze_colour * haze, (1.0 - fog.w) * (1.0 - haze));
 }
 

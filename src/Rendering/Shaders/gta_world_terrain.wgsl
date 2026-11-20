@@ -1,5 +1,5 @@
 // GTA V's world's terrain: gta_world.wgsl's placement, shaded by terrain.wgsl. Put after scene.wgsl, light.wgsl,
-// terrain.wgsl and world_instances.wgsl.
+// terrain.wgsl, world_instances.wgsl, gta_fog.wgsl and gta_world_fog.wgsl.
 
 @vertex
 fn vs_terrain_world(input: TerrainInput, @location(8) source_index: u32) -> TerrainOutput {
@@ -19,4 +19,18 @@ fn vs_terrain_world(input: TerrainInput, @location(8) source_index: u32) -> Terr
     output.lod_fade = instance_lod_fade(instance);
     output.position = scene.view_projection * vec4f(placed.position, 1.0);
     return output;
+}
+
+// A blended piece of terrain, drawn after the world's fog pass: it takes the fog itself (gta_world.wgsl's
+// fs_surface_world_fogged).
+@fragment
+fn fs_terrain_world_fogged(input: TerrainOutput) -> @location(0) vec4f {
+    use_local_lights(input.position.xy, input.place);
+    use_room(input.room);
+    // Left out after shading, which needs uniform control flow.
+    let colour = shade_terrain(input);
+    if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
+        discard;
+    }
+    return gta_world_fogged(colour, input.place, input.position.xy);
 }
