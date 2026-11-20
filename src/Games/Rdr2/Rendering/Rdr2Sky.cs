@@ -303,7 +303,25 @@ internal sealed class Rdr2Sky
             Field("postfx_desaturation", at, 1),
             Rdr2Grading.WeatherWeights(humidity, temperature, Bands("Humidity"), Bands("Temperature"), Field("postfx_weather_color_correction", at, 1)),
             new Vector4(Colour("postfx_scotopic_col", at, 1), Field("postfx_scotopic_blue_shift_intensity", at)),
-            new Vector2(Field("postfx_scotopic_weight_scale", at), Field("postfx_scotopic_weight_bias", at)));
+            new Vector2(Field("postfx_scotopic_weight_scale", at), Field("postfx_scotopic_weight_bias", at)),
+            Gradient(at));
+    }
+
+    // The gradient filter, as the game's post-process works it out from the timecycle: each band's colour times its fade;
+    // the top's and the bottom's raised to the front end's gamma, its default 1/2.2 (the viewer doesn't follow the game's
+    // brightness setting), the middle's not; each times its multiplier. The timecycle's defaults are 1, and a half for
+    // the midpoints.
+    private Rdr2Gradient Gradient(TimecycleSample at)
+    {
+        const float Gamma = 1 / 2.2f;
+        Vector3 Band(string band) => Colour($"postfx_grad_{band}_col", at, 1) * Field($"postfx_grad_{band}_col_fade", at, 1);
+        static Vector3 Raised(Vector3 colour) => new(MathF.Pow(colour.X, Gamma), MathF.Pow(colour.Y, Gamma), MathF.Pow(colour.Z, Gamma));
+        float middle = Field("postfx_grad_midpoint", at, .5f);
+        return new Rdr2Gradient(
+            new Vector4(Raised(Band("top")) * Field("postfx_grad_top_col_mult", at, 1), 1 - 2 * Field("postfx_grad_top_middle_midpoint", at, .5f)),
+            new Vector4(Band("middle") * Field("postfx_grad_middle_col_mult", at, 1), middle),
+            new Vector4(Raised(Band("bottom")) * Field("postfx_grad_bottom_col_mult", at, 1), 1 - 2 * Field("postfx_grad_middle_bottom_midpoint", at, .5f)),
+            new Vector2(1 / (1 - middle), 1 / middle));
     }
 
     // The spot meter over the frame (0 to 1) from its middle and size (-1 to 1), as the game's: middle less and plus half

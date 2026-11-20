@@ -6,8 +6,22 @@ namespace HikariHopper.Rendering;
 /// <param name="WeatherWeights">The weather tables' weights, [temperature + 3 humidity].</param>
 /// <param name="Scotopic">The scotopic colour, and its blue shift's intensity.</param>
 /// <param name="ScotopicWeight">The scotopic weight's scale and bias.</param>
+/// <param name="Gradient">The gradient filter the frame is multiplied by before its exposure.</param>
 internal sealed record Rdr2GradeValues(System.Numerics.Vector4 Correct, System.Numerics.Vector4 Shift, float Desaturation, float[] WeatherWeights,
-    System.Numerics.Vector4 Scotopic, System.Numerics.Vector2 ScotopicWeight);
+    System.Numerics.Vector4 Scotopic, System.Numerics.Vector2 ScotopicWeight, Rdr2Gradient Gradient);
+
+/// <summary>
+/// Red Dead Redemption 2's gradient filter at an hour, as its post-process sets it up for PS_Composite
+/// (GradientFilterColTop, Middle, Bottom and Extra): the colour its HDR frame is multiplied by before the exposure,
+/// blended down the screen from the top colour through the middle's to the bottom's (tonemap.wgsl's rdr2_gradient).
+/// </summary>
+/// <param name="Top">The timecycle's top colour times its fade, raised to the front end's gamma (1/2.2), times its
+/// multiplier; and one less twice the top-middle midpoint.</param>
+/// <param name="Middle">The middle colour times its fade and its multiplier, not raised; and where it sits down the screen.</param>
+/// <param name="Bottom">As the top's, from the bottom colour and the middle-bottom midpoint.</param>
+/// <param name="Extra">One over one less where the middle sits, and one over where it sits.</param>
+internal sealed record Rdr2Gradient(System.Numerics.Vector4 Top, System.Numerics.Vector4 Middle, System.Numerics.Vector4 Bottom,
+    System.Numerics.Vector2 Extra);
 
 /// <summary>
 /// How Red Dead Redemption 2 exposes and tone-maps its world, as its post-process works the exposure out

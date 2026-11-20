@@ -6,7 +6,9 @@
 // target. Its dither is the window's, once the frame is done (Post/present.wgsl). The HDR target holds premultiplied colour and coverage, so
 // this is blended over what is already drawn (the backdrop) where there is a drawable; past its edges, its glow is
 // added over the backdrop.
-// Red Dead Redemption 2's world is graded after its tone map as its PS_Composite grades it (Rdr2Grading.cs): the colour
+// Red Dead Redemption 2's world has its gradient filter before the exposure, as its PS_Composite has it: the HDR colour
+// times a colour blended down the screen from the timecycle's top, middle and bottom bands (rdr2_gradient). It is
+// graded after its tone map as PS_Composite grades it (Rdr2Grading.cs): the colour
 // to the display's sRGB (the game's own transform, not GTA V's gamma); the scotopic shift, the colour's scotopic
 // luminance (from its XYZ: Y (1.33 (1 + (Y + Z) / X) - 1.68)) times the timecycle's scotopic colour and intensity,
 // mixed in by saturate(0.04 / (L + 0.04) scale + bias) for the scene's luminance L before its exposure; then its levels
@@ -18,11 +20,18 @@
 @group(1) @binding(2) var bloom_texture: texture_2d<f32>;
 @group(1) @binding(3) var bloom_sampler: sampler;
 
-// RDR2's grading: whether it's on; the scotopic colour and its intensity; the scotopic weight's scale and bias.
+// RDR2's grading: whether it's on; the scotopic colour and its intensity; the scotopic weight's scale and bias; the
+// gradient filter's top colour and one less twice the top-middle midpoint, its middle colour and where it sits, its
+// bottom colour and one less twice the middle-bottom midpoint, and one over one less where the middle sits and one
+// over where it sits (Rdr2Gradient).
 struct Rdr2Grade {
     on: vec4f,
     scotopic: vec4f,
     scotopic_weight: vec4f,
+    gradient_top: vec4f,
+    gradient_middle: vec4f,
+    gradient_bottom: vec4f,
+    gradient_extra: vec4f,
 };
 @group(1) @binding(4) var<uniform> rdr2_grade: Rdr2Grade;
 @group(1) @binding(5) var rdr2_levels: texture_2d<f32>;
@@ -37,6 +46,16 @@ fn rdr2_table(table: texture_2d<f32>, colour: vec3f) -> vec3f {
     let below = textureSampleLevel(table, bloom_sampler, at, 0.0).rgb;
     let above = textureSampleLevel(table, bloom_sampler, at + vec2f(0.0625, 0.0), 0.0).rgb;
     return mix(below, above, along);
+}
+
+// RDR2's gradient filter at a height down the screen (0 at its top, 1 at its bottom), as PS_Composite works it out: the
+// top colour blended into the middle's from the top-middle midpoint, the middle's into the bottom's from the
+// middle-bottom midpoint, then those two blended by the height.
+fn rdr2_gradient(y: f32) -> vec3f {
+    let g = rdr2_grade;
+    let upper = saturate(saturate(y * g.gradient_extra.y) + g.gradient_top.w);
+    let lower = saturate(saturate(saturate(y - g.gradient_middle.w) * g.gradient_extra.x) - g.gradient_bottom.w);
+    return mix(mix(g.gradient_top.rgb, g.gradient_middle.rgb, upper), mix(g.gradient_middle.rgb, g.gradient_bottom.rgb, lower), y);
 }
 
 // RDR2's display colour for a tone-mapped one, at the scene's luminance before its exposure, as the window takes it.
@@ -97,15 +116,20 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     // reads when it is larger (supersampled; at twice the size, each of its pixels once), one bilinear read when smaller.
     // A read between its pixels tone-maps the four around it and blends those, rather than blend the HDR colour first.
     let size = vec2f(textureDimensions(hdr_texture));
+    // RDR2's gradient filter, at this pixel's height; none for GTA V's.
+    var gradient = vec3f(1.0);
+    if (rdr2_grade.on.x > 0.5) {
+        gradient = rdr2_gradient(uv.y);
+    }
     var result = vec4f(0.0);
     if (all(abs(size - window_size) < vec2f(0.5))) {
-        result = composite(textureLoad(hdr_texture, vec2i(frag.xy), 0), bloom, glow, exposure, p0, p1, white);
+        result = composite(textureLoad(hdr_texture, vec2i(frag.xy), 0), bloom, glow, exposure, p0, p1, white, gradient);
     } else {
         let n = select(1, 2, size.x > window_size.x + 0.5);
         for (var y = 0; y < n; y++) {
             for (var x = 0; x < n; x++) {
                 let at = (floor(frag.xy) + (vec2f(f32(x), f32(y)) + 0.5) / f32(n)) / window_size;
-                result += composite_between(at * size, bloom, glow, exposure, p0, p1, white);
+                result += composite_between(at * size, bloom, glow, exposure, p0, p1, white, gradient);
             }
         }
         result /= f32(n * n);
@@ -118,7 +142,7 @@ fn fs_tonemap(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 
 // The HDR target at a point between its pixels (in its pixels, from its corner): the four pixels around it, each
 // tone-mapped, blended by how near the point is to each, as a bilinear read would blend them.
-fn composite_between(place: vec2f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32) -> vec4f {
+fn composite_between(place: vec2f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32, gradient: vec3f) -> vec4f {
     let last = vec2i(textureDimensions(hdr_texture)) - 1;
     let centred = place - 0.5;
     let corner = vec2i(floor(centred));
@@ -129,7 +153,7 @@ fn composite_between(place: vec2f, bloom: vec3f, glow: vec3f, exposure: f32, p0:
             let texel = clamp(corner + vec2i(x, y), vec2i(0), last);
             let w = select(1.0 - weight.x, weight.x, x == 1) * select(1.0 - weight.y, weight.y, y == 1);
             if (w > 0.0) {
-                sum += w * composite(textureLoad(hdr_texture, texel, 0), bloom, glow, exposure, p0, p1, white);
+                sum += w * composite(textureLoad(hdr_texture, texel, 0), bloom, glow, exposure, p0, p1, white, gradient);
             }
         }
     }
@@ -137,15 +161,15 @@ fn composite_between(place: vec2f, bloom: vec3f, glow: vec3f, exposure: f32, p0:
 }
 
 // One read of the HDR target, tone-mapped and premultiplied by its coverage over the backdrop, with the glow over the
-// part of it the drawable doesn't cover.
-fn composite(stored: vec4f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32) -> vec4f {
+// part of it the drawable doesn't cover. RDR2's gradient filter multiplies the colour before its exposure.
+fn composite(stored: vec4f, bloom: vec3f, glow: vec3f, exposure: f32, p0: vec4f, p1: vec4f, white: f32, gradient: vec3f) -> vec4f {
     let coverage = stored.a;
     if (coverage <= 0.0) {
         return vec4f(to_target(game_gamma(glow)), 0.0);
     }
     let hdr = max(stored.rgb / coverage, vec3f(0.0));
     // PS_Composite keeps the scene and its bloom to half-float range, then exposes it.
-    let exposed = min(hdr + bloom, vec3f(65504.0)) * exposure;
+    let exposed = min(hdr + bloom, vec3f(65504.0)) * gradient * exposure;
     let mapped = saturate(filmic(exposed, p0, p1) / white);
     if (rdr2_grade.on.x > 0.5) {
         let display = rdr2_display(mapped, dot(hdr, vec3f(0.3, 0.59, 0.11)));
