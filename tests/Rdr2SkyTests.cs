@@ -214,6 +214,17 @@ public sealed class Rdr2SkyTests
     }
 
     [Fact]
+    public void The_constants_the_tables_are_built_from_are_copied_alone()
+    {
+        Vector4[] from = [.. Enumerable.Range(0, 9).Select(i => new Vector4(i + 1))], to = new Vector4[9];
+        Rdr2Sky.CopyTables(from, to);
+        Assert.True(Rdr2Sky.SameTables(from, to));
+        // The altitude bias and the rest aren't the tables'.
+        Assert.Equal(new Vector4(1, 1, 1, 0), to[0]);
+        Assert.Equal(Vector4.Zero, to[3]);
+    }
+
+    [Fact]
     public void A_game_without_its_weather_has_no_sky() =>
         Assert.Null(Rdr2Sky.Read(_ => null));
 
@@ -359,7 +370,13 @@ public sealed class Rdr2SkyTests
             renderer.SetTime(15);
             Middle();
             Assert.Equal(1, renderer.Rdr2SkyBuilds);
+            // Other air, the hour just moved: the tables wait (the hour may be moving still); once it holds, they're built.
+            renderer.Rdr2TablesInterval = TimeSpan.FromHours(1);
             renderer.SetTime(23);
+            Middle();
+            Assert.Equal(1, renderer.Rdr2SkyBuilds);
+            Middle();
+            Assert.Equal(2, renderer.Rdr2SkyBuilds);
             Middle();
             Assert.Equal(2, renderer.Rdr2SkyBuilds);
             // By night, the moon's light: thousands of times less.
