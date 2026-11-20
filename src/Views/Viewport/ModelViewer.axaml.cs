@@ -344,8 +344,8 @@ public partial class ModelViewer : UserControl, IModalContent
     private IReadOnlyList<NearbyDictionary> gameDictionaries = [];
 
     /// <summary>
-    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; once it closes after saving,
-    /// the drawable is shown with them as saved.
+    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; each time it saves, the drawable is
+    /// shown with them as saved.
     /// </summary>
     internal bool OpenTextures()
     {
