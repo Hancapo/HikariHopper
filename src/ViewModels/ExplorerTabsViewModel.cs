@@ -84,6 +84,24 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Opens <paramref name="path"/> (from the game's folder) in a new tab just after <paramref name="source"/>, on its game
+    /// alone, without the folder it may have open, and shows that tab.
+    /// </summary>
+    private void OpenInGameTab(ExplorerViewModel source, string path)
+    {
+        if (!source.HasGame)
+            return;
+        string game = source.GamePath;
+        int row = NewTab();
+        ExplorerViewModel tab = tabs[row];
+        int after = tabs.IndexOf(source);
+        if (after >= 0 && after + 1 < tabs.Count)
+            MoveTab(row, after + 1);
+        tab.OpenGame(game);
+        tab.GoToAddress(path);
+    }
+
+    /// <summary>
     /// The games a folder can be opened with: each edition whose installation is set up, with its folder, in the order
     /// the start page lists them.
     /// </summary>
@@ -168,12 +186,14 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         EventHandler<object> contentChanged = (_, target) => ContentChanged(bridge, target);
         EventHandler<string> archiveWrite = (_, rootPath) => PrepareArchiveWrite(rootPath);
         EventHandler<string> newTab = (_, path) => OpenInNewTab(bridge, path);
+        EventHandler<string> gameTab = (_, path) => OpenInGameTab(bridge, path);
         bridge.PropertyChanged += propertyChanged;
         bridge.GameOpened += gameOpened;
         bridge.LooseFilesAboutToBeDeleted += looseFiles;
         bridge.ContentChanged += contentChanged;
         bridge.ArchiveWriteRequested += archiveWrite;
         bridge.OpenInNewTabRequested += newTab;
+        bridge.OpenInGameTabRequested += gameTab;
         unsubscribers[bridge] = () =>
         {
             bridge.PropertyChanged -= propertyChanged;
@@ -182,6 +202,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
             bridge.ContentChanged -= contentChanged;
             bridge.ArchiveWriteRequested -= archiveWrite;
             bridge.OpenInNewTabRequested -= newTab;
+            bridge.OpenInGameTabRequested -= gameTab;
         };
         tabs.Add(bridge);
         SynchronizeOperationState();

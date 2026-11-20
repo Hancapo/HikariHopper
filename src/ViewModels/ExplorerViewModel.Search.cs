@@ -400,15 +400,21 @@ public sealed partial class ExplorerViewModel
         public bool InArchive => RootFull.Length > 0;
     }
 
+    // Set while the hits read are the game's own (the world's files), even in a tab showing a folder open with it.
+    private bool gameHits;
+
+    // Where hits' paths are from: the folder the tab shows, or the game's for its own.
+    private string HitRoot => gameHits ? Provider.GamePath : Provider.LoosePath;
+
     private HitPlace PlaceOf(SearchHit hit)
     {
         string[] parts = hit.Path.Split('/');
         int[] containers = [.. Enumerable.Range(0, parts.Length - 1).Where(i => parts[i].EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))];
         bool standalone = searchIndex?.StandaloneArchive == true;
         if (containers.Length == 0)
-            return new HitPlace(hit, "", "", "", hit.Path, "", Path.Combine([Provider.LoosePath, .. parts]));
+            return new HitPlace(hit, "", "", "", hit.Path, "", Path.Combine([HitRoot, .. parts]));
         int first = containers[0], last = containers[^1];
-        string rootFull = standalone && first == 0 ? searchIndex!.Root : Path.Combine([Provider.LoosePath, .. parts[..(first + 1)]]);
+        string rootFull = standalone && first == 0 ? searchIndex!.Root : Path.Combine([HitRoot, .. parts[..(first + 1)]]);
         string nested = string.Join('/', parts[(first + 1)..(last + 1)]);
         string inner = string.Join('/', parts[(last + 1)..^1]);
         return new HitPlace(hit, rootFull, nested, inner.Length == 0 ? "." : inner,
@@ -449,7 +455,7 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>The folder open with the game that a reader of results opens too, whose files they are; none without one.</summary>
     private string? ReaderFolder() =>
-        searchIndex is { StandaloneArchive: false } && Provider.HasFolder ? Provider.FolderPath : null;
+        !gameHits && searchIndex is { StandaloneArchive: false } && Provider.HasFolder ? Provider.FolderPath : null;
 
     private static List<T> RunReader<T>(HitPlace[] places, LoadedGame? game, string? openFolder,
         Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
@@ -665,6 +671,12 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>Asks for a tab of its own at <c>path</c> (an RPF result, to browse it); the tabs open it.</summary>
     public event EventHandler<string>? OpenInNewTabRequested;
+
+    /// <summary>
+    /// Asks for a tab of the game's own, without the folder open here, at <c>path</c> (from the game's folder): where one
+    /// of the world's files is shown.
+    /// </summary>
+    public event EventHandler<string>? OpenInGameTabRequested;
 
     /// <summary>Open location: the selected result's folder, with it selected.</summary>
     public void OpenSelectedLocation()

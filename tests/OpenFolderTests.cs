@@ -103,6 +103,39 @@ public sealed class OpenFolderTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void The_worlds_files_are_the_games_even_in_a_folders_tab()
+    {
+        var (game, folder, tabs) = Setup();
+        // The same path in the game and in the folder, holding different models.
+        SaveArchive(Path.Combine(game, "x64", "props.rpf"), ("sign.ydr", "game's"));
+        SaveArchive(Path.Combine(folder, "x64", "props.rpf"), ("sign.ydr", "folder's"));
+        tabs.OpenFolders([folder], game, after: 0);
+        Settle(tabs);
+        ExplorerViewModel opened = tabs.ActiveBridge;
+        var model = new WorldFile("x64/props.rpf/sign.ydr", 6);
+
+        // Open model: the game's.
+        ModelFile? file = null;
+        opened.ModelFileOpened += (_, opening) => file = opening;
+        opened.OpenWorldModel(model);
+        Settle(opened);
+        Assert.Equal("game's", System.Text.Encoding.UTF8.GetString(Assert.IsType<ModelFile>(file).Data));
+
+        // Shown in Files: in a tab of the game's own beside it, selected; the folder's tab stays as it was.
+        opened.ShowWorldFile(model);
+        Settle(tabs);
+        Assert.Equal(3, tabs.Tabs.Count);
+        ExplorerViewModel shown = tabs.Tabs[2];
+        Assert.Same(shown, tabs.ActiveBridge);
+        Assert.False(shown.HasFolder);
+        Assert.Equal(game, shown.GamePath);
+        Assert.True(shown.InArchive);
+        Assert.Equal(["sign.ydr"], shown.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
+        Assert.True(opened.HasFolder);
+        Assert.Equal(["stream", "x64", "dlc.rpf"], ListedNames(opened));
+    }
+
+    [AvaloniaFact]
     public void Close_goes_from_an_rpf_back_to_the_folder_then_from_the_folder_back_to_the_games_files()
     {
         var (game, folder, tabs) = Setup();
