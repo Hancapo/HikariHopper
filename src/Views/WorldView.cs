@@ -21,7 +21,8 @@ namespace HikariHopper.Views;
 /// what it streamed.
 /// <para>
 /// The viewport is a native window, which covers whatever the main window draws over it: it hides while a dialog or a
-/// menu is open over the window, or the tab's loading cover is up.
+/// menu drawn in the window is open over it, or the tab's loading cover is up. The title bar's menus open as windows of
+/// their own over it (<see cref="MenuRow"/>), so it keeps drawing under them.
 /// </para>
 /// </summary>
 internal sealed class WorldView : UserControl
