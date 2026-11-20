@@ -19,13 +19,16 @@ internal sealed class Rdr2Sky
     public const int TableVectors = 9, TableBytes = TableVectors * 16;
 
     /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
-    public const int Vectors = TableVectors + 20, Bytes = Vectors * 16;
+    public const int Vectors = TableVectors + 24, Bytes = Vectors * 16;
 
     /// <summary>
     /// Where the camera's rays are among the dome's constants, which the renderer writes: its forward way with the
     /// aerial perspective's far clip, then its right and up ways at the frame's edge, the latter with the near plane.
     /// </summary>
     public const int CameraRays = TableVectors + 17;
+
+    /// <summary>Where the height fog's constants are among the dome's: four after the camera's rays.</summary>
+    public const int Fog = TableVectors + 20;
 
     /// <summary>
     /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
@@ -156,7 +159,8 @@ internal sealed class Rdr2Sky
         return fallback ?? Defaults.GetValueOrDefault(name, 0);
     }
 
-    private Vector3 Colour(string name, TimecycleSample at) => new(Field(name + "_r", at), Field(name + "_g", at), Field(name + "_b", at));
+    private Vector3 Colour(string name, TimecycleSample at, float? fallback = null) =>
+        new(Field(name + "_r", at, fallback), Field(name + "_g", at, fallback), Field(name + "_b", at, fallback));
 
     /// <summary>The ozone's cross-section at a wavelength in nanometres, between the nanometres either side.</summary>
     internal static double OzoneAt(float wavelength)
@@ -201,6 +205,15 @@ internal sealed class Rdr2Sky
         // The camera, and the timecycle's tint of the key light the world's lit by.
         values[TableVectors + 15] = new(eye, 0);
         values[TableVectors + 16] = new(Colour("light_dir_col", at) * Field("light_dir_mult", at), sunLights ? 1 : 0);
+        // The height fog, as the local atmosphere's: its density, the height it's thickest below and one over the
+        // height it thins out over; its anisotropy; the tints of the key light and of the sky's ambient through it, and
+        // its fill ambient, over a thousand as the air glow's colours are taken.
+        values[Fog] = new(Field("local_atmosphere_fog_density", at), Field("local_atmosphere_fog_height", at),
+            1 / MathF.Max(Field("local_atmosphere_fog_falloff", at, 500), 1), Math.Min(Field("local_atmosphere_anisotropy_high_density", at, .5f), .99f));
+        values[Fog + 1] = new(Colour("local_atmosphere_direct_light_color", at, 1) * Field("local_atmosphere_direct_light_intensity", at, 1), 0);
+        values[Fog + 2] = new(Colour("local_atmosphere_sky_col", at, 1) * Field("local_atmosphere_sky_intensity", at, 1), 0);
+        values[Fog + 3] = new(Colour("local_atmosphere_fill_ambient_light_color", at, 0) * Field("local_atmosphere_fill_ambient_light_intensity", at, 1)
+            / AirGlowScale, 0);
     }
 
     /// <summary>How far the aerial perspective reaches, in metres (sky.AerialPerspectiveFarClip).</summary>

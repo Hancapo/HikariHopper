@@ -619,14 +619,20 @@ internal sealed unsafe partial class ViewportRenderer
             });
             if (fog)
                 DrawWorldFog(pass);
-            if (aerial)
-                DrawRdr2Aerial(pass);
         }
         worldViewDraws += worldWaterDraws.Count + worldBlendedDraws.Count;
         // Bundles leave the pass's bindings cleared.
         pass.SetBindGroup(0, sceneGroup);
         pass.SetBindGroup(2, lightGroup!);
         DrawBlended(pass, worldWaterDraws);
+        // RDR2's aerial perspective and height fog over the solid surfaces and the water, which writes no depth: it takes
+        // the haze of what's under it.
+        if (aerial)
+        {
+            DrawRdr2Aerial(pass);
+            pass.SetBindGroup(0, sceneGroup);
+            pass.SetBindGroup(2, lightGroup!);
+        }
         // The cloud hats after the water, as the game draws them after its sky, before the other blended surfaces.
         pass = DrawCloudHats(pass, encoder, depthCopied);
         DrawBlended(pass, worldBlendedDraws);

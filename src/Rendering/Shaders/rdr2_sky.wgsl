@@ -59,6 +59,10 @@ struct Rdr2Night {
     // The camera's rays: its forward way, with how far the aerial perspective reaches; its right and up ways at the
     // frame's edge, the latter with the near plane.
     rays: array<vec4f, 3>,
+    // The height fog (the local atmosphere's): its density a metre, the height it's thickest below and one over the
+    // height it thins out over, its anisotropy; the tints of the key light and of the sky's ambient through it, and its
+    // fill ambient.
+    fog: array<vec4f, 4>,
 };
 
 struct Rdr2Dome {

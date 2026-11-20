@@ -6,15 +6,86 @@
 //     and aerosol densities, added up along the ray (trapezoids, as the game's). The game keeps the in-scattered light
 //     apart, sun and moon, Rayleigh and Mie, its colours squeezed; here it's put together as the dome lights it, by the
 //     phases for the cell's way and the sun's and moon's light, as the cell's way is the same at every slice.
+//   - The height fog, as the game's local atmosphere fogs its world (CS_GatherMaterialVolume's global fog, lit by
+//     CS_GatherScatteringVolume and added up by CS_AccumulateScatteringVolume): over a 64 by 36 grid of the frame, each
+//     cell's ray in 64 slices out to the far clip, finer near the camera; at each, the fog's density, its timecycle
+//     density times (1 - saturate((height - its height) / its falloff))^3, lighting it with the key light through
+//     Henyey-Greenstein's phase by its anisotropy and the sky's ambient (its ambient cube's mean) by their tints, plus its
+//     fill ambient; each slice's light added as (S - S T) / density times the transmittance before it.
 //   - Over the frame, where something's drawn: its colour times the transmittance from the camera to it, then the light
-//     scattered in on the way, from the slice its distance over the far clip falls at.
+//     scattered in on the way, from the slices its distance falls at: the fog's in front of the air's.
 // In the game's own units, as its world and sky are drawn in. Put after scene.wgsl, rdr2_atmosphere.wgsl and
 // rdr2_sky.wgsl.
 
 @group(2) @binding(0) var aerial_transmittance_out: texture_storage_3d<rgba16float, write>;
 @group(2) @binding(1) var aerial_inscatter_out: texture_storage_3d<rgba16float, write>;
+@group(2) @binding(2) var fog_transmittance_out: texture_storage_3d<rgba16float, write>;
+@group(2) @binding(3) var fog_inscatter_out: texture_storage_3d<rgba16float, write>;
 
 const RDR2_AERIAL_SIZE: u32 = 32u;
+const RDR2_FOG_GRID: vec3u = vec3u(64u, 36u, 64u);
+// The fog's slices: the distance at a fraction t of the way out is RDR2_FOG_NEAR ((1 + far / RDR2_FOG_NEAR)^t - 1).
+const RDR2_FOG_NEAR: f32 = 32.0;
+// The most a half float holds, which the light scattered in is kept to.
+const RDR2_HALF_MAX: f32 = 65504.0;
+
+fn rdr2_fog_distance(t: f32, far: f32) -> f32 {
+    return RDR2_FOG_NEAR * (pow(1.0 + far / RDR2_FOG_NEAR, t) - 1.0);
+}
+
+fn rdr2_fog_fraction(distance: f32, far: f32) -> f32 {
+    return log(1.0 + distance / RDR2_FOG_NEAR) / log(1.0 + far / RDR2_FOG_NEAR);
+}
+
+// The fog's density a metre at a height in the world.
+fn rdr2_fog_density(height: f32) -> f32 {
+    let fog = dome.night.fog[0];
+    let thinned = 1.0 - saturate((height - fog.y) * fog.z);
+    return fog.x * thinned * thinned * thinned;
+}
+
+// Henyey-Greenstein's phase, as the game's: (1 - g^2) / (1 + g^2 - 2 g cos)^1.5 over 4 pi.
+fn rdr2_fog_phase(cosine: f32, g: f32) -> f32 {
+    return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosine, 1.5) * RDR2_INVERSE_4PI;
+}
+
+@compute @workgroup_size(8, 8)
+fn cs_rdr2_fog(@builtin(global_invocation_id) id: vec3u) {
+    if (id.x >= RDR2_FOG_GRID.x || id.y >= RDR2_FOG_GRID.y) {
+        return;
+    }
+    let night = dome.night;
+    let fog = night.fog;
+    let across = f32(id.x) * 2.0 / f32(RDR2_FOG_GRID.x - 1u) - 1.0;
+    let down = 1.0 - f32(id.y) * 2.0 / f32(RDR2_FOG_GRID.y - 1u);
+    let view = normalize(night.rays[0].xyz + night.rays[1].xyz * across + night.rays[2].xyz * down);
+    let far = night.rays[0].w;
+    // The key light (the sky's, as the world's lit by it) and the sky's ambient, its cube's mean.
+    let toward = select(night.moon.xyz, dome.atmosphere.sun.xyz, night.key_light.w > 0.5);
+    let key = sky_light[0].rgb * fog[1].rgb * rdr2_fog_phase(dot(view, toward), fog[0].w);
+    var ambient = vec3f(0.0);
+    for (var face = 1; face < 7; face++) {
+        ambient += sky_light[face].rgb;
+    }
+    let lit = key + ambient / 6.0 * fog[2].rgb + fog[3].rgb;
+    var transmittance = 1.0;
+    var inscattered = vec3f(0.0);
+    var behind = 0.0;
+    for (var slice = 0u; slice < RDR2_FOG_GRID.z; slice++) {
+        let ahead = rdr2_fog_distance((f32(slice) + 1.0) / f32(RDR2_FOG_GRID.z), far);
+        let middle = (behind + ahead) * 0.5;
+        let density = rdr2_fog_density(night.camera.z + view.z * middle);
+        let through = exp(-density * (ahead - behind));
+        // (S - S T) / density, S the light scattered in a metre: density times what lights it.
+        inscattered += lit * (1.0 - through) * transmittance;
+        transmittance *= through;
+        behind = ahead;
+        let cell = vec3u(id.xy, slice);
+        textureStore(fog_transmittance_out, cell, vec4f(vec3f(transmittance), 1.0));
+        // Kept to half floats' range: towards the sun through thick fog it would pass it (and be infinite).
+        textureStore(fog_inscatter_out, cell, vec4f(min(inscattered, vec3f(RDR2_HALF_MAX)), 1.0));
+    }
+}
 
 // The densities (Rayleigh, aerosols) at a place above the planet's middle.
 fn rdr2_aerial_density(place: vec3f) -> vec2f {
@@ -120,6 +191,8 @@ fn cs_rdr2_aerial(@builtin(global_invocation_id) id: vec3u) {
 @group(1) @binding(10) var aerial_depth: texture_depth_2d;
 @group(1) @binding(11) var aerial_transmittance: texture_3d<f32>;
 @group(1) @binding(12) var aerial_inscatter: texture_3d<f32>;
+@group(1) @binding(13) var fog_transmittance: texture_3d<f32>;
+@group(1) @binding(14) var fog_inscatter: texture_3d<f32>;
 
 struct Rdr2AerialVarying {
     @builtin(position) position: vec4f,
@@ -136,30 +209,47 @@ fn vs_rdr2_aerial(@builtin(vertex_index) index: u32) -> Rdr2AerialVarying {
 }
 
 // Where in the aerial perspective a pixel's surface falls: its cell's coordinates and the slice of its distance over
-// the far clip; none for the sky (nothing drawn there).
-fn rdr2_aerial_cell(input: Rdr2AerialVarying) -> vec4f {
+// the far clip; none for the sky (nothing drawn there). And in the fog's grid.
+struct Rdr2AerialCell {
+    aerial: vec3f,
+    fog: vec3f,
+    drawn: f32,
+};
+
+fn rdr2_aerial_cells(input: Rdr2AerialVarying) -> Rdr2AerialCell {
     let night = dome.night;
     let depth = textureLoad(aerial_depth, vec2i(input.position.xy), 0);
-    // Reversed Z, infinitely far: depth is near over the distance along the view.
     let along = night.rays[2].w / max(depth, 1e-12);
     let ray = night.rays[0].xyz + night.rays[1].xyz * input.ndc.x + night.rays[2].xyz * input.ndc.y;
     let distance = along * length(ray);
+    let far = night.rays[0].w;
+    var cell: Rdr2AerialCell;
     let size = f32(RDR2_AERIAL_SIZE);
-    let uv = (vec2f(input.ndc.x * 0.5 + 0.5, 0.5 - input.ndc.y * 0.5) * (size - 1.0) + 0.5) / size;
-    return vec4f(uv, saturate(distance / night.rays[0].w), select(1.0, 0.0, depth <= 0.0));
+    cell.aerial = vec3f((vec2f(input.ndc.x * 0.5 + 0.5, 0.5 - input.ndc.y * 0.5) * (size - 1.0) + 0.5) / size, saturate(distance / far));
+    let grid = vec2f(RDR2_FOG_GRID.xy);
+    // Each slice holds what's in front of its far end.
+    let slices = f32(RDR2_FOG_GRID.z);
+    let slice = (saturate(rdr2_fog_fraction(distance, far)) * slices - 0.5) / slices;
+    cell.fog = vec3f((vec2f(input.ndc.x * 0.5 + 0.5, 0.5 - input.ndc.y * 0.5) * (grid - 1.0) + 0.5) / grid, slice);
+    cell.drawn = select(1.0, 0.0, depth <= 0.0);
+    return cell;
 }
 
-// The colour behind times the transmittance from the camera.
+// The colour behind times the transmittance from the camera, through the fog and the air.
 @fragment
 fn fs_rdr2_aerial_transmittance(input: Rdr2AerialVarying) -> @location(0) vec4f {
-    let cell = rdr2_aerial_cell(input);
-    let transmittance = textureSampleLevel(aerial_transmittance, dome_sampler, cell.xyz, 0.0).rgb;
-    return vec4f(mix(vec3f(1.0), transmittance, cell.w), 1.0);
+    let cell = rdr2_aerial_cells(input);
+    let air = textureSampleLevel(aerial_transmittance, dome_sampler, cell.aerial, 0.0).rgb;
+    let fog = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
+    return vec4f(mix(vec3f(1.0), air * fog, cell.drawn), 1.0);
 }
 
-// Then the light scattered in on the way.
+// Then the light scattered in on the way: the fog's, and the air's through it.
 @fragment
 fn fs_rdr2_aerial_inscatter(input: Rdr2AerialVarying) -> @location(0) vec4f {
-    let cell = rdr2_aerial_cell(input);
-    return vec4f(textureSampleLevel(aerial_inscatter, dome_sampler, cell.xyz, 0.0).rgb * cell.w, 1.0);
+    let cell = rdr2_aerial_cells(input);
+    let air = textureSampleLevel(aerial_inscatter, dome_sampler, cell.aerial, 0.0).rgb;
+    let fog = textureSampleLevel(fog_inscatter, dome_sampler, cell.fog, 0.0).rgb;
+    let through = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
+    return vec4f(min((fog + air * through) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
 }
