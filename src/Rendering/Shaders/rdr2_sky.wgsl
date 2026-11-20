@@ -56,6 +56,9 @@ struct Rdr2Night {
     // The timecycle's tint of the key light (light_dir_col times light_dir_mult), then whether the sun is the key light
     // (else the moon).
     key_light: vec4f,
+    // The camera's rays: its forward way, with how far the aerial perspective reaches; its right and up ways at the
+    // frame's edge, the latter with the near plane.
+    rays: array<vec4f, 3>,
 };
 
 struct Rdr2Dome {
@@ -72,6 +75,9 @@ struct Rdr2Dome {
 @group(1) @binding(5) var dome_stars: texture_2d<f32>;
 @group(1) @binding(6) var dome_air_glow: texture_2d<f32>;
 @group(1) @binding(7) var dome_moon: texture_2d<f32>;
+// The light gathered at a point from every order of the scattering, by the multiple scattering's intensity (the game's
+// summed gathered light), as the tables' gathered light is laid out.
+@group(1) @binding(9) var dome_gathered: texture_3d<f32>;
 
 struct Rdr2SkyVarying {
     @builtin(position) position: vec4f,

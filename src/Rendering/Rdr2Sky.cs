@@ -19,7 +19,13 @@ internal sealed class Rdr2Sky
     public const int TableVectors = 9, TableBytes = TableVectors * 16;
 
     /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
-    public const int Vectors = TableVectors + 17, Bytes = Vectors * 16;
+    public const int Vectors = TableVectors + 20, Bytes = Vectors * 16;
+
+    /// <summary>
+    /// Where the camera's rays are among the dome's constants, which the renderer writes: its forward way with the
+    /// aerial perspective's far clip, then its right and up ways at the frame's edge, the latter with the near plane.
+    /// </summary>
+    public const int CameraRays = TableVectors + 17;
 
     /// <summary>
     /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
@@ -196,6 +202,9 @@ internal sealed class Rdr2Sky
         values[TableVectors + 15] = new(eye, 0);
         values[TableVectors + 16] = new(Colour("light_dir_col", at) * Field("light_dir_mult", at), sunLights ? 1 : 0);
     }
+
+    /// <summary>How far the aerial perspective reaches, in metres (sky.AerialPerspectiveFarClip).</summary>
+    public float AerialFarClip => visuals.Get("sky.AerialPerspectiveFarClip", 10000);
 
     /// <summary>
     /// How the game exposes and tone-maps its world at an hour: PS_CalculateExposure's curve and blend curve

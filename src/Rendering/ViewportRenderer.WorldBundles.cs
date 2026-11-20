@@ -593,10 +593,13 @@ internal sealed unsafe partial class ViewportRenderer
         // pass reads the depth, which nothing after writes.
         bool fog = worldSky is not null;
         WorldFogged = fog;
+        // Or RDR2's aerial perspective, once its sky is shown (ViewportRenderer.Rdr2Sky.cs).
+        bool aerial = !fog && Rdr2Aerial;
+        bool overlaid = fog || aerial;
         // The water over what's behind it, which it refracts and reflects: the pass ends while that's copied. With the
         // fog it ends here anyway, and the depth is copied for the cloud hats to fade against.
         bool depthCopied = false;
-        if (worldWaterDraws.Count > 0 || fog)
+        if (worldWaterDraws.Count > 0 || overlaid)
         {
             pass.End();
             if (worldWaterDraws.Count > 0)
@@ -610,12 +613,14 @@ internal sealed unsafe partial class ViewportRenderer
             pass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = HdrAttachments(clear: false),
-                DepthStencilAttachment = fog
+                DepthStencilAttachment = overlaid
                     ? new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthReadOnly = true }
                     : new RenderPassDepthStencilAttachment { View = hdrDepthView!, DepthLoadOp = LoadOp.Load, DepthStoreOp = StoreOp.Store },
             });
             if (fog)
                 DrawWorldFog(pass);
+            if (aerial)
+                DrawRdr2Aerial(pass);
         }
         worldViewDraws += worldWaterDraws.Count + worldBlendedDraws.Count;
         // Bundles leave the pass's bindings cleared.

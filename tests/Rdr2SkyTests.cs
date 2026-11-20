@@ -133,6 +133,8 @@ public sealed class Rdr2SkyTests
         Assert.Equal(.6475f, exposure.StepMult, 5);
         // The filmic curves the file has.
         Assert.Equal(.22f, exposure.ToneMap.Bright.A, 5);
+        // The aerial perspective out to visualsettings.dat's far clip (the game's default where it hasn't it).
+        Assert.Equal(10000, sky.AerialFarClip);
     }
 
     [Fact]
