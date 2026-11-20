@@ -133,6 +133,19 @@ public sealed class OpenFolderTests : ExplorerTestBase
         Assert.Equal(["sign.ydr"], shown.EntriesModel.Where(item => item.Selected).Select(item => item.Name));
         Assert.True(opened.HasFolder);
         Assert.Equal(["stream", "x64", "dlc.rpf"], ListedNames(opened));
+
+        // While a tab writes (the model saving into its RPF), no tab opens that couldn't open anything: it says why.
+        SaveTarget saving = Assert.IsType<SaveTarget>(file!.SaveTarget);
+        saving.Prepare!();
+        opened.ShowWorldFile(model);
+        Assert.Null(tabs.OpenFolders([folder], game));
+        Assert.Equal(3, tabs.Tabs.Count);
+        Assert.Contains("write under way", tabs.ActiveBridge.Status);
+        saving.Finished!(true);
+        Settle(tabs);
+        opened.ShowWorldFile(model);
+        Settle(tabs);
+        Assert.Equal(4, tabs.Tabs.Count);
     }
 
     [AvaloniaFact]

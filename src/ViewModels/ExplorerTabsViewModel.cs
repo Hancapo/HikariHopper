@@ -89,7 +89,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     /// </summary>
     private void OpenInGameTab(ExplorerViewModel source, string path)
     {
-        if (!source.HasGame)
+        if (!source.HasGame || RefusedWhileWriting(source))
             return;
         string game = source.GamePath;
         int row = NewTab();
@@ -142,7 +142,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     /// </summary>
     public IReadOnlyList<(GameEditionInfo Edition, string Root)>? OpenFolders(IReadOnlyList<string> folders, string? gameRoot, int after = -1)
     {
-        if (folders.Count == 0)
+        if (folders.Count == 0 || RefusedWhileWriting(ActiveBridge))
             return null;
         if (string.IsNullOrEmpty(gameRoot))
         {
@@ -311,6 +311,18 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         int row = tabs.IndexOf(bridge);
         if (row >= 0 && row == activeIndex)
             RaiseActiveTabChanged();
+    }
+
+    /// <summary>
+    /// Whether a tab is writing, so a new tab could open nothing until it ends: then <paramref name="asking"/>'s status bar
+    /// says so, and nothing opens.
+    /// </summary>
+    private bool RefusedWhileWriting(ExplorerViewModel asking)
+    {
+        if (!tabs.Any(bridge => bridge.LocalEntryOperationBusy))
+            return false;
+        asking.ShowStatus("Wait for the write under way to finish, then try again");
+        return true;
     }
 
     private void SynchronizeOperationState()
