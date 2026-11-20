@@ -57,6 +57,8 @@ internal sealed class WorldStreamer : IDisposable
 
     // The lens flare over it, read once, as the streaming starts.
     private readonly Task<GtaLensFlare?> lensFlare;
+    // The cloud hat over it, read alongside.
+    private readonly Task<GtaCloudHats?> cloudHats;
     private WorldAssetKey[] wanted = [];
     private readonly HashSet<WorldAssetKey> loading = [];
     private HashSet<WorldAssetKey> resident = [];
@@ -106,6 +108,7 @@ internal sealed class WorldStreamer : IDisposable
         workers = [.. Enumerable.Range(0, count).Select(n => Task.Run(() => Work(grass: n == 0)))];
         sky = Task.Run(index.LoadSky);
         lensFlare = Task.Run(index.LoadLensFlare);
+        cloudHats = Task.Run(index.LoadCloudHats);
     }
 
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
@@ -124,7 +127,7 @@ internal sealed class WorldStreamer : IDisposable
         get
         {
             lock (gate)
-                return !sky.IsCompleted || !lensFlare.IsCompleted || planning is not null || loading.Count > 0 || loadingGrass is not null || !prepared.IsEmpty || uploadPending
+                return !sky.IsCompleted || !lensFlare.IsCompleted || !cloudHats.IsCompleted || planning is not null || loading.Count > 0 || loadingGrass is not null || !prepared.IsEmpty || uploadPending
                     || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key))
                     || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
         }
@@ -275,6 +278,8 @@ internal sealed class WorldStreamer : IDisposable
             viewport.ShowWorldSky(dome);
         if (lensFlare.IsCompletedSuccessfully && lensFlare.Result is { } flare && !viewport.HasWorldLensFlare)
             viewport.ShowWorldLensFlare(flare);
+        if (cloudHats.IsCompletedSuccessfully && cloudHats.Result is { } hats && !viewport.HasWorldCloudHats)
+            viewport.ShowWorldCloudHats(hats);
         selectionTime += seconds;
         // Ten times a second, as RedFury's session has it (and at once for a new viewport); the uploads go on every frame.
         bool selectionDue = selectionTime >= .1f || firstSelection;

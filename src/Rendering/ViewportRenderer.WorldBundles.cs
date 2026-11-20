@@ -326,7 +326,10 @@ internal sealed unsafe partial class ViewportRenderer
             CreateWorldFamily(family, prepare: true);
         // GTA V's world has its sky behind it.
         if (families.Contains(WorldFamily.Gta))
+        {
             CreateSkyPipelines(prepare: true);
+            CreateCloudHatPipeline(prepare: true);
+        }
     }
 
     // RedFury's casters' depth: less or equal, pushed back by 2 and 2.5 times the slope, so surfaces don't shadow
@@ -552,12 +555,13 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>
     /// The placements in view, as RedFury draws them: the solid surfaces, each instanced over its level's placements;
     /// the decals over them, the same way, as each lies on its own placement; then the water, over a copy of the scene
-    /// behind it, and the other blended surfaces, one placement at a time, far to near. Returns the pass to go on with.
+    /// behind it, the sky's cloud hat, and the other blended surfaces, one placement at a time, far to near. Returns the
+    /// pass to go on with.
     /// </summary>
     private RenderPassEncoder DrawWorld(RenderPassEncoder pass, CommandEncoder encoder)
     {
         if (listedAssets.Count == 0 || worldInstanceLayout is null)
-            return pass;
+            return DrawCloudHats(pass, encoder, depthCopied: false);
         DrawWorldPass(pass, OpaqueBundle);
         DrawWorldPass(pass, DecalBundle);
         // The water over what's behind it, which it refracts and reflects: the pass ends while that's copied.
@@ -581,6 +585,8 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetBindGroup(0, sceneGroup);
         pass.SetBindGroup(2, lightGroup!);
         DrawBlended(pass, worldWaterDraws);
+        // The cloud hats after the water, as the game draws them after its sky, before the other blended surfaces.
+        pass = DrawCloudHats(pass, encoder, depthCopied: worldWaterDraws.Count > 0);
         DrawBlended(pass, worldBlendedDraws);
         return pass;
     }
