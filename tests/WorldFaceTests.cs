@@ -268,12 +268,27 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.Equal(backdrop.Bounds.Size, pane.ClientSize);
         Assert.Equal(Avalonia.VisualExtensions.PointToScreen(backdrop, default), ((Window)pane).Position);
 
-        // Closed, the pane goes with it.
-        settings.Close();
+        // Closed as a window (Alt+F4), it closes Settings, and goes with it.
+        ((Window)pane).Close();
+        TestWait.Pump(50);
+        Assert.False(settings.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(window));
         TestWait.Pump(400);
         Assert.False(pane.IsVisible);
-        Assert.False(ModalOverlay.IsOpen(window));
         Assert.True(world.Viewport.IsVisible);
+
+        // Shown again; with the keyboard on the window behind (its title bar clicked), Escape still closes it.
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        Assert.True(settings.IsOpen);
+        TopLevel again = TopLevel.GetTopLevel(settings)!;
+        Assert.NotSame(window, again);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        TestWait.Pump(400);
+        Assert.False(settings.IsOpen);
+        Assert.False(again.IsVisible);
+        Assert.False(ModalOverlay.IsOpen(window));
 
         // On the files' side it's drawn in the window, over its blurred content, as before.
         tab.ShowFiles();

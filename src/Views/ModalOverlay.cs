@@ -482,6 +482,7 @@ public sealed class ModalOverlay : Panel
         else
             Close();
     }
+
     /// <summary>
     /// A dialog's window of its own over a native view that keeps drawing (<see cref="KeepsDrawingProperty"/>):
     /// borderless and clear, owned by the window and laid over the part of it a modal covers (its backdrop, or all of
@@ -507,11 +508,23 @@ public sealed class ModalOverlay : Panel
             Panes.Add(this);
             over.PositionChanged += OnMoved;
             area.PropertyChanged += OnResized;
+            over.AddHandler(KeyDownEvent, OnOverKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            // Closed as a window (Alt+F4) while it shows a dialog: the dialog is asked to close instead, as Escape asks
+            // it, and the pane goes once it has. The window it's over closing takes it along.
+            Closing += (_, e) =>
+            {
+                if (e.CloseReason == WindowCloseReason.WindowClosing && Dialog is { } shown)
+                {
+                    e.Cancel = true;
+                    shown.Dismiss();
+                }
+            };
             Closed += (_, _) =>
             {
                 Panes.Remove(this);
                 over.PositionChanged -= OnMoved;
                 area.PropertyChanged -= OnResized;
+                over.RemoveHandler(KeyDownEvent, OnOverKeyDown);
             };
         }
 
@@ -521,7 +534,28 @@ public sealed class ModalOverlay : Panel
         /// <summary>What the dialog is shown from.</summary>
         public Panel Body { get; } = new();
 
+        // The dialog on top in it, if one is.
+        private ModalOverlay? Dialog => OpenOverlays.TryGetValue(this, out var open) && open.Count > 0 ? open[^1] : null;
+
         private void OnMoved(object? sender, PixelPointEventArgs e) => Place();
+
+        // The window's title bar stays usable, so the keyboard can land there (a click on Maximize, a drag): Escape and
+        // Tab are still the dialog's then, as they are for one drawn in the window.
+        private void OnOverKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Handled || Dialog is not { } shown)
+                return;
+            if (e.Key == Key.Escape)
+                shown.Dismiss();
+            else if (e.Key == Key.Tab && (e.KeyModifiers & ~KeyModifiers.Shift) == KeyModifiers.None)
+            {
+                Activate();
+                shown.MoveFocus(e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            }
+            else
+                return;
+            e.Handled = true;
+        }
 
         private void OnResized(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
