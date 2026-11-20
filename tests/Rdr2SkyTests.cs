@@ -245,12 +245,18 @@ public sealed class Rdr2SkyTests
                 renderer.Camera.Free = true;
                 renderer.Camera.Place(new Vector3(0, 0, 100), 0, .3f);
                 renderer.SetTime(12);
-                renderer.ShowRdr2Sky(sky);
-                for (int i = 0; i < 60; i++)
-                    renderer.RenderTo(target.CreateView());
-                uint[] pixels = [GtaSkyTests.Pixel(gpu, target, Width / 2, 1), GtaSkyTests.Pixel(gpu, target, Width / 2, Height - 2)];
-                renderer.Dispose();
-                return pixels;
+                try
+                {
+                    renderer.ShowRdr2Sky(sky);
+                    for (int i = 0; i < 60; i++)
+                        renderer.RenderTo(target.CreateView());
+                    return [GtaSkyTests.Pixel(gpu, target, Width / 2, 1), GtaSkyTests.Pixel(gpu, target, Width / 2, Height - 2)];
+                }
+                finally
+                {
+                    target.Destroy();
+                    renderer.Dispose();
+                }
             }
         }
         static int Green(uint pixel) => (int)((pixel >> 8) & 0xFF);
