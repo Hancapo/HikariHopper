@@ -242,7 +242,7 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (!worldShown || worldSky is not { } sky)
             return false;
-        skyPasses = GtaSky.Write(skyValues, sky.Visuals, Hours, Sky, Camera.Eye, waterClock.Elapsed.TotalSeconds);
+        skyPasses = GtaSky.Write(skyValues, sky.Visuals, Hours, Sky, Camera.Eye, waterClock.Elapsed.TotalSeconds, timecycle);
         queue.WriteBuffer(skyUniforms!, 0, (ReadOnlySpan<Vector4>)skyValues);
         WriteWorldFog(skyValues);
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor

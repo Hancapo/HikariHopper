@@ -255,8 +255,8 @@ internal sealed unsafe partial class ViewportRenderer
     /// </summary>
     private void DrawReflections(float hours)
     {
-        WriteSky(frameSkyBuffer!, SkySystem.At(hours), hours);
-        WriteSky(skyBuffer!, SkySystem.At(hours, reflection: true), hours);
+        WriteSky(frameSkyBuffer!, SkySystem.At(hours, timecycle: timecycle), hours);
+        WriteSky(skyBuffer!, SkySystem.At(hours, reflection: true, timecycle: timecycle), hours);
         CommandEncoder encoder = device.CreateCommandEncoder();
         RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
         {

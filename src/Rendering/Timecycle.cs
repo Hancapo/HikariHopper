@@ -44,6 +44,9 @@ internal static class Timecycle
     private static readonly Dictionary<string, float[]> Kept;
     private static volatile Dictionary<string, float[]> Values;
     private static volatile GtaToneMapVisuals toneMap = GtaToneMapVisuals.GameDefaults;
+    // The game's weather's second region (URBAN), each field at the keyframes; none before a game is open.
+    private static volatile Dictionary<string, float[]>? Region;
+
 
     /// <summary>
     /// The gamma PS_Composite encodes with: it raises the tone-mapped colour to its Gamma, one over this, itself, and
@@ -72,16 +75,26 @@ internal static class Timecycle
     }
 
     /// <summary>
-    /// Takes the game's clear weather from now on, each field it has at the keyframes over the copy kept with the app;
-    /// null goes back to the copy. Views pick it up the next time they set their hour.
+    /// Takes the game's clear weather from now on, each field it has at the keyframes over the copy kept with the app,
+    /// and its second region (URBAN) to blend over it by place; null goes back to the copy. The keyframes are kept as
+    /// the game keeps them, at half precision. Views pick it up the next time they set their hour.
     /// </summary>
     internal static void Use(Core.GameTimecycle? game)
     {
         var values = new Dictionary<string, float[]>(Kept);
         foreach (var (name, keyframes) in game?.Weather ?? new Dictionary<string, float[]>())
             if (keyframes.Length == Hours.Length)
-                values[name] = keyframes;
-        Values = values;
+                values[name] = Half(keyframes);
+        Dictionary<string, float[]>? region = null;
+        // The game blends two regions at most.
+        if (game is { Regions.Count: > 1 })
+        {
+            region = [];
+            foreach (var (name, keyframes) in game.Regions[1].Fields)
+                if (keyframes.Length == Hours.Length)
+                    region[name] = Half(keyframes);
+        }
+        (Values, Region) = (values, region);
     }
 
     /// <summary>
@@ -94,6 +107,9 @@ internal static class Timecycle
     /// <summary>The exposure curve and filmic tone map in use, the game's visualsettings.dat's or its code's defaults.</summary>
     internal static GtaToneMapVisuals ToneMap => toneMap;
 
+    // A keyframe's values as the game stores them: half-precision floats.
+    private static float[] Half(float[] keyframes) => [.. keyframes.Select(value => (float)(Half)value)];
+
     /// <summary>Whether the timecycle in use has this field, the game's or the kept copy's.</summary>
     internal static bool Has(string name) => Values.ContainsKey(name);
 
@@ -105,9 +121,7 @@ internal static class Timecycle
     {
         if (!float.IsFinite(hours))
             throw new ArgumentOutOfRangeException(nameof(hours));
-        hours %= 24;
-        if (hours < 0)
-            hours += 24;
+        hours = WrapHours(hours);
         // The keyframe at or before this hour, and how far it is towards the next; the last one runs to midnight.
         int index = Hours.Length - 1;
         while (index > 0 && Hours[index] > hours)
@@ -117,6 +131,13 @@ internal static class Timecycle
         return new(index, next, (hours - Hours[index]) / (end - Hours[index]));
     }
 
+    /// <summary>A finite time wrapped to the day, 0 to 24.</summary>
+    internal static float WrapHours(float hours)
+    {
+        hours %= 24;
+        return hours < 0 ? hours + 24 : hours;
+    }
+
     /// <summary>One field of the timecycle between two keyframes.</summary>
     internal static float Field(string name, int index, int next, float t) => Field(name, index, next, t, 0);
 
@@ -124,19 +145,60 @@ internal static class Timecycle
     internal static float Field(string name, int index, int next, float t, float fallback) =>
         Values.TryGetValue(name, out float[]? keyframes) ? float.Lerp(keyframes[index], keyframes[next], t) : fallback;
 
-    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
-    internal static TimecycleLight Evaluate(float hours)
+    /// <summary>
+    /// The timecycle at <paramref name="hours"/> after midnight at <paramref name="place"/> in the game's world, worked
+    /// out into <paramref name="frame"/> as the game does: every field between
+    /// its keyframes, GLOBAL's then the second region's blended over it by the region's strength (the second alone at
+    /// full strength), then each box modifier applied over that in turn, at its strength, as its field blends. A field
+    /// the second region lacks keeps GLOBAL's (the game's own regions have the same fields).
+    /// </summary>
+    internal static TimecycleSample Resolve(float hours, TimecyclePlace? place, TimecycleFrame frame)
     {
         TimecycleSample sample = Sample(hours);
-        float Get(string name) => sample.Get(name);
-        Vector3 Colour(string name) => sample.Colour(name);
+        var (index, next, t) = sample;
+        Dictionary<string, float[]> values = Values;
+        Dictionary<string, float[]>? region = Region;
+        float strength = place?.Region ?? 0;
+        Dictionary<string, float> resolved = frame.Values;
+        if (!ReferenceEquals(frame.Source, values))
+        {
+            resolved.Clear();
+            frame.Source = values;
+        }
+        foreach (var (name, keyframes) in values)
+        {
+            float value = Between(keyframes);
+            if (strength > 0 && region is not null && region.TryGetValue(name, out float[]? local))
+                value = strength >= 1 ? Between(local) : value + (Between(local) - value) * strength;
+            resolved[name] = value;
+        }
+        if (place is not null)
+            foreach (var (modifier, at) in place.Modifiers)
+                foreach (var (name, (a, b)) in modifier.Fields)
+                    if (resolved.TryGetValue(name, out float value))
+                        resolved[name] = TimecycleModifierBlend.Apply(TimecycleModifierBlend.Of(name), value, a, b, Math.Clamp(at, 0, 1));
+        return sample with { Frame = frame };
 
-        float natural = Get("natural_ambient_multiplier");
+        float Between(float[] keyframes) => keyframes[index] + (keyframes[next] - keyframes[index]) * t;
+    }
+
+    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
+    internal static TimecycleLight Evaluate(float hours) => Evaluate(Sample(hours));
+
+    /// <summary>The light of a sample of the timecycle.</summary>
+    internal static TimecycleLight Evaluate(in TimecycleSample sample)
+    {
+        TimecycleSample tc = sample;
+        float Get(string name) => tc.Get(name);
+        Vector3 Colour(string name) => tc.Colour(name);
+
+        // As the game sets the frame's: the natural ambient multiplier isn't the frame's (it scales what's
+        // inside a room or a box, entity by entity), so a modifier box at the camera that sets it changes nothing here.
         float occlusion = Get("light_amb_occ_mult");
         return new(
             Colour("light_dir_col") * Get("light_dir_mult"),
-            Colour("light_natural_amb_down_col") * Get("light_natural_amb_down_intensity") * natural,
-            Colour("light_natural_amb_up_col") * Get("light_natural_amb_up_intensity") * Get("light_natural_amb_up_intensity_mult") * natural,
+            Colour("light_natural_amb_down_col") * Get("light_natural_amb_down_intensity"),
+            Colour("light_natural_amb_up_col") * Get("light_natural_amb_up_intensity") * Get("light_natural_amb_up_intensity_mult"),
             Get("light_amb_down_wrap"),
             Colour("light_directional_amb_col") * Get("light_directional_amb_intensity") * Get("light_directional_amb_intensity_mult"),
             Get("light_directional_amb_bounce_enabled"),
@@ -209,15 +271,25 @@ internal static class Timecycle
     internal static float Luminance(Vector3 colour) => Vector3.Dot(colour, new(.2125f, .7154f, .0721f));
 }
 
-/// <summary>The timecycle between two keyframes, a fraction of the way from one to the next.</summary>
+/// <summary>
+/// The timecycle between two keyframes, a fraction of the way from one to the next: GLOBAL's, or with a frame, the
+/// frame's, worked out at a place in the world.
+/// </summary>
 internal readonly record struct TimecycleSample(int Index, int Next, float T)
 {
-    internal float Get(string name) => Timecycle.Field(name, Index, Next, T);
+    /// <summary>The fields worked out at a place (<see cref="Timecycle.Resolve"/>); none for GLOBAL's alone.</summary>
+    internal TimecycleFrame? Frame { get; init; }
 
-    /// <summary>A field, or the default the game's code gives it (its variable table) where the timecycle hasn't it.</summary>
-    internal float Get(string name, float fallback) => Timecycle.Field(name, Index, Next, T, fallback);
-    /// <summary>A field, or the default the game's code gives it (its TCVAR's) where the timecycle in use hasn't it.</summary>
-    internal float GetOr(string name, float fallback) => Timecycle.Has(name) ? Get(name) : fallback;
+    internal float Get(string name) => Frame is { } frame ? frame.Get(name) : Timecycle.Field(name, Index, Next, T);
+
+    /// <summary>
+    /// A field (the place's blend, with a frame), or the default the game's code gives it (its variable table)
+    /// where the timecycle hasn't it.
+    /// </summary>
+    internal float Get(string name, float fallback) => Timecycle.Has(name) ? Get(name) : fallback;
+
+    /// <summary>The same as <see cref="Get(string, float)"/>.</summary>
+    internal float GetOr(string name, float fallback) => Get(name, fallback);
 
     /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
     internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));

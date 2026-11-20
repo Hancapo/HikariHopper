@@ -107,6 +107,9 @@ internal sealed class WorldStreamer : IDisposable
     private Vector3 lightEye;
     private int? lightHour;
 
+    // The camera's place in the world's timecycle, worked out each frame into the same one.
+    private readonly TimecyclePlace place = new();
+
     public WorldStreamer(WorldIndex index)
     {
         ambient = index.AmbientOf;
@@ -283,6 +286,15 @@ internal sealed class WorldStreamer : IDisposable
             selectedReady = [];
         }
         Apply(viewport);
+        // The timecycle at the camera's place, every frame as the game works it out; the view takes it only where it changed.
+        // A world without them (RDR2's) has GLOBAL's alone, whatever world the view showed before.
+        if (index.TimecycleZones is { } zones)
+        {
+            zones.Evaluate(viewport.Camera.Eye, viewport.Hours, place);
+            viewport.SetTimecyclePlace(place);
+        }
+        else
+            viewport.SetTimecyclePlace(null);
         // The sky as soon as it's read, and again for a viewport that hasn't it.
         if (sky.IsCompletedSuccessfully && sky.Result is { } dome && !viewport.HasWorldSky)
             viewport.ShowWorldSky(dome);

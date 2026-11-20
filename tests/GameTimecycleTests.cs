@@ -32,33 +32,42 @@ public sealed class GameTimecycleTests
             <light_artificial_int_down_col_r>0.800 1.000</light_artificial_int_down_col_r>
             <artificial_int_ambient_multiplier>0.500 0.000</artificial_int_ambient_multiplier>
           </modifier>
-          <modifier name="v_house" numMods="2" userFlags="0">
+          <modifier name="v_house" numMods="3" userFlags="2">
             <light_artificial_int_down_intensity>2.000 0.000</light_artificial_int_down_intensity>
             <natural_ambient_multiplier>0.200 0.000</natural_ambient_multiplier>
+            <artificial_int_ambient_multiplier>0.250 1.000</artificial_int_ambient_multiplier>
           </modifier>
         </timecycle_modifier_data>
         """;
 
     [Fact]
-    public void The_weathers_global_region_and_each_modifiers_first_values_are_read()
+    public void The_weathers_regions_in_order_and_each_modifiers_two_values_and_flags_are_read()
     {
         Dictionary<string, float[]> weather = GameTimecycle.ParseWeather(Weather);
         Assert.Equal(Enumerable.Range(1, 13).Select(i => (float)i), weather["light_dir_mult"]);
         Assert.Equal(.5f, weather["light_artificial_ext_down_col_r"][4]);
-        var modifiers = GameTimecycle.ParseModifiers(Modifiers).ToDictionary(m => m.Name, m => m.Fields);
-        Assert.Equal(.8f, modifiers["V_Room"]["light_artificial_int_down_col_r"]);
-        Assert.Equal(.5f, modifiers["V_Room"]["artificial_int_ambient_multiplier"]);
-        Assert.Equal(2, modifiers["v_house"].Count);
+        var regions = GameTimecycle.ParseRegions(Weather);
+        Assert.Equal(["GLOBAL", "URBAN"], regions.Select(region => region.Name));
+        Assert.Equal(9, regions[1].Fields["light_dir_mult"][12]);
+        var modifiers = GameTimecycle.ParseModifiers(Modifiers).ToDictionary(m => m.Name);
+        Assert.Equal((.8f, 1f), modifiers["V_Room"].Fields["light_artificial_int_down_col_r"]);
+        Assert.Equal((.5f, 0f), modifiers["V_Room"].Fields["artificial_int_ambient_multiplier"]);
+        Assert.Equal(3, modifiers["v_house"].Fields.Count);
+        Assert.Equal(GameTimecycleModifier.InteriorOnly, modifiers["v_house"].Flags);
     }
 
+    internal static Dictionary<uint, GameTimecycleModifier> Read(string xml) =>
+        GameTimecycle.ParseModifiers(xml).Select((m, order) => (m, order))
+            .ToDictionary(pair => new Hash32(pair.m.Name.ToLowerInvariant()).Value, pair => new GameTimecycleModifier(pair.order, pair.m.Flags, pair.m.Fields));
+
     [Fact]
-    public void A_rooms_ambient_takes_its_primary_modifier_over_its_secondary_over_the_weather()
+    public void A_rooms_ambient_takes_its_secondary_modifier_over_its_primary_over_the_weather()
     {
-        var timecycle = GameTimecycle.From(GameTimecycle.ParseWeather(Weather),
-            GameTimecycle.ParseModifiers(Modifiers).ToDictionary(m => new Hash32(m.Name.ToLowerInvariant()).Value, m => m.Fields));
+        var timecycle = GameTimecycle.From(GameTimecycle.ParseWeather(Weather), Read(Modifiers));
         InteriorAmbient room = InteriorAmbient.For(new Hash32("v_room").Value, new Hash32("v_house").Value, timecycle);
-        // Red: the room's .8, by the house's intensity 2, by the room's multiplier .5; the weather has no green.
-        Assert.Equal(.8f, room.Down.X, 3);
+        // Red: the room's .8 (the house hasn't it), by the house's intensity 2, by the house's multiplier .25 over the
+        // room's .5; the weather has no green.
+        Assert.Equal(.4f, room.Down.X, 3);
         Assert.Equal(0, room.Down.Y);
         Assert.Equal(.2f, room.Natural, 3);
         // Without modifiers: the weather's, whose interior multiplier it doesn't have.

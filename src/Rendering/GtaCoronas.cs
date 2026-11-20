@@ -509,9 +509,9 @@ internal static class GtaCoronas
     /// <param name="seconds">How long the coronas have turned for.</param>
     /// <param name="heightAboveGround">The camera's height over the lowest ground near it.</param>
     public static void Write(Span<Vector4> values, GtaCoronaVisuals visuals, float hours, Vector3 right, Vector3 up, Vector3 forward, float tanHalfFov,
-        float aspect, int targetWidth, double seconds, float heightAboveGround, int count)
+        float aspect, int targetWidth, double seconds, float heightAboveGround, int count, TimecycleSample? timecycle = null)
     {
-        TimecycleSample sample = Timecycle.Sample(hours);
+        TimecycleSample sample = timecycle ?? Timecycle.Sample(hours);
         // The timecycle's sprite fields, with the game's defaults where a timecycle hasn't them.
         float spriteSize = sample.GetOr("sprite_size", 1), spriteBrightness = sample.GetOr("sprite_brightness", 1);
         float expansion = sample.GetOr("sprite_corona_screenspace_expansion", 0) + visuals.ScreenspaceExpansion;
