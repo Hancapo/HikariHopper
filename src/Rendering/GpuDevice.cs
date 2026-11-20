@@ -16,6 +16,8 @@ namespace HikariHopper.Rendering;
 internal sealed class GpuDevice
 {
     private static readonly Lock Creation = new();
+    // Around the warm-up's task alone: the warm-up makes the device under Creation, which asking after it mustn't wait for.
+    private static readonly Lock Warming = new();
     private static GpuDevice? shared;
     private static Task? warming;
 
@@ -77,7 +79,7 @@ internal sealed class GpuDevice
     /// </summary>
     internal static Task WarmUp()
     {
-        lock (Creation)
+        lock (Warming)
             return warming ??= Task.Run(() =>
             {
                 try
@@ -106,7 +108,7 @@ internal sealed class GpuDevice
     {
         get
         {
-            lock (Creation)
+            lock (Warming)
                 return warming ?? Task.CompletedTask;
         }
     }
@@ -122,7 +124,7 @@ internal sealed class GpuDevice
         get
         {
             Task? started;
-            lock (Creation)
+            lock (Warming)
                 started = warming;
             if (started is null)
                 return Task.CompletedTask;
