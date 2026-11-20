@@ -7,7 +7,8 @@ namespace HikariHopper.Tests;
 /// <summary>
 /// The real game the real-asset tests read from, found as the app would: <c>HIKARI_TEST_LEGACY</c> when set, else the
 /// Legacy folder set in HikariHopper's settings, else Steam's own install of it. Read only: a test copies what it
-/// changes. Without one, those tests are skipped.
+/// changes. Without one, those tests are skipped; and with <c>HIKARI_TEST_SKIP_GAMES=1</c>, for a quick run that leaves
+/// out the slowest of them.
 /// </summary>
 internal static partial class TestGames
 {
@@ -22,12 +23,20 @@ internal static partial class TestGames
     /// </summary>
     internal static string Rdr2()
     {
+        SkipWhenAsked();
         if (rdr2.Value is not { } root)
         {
             Assert.Skip("No RDR2 found: set HIKARI_TEST_RDR2, its folder in HikariHopper's settings, or install it with Steam.");
             throw new InvalidOperationException();
         }
         return root;
+    }
+
+    // HIKARI_TEST_SKIP_GAMES=1: the tests that read a real game are skipped.
+    private static void SkipWhenAsked()
+    {
+        if (Environment.GetEnvironmentVariable("HIKARI_TEST_SKIP_GAMES") == "1")
+            Assert.Skip("HIKARI_TEST_SKIP_GAMES=1: the tests that read a real game are left out.");
     }
 
     private static string? FindRdr2()
@@ -45,6 +54,7 @@ internal static partial class TestGames
     /// <summary>The GTA V Legacy folder, or skips the test that needs it.</summary>
     internal static string Legacy()
     {
+        SkipWhenAsked();
         string? named = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY");
         if (!string.IsNullOrEmpty(named))
             Assert.True(Directory.Exists(named), $"HIKARI_TEST_LEGACY does not exist: {named}");
