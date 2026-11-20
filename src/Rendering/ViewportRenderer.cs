@@ -640,6 +640,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         hdr?.Destroy();
         hdrDepth?.Destroy();
         subSampled?.Destroy();
+        DestroyAmbientOcclusionTargets();
         bloom?.Destroy();
         bloomUnfiltered?.Destroy();
         shadowMap?.Destroy();

@@ -1014,8 +1014,8 @@ fn shade_material(
     if ((material.flags.y & 1u) != 0u) {
         ao *= sample_rage(occlusion_texture, material_sampler, input.uv).r;
     }
-    // The viewer has no screen-space mask or occlusion: every surface reads the cascades (light.wgsl's sun_shadow), on
-    // the side of its geometric normal being drawn.
+    // The viewer has no screen-space mask: every surface reads the cascades (light.wgsl's sun_shadow), on the side of
+    // its geometric normal being drawn. A world's screen-space occlusion is taken out after (ambient_occlusion.wgsl).
     let screen_occlusion = 1.0;
     let sun_visibility = sun_shadow(input.world_position, select(-normalize(input.normal), normalize(input.normal), front_facing));
     // Baked and screen-space occlusion describe the same missing light; combine with min, not product.
@@ -1023,6 +1023,7 @@ fn shade_material(
     let diffuse_colour = base_colour * (1.0 - metallic);
     let irradiance = sky_irradiance(n);
     var lit = diffuse_colour * irradiance * multi_bounce_occlusion(ambient_visibility, diffuse_colour);
+    occludable(diffuse_colour * irradiance, ao, n, diffuse_colour);
     // Specular ambient: analytic sky along the reflection, widened towards irradiance with roughness.
     let reflected = reflect(-v, n);
     // The sky-view LUT is unfiltered; rough lobes average most of the sky, so fade towards the

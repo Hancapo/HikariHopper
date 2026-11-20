@@ -337,6 +337,7 @@ internal sealed unsafe partial class ViewportRenderer
             ],
         });
         CreateRdr2Grading();
+        CreateAmbientOcclusion();
         CreateExposure();
         CreateBloom();
         CreateSubSampledPipeline();
@@ -465,6 +466,7 @@ internal sealed unsafe partial class ViewportRenderer
         CreateFogRayTargets();
         CreateWaterTargets();
         CreateSubSampledTargets();
+        CreateAmbientOcclusionTargets();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {

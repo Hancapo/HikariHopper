@@ -112,6 +112,7 @@ internal sealed partial class ViewportHost : NativeControlHost
             return;
         renderer.Antialiasing = Core.GraphicsSettings.Antialiasing;
         renderer.Bloom = Core.GraphicsSettings.Bloom;
+        renderer.AmbientOcclusion = Core.GraphicsSettings.AmbientOcclusion;
         renderer.Shadows = Core.GraphicsSettings.Shadows;
         renderer.ShadowResolution = Core.GraphicsSettings.ShadowResolution;
         renderer.Anisotropy = Core.GraphicsSettings.Anisotropy;

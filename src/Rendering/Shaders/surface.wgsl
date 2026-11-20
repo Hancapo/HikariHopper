@@ -256,6 +256,9 @@ struct Surface {
 struct SurfaceTargets {
     @location(0) colour: vec4f,
     @location(1) sub_sampled: f32,
+    // And what the world's ambient occlusion takes back out (light.wgsl's occludable).
+    @location(2) ambient: vec4f,
+    @location(3) normal: vec4f,
 };
 
 // The sub-sampled alpha a cut-out leaves (shade_surface), nought for everything else.
@@ -270,7 +273,7 @@ fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> Surfa
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return SurfaceTargets(colour, sub_sampled_alpha);
+    return SurfaceTargets(colour, sub_sampled_alpha, occludable_ambient, occludable_normal);
 }
 
 // Into the reflection map: the paraboloid mirrors the winding, and what is behind the hemisphere is left out (after
@@ -973,6 +976,7 @@ fn tree_foliage_light(place: vec3f, stored: vec3f, original: vec3f, view: vec3f,
     let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h, exponent + 1e-8) * fresnel(fresnel_value, h_dot_l);
     let sun = sun_colour * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
     let ambient = albedo * kept * (gta_ambient(around) * ambient_scale + gta_artificial_ambient(around) * artificial_scale);
+    occludable(ambient, 1.0, around, albedo);
     let reflection = gta_reflection(around, view, exponent, 1.0 - kept) * ambient_scale * reflection_scale;
     let local = gta_local_lights(albedo, kept, spec, exponent, fresnel_value, normal, view);
     var through = vec3f(0.0);

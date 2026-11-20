@@ -36,8 +36,15 @@ fn vs_rdr2_world(vertex: Rdr2Vertex, @location(8) source_index: u32) -> Material
     return output;
 }
 
+// What the world's surfaces write: the colour, then what its ambient occlusion takes back out (light.wgsl's occludable).
+struct Rdr2WorldTargets {
+    @location(0) colour: vec4f,
+    @location(2) ambient: vec4f,
+    @location(3) normal: vec4f,
+};
+
 @fragment
-fn fs_rdr2_world(input: MaterialVertexOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+fn fs_rdr2_world(input: MaterialVertexOutput, @builtin(front_facing) front: bool) -> Rdr2WorldTargets {
     use_local_lights(input.position.xy, input.relative_position);
     sub_sampled_view = true;
     // Left out after shading, which needs uniform control flow.
@@ -45,5 +52,5 @@ fn fs_rdr2_world(input: MaterialVertexOutput, @builtin(front_facing) front: bool
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return colour;
+    return Rdr2WorldTargets(colour, occludable_ambient, occludable_normal);
 }

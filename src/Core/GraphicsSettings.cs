@@ -10,6 +10,7 @@ public static class GraphicsSettings
 {
     public const string AntialiasingKey = "graphics/antialiasing";
     public const string BloomKey = "graphics/bloom";
+    public const string AmbientOcclusionKey = "graphics/ambient-occlusion";
     public const string ShadowsKey = "graphics/shadows";
     public const string ShadowResolutionKey = "graphics/shadowResolution";
     public const string AnisotropyKey = "graphics/anisotropy";
@@ -46,6 +47,13 @@ public static class GraphicsSettings
     {
         get => AppSettings.GetInt(BloomKey, 1) != 0;
         set => SetFlag(BloomKey, Bloom, value);
+    }
+
+    /// <summary>Whether a world's solid surfaces are darkened by their screen-space ambient occlusion; on by default.</summary>
+    public static bool AmbientOcclusion
+    {
+        get => AppSettings.GetInt(AmbientOcclusionKey, 1) != 0;
+        set => SetFlag(AmbientOcclusionKey, AmbientOcclusion, value);
     }
 
     /// <summary>Whether the sun casts shadows, on the model and the ground; on by default.</summary>

@@ -345,6 +345,17 @@ fn fresnel(fresnel_value: f32, cosine: f32) -> f32 {
 // GTA's directional pass (PS_directional_just_dir) and the core of its ambient one (PS_directional_ambient) over what
 // a deferred shader wrote to its G-buffer: albedo as stored (gamma 2, squared here as the passes read it), normal,
 // specular intensity, power and fresnel, and the ambient scale. The game's lighting has no 1/pi.
+// What screen-space ambient occlusion (ambient_occlusion.wgsl) takes back out of a world's solid surface: the ambient
+// it was lit with and the occlusion already baked into that (one where the ambient holds it already); its normal, and its
+// albedo's luminance (nought where there's nothing to take out).
+var<private> occludable_ambient: vec4f = vec4f(0.0, 0.0, 0.0, 1.0);
+var<private> occludable_normal: vec4f = vec4f(0.0);
+
+fn occludable(ambient: vec3f, baked: f32, normal: vec3f, albedo: vec3f) {
+    occludable_ambient = vec4f(ambient, baked);
+    occludable_normal = vec4f(normal, max(dot(albedo, vec3f(0.2126, 0.7152, 0.0722)), 1e-4));
+}
+
 fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32, fresnel_value: f32, ambient_scale: f32,
     shadow: f32, reflection_scale: f32, artificial_scale: f32) -> vec3f {
     let to_light = normalize(light.sun_direction.xyz);
@@ -369,6 +380,8 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     // Ambient: the timecycle's natural and directional ambient for this normal, by the ambient scale, and its
     // artificial ambient by the artificial scale (what the vertex green stores).
     let ambient = albedo * kept * (gta_ambient(normal) * ambient_scale + gta_artificial_ambient(normal) * artificial_scale);
+    // Its vertex occlusion is in the ambient scales already.
+    occludable(ambient, 1.0, normal, albedo);
 
     // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is, and by the scale
     // the G-buffer's last channel holds (one for all but peds, whose deferred shaders write their own).

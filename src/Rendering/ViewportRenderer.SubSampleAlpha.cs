@@ -23,17 +23,23 @@ internal sealed unsafe partial class ViewportRenderer
     internal bool SubSampledCombine { get; set; } = true;
 
     /// <summary>The HDR passes' targets: the HDR one, and the sub-sampled alpha, written only where it says.</summary>
-    private static ColorTargetState[] HdrTargets(ColorTargetState colour, bool subSampled = false) =>
+    private static ColorTargetState[] HdrTargets(ColorTargetState colour, bool subSampled = false, bool occludable = false) =>
     [
         colour,
         new ColorTargetState { Format = SubSampledFormat, WriteMask = subSampled ? ColorWriteMask.All : ColorWriteMask.None },
+        // What a world's solid surfaces leave for its ambient occlusion (ViewportRenderer.AmbientOcclusion.cs).
+        new ColorTargetState { Format = OccludableFormat, WriteMask = occludable ? ColorWriteMask.All : ColorWriteMask.None },
+        new ColorTargetState { Format = OccludableFormat, WriteMask = occludable ? ColorWriteMask.All : ColorWriteMask.None },
     ];
 
     /// <summary>A drawable's targets: the HDR passes' into the view, the HDR target alone into the reflection map.</summary>
     private static ColorTargetState[] ViewTargets(ColorTargetState colour, bool reflected, bool subSampled = false) =>
         reflected ? [colour] : HdrTargets(colour, subSampled);
 
-    /// <summary>The HDR passes' attachments: the HDR target, and the sub-sampled alpha, cleared to none as it begins.</summary>
+    /// <summary>
+    /// The HDR passes' attachments: the HDR target, the sub-sampled alpha, and what the world's ambient occlusion takes
+    /// out (its ambient with nothing baked into it, its normals with no albedo), cleared as it begins.
+    /// </summary>
     private RenderPassColorAttachment[] HdrAttachments(bool clear) =>
     [
         new RenderPassColorAttachment
@@ -46,6 +52,20 @@ internal sealed unsafe partial class ViewportRenderer
         new RenderPassColorAttachment
         {
             View = subSampledView!,
+            LoadOp = clear ? LoadOp.Clear : LoadOp.Load,
+            StoreOp = StoreOp.Store,
+            ClearValue = new Color(0, 0, 0, 0),
+        },
+        new RenderPassColorAttachment
+        {
+            View = occludableAmbientView!,
+            LoadOp = clear ? LoadOp.Clear : LoadOp.Load,
+            StoreOp = StoreOp.Store,
+            ClearValue = new Color(0, 0, 0, 1),
+        },
+        new RenderPassColorAttachment
+        {
+            View = occludableNormalView!,
             LoadOp = clear ? LoadOp.Clear : LoadOp.Load,
             StoreOp = StoreOp.Store,
             ClearValue = new Color(0, 0, 0, 0),
