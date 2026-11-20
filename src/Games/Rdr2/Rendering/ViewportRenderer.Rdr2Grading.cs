@@ -4,15 +4,15 @@ using Buffer = WebGpuSharp.Buffer;
 
 namespace HikariHopper.Rendering;
 
-// Red Dead Redemption 2's colour grading after the tone map (Post/tonemap.wgsl's rdr2_display): in the display's sRGB, the
-// scotopic shift towards the timecycle's night colour where the scene is dark, then its levels table and its weather's
-// (Rdr2Grading.cs), each baked as the game bakes it when its values change. Off (and the tables the identity) without an
-// RDR2 world's sky.
+// Red Dead Redemption 2's colour grading: before the exposure, the gradient filter down the screen (Post/tonemap.wgsl's
+// rdr2_gradient); after the tone map (rdr2_display), in the display's sRGB, the scotopic shift towards the timecycle's
+// night colour where the scene is dark, then its levels table and its weather's (Rdr2Grading.cs), each baked as the game
+// bakes it when its values change. Off (and the tables the identity) without an RDR2 world's sky.
 internal sealed unsafe partial class ViewportRenderer
 {
     // The grading's constants (Post/tonemap.wgsl's Rdr2Grade): whether it's on; the scotopic colour and its intensity; the
-    // scotopic weight's scale and bias.
-    private const int Rdr2GradeBytes = 48;
+    // scotopic weight's scale and bias; the gradient filter's top, middle, bottom and extra (Rdr2Gradient).
+    private const int Rdr2GradeBytes = 112;
 
     private Buffer? rdr2GradeBuffer;
     private WebGpuSharp.Texture? rdr2LevelsTable, rdr2WeatherTable;
@@ -42,8 +42,11 @@ internal sealed unsafe partial class ViewportRenderer
         float[] identity = Rdr2Grading.Levels(Vector4.One, Vector4.One, 1);
         WriteRdr2Table(rdr2LevelsTable, identity);
         WriteRdr2Table(rdr2WeatherTable, identity);
-        queue.WriteBuffer(rdr2GradeBuffer, 0, (ReadOnlySpan<Vector4>)[Vector4.Zero, Vector4.Zero, Vector4.Zero]);
+        queue.WriteBuffer(rdr2GradeBuffer, 0, (ReadOnlySpan<Vector4>)NoGrade);
     }
+
+    // The constants with the grading off.
+    private static readonly Vector4[] NoGrade = new Vector4[Rdr2GradeBytes / 16];
 
     private void WriteRdr2Table(WebGpuSharp.Texture table, float[] texels)
     {
@@ -61,7 +64,7 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (!worldShown || rdr2Sky is not { } sky)
         {
-            queue.WriteBuffer(rdr2GradeBuffer!, 0, (ReadOnlySpan<Vector4>)[Vector4.Zero, Vector4.Zero, Vector4.Zero]);
+            queue.WriteBuffer(rdr2GradeBuffer!, 0, (ReadOnlySpan<Vector4>)NoGrade);
             return;
         }
         Rdr2GradeValues grade = sky.Sky.GradeAt(Hours);
@@ -77,7 +80,8 @@ internal sealed unsafe partial class ViewportRenderer
             WriteRdr2Table(rdr2WeatherTable!, tables.Weather(grade.WeatherWeights));
             rdr2WeatherBaked = (tables, grade.WeatherWeights);
         }
+        Rdr2Gradient gradient = grade.Gradient;
         queue.WriteBuffer(rdr2GradeBuffer!, 0, (ReadOnlySpan<Vector4>)[Vector4.UnitX, grade.Scotopic,
-            new Vector4(grade.ScotopicWeight, 0, 0)]);
+            new Vector4(grade.ScotopicWeight, 0, 0), gradient.Top, gradient.Middle, gradient.Bottom, new Vector4(gradient.Extra, 0, 0)]);
     }
 }

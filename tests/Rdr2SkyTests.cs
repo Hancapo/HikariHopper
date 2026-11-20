@@ -196,6 +196,76 @@ public sealed class Rdr2SkyTests
         Assert.Equal(1, grade.WeatherWeights.Sum(), 6);
         Assert.Equal(new Vector4(.37f, 1, 1, .7f), grade.Scotopic);
         Assert.Equal(new Vector2(.3f, -.15f), grade.ScotopicWeight);
+        // No gradient filter where the weather sets none: white bands, the midpoints at the middle.
+        Assert.Equal(new Rdr2Gradient(new Vector4(1, 1, 1, 0), new Vector4(1, 1, 1, .5f), new Vector4(1, 1, 1, 0), new Vector2(2, 2)), grade.Gradient);
+    }
+
+    [Fact]
+    public void The_gradient_filter_is_the_timecycles_bands_as_the_games_post_process_sets_them_up()
+    {
+        Rdr2Sky sky = Sky(("postfx_grad_top_col_r", [.25f]), ("postfx_grad_top_col_fade", [.5f]), ("postfx_grad_top_col_mult", [.3f]),
+            ("postfx_grad_middle_col_g", [.5f]), ("postfx_grad_middle_col_mult", [.6f]), ("postfx_grad_bottom_col_mult", [1.2f]),
+            ("postfx_grad_midpoint", [.4f]), ("postfx_grad_top_middle_midpoint", [.25f]), ("postfx_grad_middle_bottom_midpoint", [.75f]));
+        Rdr2Gradient gradient = sky.GradeAt(12).Gradient;
+        // The top's colour times its fade, raised to 1/2.2, times its multiplier; one less twice its midpoint.
+        float Raised(float value) => MathF.Pow(value, 1 / 2.2f);
+        Assert.Equal(.3f * Raised(.25f * .5f), gradient.Top.X, 6);
+        Assert.Equal(.3f * Raised(.5f), gradient.Top.Y, 6);
+        Assert.Equal(.5f, gradient.Top.W, 6);
+        // The middle's times its multiplier alone, not raised, and where it sits.
+        Assert.Equal(new Vector4(.6f, .3f, .6f, .4f), gradient.Middle);
+        Assert.Equal(new Vector4(1.2f, 1.2f, 1.2f, -.5f), gradient.Bottom);
+        Assert.Equal(1 / .6f, gradient.Extra.X, 6);
+        Assert.Equal(1 / .4f, gradient.Extra.Y, 6);
+    }
+
+    [Fact]
+    public void The_gradient_filter_darkens_the_frame_down_from_its_top_before_the_exposure()
+    {
+        uint[] Frame(params (string Field, float[] Values)[] fields)
+        {
+            Rdr2Sky sky = Sky(fields);
+            GpuDevice gpu = TestGpu.Device();
+            lock (gpu.Gate)
+            {
+                var renderer = new ViewportRenderer(gpu);
+                const int Width = 64, Height = 32;
+                WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+                {
+                    Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
+                    Dimension = WebGpuSharp.TextureDimension.D2,
+                    Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                    Format = renderer.PresentFormat,
+                    MipLevelCount = 1,
+                    SampleCount = 1,
+                });
+                renderer.Resize(Width, Height);
+                renderer.WorldShown = true;
+                renderer.Camera.Frame(new Vector3(0, 0, 100), 20);
+                renderer.Camera.Free = true;
+                renderer.Camera.Place(new Vector3(0, 0, 100), 0, .3f);
+                renderer.SetTime(12);
+                try
+                {
+                    renderer.ShowRdr2Sky(sky);
+                    for (int i = 0; i < 60; i++)
+                        renderer.RenderTo(target.CreateView());
+                    return [GtaSkyTests.Pixel(gpu, target, Width / 2, 1), GtaSkyTests.Pixel(gpu, target, Width / 2, Height - 2)];
+                }
+                finally
+                {
+                    target.Destroy();
+                    renderer.Dispose();
+                }
+            }
+        }
+        static int Green(uint pixel) => (int)((pixel >> 8) & 0xFF);
+        uint[] plain = Frame();
+        uint[] filtered = Frame(("postfx_grad_top_col_mult", [.25f]));
+        // The top a quarter as bright before the exposure, which the filter doesn't change: much darker on screen.
+        Assert.True(Green(filtered[0]) < Green(plain[0]) - 20, $"{plain[0]:X8} {filtered[0]:X8}");
+        // The bottom, past the middle, as it was.
+        Assert.InRange(Green(filtered[1]) - Green(plain[1]), -2, 2);
     }
 
     [Fact]
