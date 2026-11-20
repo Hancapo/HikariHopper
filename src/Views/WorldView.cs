@@ -21,8 +21,9 @@ namespace HikariHopper.Views;
 /// what it streamed.
 /// <para>
 /// The viewport is a native window, which covers whatever the main window draws over it: it hides while a dialog or a
-/// menu drawn in the window is open over it, or the tab's loading cover is up. The title bar's menus open as windows of
-/// their own over it (<see cref="MenuRow"/>), so it keeps drawing under them.
+/// menu drawn in the window is open over it, or the tab's loading cover is up. The title bar's menus and the sheets
+/// (Settings among them) open over it in windows of their own (<see cref="MenuRow"/>, <see cref="ModalOverlay"/>), so it
+/// keeps drawing under them.
 /// </para>
 /// </summary>
 internal sealed class WorldView : UserControl
@@ -46,6 +47,8 @@ internal sealed class WorldView : UserControl
     public WorldView()
     {
         Viewport = new ViewportHost { FreeCamera = true, World = true };
+        // Settings and the other sheets open over it in a pane of their own, so it keeps drawing under them.
+        ModalOverlay.SetKeepsDrawing(Viewport, true);
         Viewport.Drawing += (renderer, seconds) => streamer?.Update(renderer, seconds, bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours);
         Viewport.PixelClicked += PickAt;
         Pattern = new RailPattern { IsRunning = false };
@@ -293,7 +296,7 @@ internal sealed class WorldView : UserControl
     }
 
     /// <summary>Whether something the main window draws covers the viewport now: a dialog, a menu, the loading cover.</summary>
-    internal bool Covered => top is not null && (ModalOverlay.IsOpen(top) || Controls.RetroMenu.AnyOpenOver(top)) || bridge?.GameLoading == true;
+    internal bool Covered => top is not null && (ModalOverlay.IsDrawnIn(top) || Controls.RetroMenu.AnyOpenOver(top)) || bridge?.GameLoading == true;
 
     private void Refresh()
     {

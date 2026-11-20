@@ -242,6 +242,68 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void Settings_opens_over_the_world_in_a_window_of_its_own_and_the_world_keeps_drawing()
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        tab.ShowWorld();
+        TestWait.Pump(300);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Viewport.IsVisible);
+        MenuRow menus = Find<MenuRow>(window);
+        Control backdrop = ModalOverlay.BackdropOf(window)!;
+
+        // In a pane of its own over the window's content: the view isn't covered, nothing is blurred, and the window
+        // is blocked as under any dialog.
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        SettingsDialog settings = menus.Settings!;
+        TopLevel pane = TopLevel.GetTopLevel(settings)!;
+        Assert.NotSame(window, pane);
+        Assert.True(ModalOverlay.IsOpen(window));
+        Assert.False(ModalOverlay.IsDrawnIn(window));
+        Assert.False(world.Covered);
+        Assert.True(world.Viewport.IsVisible);
+        Assert.True(backdrop.Effect is null or Avalonia.Media.BlurEffect { Radius: 0 });
+        Assert.Equal(backdrop.Bounds.Size, pane.ClientSize);
+        Assert.Equal(Avalonia.VisualExtensions.PointToScreen(backdrop, default), ((Window)pane).Position);
+
+        // Closed as a window (Alt+F4), it closes Settings, and goes with it.
+        ((Window)pane).Close();
+        TestWait.Pump(50);
+        Assert.False(settings.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(window));
+        TestWait.Pump(400);
+        Assert.False(pane.IsVisible);
+        Assert.True(world.Viewport.IsVisible);
+
+        // Shown again; with the keyboard on the window behind (its title bar clicked), Escape still closes it.
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        Assert.True(settings.IsOpen);
+        TopLevel again = TopLevel.GetTopLevel(settings)!;
+        Assert.NotSame(window, again);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        TestWait.Pump(400);
+        Assert.False(settings.IsOpen);
+        Assert.False(again.IsVisible);
+        Assert.False(ModalOverlay.IsOpen(window));
+
+        // On the files' side it's drawn in the window, over its blurred content, as before.
+        tab.ShowFiles();
+        TestWait.Pump(100);
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        Assert.Same(window, TopLevel.GetTopLevel(settings));
+        Assert.True(ModalOverlay.IsDrawnIn(window));
+        Assert.True(backdrop.Effect is Avalonia.Media.BlurEffect { Radius: > 0 });
+        settings.Close();
+        TestWait.Pump(400);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void The_start_pages_globe_opens_a_game_with_a_world_on_its_World_side()
     {
         string rdr2 = MakeRdr2();
