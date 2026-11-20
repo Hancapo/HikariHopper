@@ -274,6 +274,31 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
+    public void Until_the_shaders_have_compiled_the_world_shows_its_loading_screen_and_the_window_stays_responsive()
+    {
+        var compiled = new TaskCompletionSource();
+        WorldView.GpuReady = () => compiled.Task;
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady, "the world's index");
+        tab.ShowWorld();
+        TestWait.Pump(300);
+        // The index is ready, but the viewport, which would wait for the shaders on the UI thread, stays hidden.
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Cover.IsVisible);
+        Assert.False(world.Viewport.IsVisible);
+        Assert.Equal("COMPILING SHADERS", world.Loading.Title);
+        Assert.Equal("Preparing the world", world.Loading.Detail);
+        Assert.Null(world.Loading.Progress);
+
+        // Compiled, the world opens by itself.
+        compiled.SetResult();
+        TestWait.Until(() => world.Viewport.IsVisible, "the world's view");
+        Assert.False(world.Cover.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void Once_its_index_is_ready_the_world_streams_into_its_view_until_the_game_closes()
     {
         var (window, session) = OpenWindow();
