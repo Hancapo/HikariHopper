@@ -11,7 +11,7 @@
 //     game's height fog, haze and all), and the texture squared twice.
 //   - Left out: Enhanced's second layer of occluders (a depth and its opacity; the scene's depth alone here), the
 //     coronas in reflections and under water.
-// Put after scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl: the fog's constants are the sky's.
+// Put after Scene/scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl: the fog's constants are the sky's.
 
 struct CoronaFrame {
     // The view's third row (gWorldView[2]), which the game's near fade measures with.

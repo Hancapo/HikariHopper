@@ -8,7 +8,7 @@
 //   - The flare: its elements, laid out on the CPU as the game lays them out (GtaLensFlare.cs), drawn with the im
 //     shader's colorcorrectedunlit and colorcorrectedunlitgradient techniques (the artefacts), added to the frame. The
 //     rings (the chromatic texture's) are made here from their centre, radii and fade, as the game's strips are.
-// Put after scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl.
+// Put after Scene/scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl.
 
 struct FlareVisibility {
     // The disc's radius; how much the fog hides of it (the sun's fog factor, which the game sends as noiseSoftness); and the

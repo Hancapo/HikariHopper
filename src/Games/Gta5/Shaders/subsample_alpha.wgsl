@@ -2,7 +2,7 @@
 // Enhanced's): after the frame's surfaces, coronas and lens flare, before the post-process. A cut-out's sub-sampled
 // pixels (Gta5/surface.wgsl's sub_sample) hold it where its alpha isn't whole, and leave the checkerboard's other pixels to
 // what is behind; each is blended with its neighbour to the right by the alpha it left, so both show the cut-out over
-// what is behind it by that alpha. What no cut-out left is kept as it is. Standalone (no scene.wgsl).
+// what is behind it by that alpha. What no cut-out left is kept as it is. Standalone (no Scene/scene.wgsl).
 //
 // The HDR target holds premultiplied colour and coverage: where both pixels are covered (all of a world's frame) the
 // colour is the game's own blend; where one is the backdrop, the covered one's colour is kept, its coverage blended.

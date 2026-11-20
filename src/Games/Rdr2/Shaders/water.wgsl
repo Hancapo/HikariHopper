@@ -1,8 +1,8 @@
 // Red Dead Redemption 2's water: RedFury.Rendering's water_material.wgsl, copied, its camera, light and scene copy the
-// viewer's (water_common.wgsl, Rdr2/light.wgsl). As RedFury says: the game's simulated normal and reflection buffers
+// viewer's (World/water_common.wgsl, Rdr2/light.wgsl). As RedFury says: the game's simulated normal and reflection buffers
 // aren't assets, so the ripples are analytic, the reflection screen-space over the reflection map, and the refraction
 // the opaque scene behind, without displacement. Its material's fog colour, ripple scale and bumpiness, flow and fog
-// textures, foam and opacity are the game's. Put after Rdr2/material.wgsl, Rdr2/world.wgsl and water_common.wgsl.
+// textures, foam and opacity are the game's. Put after Rdr2/material.wgsl, Rdr2/world.wgsl and World/water_common.wgsl.
 
 // Integer-hashed unit gradient per lattice cell; stable at large world coordinates, unlike sin-based hashes.
 fn water_gradient(cell: vec2f) -> vec2f {

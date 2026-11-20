@@ -14,7 +14,7 @@
 //   - The game skips what's nearer than the fog's start with a depth test against a plane there; nothing there has any
 //     fog, so here it's simply drawn over. Its fog rays read a smaller copy of its shadow map; here the shadow's own
 //     cascades.
-// Put after scene.wgsl, light.wgsl, Gta5/fog.wgsl and Gta5/world_fog.wgsl.
+// Put after Scene/scene.wgsl, Scene/light.wgsl, Gta5/fog.wgsl and Gta5/world_fog.wgsl.
 
 // The world's depth (reversed Z, infinitely far), read where it's attached.
 @group(1) @binding(0) var fog_depth: texture_depth_2d;

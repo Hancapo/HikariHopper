@@ -2,7 +2,7 @@
 // Gta5/surface.wgsl as the model viewer shades them, a tree's moved first by its vertex shader's work (Gta5/trees.wgsl). A
 // placement's matrices are read per instance; positions go relative to the scene's origin, the camera, so the world's
 // large coordinates stay precise. An entity's tint picks its row of a _tnt shader's palette, as the game's tint
-// palette selector. Put after scene.wgsl, light.wgsl, Gta5/trees.wgsl, Gta5/surface.wgsl, world_instances.wgsl, Gta5/fog.wgsl and
+// palette selector. Put after Scene/scene.wgsl, Scene/light.wgsl, Gta5/trees.wgsl, Gta5/surface.wgsl, World/world_instances.wgsl, Gta5/fog.wgsl and
 // Gta5/world_fog.wgsl.
 
 // A placement's vertex: in the world, then relative to the scene's origin. A plant shrinks away with distance.

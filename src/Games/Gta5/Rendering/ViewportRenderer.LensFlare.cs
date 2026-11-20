@@ -123,7 +123,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("scene.wgsl") + "\n" + Read("Gta5/sky_system.wgsl") + "\n" + Read("Gta5/fog.wgsl") + "\n" + Read("Gta5/sky.wgsl") + "\n" + Read("Gta5/lens_flare.wgsl"),
+            Code = Read("Scene/scene.wgsl") + "\n" + Read("Gta5/sky_system.wgsl") + "\n" + Read("Gta5/fog.wgsl") + "\n" + Read("Gta5/sky.wgsl") + "\n" + Read("Gta5/lens_flare.wgsl"),
         }));
         RenderPipelineDescriptor Describe(BindGroupLayout layout, string vertex, string fragment, BlendState? blend, ColorWriteMask mask) => new()
         {
@@ -327,7 +327,7 @@ internal sealed unsafe partial class ViewportRenderer
         }
         pass.End();
 
-        // The count and the exposure the tone map last took (exposure.wgsl's), to be read back once they're done.
+        // The count and the exposure the tone map last took (Post/exposure.wgsl's), to be read back once they're done.
         int slot = Array.IndexOf(flareReadbackStates, FlareReadback.Free);
         if (slot >= 0)
         {

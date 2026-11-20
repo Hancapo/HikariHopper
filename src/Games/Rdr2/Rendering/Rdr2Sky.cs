@@ -284,7 +284,7 @@ internal sealed class Rdr2Sky
     }
 
     /// <summary>
-    /// How the game grades its frame at an hour (Rdr2Grading.cs, tonemap.wgsl): the timecycle's colour correction (its
+    /// How the game grades its frame at an hour (Rdr2Grading.cs, Post/tonemap.wgsl): the timecycle's colour correction (its
     /// cut-off at least 0.0001, as the game takes it), shift and desaturation for the levels table; the weather tables'
     /// weights for the climate (at postfx_weather_color_correction); the scotopic colour with its blue shift's intensity,
     /// and the scotopic weight's scale and bias.

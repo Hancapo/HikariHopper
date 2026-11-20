@@ -1,4 +1,4 @@
-// The key light's shadow of Red Dead Redemption 2's cut-out surfaces, as shadow.wgsl casts GTA V's: their depth where
+// The key light's shadow of Red Dead Redemption 2's cut-out surfaces, as Scene/shadow.wgsl casts GTA V's: their depth where
 // the game's cascades keep them (Rdr2/cutout.wgsl's rdr2_cutout_casts). Put after Rdr2/cutout.wgsl: the shadow's view,
 // and the start of RDR2's material group.
 

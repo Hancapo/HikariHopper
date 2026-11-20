@@ -1,5 +1,5 @@
 // Red Dead Redemption 2's drawables in the viewer: its vertices into RedFury's material (Rdr2/material.wgsl), in the
-// main view and into the reflection map, as Gta5/surface.wgsl draws GTA V's. Put after scene.wgsl, light.wgsl,
+// main view and into the reflection map, as Gta5/surface.wgsl draws GTA V's. Put after Scene/scene.wgsl, Scene/light.wgsl,
 // Rdr2/light.wgsl, Rdr2/terrain_blending.wgsl, Rdr2/material.wgsl and Rdr2/vertex.wgsl.
 
 // RedFury's vs_material: positions are relative to the scene's origin already.

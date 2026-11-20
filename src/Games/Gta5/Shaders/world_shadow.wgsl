@@ -1,6 +1,6 @@
-// GTA V's cut-outs into the sun's shadow, where their diffuse alpha passes the cascades' test, as shadow.wgsl's
+// GTA V's cut-outs into the sun's shadow, where their diffuse alpha passes the cascades' test, as Scene/shadow.wgsl's
 // fs_shadow_masked has them; a tree's moved first as the game's tree shaders move them into the cascades, and cut by
-// their test. Put after world_shadow.wgsl and Gta5/trees.wgsl.
+// their test. Put after World/world_shadow.wgsl and Gta5/trees.wgsl.
 
 // Gta5/surface.wgsl's Material, what of it is read: the trees' settings.
 struct ShadowMaterial {

@@ -11,7 +11,7 @@
 //     they're drawn the sky covers the frame, which the tone map then takes whole.
 //   - Left out: the sky plane under the horizon (the ocean covers it) and the fog rays. The cloud hats, the game's own
 //     models drawn after the sky, are Gta5/cloud_hats.wgsl's.
-// Put after scene.wgsl, Gta5/sky_system.wgsl and Gta5/fog.wgsl.
+// Put after Scene/scene.wgsl, Gta5/sky_system.wgsl and Gta5/fog.wgsl.
 
 struct GtaSky {
     // azimuthEastColor, with azimuthTransitionPosition in w.

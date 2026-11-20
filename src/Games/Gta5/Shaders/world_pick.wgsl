@@ -1,6 +1,6 @@
 // GTA V's cut-outs in the world's picking: their holes aren't them, what's behind is picked, where the alpha is under
 // their reference (hair's, at half).
-// Put after world_pick.wgsl.
+// Put after World/world_pick.wgsl.
 
 // The start of Gta5/surface.wgsl's Material: the alpha reference is extra.x.
 struct GtaPickMaterial {

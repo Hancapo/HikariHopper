@@ -1,7 +1,7 @@
 // GTA V's terrain, as its terrain_cb_* shaders draw it: PS_TexturedDeferred over four layers, each a diffuse map and
 // a bump map, mixed by three weights. The terrain writes what the game writes to its G-buffer, for dry weather, and is
-// lit with the game's lighting passes (light.wgsl's gta_lit), as Gta5/surface.wgsl's families are.
-// Scene comes from scene.wgsl, the light from light.wgsl.
+// lit with the game's lighting passes (Scene/light.wgsl's gta_lit), as Gta5/surface.wgsl's families are.
+// Scene comes from Scene/scene.wgsl, the light from Scene/light.wgsl.
 //
 // The weights (x, y, z) come from the vertex's second colour (the cb shaders), from a lookup map on the second UV set
 // (_cm), or from the lookup map pulled towards the second colour by the first colour's alpha (_2tex_blend). They mix
@@ -89,9 +89,9 @@ struct TerrainOutput {
     @location(10) distance: f32,
     // The vertex's angle to the sun less bumpSelfShadowAmount, times nine: the bump self-shadow's start.
     @location(11) bump_shadow: f32,
-    // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
+    // The interior room it's in (Scene/light.wgsl's use_room): nought outside, and in the viewer.
     @location(12) @interpolate(flat) room: vec4f,
-    // Its placement's level of detail fade (light.wgsl's lod_fade_keeps): none in the viewer.
+    // Its placement's level of detail fade (Scene/light.wgsl's lod_fade_keeps): none in the viewer.
     @location(13) @interpolate(flat) lod_fade: vec2f,
 };
 
@@ -153,7 +153,7 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
 struct TerrainTargets {
     @location(0) colour: vec4f,
     @location(1) sub_sampled: f32,
-    // And what the world's ambient occlusion takes back out (light.wgsl's occludable).
+    // And what the world's ambient occlusion takes back out (Scene/light.wgsl's occludable).
     @location(2) ambient: vec4f,
     @location(3) normal: vec4f,
 };

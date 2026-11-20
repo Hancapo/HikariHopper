@@ -4,13 +4,13 @@ using Buffer = WebGpuSharp.Buffer;
 
 namespace HikariHopper.Rendering;
 
-// Red Dead Redemption 2's colour grading after the tone map (tonemap.wgsl's rdr2_display): in the display's sRGB, the
+// Red Dead Redemption 2's colour grading after the tone map (Post/tonemap.wgsl's rdr2_display): in the display's sRGB, the
 // scotopic shift towards the timecycle's night colour where the scene is dark, then its levels table and its weather's
 // (Rdr2Grading.cs), each baked as the game bakes it when its values change. Off (and the tables the identity) without an
 // RDR2 world's sky.
 internal sealed unsafe partial class ViewportRenderer
 {
-    // The grading's constants (tonemap.wgsl's Rdr2Grade): whether it's on; the scotopic colour and its intensity; the
+    // The grading's constants (Post/tonemap.wgsl's Rdr2Grade): whether it's on; the scotopic colour and its intensity; the
     // scotopic weight's scale and bias.
     private const int Rdr2GradeBytes = 48;
 

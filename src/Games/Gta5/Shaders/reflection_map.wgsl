@@ -1,5 +1,5 @@
 // The reflection map drawables reflect, laid out as GTA V's is: a dual paraboloid, the upper hemisphere on the right
-// half and the lower on the left, which PS_directional_ambient samples at a mip chosen by gloss (light.wgsl). The
+// half and the lower on the left, which PS_directional_ambient samples at a mip chosen by gloss (Scene/light.wgsl). The
 // game renders its world and sky into it; the viewer has only the sky (Gta5/sky_system.wgsl, brightened as the game's
 // reflection pass is) and, below the horizon, a stand-in ground in the sky map and the backdrop's floor (its colour
 // and grid, from the camera) in the map drawables reflect. Each mip is the one above it averaged two by two.
@@ -24,7 +24,7 @@ fn vs_reflection_map(@builtin(vertex_index) index: u32) -> MapVarying {
     return out;
 }
 
-// The direction a texel of the map holds: the inverse of light.wgsl's paraboloid_uv. Texels outside a hemisphere's
+// The direction a texel of the map holds: the inverse of Scene/light.wgsl's paraboloid_uv. Texels outside a hemisphere's
 // disc take its rim, so filtering and mips near the rim stay clean.
 fn paraboloid_direction(uv: vec2f) -> vec3f {
     let upper = uv.x >= 0.5;
@@ -46,7 +46,7 @@ fn fs_reflection_map(in: MapVarying) -> @location(0) vec4f {
     return vec4f(mix(sky_system(sky, d), sky.ground.rgb, ground), 1.0);
 }
 
-// The backdrop's floor as the scene map reflects it, from the camera as the backdrop draws it (backdrop.wgsl).
+// The backdrop's floor as the scene map reflects it, from the camera as the backdrop draws it (Scene/backdrop.wgsl).
 struct ReflectionFloor {
     // The camera and the floor's height, in the world, so the grid lies where the backdrop's does.
     eye: vec4f,
@@ -61,7 +61,7 @@ struct ReflectionFloor {
 
 @group(1) @binding(0) var<uniform> reflection_floor: ReflectionFloor;
 
-// Coverage of the nearest line of a unit grid, about one texel wide, as backdrop.wgsl's.
+// Coverage of the nearest line of a unit grid, about one texel wide, as Scene/backdrop.wgsl's.
 fn floor_line(coordinate: vec2f, derivative: vec2f) -> f32 {
     let distance_to_line = abs(fract(coordinate - 0.5) - 0.5) / max(derivative, vec2f(0.00001));
     return 1.0 - clamp(min(distance_to_line.x, distance_to_line.y), 0.0, 1.0);

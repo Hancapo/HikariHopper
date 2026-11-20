@@ -10,7 +10,7 @@
 //   - Alpha blended over the scene; the target's alpha (the sky's cover) is left as it is.
 //   - Under the water's level they're cut away, as the game's PS3 path does; elsewhere the game's water, which writes
 //     its depth, hides them there, and the viewer's water doesn't write it.
-// Put after scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl.
+// Put after Scene/scene.wgsl, Gta5/sky_system.wgsl and Gta5/sky.wgsl.
 
 struct CloudHatLayer {
     // gSkyColor, gEastMinusWestColor and gWestColor: the fill from the sky, east less west, and west.

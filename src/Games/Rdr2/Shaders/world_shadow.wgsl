@@ -1,5 +1,5 @@
 // Red Dead Redemption 2's cut-outs into the sun's shadow, where the game's cascades keep them (Rdr2/cutout.wgsl's
-// rdr2_cutout_casts). Put after world_shadow.wgsl and Rdr2/cutout.wgsl.
+// rdr2_cutout_casts). Put after World/world_shadow.wgsl and Rdr2/cutout.wgsl.
 
 // The start of Rdr2/material.wgsl's MaterialUniforms: base_colour_factor, surface, emission_alpha_layers, decal_opacity,
 // flags.

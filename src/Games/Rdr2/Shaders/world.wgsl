@@ -2,8 +2,8 @@
 // A placement's world matrix and its inverse transpose stay on the GPU for as long as it's covered; each frame only the
 // four-byte indexes of the placements in view move, read per instance. Positions go relative to the scene's origin, the
 // camera, so the world's large coordinates stay precise. Grass shrinks away with distance and carries its colour and
-// occlusion. Put after scene.wgsl, light.wgsl, Rdr2/light.wgsl,
-// Rdr2/terrain_blending.wgsl, Rdr2/material.wgsl, Rdr2/vertex.wgsl and world_instances.wgsl.
+// occlusion. Put after Scene/scene.wgsl, Scene/light.wgsl, Rdr2/light.wgsl,
+// Rdr2/terrain_blending.wgsl, Rdr2/material.wgsl, Rdr2/vertex.wgsl and World/world_instances.wgsl.
 
 // A plant shrinks to nothing between its fade's start and end, from the camera.
 fn grass_fade(instance: WorldInstance) -> f32 {
@@ -36,7 +36,7 @@ fn vs_rdr2_world(vertex: Rdr2Vertex, @location(8) source_index: u32) -> Material
     return output;
 }
 
-// What the world's surfaces write: the colour, then what its ambient occlusion takes back out (light.wgsl's occludable).
+// What the world's surfaces write: the colour, then what its ambient occlusion takes back out (Scene/light.wgsl's occludable).
 struct Rdr2WorldTargets {
     @location(0) colour: vec4f,
     @location(2) ambient: vec4f,

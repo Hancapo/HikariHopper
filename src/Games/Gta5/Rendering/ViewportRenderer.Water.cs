@@ -7,7 +7,7 @@ namespace HikariHopper.Rendering;
 
 // Water (RedFury's WebGpuRenderer.Water, copied): the scene behind it, its colour and depth, copied once the world's
 // solid surfaces and decals are drawn, which the water then refracts and reflects (Rdr2/water.wgsl, Gta5/water.wgsl,
-// through light.wgsl's bindings 7 and 8); and GTA V's water's own material group.
+// through Scene/light.wgsl's bindings 7 and 8); and GTA V's water's own material group.
 internal sealed unsafe partial class ViewportRenderer
 {
     private Texture? waterBackground, waterDepth, waterPlaceholder, waterDepthPlaceholder;

@@ -1,7 +1,7 @@
 // What Red Dead Redemption 2's material (Rdr2/material.wgsl, RedFury's viewer_material.wgsl) reads of its light, from
-// the viewer's (light.wgsl), in RedFury's units. RedFury's diffuse is divided by pi and lit by the sun's illuminance; the
+// the viewer's (Scene/light.wgsl), in RedFury's units. RedFury's diffuse is divided by pi and lit by the sun's illuminance; the
 // viewer's light, GTA's, has no pi in its lighting, so the sun's illuminance is its colour times pi. The ambient is
-// irradiance over pi in both, and the reflection map holds radiance, as RedFury's sky does. Put after light.wgsl.
+// irradiance over pi in both, and the reflection map holds radiance, as RedFury's sky does. Put after Scene/light.wgsl.
 
 // The camera, relative to the scene's origin, where the material's positions are.
 fn rdr2_eye() -> vec3f {

@@ -5,7 +5,7 @@
 // a unit is drawn half as wide again as it is, and faded by how thin it is: far wires fade out as they thin, as in
 // the game, which has no minimum width. It is forward, blended over what is behind it: lit by the ambient alone, with
 // no sun, shadow or specular. The game sways it in the wind; the viewer shows it at rest.
-// Scene comes from scene.wgsl, the light from light.wgsl.
+// Scene comes from Scene/scene.wgsl, the light from Scene/light.wgsl.
 
 struct Cable {
     // shader_radiusScale, shader_fadeExponent, shader_cableEmissive, and the alpha test (the game's 0.1).

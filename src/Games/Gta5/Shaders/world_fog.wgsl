@@ -1,8 +1,8 @@
 // GTA V's fog over its world, as its shaders read it (ViewportRenderer.WorldFog.cs): the fog's constants (Gta5/fog.wgsl)
-// and the fog rays', through light.wgsl's group; and the fog rays' map, how much of each pixel's ray
+// and the fog rays', through Scene/light.wgsl's group; and the fog rays' map, how much of each pixel's ray
 // through the fog the sun reaches (Gta5/world_fog_pass.wgsl), which darkens the fog's colour where it doesn't. With no
 // world's sky, no fog; with no sun's shadow, no rays.
-// Put after scene.wgsl, light.wgsl and Gta5/fog.wgsl.
+// Put after Scene/scene.wgsl, Scene/light.wgsl and Gta5/fog.wgsl.
 
 struct WorldFog {
     fog: GtaFog,

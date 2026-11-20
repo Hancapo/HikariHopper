@@ -1,5 +1,5 @@
-// GTA V's world's terrain: Gta5/world.wgsl's placement, shaded by Gta5/terrain.wgsl. Put after scene.wgsl, light.wgsl,
-// Gta5/terrain.wgsl, world_instances.wgsl, Gta5/fog.wgsl and Gta5/world_fog.wgsl.
+// GTA V's world's terrain: Gta5/world.wgsl's placement, shaded by Gta5/terrain.wgsl. Put after Scene/scene.wgsl, Scene/light.wgsl,
+// Gta5/terrain.wgsl, World/world_instances.wgsl, Gta5/fog.wgsl and Gta5/world_fog.wgsl.
 
 @vertex
 fn vs_terrain_world(input: TerrainInput, @location(8) source_index: u32) -> TerrainOutput {

@@ -10,7 +10,7 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     /// <summary>
-    /// The textures RDR2's material reads in its fragment stage: its 24 slots, and light.wgsl's shadow and reflection
+    /// The textures RDR2's material reads in its fragment stage: its 24 slots, and Scene/light.wgsl's shadow and reflection
     /// maps. A GPU that can't bind as many draws its materials with Gta5/surface.wgsl's plain textured program instead.
     /// </summary>
     internal const uint Rdr2TextureSlots = Rdr2Material.Slots + 2;
