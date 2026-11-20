@@ -56,6 +56,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Show in Explorer works only for files and folders on disk, and is greyed out inside an RPF instead of showing the RPF. ([#332](https://github.com/Hancapo/HikariHopper/pull/332))
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 - Take GTA V's exposure and filmic tone map from the game's own visualsettings.dat once a GTA V game is open, and from the game's own defaults before then. ([#293](https://github.com/Hancapo/HikariHopper/pull/293))
