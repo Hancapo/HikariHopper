@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -30,7 +29,7 @@ public sealed class SmoothScrolling
 
     private readonly ScrollViewer viewer;
     private readonly DispatcherTimer fallback;
-    private readonly Stopwatch clock = new();
+    private long started;
     private TimeSpan lastFrame;
     private bool running;
     private double target;
@@ -137,7 +136,7 @@ public sealed class SmoothScrolling
         if (running)
             return;
         running = true;
-        clock.Restart();
+        started = Ui.MotionClock.Timestamp;
         lastFrame = TimeSpan.Zero;
         RequestFrame();
     }
@@ -167,7 +166,7 @@ public sealed class SmoothScrolling
     {
         if (!running)
             return;
-        TimeSpan now = clock.Elapsed;
+        TimeSpan now = Ui.MotionClock.Since(started);
         double seconds = Math.Clamp((now - lastFrame).TotalSeconds, 0, 0.05);
         lastFrame = now;
 

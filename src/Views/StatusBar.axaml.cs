@@ -54,7 +54,7 @@ public partial class StatusBar : UserControl
             return;
         }
         // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
-        if (Environment.TickCount64 - timeClosedAt < 400)
+        if (Ui.MotionClock.Since(timeClosedAt).TotalMilliseconds < 400)
             return;
         timeDropdown = Controls.DropdownWindow.OpenAbove(TimeWell, timeBody, 4, right: true);
         if (timeDropdown is null)
@@ -64,7 +64,7 @@ public partial class StatusBar : UserControl
         timeDropdown.Closed += (_, _) =>
         {
             timeDropdown = null;
-            timeClosedAt = Environment.TickCount64;
+            timeClosedAt = Ui.MotionClock.Timestamp;
             TimeButton.Sunken = false;
         };
     }
