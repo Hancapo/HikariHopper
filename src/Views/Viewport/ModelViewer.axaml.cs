@@ -1024,7 +1024,10 @@ public partial class ModelViewer : UserControl, IModalContent
         if (surfaces is not { } scene)
             return [];
         var named = new Dictionary<string, FiveFury.Textures.Texture>(StringComparer.OrdinalIgnoreCase);
-        foreach (SurfaceMaterial material in scene.Materials)
+        // The materials its geometry is drawn with: a shader entry none of it uses draws nothing.
+        IEnumerable<SurfaceMaterial> drawn = scene.Parts.Select(part => part.Material).Distinct()
+            .Where(index => index >= 0 && index < scene.Materials.Count).Order().Select(index => scene.Materials[index]);
+        foreach (SurfaceMaterial material in drawn)
         {
             IEnumerable<FiveFury.Textures.Texture?> textures = material.Rdr2 is { } rdr2
                 ? rdr2.Textures

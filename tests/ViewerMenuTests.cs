@@ -183,6 +183,10 @@ public sealed class ViewerMenuTests
         material.Textures["BumpSampler"] = new TextureReference("wall_n");
         var builder = new DrawableBuilder { Name = "tri" };
         builder.Materials.Add(material);
+        // And a shader entry of its own that none of its geometry uses, with a map of its own.
+        var spare = new DrawableMaterialInput { Name = "spare", Shader = "default" };
+        spare.Textures["DiffuseSampler"] = new TextureReference(TextureTestKit.Red("spare"));
+        builder.Materials.Add(spare);
         var model = new DrawableModelInput();
         model.Meshes.Add(mesh);
         builder.Models.Add(model);
@@ -196,7 +200,7 @@ public sealed class ViewerMenuTests
         Task<bool> extracting = viewer.ExtractTextures();
         Wait(extracting);
         Assert.True(extracting.Result, viewer.StatusText.Text);
-        // Both it is drawn with, and not the one beside it that it doesn't use.
+        // Both it is drawn with, and not the one beside it nor the spare entry's, which it doesn't draw with.
         Assert.Equal(["paint.dds", "wall_n.dds"], Directory.GetFiles(folder.Path).Select(Path.GetFileName).Order());
         Assert.Equal("Extracted 2 textures", viewer.StatusText.Text);
 
