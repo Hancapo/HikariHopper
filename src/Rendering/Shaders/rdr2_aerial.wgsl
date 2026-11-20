@@ -15,8 +15,13 @@
 //     back towards the light (CS_GatherShadowVolume), and the sky's ambient (its ambient cube's mean) by their
 //     tints, plus its fill ambient; each slice's light added as (S - S T) / density times the transmittance before it.
 //     The shadow is the world's (light.wgsl's cascades), at each slice's middle.
-//   - Over the frame, where something's drawn: its colour times the transmittance from the camera to it, then the light
-//     scattered in on the way, from the slices its distance falls at: the fog's in front of the air's.
+//   - The fog past the far clip, as the game's far fog (CS_GatherFarDistance) marches it on where its volume ends: out
+//     to the surface, or to the game's reach of 15 km (the sky's too), its transmittance taken to none once it's under
+//     the game's cut-off of 0.05. The global fog's density depends on height alone and the light on it is the same
+//     all the way (there's no shadow past the cascades), so it's added up in closed form rather than in steps.
+//   - Over the frame: the colour times the transmittance from the camera, then the light scattered in on the way, from
+//     the slices its distance falls at: the fog's in front of the air's, then the far fog's. The sky takes the fog
+//     alone, as the game fogs it; what's drawn the air and the far haze too.
 // In the game's own units, as its world and sky are drawn in. Put after scene.wgsl, rdr2_atmosphere.wgsl and
 // rdr2_sky.wgsl; the fog's pass after light.wgsl too, its light group at group 2.
 
@@ -40,11 +45,36 @@ fn rdr2_fog_fraction(distance: f32, far: f32) -> f32 {
     return log(1.0 + distance / RDR2_FOG_NEAR) / log(1.0 + far / RDR2_FOG_NEAR);
 }
 
+// The game's far fog's reach in metres and the transmittance it's taken as none below.
+const RDR2_FOG_REACH: f32 = 15000.0;
+const RDR2_FOG_CUTOFF: f32 = 0.05;
+
 // The fog's density a metre at a height in the world.
 fn rdr2_fog_density(height: f32) -> f32 {
     let fog = dome.night.fog[0];
     let thinned = 1.0 - saturate((height - fog.y) * fog.z);
     return fog.x * thinned * thinned * thinned;
+}
+
+// (1 - saturate(u))^3 summed up to u: u below the fog's height, a quarter once it's thinned out.
+fn rdr2_fog_summed(u: f32) -> f32 {
+    if (u <= 0.0) {
+        return u;
+    }
+    let rest = 1.0 - min(u, 1.0);
+    return 0.25 - rest * rest * rest * rest * 0.25;
+}
+
+// The fog's optical depth along a view from a height, between two distances along it.
+fn rdr2_fog_optical_depth(height: f32, up: f32, near: f32, far: f32) -> f32 {
+    let fog = dome.night.fog[0];
+    let rate = up * fog.z;
+    if (abs(rate) < 1e-7) {
+        return rdr2_fog_density(height + up * (near + far) * 0.5) * (far - near);
+    }
+    let start = (height + up * near - fog.y) * fog.z;
+    let to = (height + up * far - fog.y) * fog.z;
+    return fog.x * (rdr2_fog_summed(to) - rdr2_fog_summed(start)) / rate;
 }
 
 // How much of the sun reaches a place relative to the scene's origin, this far along the view: the world's shadow
@@ -246,7 +276,7 @@ fn vs_rdr2_aerial(@builtin(vertex_index) index: u32) -> Rdr2AerialVarying {
 }
 
 // Where in the aerial perspective a pixel's surface falls: its cell's coordinates and the slice of its distance over
-// the far clip; none for the sky (nothing drawn there). And in the fog's grid.
+// the far clip (the last for the sky). And in the fog's grid, and the fog past it.
 struct Rdr2AerialCell {
     aerial: vec3f,
     fog: vec3f,
@@ -254,6 +284,9 @@ struct Rdr2AerialCell {
     // How much of the far haze there is, and the light it takes in.
     haze: f32,
     haze_light: vec3f,
+    // The fog past the far clip: its transmittance and the light it scatters in.
+    far_transmittance: f32,
+    far_inscatter: vec3f,
 };
 
 fn rdr2_aerial_cells(input: Rdr2AerialVarying) -> Rdr2AerialCell {
@@ -281,6 +314,14 @@ fn rdr2_aerial_cells(input: Rdr2AerialVarying) -> Rdr2AerialCell {
         ambient += sky_light[face].rgb;
     }
     cell.haze_light = (ambient / 6.0 + night.fog[3].rgb / 3.14159265) * haze.w;
+    // The fog past the far clip, out to the surface or the game's reach, lit as the slices are past the cascades.
+    let view = normalize(ray);
+    let end = max(select(min(distance, RDR2_FOG_REACH), RDR2_FOG_REACH, depth <= 0.0), far);
+    let through = exp(-rdr2_fog_optical_depth(night.camera.z, view.z, far, end));
+    cell.far_transmittance = saturate((through - RDR2_FOG_CUTOFF) / (1.0 - RDR2_FOG_CUTOFF));
+    let toward = select(night.moon.xyz, dome.atmosphere.sun.xyz, night.key_light.w > 0.5);
+    let key = sky_light[0].rgb * night.fog[1].rgb * rdr2_fog_phase(dot(view, toward), night.fog[0].w);
+    cell.far_inscatter = (key + ambient / 6.0 * night.fog[2].rgb + night.fog[3].rgb) * (1.0 - through);
     return cell;
 }
 
@@ -290,11 +331,11 @@ fn fs_rdr2_aerial_transmittance(input: Rdr2AerialVarying) -> @location(0) vec4f 
     let cell = rdr2_aerial_cells(input);
     let air = textureSampleLevel(aerial_transmittance, dome_sampler, cell.aerial, 0.0).rgb;
     let fog = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
-    return vec4f(mix(vec3f(1.0), air * fog * (1.0 - cell.haze), cell.drawn), 1.0);
+    return vec4f(fog * cell.far_transmittance * mix(vec3f(1.0), air * (1.0 - cell.haze), cell.drawn), 1.0);
 }
 
-// Then the light scattered in on the way: the fog's, and the air's through it; and the far haze's light through the
-// air.
+// Then the light scattered in on the way: the fog's, and the air's through it; the far fog's through both (the fog's
+// alone for the sky); and the far haze's light through the air.
 @fragment
 fn fs_rdr2_aerial_inscatter(input: Rdr2AerialVarying) -> @location(0) vec4f {
     let cell = rdr2_aerial_cells(input);
@@ -302,5 +343,6 @@ fn fs_rdr2_aerial_inscatter(input: Rdr2AerialVarying) -> @location(0) vec4f {
     let fog = textureSampleLevel(fog_inscatter, dome_sampler, cell.fog, 0.0).rgb;
     let through = textureSampleLevel(fog_transmittance, dome_sampler, cell.fog, 0.0).rgb;
     let clear = textureSampleLevel(aerial_transmittance, dome_sampler, cell.aerial, 0.0).rgb;
-    return vec4f(min((fog + air * through + cell.haze_light * cell.haze * clear) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
+    let far = cell.far_inscatter * through * mix(vec3f(1.0), clear, cell.drawn);
+    return vec4f(min(fog + far + (air * through + cell.haze_light * cell.haze * clear) * cell.drawn, vec3f(RDR2_HALF_MAX)), 1.0);
 }

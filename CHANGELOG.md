@@ -48,6 +48,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Fog Red Dead Redemption 2's world with its height fog as the game does: valleys filled with sunlit haze in the morning, distant mountains softened at noon, a moonlit haze at night, from its own timecycle; its lakes and rivers now take the haze too. ([#309](https://github.com/Hancapo/HikariHopper/pull/309))
 - Cast the sun's shadow through Red Dead Redemption 2's fog as the game does: hills and trees shade the haze behind them, and sunbeams fall between them at dawn and dusk. ([#310](https://github.com/Hancapo/HikariHopper/pull/310))
 - Fade Red Dead Redemption 2's distant land with its far haze as the game does: far mountains sink into the night sky, and grey towards the sky's light by day. ([#311](https://github.com/Hancapo/HikariHopper/pull/311))
+- Carry Red Dead Redemption 2's fog past 10 km and over its sky as the game does: the horizon fogs over and distant ridges blend into it. ([#312](https://github.com/Hancapo/HikariHopper/pull/312))
 
 ### Changed
 
