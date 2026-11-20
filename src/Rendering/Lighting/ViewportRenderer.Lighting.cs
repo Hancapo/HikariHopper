@@ -1,0 +1,716 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using WebGpuSharp;
+using Buffer = WebGpuSharp.Buffer;
+using Texture = WebGpuSharp.Texture;
+
+namespace HikariHopper.Rendering;
+
+// Drawables' light: GTA V's timecycle at the viewer's time of day, the directional light's shadow (after RedFury's),
+// and drawables drawn in HDR, then exposed and tone-mapped as the game's post-process does, over the backdrop.
+// Collisions, navmeshes and the backdrop keep their own flat shading, in the theme's colours.
+//   reflection map (when the time changes) -> shadow map -> backdrop and lines to the display -> drawables to HDR ->
+//   the frame's mean luminance -> their bloom -> tone map over them, exposed for it
+internal sealed unsafe partial class ViewportRenderer
+{
+    private const TextureFormat HdrFormat = TextureFormat.RGBA16Float;
+    // A cascade's view: its matrix, then (for the world's grass) the camera it was fitted for.
+    // Scene/light.wgsl's Light; the CPU writes all but its last, RDR2's sky's light, which the GPU writes from the sky
+    // (ViewportRenderer.Rdr2Sky.cs).
+    private const int LightBytes = 720, LightWrittenBytes = 608, ShadowViewBytes = 80;
+    private int shadowResolution = Core.GraphicsSettings.DefaultShadowResolution;
+    private Sampler? shadowCompare;
+
+    /// <summary>
+    /// The side of each of the shadow's cascades in texels (Core.GraphicsSettings.ShadowResolutions); a change makes
+    /// the shadow map again at that size.
+    /// </summary>
+    public int ShadowResolution
+    {
+        get => shadowResolution;
+        set
+        {
+            if (value == shadowResolution || value <= 0)
+                return;
+            shadowResolution = value;
+            if (shadowMap is not null)
+                CreateShadowMap();
+        }
+    }
+
+    /// <summary>Whether bright light blooms, as the game's post-process makes it.</summary>
+    public bool Bloom { get; set; } = true;
+
+    /// <summary>
+    /// How many cascades the sun's shadow is split into by distance from the camera, as GTA V splits its own: the nearest
+    /// covers a few metres in front of the camera at the map's full resolution, the furthest what the model reaches to.
+    /// </summary>
+    internal const int ShadowCascades = 4;
+
+    private BindGroupLayout? lightLayout;
+    private BindGroup? lightGroup, skyLightGroup;
+    private Buffer? lightBuffer;
+    private Texture? shadowMap;
+    // The cascades, all of them as the shading reads them, and each one as its pass draws it.
+    private TextureView? shadowView;
+    private readonly TextureView[] shadowLayers = new TextureView[ShadowCascades];
+    private readonly Buffer[] shadowViewBuffers = new Buffer[ShadowCascades];
+    private readonly BindGroup[] shadowGroups = new BindGroup[ShadowCascades];
+    private BindGroupLayout? shadowViewLayout;
+    private RenderPipeline? shadowPipeline;
+    // Cut-out surfaces, with their material for the diffuse map's alpha (made with the surface pipelines).
+    private RenderPipeline? maskedShadowPipeline;
+    private RenderPipeline? groundShadowPipeline;
+    private BindGroup? noGroup;
+    private BindGroupLayout? tonemapLayout;
+    private RenderPipeline? tonemapPipeline;
+    private Texture? hdr;
+    private TextureView? hdrView;
+    // The drawables' own depth, at the HDR target's size.
+    private Texture? hdrDepth;
+    private TextureView? hdrDepthView;
+    private int hdrWidth, hdrHeight;
+    private float renderScale = 1;
+
+    /// <summary>
+    /// How large the drawables are drawn before they are tone-mapped to the window, as a share of its size
+    /// (Core.GraphicsSettings.RenderScales): over one is supersampled, under one cheaper and softer.
+    /// </summary>
+    public float RenderScale
+    {
+        get => renderScale;
+        set
+        {
+            value = Math.Clamp(value, .25f, 4);
+            if (value == renderScale)
+                return;
+            renderScale = value;
+            if (hdr is not null && width > 0)
+                CreateHdr();
+        }
+    }
+
+    /// <summary>The HDR target's size for a window at a scale, at least a pixel and within what a texture may be.</summary>
+    internal static (int Width, int Height) ScaledSize(int width, int height, float scale) =>
+        (Math.Clamp((int)MathF.Round(width * scale), 1, MaxTargetSide), Math.Clamp((int)MathF.Round(height * scale), 1, MaxTargetSide));
+
+    // WebGPU's least maximum texture side.
+    private const int MaxTargetSide = 8192;
+    private BindGroup? tonemapGroup;
+    private KeyLight key;
+    private TimecycleLight cycle;
+
+    // visualsettings.dat's exposure curve and filmic tone map, as they were when the hour was last set.
+    private GtaToneMapVisuals toneMap = Timecycle.ToneMap;
+    // Each cascade's view from the sun, its texel in metres and its depth range in metres; and how far from the camera,
+    // along its view, each one reaches.
+    private readonly Matrix4x4[] shadowMatrices = new Matrix4x4[ShadowCascades];
+    private Vector4 shadowTexels, shadowDepths, shadowSplits;
+    // The drawables' bounding radius around the scene's origin, which the cascades reach to; none without a drawable.
+    private float shadowRadius;
+
+    /// <summary>The time of day drawables are lit at, in hours after midnight.</summary>
+    public float Hours { get; private set; } = DayCycle.DefaultHours;
+
+    /// <summary>The sun's and moon's paths, from the game's <c>time.xml</c>; the game's own until one is read.</summary>
+    public SkyPath Sky { get; private set; } = SkyPath.Game;
+
+    /// <summary>Moves the sun and moon along these paths, and lights drawables from where they then are.</summary>
+    public void SetSky(SkyPath sky)
+    {
+        Sky = sky;
+        SetTime(Hours);
+    }
+
+    /// <summary>Whether the sun casts shadows, on the drawable and on the ground under it.</summary>
+    public bool Shadows { get; set; } = true;
+
+    /// <summary>Stops added to the exposure the game's post-process works out from the frame.</summary>
+    public float Exposure { get; set; }
+
+    private void CreateLighting()
+    {
+        lightBuffer = device.CreateBuffer(new BufferDescriptor { Size = LightBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+        shadowCompare = device.CreateSampler(new SamplerDescriptor
+        {
+            AddressModeU = AddressMode.ClampToEdge,
+            AddressModeV = AddressMode.ClampToEdge,
+            AddressModeW = AddressMode.ClampToEdge,
+            MagFilter = FilterMode.Linear,
+            MinFilter = FilterMode.Linear,
+            MipmapFilter = MipmapFilterMode.Nearest,
+            LodMinClamp = 0,
+            LodMaxClamp = 1,
+            Compare = CompareFunction.LessEqual,
+            MaxAnisotropy = 1,
+        })!;
+        CreateReflections();
+        lightLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                // The terrain's vertices read the sun's direction as well.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = LightBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 1,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2Array },
+                },
+                new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 3,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 4, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // The local lights and their screen tiles (ViewportRenderer.LocalLights.cs): they keep their size, so
+                // the world's bundles keep reading them.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 5,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.LightBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 6,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = World.LocalLightFrame.TileBytes },
+                },
+                // The scene behind the water, read pixel by pixel.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 7,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.UnfilterableFloat, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 8,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
+                },
+                // GTA V's fog over its world and its fog rays' map (Gta5/world_fog.wgsl, ViewportRenderer.WorldFog.cs).
+                new BindGroupLayoutEntry
+                {
+                    Binding = 9,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = WorldFogBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 10,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+            ],
+        });
+        localLightBuffer = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.LightBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+        CreateWorldFogBuffer();
+        localLightTiles = device.CreateBuffer(new BufferDescriptor { Size = World.LocalLightFrame.TileBytes, Usage = BufferUsage.Storage | BufferUsage.CopyDst });
+        CreateShadowMap();
+
+        // The shadow map: depth only, from the sun, nearer is smaller.
+        shadowViewLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Vertex,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = ShadowViewBytes },
+                },
+            ],
+        });
+        for (int i = 0; i < ShadowCascades; i++)
+        {
+            shadowViewBuffers[i] = device.CreateBuffer(new BufferDescriptor { Size = ShadowViewBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
+            shadowGroups[i] = device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = shadowViewLayout,
+                Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffers[i], Size = ShadowViewBytes }],
+            });
+        }
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/trees.wgsl") + "\n" + Read("Scene/shadow.wgsl") }));
+        shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout] }),
+            Vertex = new VertexState
+            {
+                Module = shadowShader.Value,
+                EntryPoint = "vs_shadow",
+                Buffers = new[]
+                {
+                    new VertexBufferLayout
+                    {
+                        ArrayStride = SurfaceVertex.Size,
+                        Attributes = new[] { new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 } },
+                    },
+                },
+            },
+            // Both sides cast: a model's one-sided panels still shadow what is behind them.
+            Primitive = new PrimitiveState { Topology = PrimitiveTopology.TriangleList, CullMode = CullMode.None },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.Less },
+        }));
+
+        // The drawable's shadow on the backdrop's ground, multiplied over it. Group 1 is unused.
+        BindGroupLayout none = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = [] });
+        noGroup = device.CreateBindGroup(new BindGroupDescriptor { Layout = none, Entries = [] });
+        Lazy<ShaderModule> groundShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Scene/ground_shadow.wgsl") }));
+        groundShadowPipeline = gpu.Pipeline($"ground-shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, none, lightLayout] }),
+            Vertex = new VertexState { Module = groundShader.Value, EntryPoint = "vs_ground_shadow" },
+            Fragment = new FragmentState
+            {
+                Module = groundShader.Value,
+                EntryPoint = "fs_ground_shadow",
+                Targets = new[]
+                {
+                    new ColorTargetState
+                    {
+                        Format = viewFormat,
+                        Blend = new BlendState
+                        {
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.Src },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.Zero, DstFactor = BlendFactor.One },
+                        },
+                        WriteMask = ColorWriteMask.All,
+                    },
+                },
+            },
+            DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
+        }));
+
+        // The tone map, blended premultiplied over the backdrop; it reads the HDR target filtered at a render scale other
+        // than one.
+        tonemapLayout = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+        {
+            Entries =
+            [
+                new BindGroupLayoutEntry
+                {
+                    Binding = 0,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 1,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage, MinBindingSize = MeasuredBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 2,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry { Binding = 3, Visibility = ShaderStage.Fragment, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
+                // RDR2's grading: its constants, its levels table and its weather's.
+                new BindGroupLayoutEntry
+                {
+                    Binding = 4,
+                    Visibility = ShaderStage.Fragment,
+                    Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, MinBindingSize = Rdr2GradeBytes },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 5,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+                new BindGroupLayoutEntry
+                {
+                    Binding = 6,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.D2 },
+                },
+            ],
+        });
+        CreateRdr2Grading();
+        CreateAmbientOcclusion();
+        CreateExposure();
+        CreateBloom();
+        CreateSubSampledPipeline();
+        Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Post/tonemap.wgsl") }));
+        tonemapPipeline = gpu.Pipeline($"tonemap/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, tonemapLayout, lightLayout] }),
+            Vertex = new VertexState { Module = tonemapShader.Value, EntryPoint = "vs_tonemap" },
+            Fragment = new FragmentState
+            {
+                Module = tonemapShader.Value,
+                EntryPoint = "fs_tonemap",
+                Targets = new[]
+                {
+                    new ColorTargetState
+                    {
+                        Format = viewFormat,
+                        Blend = new BlendState
+                        {
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                        },
+                        WriteMask = ColorWriteMask.All,
+                    },
+                },
+            },
+        }));
+        SetTime(Hours);
+    }
+
+    /// <summary>Lights drawables at this time of day: where the light comes from, and the timecycle's light then.</summary>
+    public void SetTime(float hours)
+    {
+        // Evaluated first: an hour that isn't a number throws and changes nothing.
+        key = DayCycle.Evaluate(hours, Sky);
+        timecycle = TimecycleAt(hours);
+        cycle = Timecycle.Evaluate(timecycle);
+        toneMap = Timecycle.ToneMap;
+        Hours = hours;
+        // A drawable's shadow follows the sun.
+        if (shadowRadius > 0)
+            FitShadow(shadowRadius);
+        DrawReflections(hours);
+        reflectedPlace.CopyFrom(place ?? NoPlace);
+    }
+
+    // The timecycle at the hour and place the view is lit at: worked out once each time either changes, and read from
+    // then on by the light, the sky, its reflections, the exposure and the bloom.
+    private TimecycleSample timecycle;
+    private readonly TimecycleFrame timecycleFrame = new();
+    // The camera's place in the game's world, the timecycle's regions and box modifiers there; none outside a world.
+    private TimecyclePlace? place;
+    // The place the sky's reflection maps were last drawn at.
+    private readonly TimecyclePlace reflectedPlace = new();
+    private static readonly TimecyclePlace NoPlace = new();
+
+    /// <summary>
+    /// How far a place's strengths move from where the sky's reflection maps were drawn before they're drawn again: the
+    /// light follows each change, the maps (a pass and their mips) a change this size, below what their colours show.
+    /// </summary>
+    internal const float ReflectionStep = 1 / 256f;
+
+    private TimecycleSample TimecycleAt(float hours) =>
+        place is { IsGlobal: false } at ? Timecycle.Resolve(hours, at, timecycleFrame) : Timecycle.Sample(hours);
+
+    /// <summary>The timecycle the view is lit with, at its hour and place.</summary>
+    internal TimecycleSample TimecycleSample => timecycle;
+
+    /// <summary>
+    /// Takes the timecycle at the camera's place in the game's world (<paramref name="at"/>, copied; null outside one,
+    /// GLOBAL's alone), as the game does each frame: the light, the sky, the exposure and the bloom follow it at once.
+    /// The same place again changes nothing.
+    /// </summary>
+    internal void SetTimecyclePlace(TimecyclePlace? at)
+    {
+        if (at is null)
+        {
+            if (place is null)
+                return;
+            place = null;
+        }
+        else
+        {
+            if (place is not null && place.Matches(at))
+                return;
+            (place ??= new TimecyclePlace()).CopyFrom(at);
+        }
+        timecycle = TimecycleAt(Hours);
+        cycle = Timecycle.Evaluate(timecycle);
+        if (skyMap is not null && (place ?? NoPlace).Distance(reflectedPlace) >= ReflectionStep)
+        {
+            DrawReflections(Hours);
+            reflectedPlace.CopyFrom(place ?? NoPlace);
+        }
+    }
+
+    /// <summary>The HDR target drawables are drawn to, sized to the window, its bloom, and the tone map's view of them.</summary>
+    private void CreateHdr()
+    {
+        hdr?.Destroy();
+        hdrDepth?.Destroy();
+        (hdrWidth, hdrHeight) = ScaledSize(width, height, renderScale);
+        hdr = device.CreateTexture(new TextureDescriptor
+        {
+            // Copied from for the water (ViewportRenderer.Water.cs).
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
+            Format = HdrFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        hdrView = hdr.CreateView();
+        hdrDepth = device.CreateTexture(new TextureDescriptor
+        {
+            // Read by the lens flare's count of the sun's pixels (ViewportRenderer.LensFlare.cs), by the coronas
+            // (ViewportRenderer.Coronas.cs) and by the world's fog (ViewportRenderer.WorldFog.cs) where it's attached.
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.TextureBinding,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        hdrDepthView = hdrDepth.CreateView();
+        CreateFogRayTargets();
+        CreateWaterTargets();
+        CreateSubSampledTargets();
+        CreateAmbientOcclusionTargets();
+        CreateBloomChain();
+        tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
+        {
+            Layout = tonemapLayout!,
+            Entries =
+            [
+                new BindGroupEntry { Binding = 0, TextureView = hdrView },
+                new BindGroupEntry { Binding = 1, Buffer = measured!, Size = MeasuredBytes },
+                new BindGroupEntry { Binding = 2, TextureView = bloomViews[0] },
+                new BindGroupEntry { Binding = 3, Sampler = bloomSampler! },
+                new BindGroupEntry { Binding = 4, Buffer = rdr2GradeBuffer!, Size = Rdr2GradeBytes },
+                new BindGroupEntry { Binding = 5, TextureView = rdr2LevelsView! },
+                new BindGroupEntry { Binding = 6, TextureView = rdr2WeatherView! },
+            ],
+        });
+        CreateExposureGroup();
+    }
+
+    /// <summary>The drawables' bounding radius around the scene's origin, which the shadow's cascades reach to.</summary>
+    private void FitShadow(float radius) => shadowRadius = radius;
+
+    /// <summary>
+    /// Fits the shadow's cascades to the view, each frame: the distance from the camera to the far side of the
+    /// drawables is split, more finely near the camera (GTA's practical split, between even and logarithmic), and each
+    /// slice of the view gets an orthographic view along the sun around the sphere that holds it. That sphere's size
+    /// doesn't turn with the camera, and its middle is snapped to whole texels, so the shadow's edges don't crawl as the
+    /// camera orbits. A slice wider than the drawables takes their own sphere. Each view is deep enough to take in all
+    /// of the drawables casting into it, and the ground a low sun throws their shadow onto.
+    /// </summary>
+    private void FitCascades()
+    {
+        float radius = shadowRadius;
+        if (radius <= 0)
+            return;
+        Vector3 sun = key.Direction;
+        Vector3 eye = Camera.Eye - origin;
+        Vector3 forward = Camera.Forward;
+        float aspect = height > 0 ? (float)width / height : 1;
+        // How far a slice's corners are from its middle line, per metre along it.
+        float spread = OrbitCamera.TanHalf * MathF.Sqrt(1 + aspect * aspect);
+        float reach = Math.Max(eye.Length() + radius, .5f);
+        float near = Math.Clamp(eye.Length() - radius, reach * .002f, reach * .5f);
+        Vector3 up = MathF.Abs(sun.Z) > .99f ? Vector3.UnitY : Vector3.UnitZ;
+        // The sun's view axes, as CreateLookAt builds them, for snapping the middle to texels.
+        Vector3 lightRight = Vector3.Normalize(Vector3.Cross(up, sun));
+        Vector3 lightUp = Vector3.Cross(sun, lightRight);
+        float start = near;
+        Span<float> splits = stackalloc float[ShadowCascades];
+        Span<float> texels = stackalloc float[ShadowCascades];
+        Span<float> depths = stackalloc float[ShadowCascades];
+        for (int i = 0; i < ShadowCascades; i++)
+        {
+            float t = (i + 1f) / ShadowCascades;
+            float end = i == ShadowCascades - 1 ? reach : .85f * near * MathF.Pow(reach / near, t) + .15f * (near + (reach - near) * t);
+            // The sphere round the slice from start to end: its middle on the view's line, as far along as holds both
+            // ends' corners, its size the same whichever way the camera turns.
+            float along = Math.Min((start + end) * (1 + spread * spread) / 2, end);
+            float size = MathF.Sqrt((end - along) * (end - along) + end * spread * end * spread);
+            Vector3 middle = eye + forward * along;
+            if (size >= radius || Vector3.Distance(middle, Vector3.Zero) + radius <= size)
+                (middle, size) = (Vector3.Zero, radius);
+            float texel = size * 2 / ShadowResolution;
+            float x = Vector3.Dot(middle, lightRight), y = Vector3.Dot(middle, lightUp);
+            middle += lightRight * (MathF.Round(x / texel) * texel - x) + lightUp * (MathF.Round(y / texel) * texel - y);
+            // From the sun's side, beyond everything that casts into the slice; deep enough for the ground behind.
+            float back = middle.Length() + radius * 2;
+            float depth = back + middle.Length() + Math.Max(radius, size) + radius;
+            Matrix4x4 view = Matrix4x4.CreateLookAt(middle + sun * back, middle, up);
+            shadowMatrices[i] = view * Matrix4x4.CreateOrthographic(size * 2, size * 2, 0, depth);
+            queue.WriteBuffer(shadowViewBuffers[i], 0, MemoryMarshal.AsBytes(new ReadOnlySpan<Matrix4x4>(in shadowMatrices[i])));
+            splits[i] = end;
+            texels[i] = texel;
+            depths[i] = depth;
+            start = end;
+        }
+        shadowSplits = new Vector4(splits[0], splits[1], splits[2], splits[3]);
+        shadowTexels = new Vector4(texels[0], texels[1], texels[2], texels[3]);
+        shadowDepths = new Vector4(depths[0], depths[1], depths[2], depths[3]);
+    }
+
+    /// <summary>How far from the camera, along its view, each of the shadow's cascades reaches, as last fitted.</summary>
+    internal Vector4 ShadowSplits => shadowSplits;
+
+    /// <summary>Each of the shadow's cascades' texel, in metres, as last fitted.</summary>
+    internal Vector4 ShadowTexels => shadowTexels;
+
+    private void WriteLight(bool shadows)
+    {
+        if (shadows)
+        {
+            if (worldShown)
+                FitWorldShadows();
+            else
+                FitCascades();
+        }
+        Span<float> values = stackalloc float[LightWrittenBytes / sizeof(float)];
+        Span<Vector4> vectors = MemoryMarshal.Cast<float, Vector4>(values);
+        vectors[0] = new Vector4(key.Direction, 0);
+        vectors[1] = new Vector4(cycle.Directional, 0);
+        vectors[2] = new Vector4(cycle.NaturalDown, cycle.DownWrap);
+        vectors[3] = new Vector4(cycle.NaturalUp, cycle.OcclusionProp);
+        vectors[4] = new Vector4(cycle.DirectionalAmbient, cycle.OcclusionVehicle);
+        vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
+        // An RDR2 world with its sky is tone-mapped with its own filmic curves, from its own visualsettings.dat.
+        GtaToneMapVisuals mapping = Rdr2WorldExposure?.ToneMap ?? toneMap;
+        vectors[6] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure);
+        var (blendScale, blendOffset) = mapping.Blend;
+        vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, blendScale, blendOffset);
+        Filmic bright = mapping.Bright, dark = mapping.Dark;
+        vectors[8] = new Vector4(bright.A, bright.B, bright.C, bright.D);
+        vectors[9] = new Vector4(bright.E, bright.F, bright.W, 1 / Timecycle.DisplayGamma);
+        vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);
+        vectors[11] = new Vector4(dark.E, dark.F, dark.W, 0);
+        // With the day/night balance the night emissives and night-only geometry go by (globalScalars2.y).
+        vectors[12] = new Vector4(ReflectionMips, NightEmissives.Balance(Hours), 0, 0);
+        for (int i = 0; i < ShadowCascades; i++)
+            MemoryMarshal.Write(MemoryMarshal.AsBytes(values[(52 + i * 16)..(68 + i * 16)]), in shadowMatrices[i]);
+        vectors[29] = shadowSplits;
+        vectors[30] = shadowTexels;
+        vectors[31] = shadowDepths;
+        vectors[32] = new Vector4(0, 0, ShadowResolution, shadows && key.Direction.Z > 0 ? 1 : 0);
+        // Without bloom, the tone map adds none.
+        vectors[33] = Bloom ? Timecycle.BloomParameters(cycle) : Timecycle.BloomParameters(cycle) with { Y = 0 };
+        vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
+        vectors[35] = new Vector4(cycle.ArtificialDown, 0);
+        vectors[36] = new Vector4(cycle.ArtificialUp, 0);
+        vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, (float)lodFadeTime);
+        queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
+    }
+
+    // The shadow map at ShadowResolution, its cascades' views, and the light groups that read it.
+    private void CreateShadowMap()
+    {
+        shadowMap?.Destroy();
+        shadowMap = device.CreateTexture(new TextureDescriptor
+        {
+            // Read back by the tests too.
+            Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D((uint)ShadowResolution, (uint)ShadowResolution, ShadowCascades),
+            Format = DepthFormat,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        shadowView = shadowMap.CreateView(new TextureViewDescriptor
+        {
+            Format = DepthFormat,
+            Dimension = TextureViewDimension.D2Array,
+            MipLevelCount = 1,
+            ArrayLayerCount = ShadowCascades,
+            Aspect = TextureAspect.All,
+        });
+        for (int i = 0; i < ShadowCascades; i++)
+            shadowLayers[i] = shadowMap.CreateView(new TextureViewDescriptor
+            {
+                Format = DepthFormat,
+                Dimension = TextureViewDimension.D2,
+                MipLevelCount = 1,
+                BaseArrayLayer = (uint)i,
+                ArrayLayerCount = 1,
+                Aspect = TextureAspect.All,
+            });
+        CreateLightGroups();
+    }
+
+    // The light groups, which read the shadow map and a reflection map: drawables reflect the scene map; drawn into it,
+    // they reflect the sky map.
+    private void CreateLightGroups()
+    {
+        BindGroup LightGroup(TextureView reflections) => device.CreateBindGroup(new BindGroupDescriptor
+        {
+            Layout = lightLayout!,
+            Entries =
+            [
+                new BindGroupEntry { Binding = 0, Buffer = lightBuffer!, Size = LightBytes },
+                new BindGroupEntry { Binding = 1, TextureView = shadowView },
+                new BindGroupEntry { Binding = 2, Sampler = shadowCompare! },
+                new BindGroupEntry { Binding = 3, TextureView = reflections },
+                new BindGroupEntry { Binding = 4, Sampler = reflectionSampler! },
+                new BindGroupEntry { Binding = 5, Buffer = localLightBuffer!, Size = World.LocalLightFrame.LightBytes },
+                new BindGroupEntry { Binding = 6, Buffer = localLightTiles!, Size = World.LocalLightFrame.TileBytes },
+                new BindGroupEntry { Binding = 7, TextureView = WaterBackgroundView() },
+                new BindGroupEntry { Binding = 8, TextureView = WaterDepthView() },
+                new BindGroupEntry { Binding = 9, Buffer = worldFogBuffer!, Size = WorldFogBytes },
+                new BindGroupEntry { Binding = 10, TextureView = FogRayView() },
+            ],
+        });
+        lightGroup = LightGroup(sceneMap!.View);
+        skyLightGroup = LightGroup(skyMap!.View);
+    }
+
+    /// <summary>The sun's shadow of the drawables, a cascade at a time: their solid and masked parts' depth from the sun.</summary>
+    private void DrawShadow(CommandEncoder encoder)
+    {
+        // Night-only geometry casts only while it's there, as the game's shadow programs have it.
+        bool night = NightEmissives.Balance(Hours) > 0;
+        for (int cascade = 0; cascade < ShadowCascades; cascade++)
+        {
+            RenderPassEncoder pass = encoder.BeginRenderPass(new RenderPassDescriptor
+            {
+                ColorAttachments = [],
+                DepthStencilAttachment = new RenderPassDepthStencilAttachment
+                {
+                    View = shadowLayers[cascade],
+                    DepthLoadOp = LoadOp.Clear,
+                    DepthStoreOp = StoreOp.Store,
+                    DepthClearValue = 1,
+                },
+            });
+            pass.SetPipeline(shadowPipeline!);
+            pass.SetBindGroup(0, shadowGroups[cascade]);
+            pass.SetVertexBuffer(0, surfaceVertices!);
+            pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
+            for (int i = 0; i < surfaceParts.Length; i++)
+                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i] && (night || !partNightOnly[i])
+                    && surfaceParts[i].Part.Casts)
+                    pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+            // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
+            pass.SetPipeline(maskedShadowPipeline!);
+            for (int i = 0; i < surfaceParts.Length; i++)
+                if (CutOut(i) && partsShown[i] && (night || !partNightOnly[i]) && surfaceParts[i].Part.Casts)
+                {
+                    pass.SetBindGroup(1, surfaceParts[i].Material);
+                    pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
+                }
+            // RDR2's cut-out ones, through theirs.
+            DrawRdr2Shadow(pass);
+            pass.End();
+        }
+
+        // Terrain's material is laid out differently, and cuts nothing out; fur casts as its first shell, its surface.
+        bool CutOut(int i) => surfaceParts[i].Mode == AlphaMode.Mask && surfaceParts[i].Kind == PartKind.Surface;
+    }
+
+    /// <summary>The drawable's shadow on the backdrop's ground, over the backdrop just drawn.</summary>
+    private void DrawGroundShadow(RenderPassEncoder pass)
+    {
+        pass.SetPipeline(groundShadowPipeline!);
+        pass.SetBindGroup(0, sceneGroup);
+        pass.SetBindGroup(1, noGroup!);
+        pass.SetBindGroup(2, lightGroup!);
+        pass.Draw(3);
+    }
+
+    /// <summary>A shader with the light: Scene/scene.wgsl, Scene/light.wgsl, then its own file.</summary>
+    private static string LitShader(string name) => Read("Scene/scene.wgsl") + "\n" + Read("Scene/light.wgsl") + "\n" + Read(name);
+}

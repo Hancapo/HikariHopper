@@ -9,6 +9,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Keep the world drawing under Settings and the other sheets, shown as it is rather than hidden, so a graphics setting shows on it as it's changed. ([#328](https://github.com/Hancapo/HikariHopper/pull/328))
 - Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
 - Browse, search and extract from Red Dead Redemption 2's archives, their folders and file names rebuilt from the names the game is known to use. ([#238](https://github.com/Hancapo/HikariHopper/pull/238), [#239](https://github.com/Hancapo/HikariHopper/pull/239))
 - Open, edit and save Red Dead Redemption 2's texture dictionaries in the texture editor. ([#240](https://github.com/Hancapo/HikariHopper/pull/240), [#241](https://github.com/Hancapo/HikariHopper/pull/241))
@@ -51,6 +52,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Carry Red Dead Redemption 2's fog past 10 km and over its sky as the game does: the horizon fogs over and distant ridges blend into it. ([#312](https://github.com/Hancapo/HikariHopper/pull/312))
 - Meter Red Dead Redemption 2's exposure as the game does: by the middle of the frame's luminance, its darkest and brightest pixels left out, blended with the light round the camera. ([#313](https://github.com/Hancapo/HikariHopper/pull/313))
 - Grade Red Dead Redemption 2's frame as the game does after its tone map: in its own sRGB, with its night-time blue shift, its timecycle's colour correction and desaturation, and its weather's colour table. ([#314](https://github.com/Hancapo/HikariHopper/pull/314))
+- Darken Red Dead Redemption 2's daylight sky and distance with the game's gradient filter: a deep blue sky and a clearer horizon, no longer washed out. ([#330](https://github.com/Hancapo/HikariHopper/pull/330))
 - Rebuild Red Dead Redemption 2's sky tables at most four times a second while the time of day is being dragged, not every frame; they're built for the exact hour once it holds still. ([#315](https://github.com/Hancapo/HikariHopper/pull/315))
 - Darken corners, creases and the ground under things in both games' worlds with ground-truth ambient occlusion, as RedFury's viewer works it out. ([#316](https://github.com/Hancapo/HikariHopper/pull/316))
 
@@ -78,6 +80,9 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The start page's globe opens a game straight on its world, without its files showing for a moment first. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
+- Opening a world in the first seconds after the app starts no longer freezes the window for up to 15 seconds: the world shows its loading screen while its shaders compile. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
+- Keep the world drawing while the title bar's menus are open over it, instead of hiding it until they close. ([#327](https://github.com/Hancapo/HikariHopper/pull/327))
 - Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))

@@ -21,6 +21,9 @@ public partial class MenuRow : UserControl
 
     private readonly Dictionary<MenuBarButton, RetroMenu> menus = [];
     private readonly MenuBar? bar;
+    // The menu open as a window of its own, over a world, and its title.
+    private DropdownWindow? window;
+    private MenuBarButton? windowTitle;
     private SettingsDialog? settingsDialog;
     private ShortcutsDialog? shortcutsDialog;
     private AboutDialog? aboutDialog;
@@ -35,8 +38,8 @@ public partial class MenuRow : UserControl
         Bind(GoButton, "GoMenu");
         Bind(HelpButton, "HelpMenu");
         // A menu bar's clicks, pointing and keys, as the viewers' bars have them.
-        bar = MenuBar.Attach(this, [.. menus.Select(pair => new MenuBar.Title(pair.Key, pair.Value, () => pair.Value.IsOpen,
-            () => Open(pair.Key), pair.Value.Close))]);
+        bar = MenuBar.Attach(this, [.. menus.Select(pair => new MenuBar.Title(pair.Key, pair.Value,
+            () => pair.Value.IsOpen || windowTitle == pair.Key, () => Open(pair.Key), () => Close(pair.Key)))]);
 
         WindowShortcuts.Register(this,
             new WindowShortcut("Ctrl+T", () => Tabs?.NewTab()),
@@ -89,16 +92,92 @@ public partial class MenuRow : UserControl
             bar?.Toggle(button);
     }
 
+    /// <summary>Opens or closes a title's menu, as a click on the title does.</summary>
+    internal void Toggle(MenuBarButton button) => bar?.Toggle(button);
+
+    /// <summary>The menu open as a window of its own, over a world; none when none is.</summary>
+    internal DropdownWindow? OpenWindow => window;
+
     private void Open(MenuBarButton button)
     {
+        RetroMenu menu = menus[button];
+        // Over a world, a window of its own, as the viewers' menus are: the world's view is a native window, which
+        // would cover a menu drawn in the main window, so it would have to hide while the menu is open.
+        if (Bridge?.InWorld == true)
+        {
+            OpenAsWindow(button, menu);
+            return;
+        }
         // The menu hangs from its title: its frame starts at the title's bottom-left corner and leaves
         // the title's width open on top, so the two read as one surface. The popup is anchored to the
         // window, since a popup anchored to a control ignores a placement rectangle outside it.
-        RetroMenu menu = menus[button];
         menu.ConnectionWidth = button.Bounds.Width;
         Control target = TopLevel.GetTopLevel(this) ?? (Control)this;
         Point at = button.TranslatePoint(new Point(PopupOpticalOffset, button.Bounds.Height), target) ?? default;
         menu.Open(target, at.X, at.Y);
+    }
+
+    private void OpenAsWindow(MenuBarButton button, RetroMenu menu)
+    {
+        if (DropdownWindow.OpenMenu(button, menu) is not { } shown)
+            return;
+        window = shown;
+        windowTitle = button;
+        button.MenuOpen = true;
+        // Its window takes the keyboard: its keys go to the bar first, as the main window's do for a menu drawn in it.
+        if (bar is not null)
+            shown.AddHandler(KeyDownEvent, bar.OnKeyDown, RoutingStrategies.Tunnel);
+        // A menu drawn in the main window closes when one of its items is clicked; one in a window of its own is closed
+        // here, once the item has done what it does.
+        // Closed by an item or a shortcut rather than by a press outside it, which may be on its title.
+        bool done = false;
+        shown.AddHandler(MenuItem.ClickEvent, (_, _) =>
+        {
+            done = true;
+            shown.Close();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        // The keys neither the bar nor the menu takes go on to the main window, whose shortcuts (Ctrl+T, F6, Alt+Left…)
+        // work as they do while a menu drawn in it is open; one that runs closes the menu.
+        shown.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Handled || TopLevel.GetTopLevel(this) is not { } main)
+                return;
+            var passed = new Avalonia.Input.KeyEventArgs
+            {
+                RoutedEvent = KeyDownEvent,
+                Key = e.Key,
+                KeyModifiers = e.KeyModifiers,
+                PhysicalKey = e.PhysicalKey,
+                KeySymbol = e.KeySymbol,
+                KeyDeviceType = e.KeyDeviceType,
+            };
+            main.RaiseEvent(passed);
+            if (!passed.Handled)
+                return;
+            e.Handled = true;
+            done = true;
+            shown.Close();
+        }, RoutingStrategies.Bubble);
+        shown.Closed += (_, _) =>
+        {
+            button.MenuOpen = false;
+            // Another title's menu may have opened in its place meanwhile.
+            if (window != shown)
+                return;
+            window = null;
+            windowTitle = null;
+            // Taken from it, by a click on its title among others: that click doesn't open it again.
+            if (!done)
+                bar?.Closed(button);
+        };
+    }
+
+    private void Close(MenuBarButton button)
+    {
+        if (windowTitle == button)
+            window?.Close();
+        else
+            menus[button].Close();
     }
 
     private void OnNewTab(object? sender, RoutedEventArgs e) => Tabs?.NewTab();

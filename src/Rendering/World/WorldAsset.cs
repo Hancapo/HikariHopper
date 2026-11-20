@@ -180,7 +180,7 @@ internal readonly record struct WorldTextureId(uint Dictionary, uint Name);
 
 /// <summary>
 /// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials, water
-/// included, and GTA V's that surface.wgsl, terrain.wgsl and gta_water.wgsl draw (not yet its water foams, fur grass
+/// included, and GTA V's that Gta5/surface.wgsl, Gta5/terrain.wgsl and Gta5/water.wgsl draw (not yet its water foams, fur grass
 /// and cables, which the model viewer draws with shaders of their own), by level of detail, each level's solid surfaces first so they
 /// cast as one, the indexes made the vertices' own, and the vertices in the asset's own space (the scene has them from
 /// its middle), as the placements' matrices take them.
