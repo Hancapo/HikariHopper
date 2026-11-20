@@ -56,6 +56,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- A model in the 3D viewer shows its edited textures as soon as the texture editor saves them, not once it closes. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
 - Light GTA V with the timecycle read from the game's own files once a GTA V game is open, the artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259))
 - Take GTA V's exposure and filmic tone map from the game's own visualsettings.dat once a GTA V game is open, and from the game's own defaults before then. ([#293](https://github.com/Hancapo/HikariHopper/pull/293))
@@ -77,6 +78,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A Red Dead Redemption 2 model shows its textures as saved from the texture editor, instead of failing to be read again. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
 - Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))
