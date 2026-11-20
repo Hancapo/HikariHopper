@@ -1,6 +1,14 @@
 <p align="center"><img src="src/Assets/Branding/hikarihopper-banner.png" alt="HikariHopper" width="640"></p>
 
 <p align="center">
+  <a href="https://github.com/Hancapo/HikariHopper/releases/latest"><img src="https://img.shields.io/github/v/release/Hancapo/HikariHopper?style=for-the-badge&label=release" alt="Latest release"></a>
+  <a href="https://github.com/Hancapo/HikariHopper/releases"><img src="https://img.shields.io/github/downloads/Hancapo/HikariHopper/total?style=for-the-badge" alt="Downloads"></a>
+  <a href="#features"><img src="https://img.shields.io/badge/games-GTA%20V%20%7C%20RDR2-7C83DB?style=for-the-badge" alt="Games: GTA V and RDR2"></a>
+  <a href="https://dotnet.microsoft.com/download/dotnet/10.0"><img src="https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet" alt=".NET 10"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Hancapo/HikariHopper?style=for-the-badge" alt="License"></a>
+</p>
+
+<p align="center">
 A modding toolkit for games, for Windows.<br>
 Browse a game's folders and archives, then open, edit, extract and repack what is inside them.
 </p>
