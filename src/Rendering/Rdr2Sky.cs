@@ -19,7 +19,7 @@ internal sealed class Rdr2Sky
     public const int TableVectors = 9, TableBytes = TableVectors * 16;
 
     /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
-    public const int Vectors = TableVectors + 24, Bytes = Vectors * 16;
+    public const int Vectors = TableVectors + 25, Bytes = Vectors * 16;
 
     /// <summary>
     /// Where the camera's rays are among the dome's constants, which the renderer writes: its forward way with the
@@ -29,6 +29,9 @@ internal sealed class Rdr2Sky
 
     /// <summary>Where the height fog's constants are among the dome's: four after the camera's rays.</summary>
     public const int Fog = TableVectors + 20;
+
+    /// <summary>Where the camera relative to the scene's origin is among the dome's, which the renderer writes.</summary>
+    public const int RelativeCamera = TableVectors + 24;
 
     /// <summary>
     /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
@@ -210,7 +213,9 @@ internal sealed class Rdr2Sky
         // its fill ambient, over a thousand as the air glow's colours are taken.
         values[Fog] = new(Field("local_atmosphere_fog_density", at), Field("local_atmosphere_fog_height", at),
             1 / MathF.Max(Field("local_atmosphere_fog_falloff", at, 500), 1), Math.Min(Field("local_atmosphere_anisotropy_high_density", at, .5f), .99f));
-        values[Fog + 1] = new(Colour("local_atmosphere_direct_light_color", at, 1) * Field("local_atmosphere_direct_light_intensity", at, 1), 0);
+        // Then how much the sun's shadow in the fog is lifted, back towards the light.
+        values[Fog + 1] = new(Colour("local_atmosphere_direct_light_color", at, 1) * Field("local_atmosphere_direct_light_intensity", at, 1),
+            Field("local_atmosphere_fog_shadow_amount", at, 0));
         values[Fog + 2] = new(Colour("local_atmosphere_sky_col", at, 1) * Field("local_atmosphere_sky_intensity", at, 1), 0);
         values[Fog + 3] = new(Colour("local_atmosphere_fill_ambient_light_color", at, 0) * Field("local_atmosphere_fill_ambient_light_intensity", at, 1)
             / AirGlowScale, 0);
