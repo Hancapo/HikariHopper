@@ -10,7 +10,8 @@ struct Light {
     sun_colour: vec4f,
     // The natural ambient's down light (from the sky, on what faces up), with the down wrap in w.
     natural_down: vec4f,
-    // The natural ambient's up light (from the ground, on what faces down), with the props' occlusion multiplier in w.
+    // The natural ambient's up light, its base, which every surface has whichever way it faces, with the props'
+    // occlusion multiplier in w.
     natural_up: vec4f,
     // The directional ambient's colour times its intensity, with the vehicles' occlusion multiplier in w.
     directional_ambient: vec4f,
@@ -45,7 +46,8 @@ struct Light {
     bloom: vec4f,
     // The peds' ambient occlusion multiplier (light_amb_occ_mult_ped) and their rim light's (light_ped_rim_mult).
     ped: vec4f,
-    // The artificial ambient outside interiors, on what faces up and on what faces down (light_artificial_ext_*).
+    // The artificial ambient outside interiors, its down light and its base, as the natural ambient's
+    // (light_artificial_ext_*).
     artificial_down: vec4f,
     artificial_up: vec4f,
     // The water's: seconds since the view began (its ripples' time), the timecycle's water_foglight, and the frame's
@@ -188,28 +190,32 @@ fn filmic_blend(stops: f32) -> f32 {
     return saturate(stops * range.z + range.w);
 }
 
-// PS_directional_ambient's natural ambient for a unit normal: the down light on what faces up, the up light on what
-// faces down, the down light wrapping past the horizon by the down wrap; and the directional ambient on what faces it.
-fn gta_ambient(n: vec3f) -> vec3f {
+// How much of an ambient's down light reaches a unit normal, as PS_directional_ambient has it: all of it on what faces
+// up, wrapping past the horizon by the down wrap, none on what faces further down.
+fn ambient_down_share(n: vec3f) -> f32 {
     let wrap = light.natural_down.w;
-    let h = max(0.0, (n.z + wrap) / (1.0 + wrap));
+    return max(0.0, (n.z + wrap) / (1.0 + wrap));
+}
+
+// PS_directional_ambient's natural ambient for a unit normal: the up light, its base, everywhere, plus the down light
+// by its share (ambient_down_share); and the directional ambient on what faces it.
+fn gta_ambient(n: vec3f) -> vec3f {
     // An interior room keeps only so much of the natural ambient.
     let room_natural = select(1.0, shaded_room.z, shaded_room.w > 0.5);
-    let natural = mix(light.natural_up.rgb, light.natural_down.rgb, h) * room_natural;
+    let natural = (light.natural_up.rgb + light.natural_down.rgb * ambient_down_share(n)) * room_natural;
     let directional = light.directional_ambient.rgb * saturate(dot(light.directional_ambient_direction.xyz, n));
     return natural + directional;
 }
 
-// PS_directional_ambient's artificial ambient for this normal, from above and below as the natural one: an interior
-// room's own (its timecycle modifiers'), or the weather's outside interiors (the game tells them apart by a stencil
-// bit its interiors set).
+// PS_directional_ambient's artificial ambient for this normal, its base and its down light as the natural one's: an
+// interior room's own (its timecycle modifiers'), or the weather's outside interiors (the game tells them apart by a
+// stencil bit its interiors set).
 fn gta_artificial_ambient(n: vec3f) -> vec3f {
-    let wrap = light.natural_down.w;
-    let h = max(0.0, (n.z + wrap) / (1.0 + wrap));
+    let h = ambient_down_share(n);
     if (shaded_room.w > 0.5) {
-        return mix(unpack_ambient(shaded_room.y), unpack_ambient(shaded_room.x), h);
+        return unpack_ambient(shaded_room.y) + unpack_ambient(shaded_room.x) * h;
     }
-    return mix(light.artificial_up.rgb, light.artificial_down.rgb, h);
+    return light.artificial_up.rgb + light.artificial_down.rgb * h;
 }
 
 // How long a placement takes to fade in or out as the levels of detail change, in seconds.

@@ -5,7 +5,7 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// GTA V's light at one time of day, from its timecycle: the directional light (the sun, or the moon at night), the
-/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the artificial ambient outside interiors (the
+/// natural ambient as a base and a down light from the sky, the directional ambient, the artificial ambient outside interiors (the
 /// same hemisphere; nought where the timecycle in use doesn't have it), the ambient occlusion multipliers, the
 /// peds' rim light, the exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
 /// its intensity. Colours are already multiplied by their intensities.
@@ -234,13 +234,14 @@ internal static class Timecycle
     }
 
     /// <summary>
-    /// The natural ambient reaching a surface with this normal: the down light (from the sky) on what faces up, the up
-    /// light (from the ground) on what faces down, the down light wrapping past the horizon by the down wrap.
+    /// The natural ambient reaching a surface with this normal, as the game's ambient pass has it: the up light, its
+    /// base, whichever way the surface faces, plus the down light (from the sky), all of it on what faces up, wrapping
+    /// past the horizon by the down wrap, none on what faces further down.
     /// </summary>
     internal static Vector3 NaturalAmbient(in TimecycleLight light, Vector3 normal)
     {
         float h = MathF.Max(0, (normal.Z + light.DownWrap) / (1 + light.DownWrap));
-        return Vector3.Lerp(light.NaturalUp, light.NaturalDown, h);
+        return light.NaturalUp + light.NaturalDown * h;
     }
 
     /// <summary>

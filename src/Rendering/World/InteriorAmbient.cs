@@ -9,8 +9,9 @@ namespace HikariHopper.Rendering.World;
 /// over the weather's own interior values, which are the same at every hour and in every region; a room without
 /// modifiers has the weather's, whose interior multiplier is nought. All of it from the game's timecycle files.
 /// </summary>
-/// <param name="Down">The artificial ambient on what faces up: its colour by its intensity and the interior multiplier.</param>
-/// <param name="Up">The artificial ambient on what faces down.</param>
+/// <param name="Down">The artificial ambient's down light, on what faces up: its colour by its intensity and the interior
+/// multiplier.</param>
+/// <param name="Up">The artificial ambient's up light, its base, on every surface whichever way it faces.</param>
 /// <param name="Natural">The natural ambient multiplier.</param>
 internal readonly record struct InteriorAmbient(Vector3 Down, Vector3 Up, float Natural)
 {
