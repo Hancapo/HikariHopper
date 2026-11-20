@@ -51,6 +51,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Carry Red Dead Redemption 2's fog past 10 km and over its sky as the game does: the horizon fogs over and distant ridges blend into it. ([#312](https://github.com/Hancapo/HikariHopper/pull/312))
 - Meter Red Dead Redemption 2's exposure as the game does: by the middle of the frame's luminance, its darkest and brightest pixels left out, blended with the light round the camera. ([#313](https://github.com/Hancapo/HikariHopper/pull/313))
 - Grade Red Dead Redemption 2's frame as the game does after its tone map: in its own sRGB, with its night-time blue shift, its timecycle's colour correction and desaturation, and its weather's colour table. ([#314](https://github.com/Hancapo/HikariHopper/pull/314))
+- Darken Red Dead Redemption 2's daylight sky and distance with the game's gradient filter: a deep blue sky and a clearer horizon, no longer washed out. ([#330](https://github.com/Hancapo/HikariHopper/pull/330))
 - Rebuild Red Dead Redemption 2's sky tables at most four times a second while the time of day is being dragged, not every frame; they're built for the exact hour once it holds still. ([#315](https://github.com/Hancapo/HikariHopper/pull/315))
 - Darken corners, creases and the ground under things in both games' worlds with ground-truth ambient occlusion, as RedFury's viewer works it out. ([#316](https://github.com/Hancapo/HikariHopper/pull/316))
 
