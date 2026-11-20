@@ -220,9 +220,17 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.NotNull(red.WorldButton);
         Assert.NotNull(legacy.WorldButton);
 
-        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        // On its World side as soon as the load is done: its files are never shown in between.
+        bool? inWorldWhenLoaded = null;
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExplorerViewModel.GameLoading) && !tab.GameLoading && tab.HasGame)
+                inWorldWhenLoaded ??= tab.InWorld;
+        };
+        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         TestWait.Until(() => tab.HasGame && !tab.GameLoading, "the game to load");
+        Assert.True(inWorldWhenLoaded);
         TestWait.Pump(100);
         Assert.True(tab.InWorld);
         Assert.Equal("World", tab.TabTitle);
