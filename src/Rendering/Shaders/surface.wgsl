@@ -38,7 +38,9 @@ struct Material {
     // dirtLevelMod.z), the map's part in the power (0 none, 1 alpha, 2 green squared), and whether fresnel is one
     // less the map's blue.
     spec_model: vec4f,
-    // The UV set the specular map is read on and its tiling; has a second diffuse layer, the UV set it is read on.
+    // The UV set the specular map is read on and its tiling; has a second diffuse layer (a vehicle's), or the decal a
+    // textured shader lays over itself (1 by its alpha, _texdecal; 2 by one less the vertex alpha, _vertdecal); the UV
+    // set it is read on.
     spec_place: vec4f,
     // The second diffuse layer's colour and strength (matDiffuseColor2).
     layer: vec4f,
@@ -375,6 +377,13 @@ fn shade_surface(original: SurfaceOutput, front: bool, in_view: bool) -> vec4f {
     } else {
         surface = textured_surface(input, diffuse, specular_sample, normal);
         surface.base *= detail_scale;
+        // The _texdecal and _vertdecal shaders' decal over the tinted, detailed diffuse, itself untinted, as Enhanced's
+        // PS_DeferredTextured has it: by the decal's own alpha, or by one less the vertex colour's.
+        let decal = u32(material.spec_place.z + 0.5);
+        if (decal != 0u) {
+            let weight = select(layer.a, 1.0 - input.colour0.a, decal == 2u);
+            surface.base = surface.base * (1.0 - weight) + layer.rgb * weight;
+        }
         surface.intensity *= detail_scale;
         // The _reflect shaders' environment, added to the diffuse the G-buffer stores (and so kept within one).
         if (material.environment.x > 0.5) {
