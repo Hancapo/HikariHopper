@@ -153,6 +153,9 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
 struct TerrainTargets {
     @location(0) colour: vec4f,
     @location(1) sub_sampled: f32,
+    // And what the world's ambient occlusion takes back out (light.wgsl's occludable).
+    @location(2) ambient: vec4f,
+    @location(3) normal: vec4f,
 };
 
 @fragment
@@ -164,7 +167,7 @@ fn fs_terrain(input: TerrainOutput) -> TerrainTargets {
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return TerrainTargets(colour, 0.0);
+    return TerrainTargets(colour, 0.0, occludable_ambient, occludable_normal);
 }
 
 // Into the reflection map: what is behind the hemisphere is left out, after shading.

@@ -255,7 +255,9 @@ internal sealed unsafe partial class ViewportRenderer
                             Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
                         } : null,
                         WriteMask = ColorWriteMask.All,
-                    }, subSampled: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain),
+                    }, subSampled: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain,
+                        // The solid surfaces leave what the ambient occlusion takes out; water and the blended don't.
+                        occludable: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain or WorldFamily.Rdr2),
                 },
                 DepthStencil = new DepthStencilState
                 {
@@ -481,7 +483,7 @@ internal sealed unsafe partial class ViewportRenderer
         bool shadow = bundle >= ShadowBundle;
         RenderBundleEncoder encoder = device.CreateRenderBundleEncoder(new RenderBundleEncoderDescriptor
         {
-            ColorFormats = shadow ? [] : [HdrFormat, SubSampledFormat],
+            ColorFormats = shadow ? [] : [HdrFormat, SubSampledFormat, OccludableFormat, OccludableFormat],
             DepthStencilFormat = DepthFormat,
             SampleCount = 1,
         });
@@ -588,6 +590,9 @@ internal sealed unsafe partial class ViewportRenderer
         // RDR2's sub-sampled cut-outs put together before anything is drawn over them.
         if (WorldSubSampled())
             pass = CombineSubSampledAlpha(pass, encoder);
+        // The ambient occlusion over the solid surfaces, before the decals and the fog (ViewportRenderer.AmbientOcclusion.cs).
+        if (AmbientOcclusion)
+            pass = ApplyAmbientOcclusion(pass, encoder);
         DrawWorldPass(pass, DecalBundle);
         // GTA V's fog over what's drawn so far, once its sky is shown (ViewportRenderer.WorldFog.cs): the rest of the
         // pass reads the depth, which nothing after writes.
