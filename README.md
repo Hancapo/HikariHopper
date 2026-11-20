@@ -37,9 +37,9 @@ Built with .NET 10 and Avalonia.
 
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/download), this repository's
 CommonFury submodule (`git submodule update --init`), and checkouts of FiveFury.NET and
-RedFury.NET next to this repository (`..\FiveFury.NET`, `..\RedFury.NET`), or point
-`FIVEFURY_ROOT` and `REDFURY_ROOT` at them. Both build on this repository's CommonFury, so
-their own submodules aren't needed.
+RedFury.NET beside this repository's parent folder (`..\..\FiveFury.NET`,
+`..\..\RedFury.NET`), or point `FIVEFURY_ROOT` and `REDFURY_ROOT` at them. Both build on
+this repository's CommonFury, so their own submodules aren't needed.
 
 ```sh
 dotnet build HikariHopper.slnx -c Release
