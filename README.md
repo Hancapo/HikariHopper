@@ -70,3 +70,8 @@ opens. [Velopack](https://velopack.io) (`vpk`, pinned in `dotnet-tools.json`) pa
 `artifacts\`: the zip people download, which updates itself, and the files the app's updater
 reads from the GitHub release. The script ends with the `gh release create` command that
 publishes them, with the version's changelog section as the notes.
+
+## License
+
+HikariHopper is released under the [MIT License](LICENSE). Code it adapts from other projects
+keeps its own licence, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
