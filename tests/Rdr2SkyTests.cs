@@ -126,13 +126,16 @@ public sealed class Rdr2SkyTests
             ("postfx_exposure_adaption_step_mult", [.6475f]));
         Rdr2Exposure exposure = sky.Exposure(12);
         // scale ln(L) + vertical offset - 10, the game's defaults (-1.15 and 6.9), plus the tweak.
-        Assert.Equal(-1.15f * MathF.Log(1) + 6.9f - 10 - 1, exposure.TargetFor(1), 4);
-        Assert.Equal(-1.15f * MathF.Log(100) + 6.9f - 10 - 1, exposure.TargetFor(100), 4);
+        Assert.Equal(-1.15f * MathF.Log(1) + 6.9f - 10 - 1, exposure.TargetFor(1, 1), 4);
+        Assert.Equal(-1.15f * MathF.Log(100) + 6.9f - 10 - 1, exposure.TargetFor(100, 100), 4);
         // Kept in the timecycle's range.
-        Assert.Equal(-11, exposure.TargetFor(1e6f));
+        Assert.Equal(-11, exposure.TargetFor(1e6f, 1e6f));
         Assert.Equal(.6475f, exposure.StepMult, 5);
         // The filmic curves the file has.
         Assert.Equal(.22f, exposure.ToneMap.Bright.A, 5);
+        // Metered over the whole frame where the weather has no spot meter, nothing left out, from nought.
+        Assert.Equal(new Vector4(0, 0, 1, 1), exposure.SpotMeter);
+        Assert.Equal(0, exposure.CubemapAmount);
         // The aerial perspective out to visualsettings.dat's far clip (the game's default where it hasn't it).
         Assert.Equal(10000, sky.AerialFarClip);
     }
@@ -153,6 +156,24 @@ public sealed class Rdr2SkyTests
         Assert.Equal(.2f / 1000, values[Rdr2Sky.Fog + 3].Z, 7);
         // How much the sun's shadow in it is lifted.
         Assert.Equal(.3f, values[Rdr2Sky.Fog + 1].W, 6);
+    }
+
+    [Fact]
+    public void The_exposure_is_metered_over_the_spot_meter_by_the_middle_of_its_histogram_and_the_cube()
+    {
+        Rdr2Sky sky = Sky(("postfx_exposure_spot_meter_x", [.5f]), ("postfx_exposure_spot_meter_y", [0]), ("postfx_exposure_spot_meter_width", [1]),
+            ("postfx_exposure_spot_meter_height", [2]), ("postfx_exposure_lowlights_percent", [.3f]), ("postfx_exposure_highlights_percent", [.8f]),
+            ("postfx_exposure_cubemap_amount", [.5f]));
+        Rdr2Exposure exposure = sky.Exposure(12);
+        // Its middle and size over the frame (-1 to 1) as a span of it (0 to 1).
+        Assert.Equal(new Vector4(.5f, 0, 1, 1), exposure.SpotMeter);
+        // The lowlights as they are, the highlights at most 0.99 less them.
+        Assert.Equal(.3f, exposure.Lowlights, 6);
+        Assert.Equal(.69f, exposure.Highlights, 6);
+        Assert.Equal(1e-6f, exposure.AbsoluteMin, 9);
+        // Halfway from the frame's curve to the cube's.
+        float frame = -1.15f * MathF.Log(10) + 6.9f - 10, cube = -1.15f * MathF.Log(1000) + 6.9f - 10;
+        Assert.Equal((frame + cube) / 2, exposure.TargetFor(10, 1000), 4);
     }
 
     [Fact]
@@ -308,8 +329,10 @@ public sealed class Rdr2SkyTests
             Assert.InRange(Luminance(noon[0]), 1e3f, 1e8f);
             Assert.True(noon[3].Z > noon[3].X, $"{noon[3]}");
             Assert.True(noon[6].X > 0 && noon[6].X < noon[0].X, $"{noon[6]}");
-            var (mean, _, aimed) = renderer.MeasuredExposure();
-            Assert.Equal(renderer.Rdr2WorldExposure!.TargetFor(mean), aimed, 2);
+            // Metered by the middle of its histogram, and by the sky's ambient cube round the camera.
+            var (mean, _, aimed, cube) = renderer.MeasuredExposure();
+            Assert.True(mean > 0 && cube > 0, $"{mean} {cube}");
+            Assert.Equal(renderer.Rdr2WorldExposure!.TargetFor(mean, cube), aimed, 2);
             // The sun lower, the same air: the tables stay; other air: they're built again.
             renderer.SetTime(15);
             Middle();
