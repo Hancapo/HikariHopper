@@ -62,6 +62,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))
+- Light GTA V's night-only lamps, windows and signs only by night, over the hours its visualsettings.dat sets, and show its night-only light shapes only then, and give its shiny metal and glass materials the environment map they reflect, in its world and the 3D viewer. ([#296](https://github.com/Hancapo/HikariHopper/pull/296))
 
 ### Removed
 

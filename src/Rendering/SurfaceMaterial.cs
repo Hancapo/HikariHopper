@@ -6,6 +6,16 @@ using FiveFury.Textures;
 
 namespace HikariHopper.Rendering;
 
+/// <summary>How a _reflect shader reads its environment texture: a sphere map, or a cube for the _cubemap_reflect ones.</summary>
+internal enum EnvironmentKind
+{
+    None,
+    /// <summary>A sphere map, read at the reflected view's X and Z.</summary>
+    Sphere,
+    /// <summary>A cube, read along the reflected view (Y and Z swapped, as D3D's cubes take it).</summary>
+    Cube,
+}
+
 /// <summary>How a surface's pixels combine with what is behind them.</summary>
 internal enum AlphaMode
 {
@@ -29,7 +39,7 @@ internal sealed partial class SurfaceMaterial
     /// The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112, fur.wgsl's Fur its
     /// first 144 and cable.wgsl's Cable its first 64.
     /// </summary>
-    public const int UniformBytes = 400;
+    public const int UniformBytes = 416;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -93,7 +103,7 @@ internal sealed partial class SurfaceMaterial
     /// </summary>
     internal IEnumerable<Texture?> BoundTextures() => Water is { } water ? water.Textures : Terrain
         ? [.. Layers, Lookup, TintPalette]
-        : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask];
+        : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask, Environment];
 
     /// <summary>
     /// GTA V's water, as gta_water.wgsl shades it: a water shader's own (water_river, water_shallow, water_fountain...,
@@ -119,6 +129,12 @@ internal sealed partial class SurfaceMaterial
 
     /// <summary>Where hair counts as solid, for its first pass: what is less is blended in its second.</summary>
     internal const float HairSolid = .95f;
+
+    /// <summary>
+    /// A _geomnightonly shader's geometry, which the game's vertex programs collapse by day: it's there only while the
+    /// night's emissives are on at all.
+    /// </summary>
+    public bool NightOnly { get; private init; }
 
     /// <summary>A decal: drawn over the surface it sits on, without writing depth.</summary>
     public bool Decal { get; private init; }
@@ -153,6 +169,16 @@ internal sealed partial class SurfaceMaterial
 
     /// <summary>The ped_hair_spiked_mask shader's mask over the hair's alpha, on the second UV set.</summary>
     public Texture? DiffuseMask { get; private init; }
+
+    /// <summary>
+    /// The _reflect shaders' environment (EnvironmentSampler): a sphere map for reflect, normal_reflect, spec_reflect,
+    /// normal_spec_reflect and their decals, a cube for the _cubemap_reflect ones. Which one the shader reads is in
+    /// <see cref="Reflection"/>.
+    /// </summary>
+    public Texture? Environment { get; private init; }
+
+    /// <summary>How the shader reads <see cref="Environment"/>: not at all, as a sphere map or as a cube.</summary>
+    public EnvironmentKind Reflection { get; private init; }
 
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[12];
@@ -257,6 +283,19 @@ internal sealed partial class SurfaceMaterial
             };
         }
 
+        // The _reflect shaders' environment, read as their programs sample it: a texture that isn't that kind is left
+        // unread, as a missing one is.
+        Texture? environment = null;
+        var reflection = EnvironmentKind.None;
+        if (Textured.Contains(shader) && Pattern(shader, "reflect") is "sphere" or "cube" && Texture("environment") is { } found)
+        {
+            bool cube = Pattern(shader, "reflect") == "cube";
+            bool isCube = found.Shape.Dimension == CommonFury.Textures.TextureDimension.Cube && found.Shape.ArraySize == 1;
+            bool isPlane = found.Shape.IsSingleImage;
+            if (cube ? isCube : isPlane)
+                (environment, reflection) = (found, cube ? EnvironmentKind.Cube : EnvironmentKind.Sphere);
+        }
+
         var result = new SurfaceMaterial
         {
             Water = water,
@@ -287,6 +326,9 @@ internal sealed partial class SurfaceMaterial
             Height = Texture("height"),
             HairNoise = PedsHair.Contains(shader) ? Texture("hair_noise") : null,
             DiffuseMask = PedsHair.Contains(shader) ? Texture("diffuse_mask") : null,
+            Environment = environment,
+            Reflection = reflection,
+            NightOnly = Textured.Contains(shader) && Pattern(shader, "geometry_night") == "true",
             AlphaMode = Glasses.Contains(shader) ? AlphaMode.Blend : (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -365,6 +407,13 @@ internal sealed partial class SurfaceMaterial
                 u[64 + i] = i < exponent.Length ? exponent[i] : 0;
             }
         }
+        // The _reflect shaders' environment term: which map, and reflectivePower. The night emissives (emissivenight,
+        // decal_emissivenight_only, normal_spec_reflect_emissivenight) scale their emissive, and a decal its alpha too,
+        // by the day/night balance (globalScalars2.y); _geomnightonly collapses its vertices by day.
+        u[100] = (float)result.Reflection;
+        u[101] = result.Reflection != EnvironmentKind.None ? Constant("reflectivity", .45f)[0] : 0;
+        u[102] = Textured.Contains(shader) && Pattern(shader, "emissive_night") == "true" ? 1 : 0;
+        u[103] = result.NightOnly ? 1 : 0;
         // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling), and what
         // masks it: the specular map's alpha, the diffuse map's for the diffspec shaders, or nothing.
         if (result.Detail is not null)

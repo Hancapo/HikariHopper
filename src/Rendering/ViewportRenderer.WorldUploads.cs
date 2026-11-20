@@ -100,10 +100,10 @@ internal sealed unsafe partial class ViewportRenderer
                 }
                 // A big level a few rows at a time, a write at most ChunkBytes (a row at least).
                 int rows = (int)Math.Max(1, ChunkBytes / Math.Max(1, RowBytes(texture, pending.Level)));
-                var (written, done) = WriteRows(texture, pending.GpuTexture, pending.Block, pending.Level, pending.Row, rows);
+                var (written, done, wrote) = WriteRows(texture, pending.GpuTexture, pending.Block, pending.Level, pending.Row, rows);
                 bytes += Math.Max(1, written);
                 writes++;
-                pending.Row += rows;
+                pending.Row += wrote;
                 if (done)
                     (pending.Level, pending.Row) = (pending.Level + 1, 0);
                 if (pending.Level == texture.MipCount)
@@ -218,7 +218,7 @@ internal sealed unsafe partial class ViewportRenderer
             AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
                 : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
             uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
-                material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family));
+                material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family, rdr2 is null && material.NightOnly));
         }
         // RedFury's depth runs: adjacent casters of a level, one draw each.
         foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
@@ -229,7 +229,7 @@ internal sealed unsafe partial class ViewportRenderer
             else
                 uploaded.DepthRuns.Add(new WorldDepthRun(mesh.Level, mesh.Part.FirstIndex, mesh.Part.IndexCount));
         }
-        uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.Mode == AlphaMode.Mask);
+        uploaded.CastsShadows = uploaded.Meshes.Exists(mesh => mesh.Caster || mesh.MaskedCaster);
     }
 
     /// <summary>Lets go of the asset on its way up, and what it put up that nothing else uses.</summary>

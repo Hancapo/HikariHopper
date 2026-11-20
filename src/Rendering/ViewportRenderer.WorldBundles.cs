@@ -435,7 +435,7 @@ internal sealed unsafe partial class ViewportRenderer
             RenderPipeline? pipeline;
             if (shadow)
             {
-                if (mesh.Mode != AlphaMode.Mask || worldMaskedShadow[family] is null)
+                if (!mesh.MaskedCaster || worldMaskedShadow[family] is null)
                     continue;
                 pipeline = worldMaskedShadow[family];
             }

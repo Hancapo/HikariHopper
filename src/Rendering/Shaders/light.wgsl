@@ -27,7 +27,8 @@ struct Light {
     filmic_bright1: vec4f,
     filmic_dark0: vec4f,
     filmic_dark1: vec4f,
-    // The reflection map's mip count (gReflectionMipCount), in x.
+    // The reflection map's mip count (gReflectionMipCount), in x; the day/night balance (globalScalars2.y: nought by
+    // day, one while the night emissives are on, NightEmissives.cs), in y.
     reflection: vec4f,
     // From origin-relative positions to each of the shadow's cascades' clip space (ViewportRenderer.FitCascades).
     shadow: array<mat4x4f, 4>,

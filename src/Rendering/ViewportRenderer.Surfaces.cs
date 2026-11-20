@@ -77,6 +77,8 @@ internal sealed unsafe partial class ViewportRenderer
     });
     private Sampler? paletteSampler;
     private TextureView? white;
+    // What a _reflect shader reads where it has no environment of its kind: nothing, as a sphere map and as a cube.
+    private TextureView? noEnvironment, noEnvironmentCube;
     private TextureView? missing;
     private TextureView? flat;
     // A missing second diffuse layer lays nothing over the paint.
@@ -93,6 +95,8 @@ internal sealed unsafe partial class ViewportRenderer
     private (SurfacePart Part, BindGroup Material, AlphaMode Mode, PartKind Kind, BindGroup? Fringe, bool Culled)[] surfaceParts = [];
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
+    // Which are night-only geometry (SurfaceMaterial.NightOnly), cast into the shadow only by night.
+    private bool[] partNightOnly = [];
     private readonly List<Buffer> materialBuffers = [];
     // Each material's uniforms, and hair's second pass's, by material: what an edit of its values writes to.
     private Buffer[] materialUniforms = [];
@@ -127,8 +131,15 @@ internal sealed unsafe partial class ViewportRenderer
                 },
                 new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
                 // A vehicle's dirt, its paint's ramp and its second diffuse layer; a _detail shader's detail map; a
-                // _pxm shader's height map; hair's noise map and mask.
-                Map(7), Map(8), Map(9), Map(10), Map(11), Map(12), Map(13),
+                // _pxm shader's height map; hair's noise map and mask; a _reflect shader's environment, a sphere map
+                // or a cube.
+                Map(7), Map(8), Map(9), Map(10), Map(11), Map(12), Map(13), Map(14),
+                new BindGroupLayoutEntry
+                {
+                    Binding = 15,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.Cube },
+                },
             ],
         });
         // Terrain: its four layers' diffuse and bump maps, the lookup map, the tint palette and the layers' height maps.
@@ -304,6 +315,8 @@ internal sealed unsafe partial class ViewportRenderer
         missing = Checker();
         flat = Solid(128, 128, 255, 255);
         clear = Solid(0, 0, 0, 0);
+        noEnvironment = Solid(0, 0, 0, 255);
+        noEnvironmentCube = SolidCube(0, 0, 0, 255);
 
         // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
         // their material (shadow.wgsl).
@@ -387,6 +400,7 @@ internal sealed unsafe partial class ViewportRenderer
             return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
+        partNightOnly = [.. drawable.Parts.Select(part => drawable.Materials[part.Material].NightOnly)];
         partRdr2 = [.. surfaceParts.Select(p => p.Kind == PartKind.Rdr2 ? drawable.Materials[p.Part.Material].Rdr2 : null)];
         shownMaterials = drawable.Materials;
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
@@ -451,6 +465,7 @@ internal sealed unsafe partial class ViewportRenderer
         shadowRadius = 0;
         surfaceParts = [];
         partsShown = [];
+        partNightOnly = [];
         partRdr2 = [];
         partsPicked = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
@@ -489,6 +504,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 11, TextureView = View(material.Height) ?? white! },
                 new BindGroupEntry { Binding = 12, TextureView = View(material.HairNoise) ?? white! },
                 new BindGroupEntry { Binding = 13, TextureView = View(material.DiffuseMask) ?? white! },
+                new BindGroupEntry { Binding = 14, TextureView = (material.Reflection == EnvironmentKind.Sphere ? View(material.Environment) : null) ?? noEnvironment! },
+                new BindGroupEntry { Binding = 15, TextureView = (material.Reflection == EnvironmentKind.Cube ? CubeView(material.Environment) : null) ?? noEnvironmentCube! },
             ],
         });
     }
@@ -676,8 +693,46 @@ internal sealed unsafe partial class ViewportRenderer
         return texture.CreateView();
     }
 
-    /// <summary>A game texture on the GPU, uploaded once per scene; null when its format or shape can't be drawn.</summary>
-    private TextureView? View(GameTexture? texture)
+    // One colour on each face of a cube.
+    private TextureView SolidCube(byte r, byte g, byte b, byte a)
+    {
+        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D(1, 1, 6),
+            Format = TextureFormat.RGBA8Unorm,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        var copy = new TexelCopyTextureInfo { Texture = texture, Aspect = TextureAspect.All };
+        var layout = new TexelCopyBufferLayout { BytesPerRow = 4, RowsPerImage = 1 };
+        queue.WriteTexture(copy, (ReadOnlySpan<byte>)[r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a], layout, new Extent3D(1, 1, 6));
+        return ShapedView(texture);
+    }
+
+    /// <summary>A game texture's GPU texture viewed as the shaders read it: a cube's six layers as a cube.</summary>
+    private static TextureView ShapedView(WebGpuSharp.Texture texture) => texture.GetDepthOrArrayLayers() == 6
+        ? texture.CreateView(new TextureViewDescriptor
+        {
+            Format = texture.GetFormat(),
+            Dimension = TextureViewDimension.Cube,
+            MipLevelCount = texture.GetMipLevelCount(),
+            ArrayLayerCount = 6,
+            Aspect = TextureAspect.All,
+        })
+        : texture.CreateView();
+
+    /// <summary>
+    /// A game image on the GPU, uploaded once per scene; null when its format or shape can't be drawn, a cube among
+    /// them (<see cref="CubeView"/>).
+    /// </summary>
+    private TextureView? View(GameTexture? texture) => texture is { Shape.Dimension: CommonFury.Textures.TextureDimension.Cube } ? null : Uploaded(texture);
+
+    /// <summary>A game cube on the GPU, as <see cref="View"/> has an image; null for anything else.</summary>
+    private TextureView? CubeView(GameTexture? texture) => texture is { Shape.Dimension: CommonFury.Textures.TextureDimension.Cube } ? Uploaded(texture) : null;
+
+    private TextureView? Uploaded(GameTexture? texture)
     {
         if (texture is null)
             return null;
@@ -719,7 +774,9 @@ internal sealed unsafe partial class ViewportRenderer
             GameFormat.R8Unorm => (TextureFormat.R8Unorm, 1),
             _ => null,
         };
-        if (mapped is not var (format, block) || source.Shape.Dimension != CommonFury.Textures.TextureDimension.TwoD || source.Shape.ArraySize != 1
+        // A plain image, or a cube (a _cubemap_reflect shader's environment), its faces six layers.
+        bool cube = source.Shape.Dimension == CommonFury.Textures.TextureDimension.Cube && source.Width == source.Height;
+        if (mapped is not var (format, block) || source.Shape.Dimension != CommonFury.Textures.TextureDimension.TwoD && !cube || source.Shape.ArraySize != 1
             || source.Width <= 0 || source.Height <= 0 || source.Width % block != 0 || source.Height % block != 0 || (block > 1 && !compressedTextures))
             return null;
         // Viewable as sRGB too, where the format has a variant: RDR2's material reads its colours so.
@@ -728,7 +785,7 @@ internal sealed unsafe partial class ViewportRenderer
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
-            Size = new Extent3D((uint)source.Width, (uint)source.Height, 1),
+            Size = new Extent3D((uint)source.Width, (uint)source.Height, cube ? 6u : 1u),
             Format = format,
             MipLevelCount = (uint)source.MipCount,
             SampleCount = 1,
@@ -738,32 +795,45 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     /// <summary>One mip level of a game texture into its GPU texture; how many bytes that was.</summary>
-    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level) =>
-        WriteRows(source, texture, block, level, 0, int.MaxValue).Bytes;
+    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level)
+    {
+        long bytes = 0;
+        for (int first = 0; ;)
+        {
+            var (written, done, rows) = WriteRows(source, texture, block, level, first, int.MaxValue);
+            bytes += written;
+            first += rows;
+            if (done)
+                return bytes;
+        }
+    }
 
     /// <summary>
     /// Rows of one mip level (rows of blocks, for a compressed format) into its GPU texture, from <paramref name="first"/>
-    /// at most <paramref name="rows"/>: how many bytes that was, and whether the level is done.
+    /// at most <paramref name="rows"/>, within one face of a cube (its faces' rows one after another): how many bytes
+    /// that was, whether the level is done, and how many rows.
     /// </summary>
-    private (long Bytes, bool Done) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
+    private (long Bytes, bool Done, int Rows) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
     {
+        int faces = source.Shape.Faces;
         CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
         // A mip smaller than a block is still a whole block.
         uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
         int total = (int)height / block, pitch = part.Mip.RowPitch;
-        int count = Math.Min(rows, total - first);
+        int face = first / total, start = first % total;
+        int count = Math.Min(rows, total - start);
         var copy = new TexelCopyTextureInfo
         {
             Texture = texture,
             MipLevel = (uint)level,
-            Origin = new Origin3D(0, (uint)(first * block), 0),
+            Origin = new Origin3D(0, (uint)(start * block), (uint)face),
             Aspect = TextureAspect.All,
         };
         var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)pitch, RowsPerImage = (uint)count };
         var size = new Extent3D(width, (uint)(count * block), 1);
-        ReadOnlySpan<byte> data = source.GetEncodedSlice(level).Slice(first * pitch, count * pitch);
+        ReadOnlySpan<byte> data = source.GetEncodedSlice(level, 0, face).Slice(start * pitch, count * pitch);
         queue.WriteTexture(copy, data, layout, size);
-        return (data.Length, first + count == total);
+        return (data.Length, first + count == total * faces, count);
     }
 
     /// <summary>The bytes a row of a game texture's mip level holds (a row of blocks, for a compressed format).</summary>
@@ -774,6 +844,6 @@ internal sealed unsafe partial class ViewportRenderer
     {
         uploaded.Add(texture);
         uploadedOf[source] = texture;
-        return texture.CreateView();
+        return ShapedView(texture);
     }
 }

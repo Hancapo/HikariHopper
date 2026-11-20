@@ -540,8 +540,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
             {
                 if (GameTimecycle.ForGame(game) is { } timecycle)
                     Rendering.Timecycle.Use(timecycle);
-                if (GameVisualSettings.Read(game) is { } visuals)
+                GameVisualSettings? visuals = GameVisualSettings.Read(game);
+                if (visuals is not null)
                     Rendering.Timecycle.UseVisuals(visuals);
+                // When its night emissives are on, from its visualsettings.dat; one that can't be read, the code's defaults.
+                Rendering.NightEmissives.Use(visuals);
             });
         }
         // Red Dead Redemption 2's: where its models' textures are, a few seconds from nothing, a moment from the cache.
