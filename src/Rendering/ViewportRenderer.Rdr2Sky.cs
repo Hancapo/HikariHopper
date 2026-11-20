@@ -25,12 +25,18 @@ internal sealed unsafe partial class ViewportRenderer
     /// </summary>
     private sealed record Rdr2SkyResources(Rdr2Sky Sky, WebGpuSharp.Texture Transmittance, WebGpuSharp.Texture Delta, WebGpuSharp.Texture Gathered,
         WebGpuSharp.Texture[] Totals, BindGroup[] Passes, BindGroup[] Domes, Buffer Tables, Buffer Dome, Buffer Vertices, Buffer Indices,
-        uint IndexCount, WebGpuSharp.Texture[] Textures);
+        uint IndexCount, WebGpuSharp.Texture[] Textures, Buffer Light);
+
+    // The sky's light on the world: the key light's illuminance and the ambient cube's six faces (rdr2_sky.wgsl).
+    private const int Rdr2SkyLightBytes = 7 * 16;
 
     private Rdr2SkyResources? rdr2Sky;
     private BindGroupLayout? rdr2TransmittanceLayout, rdr2SingleLayout, rdr2GatherLayout, rdr2OrderLayout, rdr2AccumulateLayout, rdr2DomeLayout;
     private ComputePipeline? rdr2TransmittancePipeline, rdr2SinglePipeline, rdr2GatherPipeline, rdr2OrderPipeline, rdr2AccumulatePipeline;
     private RenderPipeline? rdr2DomePipeline;
+    private ComputePipeline? rdr2SkyLightPipeline;
+    private BindGroupLayout? rdr2NothingLayout;
+    private BindGroup? rdr2Nothing;
     private Sampler? rdr2Sampler, rdr2Wrap;
     private readonly Vector4[] rdr2Values = new Vector4[Rdr2Sky.Vectors], rdr2Built = new Vector4[Rdr2Sky.Vectors];
     private bool rdr2TablesBuilt;
@@ -40,8 +46,33 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>Whether an RDR2 world's sky is shown behind it.</summary>
     public bool HasRdr2Sky => rdr2Sky is not null;
 
+    /// <summary>
+    /// How an RDR2 world shown with its sky is exposed and tone-mapped at this hour, as the game does, in its own units;
+    /// null otherwise.
+    /// </summary>
+    internal Rdr2Exposure? Rdr2WorldExposure => worldShown && rdr2Sky is { } sky ? sky.Sky.Exposure(Hours) : null;
+
     /// <summary>How many times the sky's tables have been built; for tests.</summary>
     internal int Rdr2SkyBuilds { get; private set; }
+
+    /// <summary>
+    /// The sky's light on the world as last worked out (the key light's illuminance, then the ambient cube's faces), read
+    /// back, for tests; none without the sky.
+    /// </summary>
+    internal Vector4[] Rdr2SkyLight()
+    {
+        if (rdr2Sky is not { } sky)
+            return [];
+        Buffer readback = device.CreateBuffer(new BufferDescriptor { Size = Rdr2SkyLightBytes, Usage = BufferUsage.CopyDst | BufferUsage.MapRead });
+        CommandEncoder encoder = device.CreateCommandEncoder();
+        encoder.CopyBufferToBuffer(sky.Light, 0, readback, 0, Rdr2SkyLightBytes);
+        queue.Submit(encoder.Finish());
+        readback.MapSync(MapMode.Read);
+        Vector4[] values = readback.GetConstMappedRange<Vector4[], Vector4>(0, 7, span => span.ToArray());
+        readback.Unmap();
+        readback.Destroy();
+        return values;
+    }
 
     private void CreateRdr2SkyPipelines()
     {
@@ -75,10 +106,18 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2OrderLayout = rdr2GatherLayout;
         rdr2AccumulateLayout = Layout(Constants(0, Compute), Table(3, TextureViewDimension.D3, Compute), Table(4, TextureViewDimension.D3, Compute),
             Output(6, TextureViewDimension.D3));
-        const ShaderStage Fragment = ShaderStage.Fragment;
+        // The dome's, which its light's pass reads too.
+        const ShaderStage Fragment = ShaderStage.Fragment | ShaderStage.Compute;
         rdr2DomeLayout = Layout(Constants(0, ShaderStage.Vertex | Fragment, Rdr2Sky.Bytes), Filtering(1, Fragment), Table(2, TextureViewDimension.D2, Fragment),
             Table(3, TextureViewDimension.D3, Fragment), Filtering(4, Fragment), Table(5, TextureViewDimension.D2, Fragment),
-            Table(6, TextureViewDimension.D2, Fragment), Table(7, TextureViewDimension.D2, Fragment));
+            Table(6, TextureViewDimension.D2, Fragment), Table(7, TextureViewDimension.D2, Fragment), new BindGroupLayoutEntry
+            {
+                Binding = 8,
+                Visibility = ShaderStage.Compute,
+                Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage, MinBindingSize = Rdr2SkyLightBytes },
+            });
+        rdr2NothingLayout = Layout();
+        rdr2Nothing = device.CreateBindGroup(new BindGroupDescriptor { Layout = rdr2NothingLayout, Entries = [] });
 
         Lazy<ShaderModule> tables = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
@@ -97,6 +136,11 @@ internal sealed unsafe partial class ViewportRenderer
         Lazy<ShaderModule> dome = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
             Code = Read("scene.wgsl") + "\n" + Read("rdr2_atmosphere.wgsl") + "\n" + Read("rdr2_sky.wgsl"),
+        }));
+        rdr2SkyLightPipeline = gpu.Compute("rdr2-sky/light", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
+        {
+            Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [rdr2NothingLayout, rdr2DomeLayout] }),
+            Compute = new ComputeState { Module = dome.Value, EntryPoint = "cs_rdr2_sky_light" },
         }));
         rdr2DomePipeline = gpu.Pipeline("rdr2-sky/dome", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
@@ -207,11 +251,13 @@ internal sealed unsafe partial class ViewportRenderer
         TextureView stars = Own(shape.Stars), airGlow = Own(shape.AirGlow), moon = Own(shape.Moon);
         Buffer vertices = Upload((ReadOnlySpan<float>)shape.Vertices, sizeof(float));
         Buffer indices = Upload((ReadOnlySpan<uint>)shape.Indices, sizeof(uint), BufferUsage.Index);
+        Buffer light = device.CreateBuffer(new BufferDescriptor { Size = Rdr2SkyLightBytes, Usage = BufferUsage.Storage | BufferUsage.CopySrc });
         BindGroup Dome(TextureView total) => Group(rdr2DomeLayout!, Uniform(dome, Rdr2Sky.Bytes), Sampling(), View(2, transmittanceView),
-            View(3, total), new BindGroupEntry { Binding = 4, Sampler = rdr2Wrap }, View(5, stars), View(6, airGlow), View(7, moon));
+            View(3, total), new BindGroupEntry { Binding = 4, Sampler = rdr2Wrap }, View(5, stars), View(6, airGlow), View(7, moon),
+            new BindGroupEntry { Binding = 8, Buffer = light, Size = Rdr2SkyLightBytes });
         BindGroup[] domes = [Dome(totalViews[0]), Dome(totalViews[1])];
         rdr2Sky = new Rdr2SkyResources(sky, transmittance, delta, gathered, totals, passes, domes, tables, dome, vertices, indices,
-            (uint)shape.Indices.Length, [.. owned]);
+            (uint)shape.Indices.Length, [.. owned], light);
         rdr2TablesBuilt = false;
     }
 
@@ -223,8 +269,11 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2Sky = null;
         foreach (WebGpuSharp.Texture texture in (ReadOnlySpan<WebGpuSharp.Texture>)[sky.Transmittance, sky.Delta, sky.Gathered, .. sky.Totals, .. sky.Textures])
             texture.Destroy();
-        foreach (Buffer buffer in (ReadOnlySpan<Buffer>)[sky.Tables, sky.Dome, sky.Vertices, sky.Indices])
+        foreach (Buffer buffer in (ReadOnlySpan<Buffer>)[sky.Tables, sky.Dome, sky.Vertices, sky.Indices, sky.Light])
             buffer.Destroy();
+        // The world's lit by the viewer's light again.
+        if (lightBuffer is not null)
+            queue.WriteBuffer(lightBuffer, LightWrittenBytes, (ReadOnlySpan<byte>)new byte[Rdr2SkyLightBytes]);
     }
 
     /// <summary>
@@ -235,11 +284,25 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (!worldShown || rdr2Sky is not { } sky)
             return false;
-        sky.Sky.Write(rdr2Values, Hours, DayCycle.SunDirection(Hours, Sky), DayCycle.MoonDirection(Hours, Sky), cycle.NaturalDown,
+        sky.Sky.Write(rdr2Values, Hours, DayCycle.SunDirection(Hours, Sky), DayCycle.MoonDirection(Hours, Sky), key.Sun, Camera.Eye,
             waterClock.Elapsed.TotalSeconds);
         queue.WriteBuffer(sky.Dome, 0, (ReadOnlySpan<Vector4>)rdr2Values);
-        if (rdr2TablesBuilt && Rdr2Sky.SameTables(rdr2Values, rdr2Built))
-            return true;
+        if (!rdr2TablesBuilt || !Rdr2Sky.SameTables(rdr2Values, rdr2Built))
+            BuildRdr2SkyTables(encoder, sky);
+        // The sky's light on the world, from the tables, into the light the world's drawn with.
+        ComputePassEncoder light = encoder.BeginComputePass();
+        light.SetPipeline(rdr2SkyLightPipeline!);
+        light.SetBindGroup(0, rdr2Nothing!);
+        light.SetBindGroup(1, sky.Domes[rdr2Total]);
+        light.DispatchWorkgroups(1, 1, 1);
+        light.End();
+        encoder.CopyBufferToBuffer(sky.Light, 0, lightBuffer!, LightWrittenBytes, Rdr2SkyLightBytes);
+        return true;
+    }
+
+    // The tables, built again for the air they're now made for.
+    private void BuildRdr2SkyTables(CommandEncoder encoder, Rdr2SkyResources sky)
+    {
         rdr2Values.CopyTo(rdr2Built.AsSpan());
         rdr2TablesBuilt = true;
         Rdr2SkyBuilds++;
@@ -272,7 +335,6 @@ internal sealed unsafe partial class ViewportRenderer
         }
         pass.End();
         rdr2Total = total;
-        return true;
 
         static void DispatchScattering(ComputePassEncoder pass) => pass.DispatchWorkgroups(Groups(Rdr2ScatteringSize.Width, 4),
             Groups(Rdr2ScatteringSize.Height, 4), Groups(Rdr2ScatteringSize.DepthOrArrayLayers, 4));

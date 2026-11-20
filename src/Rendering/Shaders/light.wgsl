@@ -51,6 +51,11 @@ struct Light {
     // The water's: seconds since the view began (its ripples' time), the timecycle's water_foglight, and the frame's
     // near plane (depth is near over distance); then the level of detail fades' clock (lod_fade_keeps).
     water: vec4f,
+    // Red Dead Redemption 2's sky's light on its world, in its own units, written each frame on the GPU
+    // (rdr2_sky.wgsl's cs_rdr2_sky_light): the key light's illuminance, with one in w where it's given (none outside an
+    // RDR2 world with its sky); then its ambient cube (+x, -x, +z, +y, -y, -z), the irradiance over pi on what faces each.
+    rdr2_sun: vec4f,
+    rdr2_ambient: array<vec4f, 6>,
 };
 
 @group(2) @binding(0) var<uniform> light: Light;

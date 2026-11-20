@@ -12,7 +12,7 @@ internal sealed unsafe partial class ViewportRenderer
 {
     private const int MeasuredBytes = 16;
     private const uint LuminanceTile = 16;
-    private const int ExposureSettingsBytes = 64;
+    private const int ExposureSettingsBytes = 96;
 
     /// <summary>How many frames' times the exposure's easing averages, as the game's post-process does.</summary>
     internal const int AdaptationFrames = 30;
@@ -166,8 +166,9 @@ internal sealed unsafe partial class ViewportRenderer
     // sun the lens flare sees), the range, and how fast it eases.
     private void WriteExposureSettings()
     {
-        // GTA V's world, with its sky: an RDR2 world keeps the viewer's reference, as its own exposure isn't ported.
-        bool world = worldShown && HasWorldSky;
+        // A world with its sky, GTA V's or RDR2's, the latter with its own exposure.
+        Rdr2Exposure? rdr2 = Rdr2WorldExposure;
+        bool world = worldShown && (HasWorldSky || rdr2 is not null);
         float dt = AverageFrameSeconds();
         Vector3 eye = Camera.Eye;
         bool cut = lastExposureEye is { } last && Vector3.Distance(last, eye) > ExposureCutDistance;
@@ -176,11 +177,22 @@ internal sealed unsafe partial class ViewportRenderer
         bool reset = exposureReset || cut || !world || !exposureWasWorld;
         exposureWasWorld = world;
         exposureReset = false;
-        Span<Vector4> values = stackalloc Vector4[4];
-        values[0] = new Vector4(world ? 1 : 0, reset ? 1 : 0, dt, 0);
-        values[1] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure + SunExposurePush(reset));
-        values[2] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, 0, 0);
-        values[3] = new Vector4(toneMap.AdaptationStepMult, toneMap.AdaptationMaxStep, toneMap.AdaptationMinStep, 0);
+        Span<Vector4> values = stackalloc Vector4[6];
+        values[0] = new Vector4(world ? 1 : 0, reset ? 1 : 0, dt, rdr2 is null ? 0 : 1);
+        if (rdr2 is not null)
+        {
+            values[1] = rdr2.Curve;
+            values[2] = new Vector4(rdr2.Min, rdr2.Max, 0, 0);
+            values[3] = new Vector4(rdr2.StepMult, rdr2.MaxStep, rdr2.MinStep, rdr2.Threshold);
+            values[4] = rdr2.BlendCurve;
+            values[5] = new Vector4(rdr2.BlendWeight, rdr2.Tweak + Exposure, 0, 0);
+        }
+        else
+        {
+            values[1] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure + SunExposurePush(reset));
+            values[2] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, 0, 0);
+            values[3] = new Vector4(toneMap.AdaptationStepMult, toneMap.AdaptationMaxStep, toneMap.AdaptationMinStep, 0);
+        }
         queue.WriteBuffer(exposureSettings!, 0, (ReadOnlySpan<Vector4>)values);
     }
 
