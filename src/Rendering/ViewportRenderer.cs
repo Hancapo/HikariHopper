@@ -467,6 +467,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         {
             DrawSceneReflections(encoder);
             bool sky = DrawWorldSkyNoise(encoder);
+            bool rdr2 = !sky && PrepareRdr2Sky(encoder);
             RenderPassEncoder hdrPass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments = HdrAttachments(clear: true),
@@ -484,6 +485,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             // A world's sky first, behind it: the frame is then covered.
             if (sky)
                 DrawWorldSky(hdrPass);
+            else if (rdr2)
+                DrawRdr2Sky(hdrPass);
             if (drawable)
                 hdrPass = DrawSurfaces(hdrPass, encoder: encoder);
             if (worldShown)

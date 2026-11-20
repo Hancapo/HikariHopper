@@ -1,0 +1,166 @@
+using System.Globalization;
+using System.Numerics;
+using System.Text;
+using HikariHopper.Core;
+using HikariHopper.Rendering;
+
+namespace HikariHopper.Tests;
+
+// RDR2's sky behind its world: its air worked out from the weather and visualsettings.dat as the game works it out, and a
+// frame with it, its tables built once for each air.
+[Collection(ExplorerCollection.Name)]
+public sealed class Rdr2SkyTests
+{
+    // A weather with every keyframe the same but where a field is given as several.
+    private static string Weather(params (string Field, float[] Values)[] fields) => $"""
+        <?xml version="1.0" encoding="utf-8"?>
+        <timecycle_keyframe_data version="2.000000">
+          <cycle name="HIGHPRESSURE" description="" regions="2">
+            <region name="GLOBAL">
+        {string.Join("\n", fields.Select(f => $"      <{f.Field}>{string.Join(' ', (f.Values.Length == 1 ? Enumerable.Repeat(f.Values[0], 13) : f.Values).Select(v => v.ToString(CultureInfo.InvariantCulture)))}</{f.Field}>"))}
+            </region>
+            <region name="URBAN">
+              <sky_scattering_red_wavelength>1 1 1 1 1 1 1 1 1 1 1 1 1</sky_scattering_red_wavelength>
+            </region>
+          </cycle>
+        </timecycle_keyframe_data>
+        """;
+
+    private const string Visuals = """
+        #Config for static values for skyhat
+        sky.MultipleScattering 0.5
+        sky.SunIntensity 100000.0
+        sky.MoonIntensity 1.0
+        sky.AltitudeRemapFactor 1.0
+        sky.AtmosphereThickness 8.0
+        """;
+
+    private static Rdr2Sky Sky(params (string Field, float[] Values)[] fields)
+    {
+        var files = new Dictionary<string, byte[]>
+        {
+            [Rdr2Sky.Weather] = [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(Weather(fields))],
+            [Rdr2Sky.VisualSettingsPath] = Encoding.UTF8.GetBytes(Visuals),
+        };
+        return Rdr2Sky.Read(files.GetValueOrDefault) ?? throw new InvalidOperationException("no sky");
+    }
+
+    [Fact]
+    public void The_air_is_worked_out_from_the_weather_as_the_game_works_it_out()
+    {
+        Rdr2Sky sky = Sky(("sky_scattering_red_wavelength", [680]), ("sky_scattering_green_wavelength", [550]), ("sky_scattering_blue_wavelength", [440]),
+            ("sky_scattering_molecule_desnity_scaler", [1.5f]), ("sky_scattering_aerosol_density_scale", [.5f]), ("sky_scattering_aerosol_absorption_scale", [.25f]),
+            ("sky_scattering_aerosol_height", [1.2f]), ("sky_scattering_ozone_concentration", [.3f]), ("sky_scattering_mie_scatter", [.9f]),
+            ("sky_scattering_mie_intensity", [.75f]), ("sky_scattering_sun_intensity_multiplier", [.5f]), ("sky_scattering_moon_intensity_multiplier", [.2f]),
+            ("sky_scattering_sky_col_r", [.5f]), ("sky_scattering_sun_col_b", [.25f]), ("sky_scattering_multiple_scattering_intensity", [.8f]));
+        var values = new Vector4[Rdr2Sky.Vectors];
+        sky.Write(values, 12, Vector3.UnitZ, new Vector3(2));
+        // The Rayleigh scattering a metre over the wavelength's fourth power and the molecules; the aerosols' extinction.
+        Assert.Equal(1169939.4332487835 / (Math.Pow(680, 4) * 1.5), values[1].X, 1e-12);
+        Assert.Equal(1169939.4332487835 / (Math.Pow(440, 4) * 1.5), values[1].Z, 1e-12);
+        Assert.True(values[1].Z > values[1].Y && values[1].Y > values[1].X);
+        Assert.Equal(.5f * 4e-6f * 1.25f, values[1].W, 1e-12);
+        Assert.Equal(Rdr2Sky.OzoneAt(550) * .3 * 3.054e15, values[2].Y, 1e-9);
+        // The scale heights in metres, the altitude bias the game's default.
+        Assert.Equal(new Vector4(1, 8000, 1200, 10), values[0]);
+        // The sun's light by its intensity, and the sky clamped to the sun's and the moon's.
+        Assert.Equal(new Vector3(.5f, 1, 1) * 50000, new Vector3(values[3].X, values[3].Y, values[3].Z));
+        Assert.Equal(50000.2f, values[3].W, 2);
+        Assert.Equal(.25f * 50000, values[4].Z);
+        // Cornette-Shanks for the Mie scattering, with its intensity.
+        Assert.Equal(3 / (8 * MathF.PI) * (1 - .81f) / (2 + .81f), values[5].X, 6);
+        Assert.Equal(new Vector3(-1.8f, 1.81f, .75f), new Vector3(values[5].Y, values[5].Z, values[5].W));
+        Assert.Equal(Vector3.UnitZ, new Vector3(values[6].X, values[6].Y, values[6].Z));
+        // Each later order by the timecycle's intensity times visualsettings.dat's.
+        Assert.Equal(.4f, values[8].X, 6);
+        // Into the viewer's light: pi times its directional light over the sky's.
+        Assert.Equal(MathF.PI * 2 / 50000.2f, values[7].W, 8);
+    }
+
+    [Fact]
+    public void Fields_follow_the_keyframes_and_only_the_air_rebuilds_the_tables()
+    {
+        Rdr2Sky sky = Sky(("sky_scattering_sun_intensity_multiplier", [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]),
+            ("sky_scattering_aerosol_density_scale", [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2]));
+        Vector4[] noon = new Vector4[Rdr2Sky.Vectors], night = new Vector4[Rdr2Sky.Vectors], late = new Vector4[Rdr2Sky.Vectors];
+        sky.Write(noon, 14, Vector3.UnitZ, Vector3.One);
+        sky.Write(night, 2, -Vector3.UnitZ, Vector3.One);
+        sky.Write(late, 23, -Vector3.UnitZ, Vector3.One);
+        Assert.Equal(100000, noon[3].X);
+        Assert.Equal(0, night[3].X);
+        Assert.True(Rdr2Sky.SameTables(noon, night));
+        Assert.False(Rdr2Sky.SameTables(noon, late));
+        Assert.True(late[1].W > noon[1].W);
+    }
+
+    [Fact]
+    public void Ozone_cross_sections_are_the_games_between_its_nanometres()
+    {
+        double below = Rdr2Sky.OzoneAt(550), above = Rdr2Sky.OzoneAt(551);
+        Assert.InRange(below, 1e-21, 1e-20);
+        Assert.Equal((below + above) / 2, Rdr2Sky.OzoneAt(550.5f), 1e-30);
+        Assert.Equal(Rdr2Sky.OzoneAt(214), Rdr2Sky.OzoneAt(100));
+    }
+
+    [Fact]
+    public void A_game_without_its_weather_has_no_sky() =>
+        Assert.Null(Rdr2Sky.Read(_ => null));
+
+    [Fact]
+    public void An_RDR2_worlds_sky_is_drawn_behind_it_with_no_GPU_errors_its_tables_built_once_for_each_air()
+    {
+        Rdr2Sky sky = Sky(("sky_scattering_aerosol_density_scale", [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2]));
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            const int Width = 64, Height = 32;
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            renderer.Resize(Width, Height);
+            renderer.WorldShown = true;
+            renderer.Camera.Frame(new Vector3(0, 0, 100), 20);
+            renderer.Camera.Free = true;
+            // Looking up, away from the sun.
+            Vector3 sun = DayCycle.SunDirection(12);
+            renderer.Camera.Place(new Vector3(0, 0, 100), MathF.Atan2(sun.Y, sun.X), -.6f);
+            renderer.SetTime(12);
+            uint Middle()
+            {
+                renderer.RenderTo(target.CreateView());
+                return GtaSkyTests.Pixel(gpu, target, Width / 2, 2);
+            }
+            uint backdrop = Middle();
+            renderer.ShowRdr2Sky(sky);
+            Assert.True(renderer.HasRdr2Sky);
+            Assert.False(renderer.HasWorldSky);
+            uint day = Middle();
+            Middle();
+            Assert.Equal(1, renderer.Rdr2SkyBuilds);
+            // The sky's blue: more blue than red (the frame's BGRA).
+            Assert.True((day & 0xFF) > ((day >> 16) & 0xFF), $"{day:X8}");
+            Assert.NotEqual(backdrop, day);
+            // The sun lower, the same air: the tables stay; other air: they're built again.
+            renderer.SetTime(15);
+            Middle();
+            Assert.Equal(1, renderer.Rdr2SkyBuilds);
+            renderer.SetTime(23);
+            Middle();
+            Assert.Equal(2, renderer.Rdr2SkyBuilds);
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.ClearWorld();
+            Assert.False(renderer.HasRdr2Sky);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+}
