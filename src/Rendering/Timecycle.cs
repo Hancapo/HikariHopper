@@ -116,8 +116,11 @@ internal static class Timecycle
     }
 
     /// <summary>One field of the timecycle between two keyframes.</summary>
-    internal static float Field(string name, int index, int next, float t) =>
-        Values.TryGetValue(name, out float[]? keyframes) ? float.Lerp(keyframes[index], keyframes[next], t) : 0;
+    internal static float Field(string name, int index, int next, float t) => Field(name, index, next, t, 0);
+
+    /// <summary>One field of the timecycle between two keyframes, or <paramref name="fallback"/> where it hasn't the field.</summary>
+    internal static float Field(string name, int index, int next, float t, float fallback) =>
+        Values.TryGetValue(name, out float[]? keyframes) ? float.Lerp(keyframes[index], keyframes[next], t) : fallback;
 
     /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
     internal static TimecycleLight Evaluate(float hours)
@@ -220,6 +223,9 @@ internal static class Timecycle
 internal readonly record struct TimecycleSample(int Index, int Next, float T)
 {
     internal float Get(string name) => Timecycle.Field(name, Index, Next, T);
+
+    /// <summary>A field, or the default the game's code gives it (its variable table) where the timecycle hasn't it.</summary>
+    internal float Get(string name, float fallback) => Timecycle.Field(name, Index, Next, T, fallback);
 
     /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
     internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));

@@ -172,6 +172,12 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// for now) or whose files don't have it. On any thread.
     /// </summary>
     public virtual Rendering.GtaSkyDome? LoadSky() => null;
+
+    /// <summary>
+    /// The lens flare the game draws over its world when the sun's in view, read from its files; null for a world
+    /// without one (RDR2's, for now) or whose files don't have it. On any thread.
+    /// </summary>
+    public virtual Rendering.GtaLensFlare? LoadLensFlare() => null;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>

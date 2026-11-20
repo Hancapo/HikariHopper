@@ -310,6 +310,36 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
     }
 
+    /// <summary>
+    /// The sun's lens flare as the game loads it: Michael's settings (<c>common:/data/lensflare_m.xml</c>, the
+    /// game's first, which it starts with) and its textures from <c>platform:/textures/graphics.ytd</c>, the update's
+    /// over the base game's; visualsettings.dat's lensflare settings with them.
+    /// </summary>
+    public override GtaLensFlare? LoadLensFlare()
+    {
+        lock (Gate)
+            return ReadLensFlare(Game.FileSystem, visuals);
+    }
+
+    /// <summary>The sun's lens flare (<see cref="LoadLensFlare"/>) from a game's files, with its visualsettings.dat's settings.</summary>
+    internal static GtaLensFlare? ReadLensFlare(GameFileSystem files, GameVisualSettings? visuals)
+    {
+        try
+        {
+            byte[]? settings = files.Resolve("common:/data/lensflare_m.xml").Value?.ReadStandalone();
+            byte[]? textures = files.Resolve("platform:/textures/graphics.ytd", GameFileType.Ytd).Value?.ReadStandalone();
+            if (settings is null)
+                return null;
+            return new GtaLensFlare(GtaLensFlareSettings.Parse(System.Text.Encoding.UTF8.GetString(settings)), GtaLensFlareVisuals.From(visuals),
+                GtaLensFlare.TexturesFrom(textures is null ? null : FiveFury.Ytd.Ytd.Read(textures).Dictionary));
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+            or OverflowException or System.Xml.XmlException)
+        {
+            return null;
+        }
+    }
+
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => ExpandGrass;
 
     // The maps grass was read from lately, by name hash: neighbouring batches are in the same map.
