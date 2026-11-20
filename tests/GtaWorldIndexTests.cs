@@ -93,6 +93,11 @@ public sealed class GtaWorldIndexTests : IDisposable
             Assert.Equal("bh1_48", index.NameOf(interiorLod.Id.Map));
             Assert.Equal(index.Lod.Nodes.Count(node => node.Parent == interiorLod.Id), interiorLod.ExpectedChildren);
             Assert.True(armchair.Distance <= 45);
+            // An interior whose room only looks out leaves it out: the psychiatrist's office at Vespucci, a set with its
+            // own view of the beach and the streets around (v_65_main_ext*, hundreds of metres across), drawn over the
+            // beach itself before.
+            uint[] standIns = [.. new[] { "v_65_main_ext", "v_65_main_ext2", "v_65_main_ext3_build" }.Select(name => new CommonFury.Hashing.Hash32(name).Value)];
+            Assert.DoesNotContain(index.Lod.Nodes, node => standIns.Contains(node.Asset.Hash));
             // The menu says where it is in its interior, not the placing map's entity of its number; a map's own entity
             // is that.
             Assert.Matches(@"^interior entity \d+$", index.PlacementDetail(armchair));
