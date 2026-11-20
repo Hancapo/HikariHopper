@@ -586,10 +586,12 @@ internal sealed unsafe partial class ViewportRenderer
         return device.CreateBindGroup(new BindGroupDescriptor { Layout = terrainLayout!, Entries = [.. entries] });
     }
 
-    private void DrawSurfaces(RenderPassEncoder pass, bool reflected = false)
+    // In the main view (with the frame's encoder), the pass goes on after RDR2's sub-sampled cut-outs are put together,
+    // between what's solid and what blends; the pass to go on with is returned.
+    private RenderPassEncoder DrawSurfaces(RenderPassEncoder pass, bool reflected = false, CommandEncoder? encoder = null)
     {
         if (surfaceVertices is null || surfaceIndices is null || surfaceParts.Length == 0)
-            return;
+            return pass;
         pass.SetVertexBuffer(0, surfaceVertices);
         pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
         // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides, but for the
@@ -614,6 +616,12 @@ internal sealed unsafe partial class ViewportRenderer
                 pass.DrawIndexed(part.IndexCount, kind == PartKind.Fur ? FurShells : 1, part.FirstIndex, part.BaseVertex, 0);
             }
         }
+        if (encoder is { } frame && SurfacesSubSampled())
+        {
+            pass = CombineSubSampledAlpha(pass, frame);
+            pass.SetVertexBuffer(0, surfaceVertices);
+            pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
+        }
         // Then what blends, furthest first: blended parts, and hair's second pass, which keeps the depth its first wrote
         // where it is solid and blends the rest in by its alpha, so hair covers a pixel as much as its alpha says, as the
         // game's noise-dropped hair does once its TAA has averaged it.
@@ -630,6 +638,7 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
+        return pass;
     }
 
     // Whether a part's model is drawn into the main view, or into the reflection map, by its render mask.

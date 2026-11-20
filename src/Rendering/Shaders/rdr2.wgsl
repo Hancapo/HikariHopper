@@ -37,6 +37,7 @@ fn vs_rdr2_paraboloid(vertex: Rdr2Vertex) -> MaterialVertexOutput {
 @fragment
 fn fs_rdr2(input: MaterialVertexOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
     use_local_lights(input.position.xy, input.relative_position);
+    sub_sampled_view = true;
     return shade_material(input, front);
 }
 

@@ -15,6 +15,10 @@
     <Using Include="Avalonia.Headless.XUnit" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The rendering tests' own shaders, read with their file name. -->
+    <EmbeddedResource Include="Shaders/*.wgsl" LogicalName="HikariHopper.Tests.Shaders.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../src/HikariHopper.csproj" />
   </ItemGroup>
   <!-- The tests use the game libraries directly too, from the same place as the app. -->

@@ -1,5 +1,5 @@
 // Red Dead Redemption 2's cut-outs in the world's picking: their holes aren't them, what's behind is picked. Put after
-// world_pick.wgsl.
+// world_pick.wgsl and rdr2_cutout.wgsl.
 
 // The start of rdr2_material.wgsl's MaterialUniforms, as rdr2_world_shadow.wgsl reads it, for the cut-outs' test.
 struct Rdr2PickMaterial {
@@ -21,7 +21,7 @@ fn fs_world_pick_masked(input: PickOutput) -> @location(0) vec2u {
     if (((material.flags.w >> 3u) & 3u) == 2u) {
         alpha *= input.alpha;
     }
-    if (alpha < material.emission_alpha_layers.y) {
+    if (!rdr2_cutout_picks(alpha, material.flags.w, material.emission_alpha_layers.y)) {
         discard;
     }
     return vec2u(pick_asset.id.x, input.source);

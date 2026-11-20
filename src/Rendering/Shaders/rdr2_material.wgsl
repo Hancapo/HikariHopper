@@ -7,6 +7,7 @@
 //   - the vertex comes in the viewer's layout (rdr2.wgsl's entry points), positions relative to the scene's origin;
 //   - the sun's shadow is light.wgsl's cascades for every surface (no screen-space mask), with no screen-space occlusion;
 //   - no local lights, no aerial perspective, dry weather, no debug views;
+//   - cut-outs in the main view are drawn with the game's sub-sampled alpha (rdr2_cutout.wgsl);
 //   - water is drawn with the generic material, as RedFury draws a water shader it can't: its shading needs a copy of
 //     the scene behind it, which the viewer doesn't make yet.
 // The rest (layers, terrain blends, tints, dirt, decals, the PBR material decoding and BRDF) is RedFury's, unchanged.
@@ -767,6 +768,9 @@ fn alpha_tested_out(input: MaterialVertexOutput) -> bool {
     return material_albedo(input, vec3f(1.0)).albedo.a < material.emission_alpha_layers.y;
 }
 
+// Whether what's shaded goes to the main view, where cut-outs are sub-sampled: set by the view's entry points.
+var<private> sub_sampled_view: bool = false;
+
 fn shade_material(
     input: MaterialVertexOutput,
     front_facing: bool,
@@ -921,8 +925,17 @@ fn shade_material(
     if (debug_mode == 13u) {
         return vec4f(terrain_material_b.rgb, 1.0);
     }
-    if (alpha_mode == 1u && albedo.a < material.emission_alpha_layers.y) {
-        discard;
+    // Cut-outs in the main view with the game's sub-sampled alpha (rdr2_cutout.wgsl), elsewhere by the alpha test.
+    var sub_sample_mark = 1.0;
+    if (alpha_mode == 1u) {
+        if (sub_sampled_view && rdr2_sub_sampled(material.flags.w)) {
+            if (rdr2_sub_sample_drops(input.position.xy, albedo.a, material.flags.w)) {
+                discard;
+            }
+            sub_sample_mark = rdr2_sub_sample_mark(rdr2_cutout_coverage(albedo.a, material.flags.w));
+        } else if (albedo.a < material.emission_alpha_layers.y) {
+            discard;
+        }
     }
 
     var n = sample_normal(input, weights);
@@ -1034,7 +1047,7 @@ fn shade_material(
         lit += sample_rage(emissive_texture, material_sampler, input.uv).rgb
             * material.emission_alpha_layers.x;
     }
-    var output_alpha = 1.0;
+    var output_alpha = sub_sample_mark;
     if (alpha_mode == 2u) {
         output_alpha = albedo.a;
     }

@@ -96,7 +96,7 @@ internal sealed unsafe partial class ViewportRenderer
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
             Code = Shader("world_instances.wgsl") + "\n" + Read("world_pick.wgsl") + "\n"
-                + Read(family == WorldFamily.Rdr2 ? "rdr2_world_pick.wgsl" : "gta_world_pick.wgsl"),
+                + (family == WorldFamily.Rdr2 ? Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_world_pick.wgsl") : Read("gta_world_pick.wgsl")),
         }));
         var vertex = new VertexBufferLayout
         {

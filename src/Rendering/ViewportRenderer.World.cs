@@ -34,6 +34,10 @@ internal sealed unsafe partial class ViewportRenderer
         internal readonly List<object> Textures = [];
         internal bool CastsShadows;
 
+        // Whether it has an RDR2 cut-out drawn with sub-sampled alpha, which the frame then puts together
+        // (ViewportRenderer.Rdr2SubSampleAlpha.cs).
+        internal bool SubSampled;
+
         // The covered placements' matrices (a storage buffer, and the group reading it), and the indexes of those the
         // camera sees and of those casting into each cascade.
         internal WorldSlice? SourceInstances, Instances, ShadowInstances;

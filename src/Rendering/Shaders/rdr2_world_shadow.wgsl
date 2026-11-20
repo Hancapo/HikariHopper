@@ -1,5 +1,5 @@
-// Red Dead Redemption 2's cut-outs into the sun's shadow, where RedFury's simple alpha test
-// (rdr2_material.wgsl's simple_alpha_tested_out) keeps them. Put after world_shadow.wgsl.
+// Red Dead Redemption 2's cut-outs into the sun's shadow, where the game's cascades keep them (rdr2_cutout.wgsl's
+// rdr2_cutout_casts). Put after world_shadow.wgsl and rdr2_cutout.wgsl.
 
 // The start of rdr2_material.wgsl's MaterialUniforms: base_colour_factor, surface, emission_alpha_layers, decal_opacity,
 // flags.
@@ -21,7 +21,7 @@ fn fs_world_shadow_masked(input: MaskedOutput) {
     if (((material.flags.w >> 3u) & 3u) == 2u) {
         alpha *= input.alpha;
     }
-    if (alpha < material.emission_alpha_layers.y) {
+    if (!rdr2_cutout_casts(alpha, material.flags.w, material.emission_alpha_layers.y)) {
         discard;
     }
 }

@@ -77,7 +77,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n" + Read("rdr2_vertex.wgsl") + "\n" + Read("rdr2.wgsl"),
+            Code = LitShader("rdr2_light.wgsl") + "\n" + Read("rdr2_terrain_blending.wgsl") + "\n" + Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_material.wgsl") + "\n" + Read("rdr2_vertex.wgsl") + "\n" + Read("rdr2.wgsl"),
         }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected) =>
             gpu.Pipeline($"rdr2/{cull}/{blend}/{reflected}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
@@ -122,7 +122,7 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2BlendedReflected = Pipeline(CullMode.None, blend: true, reflected: true);
 
         // Cut-out surfaces' shadow: their depth where RedFury's simple alpha test keeps them (rdr2_shadow.wgsl).
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("rdr2_shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_shadow.wgsl") }));
         rdr2MaskedShadow = gpu.Pipeline($"rdr2-shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, rdr2Layout] }),
