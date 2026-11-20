@@ -23,7 +23,7 @@
 // moon's intensity and colour through the air from the camera, times the timecycle's light_dir tint), and the sky's
 // ambient cube, as the game's CS_AmbientCubeIBR builds it from 64 ways over the upper half of the sky, its ground face
 // the light a mid-grey ground under it sends back up.
-// Put after scene.wgsl and Rdr2/atmosphere.wgsl.
+// Put after Scene/scene.wgsl and Rdr2/atmosphere.wgsl.
 
 struct Rdr2Night {
     // Whether the sun, the moon and the stars are drawn; the dome's radius in metres.

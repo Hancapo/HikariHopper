@@ -3,9 +3,9 @@
 // combo height maps is too low for the fur there. The game draws them as eight passes of the cut-out technique, each
 // with its own vertex and pixel program (VS_FurTransformD_Zero..Seven, PS_FurDeferredTextured_Zero..Seven); here
 // they are eight instances of one draw, the instance being the shell. Each writes what the game writes to its
-// G-buffer, for dry weather, and is lit with the game's lighting passes (light.wgsl's gta_lit), as Gta5/surface.wgsl's
+// G-buffer, for dry weather, and is lit with the game's lighting passes (Scene/light.wgsl's gta_lit), as Gta5/surface.wgsl's
 // families are.
-// Scene comes from scene.wgsl, the light from light.wgsl.
+// Scene comes from Scene/scene.wgsl, the light from Scene/light.wgsl.
 //
 // Shell i reads the green (even i) or the alpha (odd i) of combo height map i / 2, at mip bias 1.15 as the game's
 // sampler does, times the fur amount (the vertex alpha; for _mask, the mask map's red too), and is cut out where that

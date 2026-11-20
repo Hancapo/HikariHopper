@@ -1,11 +1,11 @@
 // GTA V's water, as water.fxc's PS_WaterSinglePass shades it (the same arithmetic in Enhanced's program as in Legacy's,
 // whose constants are named): the ocean, lakes and pools of water.xml, and the water shaders' drawables (rivers,
-// fountains), each placement drawn as the world draws its assets (world_instances.wgsl).
+// fountains), each placement drawn as the world draws its assets (World/world_instances.wgsl).
 //   - Light: the water's ambient colour, and its directional colour by the sun's height and the shadow, through the fog
 //     colour (squared, as the map is stored): the colour the water scatters.
 //   - Bump: graphics.ytd's wave bump, tiled, each tile offset by the noise map to hide the tiling, then two static
 //     bumps drifting with time, which bend the normal by the ripple scale.
-//   - The scene behind (the copy, light.wgsl's water_background and water_depth): seen through the water's depth,
+//   - The scene behind (the copy, Scene/light.wgsl's water_background and water_depth): seen through the water's depth,
 //     exp(-78.4 a^2 d) and, along the view, exp(-235.3 a^2 d |v.z|), with a the water's alpha; sunlight scattered back
 //     through the refracted view.
 //   - Foam over the shallows, then the reflection map (the same paraboloid) by a fresnel on N.V, and the sun's highlight
@@ -14,7 +14,7 @@
 //     water by its depth; here the fog pass goes first and the water, which covers what's behind it, fogs itself.
 // The game's ambient and directional water colours are taken as the timecycle's natural ambient and sun colour; its
 // BlendSampler (the fresnel and foam curves) as Schlick's fresnel and a steep foam ramp; its wet map isn't read.
-// Put after scene.wgsl, light.wgsl, water_common.wgsl, world_instances.wgsl, Gta5/fog.wgsl
+// Put after Scene/scene.wgsl, Scene/light.wgsl, World/water_common.wgsl, World/world_instances.wgsl, Gta5/fog.wgsl
 // and Gta5/world_fog.wgsl.
 
 struct Water {

@@ -4,7 +4,7 @@ HikariHopper includes code from the following projects.
 
 ## CMAA2
 
-The 3D viewer's anti-aliasing (`src/Rendering/Shaders/cmaa2.wgsl`) is a WGSL port of Conservative Morphological Anti-Aliasing 2.3 by Intel Corporation (Filip Strugar), https://github.com/GameTechDev/CMAA2.
+The 3D viewer's anti-aliasing (`src/Rendering/Shaders/Post/cmaa2.wgsl`) is a WGSL port of Conservative Morphological Anti-Aliasing 2.3 by Intel Corporation (Filip Strugar), https://github.com/GameTechDev/CMAA2.
 
 Copyright (c) 2018, Intel Corporation. Licensed under the Apache License, Version 2.0. The changes made in the port are listed at the top of the file.
 

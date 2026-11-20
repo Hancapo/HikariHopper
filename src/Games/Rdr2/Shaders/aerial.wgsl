@@ -14,7 +14,7 @@
 //     hills and trees), the shadow lifted by the timecycle's fog shadow amount as the game's shadow volume eases it
 //     back towards the light (CS_GatherShadowVolume), and the sky's ambient (its ambient cube's mean) by their
 //     tints, plus its fill ambient; each slice's light added as (S - S T) / density times the transmittance before it.
-//     The shadow is the world's (light.wgsl's cascades), at each slice's middle.
+//     The shadow is the world's (Scene/light.wgsl's cascades), at each slice's middle.
 //   - The fog past the far clip, as the game's far fog (CS_GatherFarDistance) marches it on where its volume ends: out
 //     to the surface, or to the game's reach of 15 km (the sky's too), its transmittance taken to none once it's under
 //     the game's cut-off of 0.05. The global fog's density depends on height alone and the light on it is the same
@@ -22,8 +22,8 @@
 //   - Over the frame: the colour times the transmittance from the camera, then the light scattered in on the way, from
 //     the slices its distance falls at: the fog's in front of the air's, then the far fog's. The sky takes the fog
 //     alone, as the game fogs it; what's drawn the air and the far haze too.
-// In the game's own units, as its world and sky are drawn in. Put after scene.wgsl, Rdr2/atmosphere.wgsl and
-// Rdr2/sky.wgsl; the fog's pass after light.wgsl too, its light group at group 2.
+// In the game's own units, as its world and sky are drawn in. Put after Scene/scene.wgsl, Rdr2/atmosphere.wgsl and
+// Rdr2/sky.wgsl; the fog's pass after Scene/light.wgsl too, its light group at group 2.
 
 @group(3) @binding(0) var aerial_transmittance_out: texture_storage_3d<rgba16float, write>;
 @group(3) @binding(1) var aerial_inscatter_out: texture_storage_3d<rgba16float, write>;

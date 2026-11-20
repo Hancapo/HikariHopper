@@ -6,13 +6,13 @@
 //     (ped_default…) and their hair (ped_hair_spiked, ped_hair_cutout_alpha…), at rest: dry, undamaged, unwrinkled.
 // That is then lit with the game's directional pass (PS_directional_just_dir) and the core of its ambient one
 // (PS_directional_ambient). The game lights the G-buffer later; here both happen in one pass, with the same
-// arithmetic. The light is the game's own, from its timecycle (light.wgsl): the directional light with its shadow, the
-// natural ambient hemisphere and the directional ambient. The result is linear HDR with coverage, for tonemap.wgsl.
+// arithmetic. The light is the game's own, from its timecycle (Scene/light.wgsl): the directional light with its shadow, the
+// natural ambient hemisphere and the directional ambient. The result is linear HDR with coverage, for Post/tonemap.wgsl.
 // A vehicle's glass is no deferred shader: the game draws it forward, blended, lit as it is drawn (PS_VehicleTextured,
 // in vehicle_vehglass and its _crack and _inner), and so does glass() here.
 // The trees' (the game's tree shaders, checked against Enhanced's) are their own: shade_tree, with the game's foliage
 // light pass (PS_directional_scatter) for all but trees_lod2's billboards, which the game lights as any other surface.
-// Scene comes from scene.wgsl, the light from light.wgsl, the trees' vertex work from Gta5/trees.wgsl.
+// Scene comes from Scene/scene.wgsl, the light from Scene/light.wgsl, the trees' vertex work from Gta5/trees.wgsl.
 
 struct Material {
     // specularFresnel, specularFalloffMult, specularIntensityMult, bumpiness.
@@ -161,9 +161,9 @@ struct SurfaceOutput {
     // The _pxm shaders' parallax controls: how much of the height to drop (x), and how flat a view may go before the
     // parallax stops growing (one less y).
     @location(9) controls: vec2f,
-    // The interior room it's in (light.wgsl's use_room): nought outside, and in the viewer.
+    // The interior room it's in (Scene/light.wgsl's use_room): nought outside, and in the viewer.
     @location(10) @interpolate(flat) room: vec4f,
-    // Its placement's level of detail fade (light.wgsl's lod_fade_keeps): none in the viewer.
+    // Its placement's level of detail fade (Scene/light.wgsl's lod_fade_keeps): none in the viewer.
     @location(11) @interpolate(flat) lod_fade: vec2f,
     // The tint palette's alpha, which the trees' alpha takes.
     @location(12) tint_alpha: f32,
@@ -195,7 +195,7 @@ fn day_night_vertex_scale() -> f32 {
 }
 
 // A drawable into the reflection map, as GTA draws its world into its own: a paraboloid projection of the
-// hemisphere around the eye, into that hemisphere's half of the map (light.wgsl's paraboloid_uv, within the half's
+// hemisphere around the eye, into that hemisphere's half of the map (Scene/light.wgsl's paraboloid_uv, within the half's
 // viewport), with the distance as depth.
 @vertex
 fn vs_surface_paraboloid(original: SurfaceInput) -> SurfaceOutput {
@@ -256,7 +256,7 @@ struct Surface {
 struct SurfaceTargets {
     @location(0) colour: vec4f,
     @location(1) sub_sampled: f32,
-    // And what the world's ambient occlusion takes back out (light.wgsl's occludable).
+    // And what the world's ambient occlusion takes back out (Scene/light.wgsl's occludable).
     @location(2) ambient: vec4f,
     @location(3) normal: vec4f,
 };
@@ -831,7 +831,7 @@ fn kajiya(towards: vec3f, view: vec3f, strand: vec3f) -> f32 {
     return abs(sqrt(saturate(1.0 - l * l)) * sqrt(saturate(1.0 - v * v)) - l * v);
 }
 
-// The game's lighting passes (light.wgsl's gta_lit) over what a family wrote, with the ambient scale the family's
+// The game's lighting passes (Scene/light.wgsl's gta_lit) over what a family wrote, with the ambient scale the family's
 // deferred shader stores, which the ambient pass squares (the G-buffer holds up to two). Then emissive, which the game
 // adds in its ambient pass.
 fn lit(input: SurfaceOutput, surface: Surface, diffuse: vec4f, view: vec3f, to_light: vec3f, shadow: f32) -> vec3f {

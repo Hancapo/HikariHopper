@@ -1,11 +1,11 @@
 // Red Dead Redemption 2's material: RedFury.Rendering's viewer_material.wgsl, copied as it is, but for where its light
 // comes from. RedFury lights it with its own atmosphere, screen-space shadow mask, GTAO and local lights; here it takes
-// the viewer's light (light.wgsl through Rdr2/light.wgsl): the key light with its cascaded shadow, the ambient for a
+// the viewer's light (Scene/light.wgsl through Rdr2/light.wgsl): the key light with its cascaded shadow, the ambient for a
 // normal and the reflection map. What changed from RedFury's file:
-//   - group 0's camera and group 2's lighting are the viewer's (scene.wgsl, light.wgsl); RedFury's shadow-caster, world
+//   - group 0's camera and group 2's lighting are the viewer's (Scene/scene.wgsl, Scene/light.wgsl); RedFury's shadow-caster, world
 //     instance, depth-prepass and shadow entry points are left out (the viewer has its own passes);
 //   - the vertex comes in the viewer's layout (Rdr2/surface.wgsl's entry points), positions relative to the scene's origin;
-//   - the sun's shadow is light.wgsl's cascades for every surface (no screen-space mask), with no screen-space occlusion;
+//   - the sun's shadow is Scene/light.wgsl's cascades for every surface (no screen-space mask), with no screen-space occlusion;
 //   - no local lights, no aerial perspective, dry weather, no debug views;
 //   - cut-outs in the main view are drawn with the game's sub-sampled alpha (Rdr2/cutout.wgsl);
 //   - water is drawn with the generic material, as RedFury draws a water shader it can't: its shading needs a copy of
@@ -111,7 +111,7 @@ struct MaterialVertexOutput {
     @location(9) grass_colour_ao: vec4f,
     @location(10) relative_position: vec3f,
     @location(11) hemisphere: f32,
-    // Its placement's level of detail fade in a world (light.wgsl's lod_fade_keeps): none in the viewer.
+    // Its placement's level of detail fade in a world (Scene/light.wgsl's lod_fade_keeps): none in the viewer.
     @location(12) @interpolate(flat) lod_fade: vec2f,
 };
 
@@ -213,7 +213,7 @@ fn diffuse_burley(ndotv: f32, ndotl: f32, ldoth: f32, roughness: f32) -> f32 {
     return light * view * energy_factor / PI;
 }
 
-// Unshadowed local direct light (RedFury's, copied): light.wgsl's local lights, for a model in the viewer and the
+// Unshadowed local direct light (RedFury's, copied): Scene/light.wgsl's local lights, for a model in the viewer and the
 // world alike. The CPU's conservative screen tiles bound the light loop; exact radial and cone rejection happens here,
 // blended surfaces included.
 fn local_irradiance(pixel: vec2f, position: vec3f, n: vec3f, v: vec3f, base_colour: vec3f,
@@ -1014,8 +1014,8 @@ fn shade_material(
     if ((material.flags.y & 1u) != 0u) {
         ao *= sample_rage(occlusion_texture, material_sampler, input.uv).r;
     }
-    // The viewer has no screen-space mask: every surface reads the cascades (light.wgsl's sun_shadow), on the side of
-    // its geometric normal being drawn. A world's screen-space occlusion is taken out after (ambient_occlusion.wgsl).
+    // The viewer has no screen-space mask: every surface reads the cascades (Scene/light.wgsl's sun_shadow), on the side of
+    // its geometric normal being drawn. A world's screen-space occlusion is taken out after (Post/ambient_occlusion.wgsl).
     let screen_occlusion = 1.0;
     let sun_visibility = sun_shadow(input.world_position, select(-normalize(input.normal), normalize(input.normal), front_facing));
     // Baked and screen-space occlusion describe the same missing light; combine with min, not product.

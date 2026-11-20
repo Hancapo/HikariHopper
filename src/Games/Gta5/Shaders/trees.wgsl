@@ -1,5 +1,5 @@
 // GTA V's trees, as the game's tree shaders draw them (checked against Enhanced's): what their vertex shaders do to a vertex in its model's space, before its placement's
-// matrix, for the main view (Gta5/surface.wgsl) and the sun's shadow (shadow.wgsl, Gta5/world_shadow.wgsl). Standalone: the
+// matrix, for the main view (Gta5/surface.wgsl) and the sun's shadow (Scene/shadow.wgsl, Gta5/world_shadow.wgsl). Standalone: the
 // material's tree settings, the camera's axes and the placement's are passed in.
 //   - trees_lod2's billboards (VS_PropFoliageDeferredLod2): each corner of a quad is stored at its middle, with where it
 //     is on the quad in the first UV set; the quad is spread across the camera (or upright and turned to it, as TEXCOORD3.x
