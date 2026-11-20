@@ -13,7 +13,8 @@ internal sealed record Rdr2GradeValues(System.Numerics.Vector4 Correct, System.N
 /// <summary>
 /// Red Dead Redemption 2's gradient filter at an hour, as its post-process sets it up for PS_Composite
 /// (GradientFilterColTop, Middle, Bottom and Extra): the colour its HDR frame is multiplied by before the exposure,
-/// blended down the screen from the top colour through the middle's to the bottom's (tonemap.wgsl's rdr2_gradient).
+/// blended down the screen from the top colour through the middle's to the bottom's (Post/tonemap.wgsl's
+/// rdr2_gradient).
 /// </summary>
 /// <param name="Top">The timecycle's top colour times its fade, raised to the front end's gamma (1/2.2), times its
 /// multiplier; and one less twice the top-middle midpoint.</param>
