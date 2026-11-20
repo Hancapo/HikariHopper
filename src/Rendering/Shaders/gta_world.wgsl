@@ -1,8 +1,9 @@
 // GTA V's world: each streamed asset's vertices drawn once per placement (rdr2_world.wgsl's way), shaded by
-// surface.wgsl as the model viewer shades them. A placement's matrices are read per instance; positions go relative to
-// the scene's origin, the camera, so the world's large coordinates stay precise. An entity's tint picks its row of a
-// _tnt shader's palette, as the game's tint palette selector. Put after scene.wgsl, light.wgsl, surface.wgsl,
-// world_instances.wgsl, gta_fog.wgsl and gta_world_fog.wgsl.
+// surface.wgsl as the model viewer shades them, a tree's moved first by its vertex shader's work (trees.wgsl). A
+// placement's matrices are read per instance; positions go relative to the scene's origin, the camera, so the world's
+// large coordinates stay precise. An entity's tint picks its row of a _tnt shader's palette, as the game's tint
+// palette selector. Put after scene.wgsl, light.wgsl, trees.wgsl, surface.wgsl, world_instances.wgsl, gta_fog.wgsl and
+// gta_world_fog.wgsl.
 
 // A placement's vertex: in the world, then relative to the scene's origin. A plant shrinks away with distance.
 fn place_surface(input: SurfaceInput, instance: WorldInstance) -> SurfaceInput {
@@ -15,14 +16,22 @@ fn place_surface(input: SurfaceInput, instance: WorldInstance) -> SurfaceInput {
 }
 
 @vertex
-fn vs_surface_world(input: SurfaceInput, @location(8) source_index: u32) -> SurfaceOutput {
+fn vs_surface_world(original: SurfaceInput, @location(8) source_index: u32) -> SurfaceOutput {
     let instance = world_instances[source_index];
-    let placed = place_surface(input, instance);
+    // A tree's vertex shader works in its model's space, before the placement's matrix; a billboard's normal is the
+    // world's as it leaves it.
+    let input = tree_input(original, mat3x3f(instance.m0.xyz, instance.m1.xyz, instance.m2.xyz));
+    var placed = place_surface(input, instance);
+    if (material.tree.x > 2.5) {
+        placed.normal = input.normal;
+    }
     var output = surface_vertex(placed);
     let row = instance_tint_row_of(instance);
     if (material.extra.y > 0.5 && row > 0) {
         let rows = f32(textureDimensions(tint_palette).y);
-        output.tint = textureSampleLevel(tint_palette, palette_sampler, vec2f(placed.colour0.b, (f32(row) + 0.5) / rows), 0.0).rgb;
+        let tint = textureSampleLevel(tint_palette, palette_sampler, vec2f(tint_column(placed), (f32(row) + 0.5) / rows), 0.0);
+        output.tint = tint.rgb;
+        output.tint_alpha = tint.a;
     }
     // A plant's colour over its diffuse, and its occlusion as its natural ambient (grass_batch's vertex colours are its
     // wind's, not light).

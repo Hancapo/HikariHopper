@@ -237,7 +237,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffers[i], Size = ShadowViewBytes }],
             });
         }
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("trees.wgsl") + "\n" + Read("shadow.wgsl") }));
         shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout] }),
@@ -650,12 +650,13 @@ internal sealed unsafe partial class ViewportRenderer
             pass.SetVertexBuffer(0, surfaceVertices!);
             pass.SetIndexBuffer(surfaceIndices!, IndexFormat.Uint32);
             for (int i = 0; i < surfaceParts.Length; i++)
-                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i] && (night || !partNightOnly[i]))
+                if (surfaceParts[i].Mode != AlphaMode.Blend && !CutOut(i) && !Rdr2CutOut(i) && partsShown[i] && (night || !partNightOnly[i])
+                    && surfaceParts[i].Part.Casts)
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);
             // Then the cut-out ones, each with its material for its diffuse map: only what the main pass keeps casts.
             pass.SetPipeline(maskedShadowPipeline!);
             for (int i = 0; i < surfaceParts.Length; i++)
-                if (CutOut(i) && partsShown[i] && (night || !partNightOnly[i]))
+                if (CutOut(i) && partsShown[i] && (night || !partNightOnly[i]) && surfaceParts[i].Part.Casts)
                 {
                     pass.SetBindGroup(1, surfaceParts[i].Material);
                     pass.DrawIndexed(surfaceParts[i].Part.IndexCount, 1, surfaceParts[i].Part.FirstIndex, surfaceParts[i].Part.BaseVertex, 0);

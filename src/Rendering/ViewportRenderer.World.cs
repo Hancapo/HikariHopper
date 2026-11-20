@@ -107,22 +107,24 @@ internal sealed unsafe partial class ViewportRenderer
     // Night-only: a _geomnightonly shader's, gone by day (SurfaceMaterial.NightOnly), which the shadow's bundles leave
     // out, day and night.
     private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, WorldSlice Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
-        WorldFamily Family, bool NightOnly = false)
+        WorldFamily Family, bool NightOnly = false, bool CullsBack = false)
     {
         internal int Level => Part.Lod is >= 0 and < WorldAsset.Lods ? Part.Lod : 0;
 
-        internal bool Opaque => Mode != AlphaMode.Blend;
+        // Drawn into the main view, as its model's render mask has it (a tree's shadow proxy isn't).
+        internal bool Opaque => Mode != AlphaMode.Blend && Part.Shown;
 
-        internal bool Blended => Mode == AlphaMode.Blend && !Decal;
+        internal bool Blended => Mode == AlphaMode.Blend && !Decal && Part.Shown;
 
         // Water: drawn after the copy of the scene behind it.
         internal bool Water => Family is WorldFamily.Rdr2Water or WorldFamily.GtaWater;
 
         // Solid without a cut-out: casts without its material, beside the others of its level.
-        internal bool Caster => Mode == AlphaMode.Opaque && !Decal && !NightOnly;
+        // Each only where its model's render mask casts it (a tree's shadow proxy does, the tree it stands in for doesn't).
+        internal bool Caster => Mode == AlphaMode.Opaque && !Decal && !NightOnly && Part.Casts;
 
         // A cut-out that casts through its material.
-        internal bool MaskedCaster => Mode == AlphaMode.Mask && !NightOnly;
+        internal bool MaskedCaster => Mode == AlphaMode.Mask && !NightOnly && Part.Casts;
     }
 
     // Adjacent solid surfaces of a level, cast into the shadow as one draw.

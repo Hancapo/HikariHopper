@@ -218,7 +218,8 @@ internal sealed unsafe partial class ViewportRenderer
             AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
                 : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
             uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
-                material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family, rdr2 is null && material.NightOnly));
+                material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family, rdr2 is null && material.NightOnly,
+                rdr2 is null && material.CullsBack));
         }
         // RedFury's depth runs: adjacent casters of a level, one draw each.
         foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))

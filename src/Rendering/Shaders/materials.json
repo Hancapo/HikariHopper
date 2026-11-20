@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred); what fur.wgsl reads for the fur grass shaders (PS_FurDeferredTextured) and cable.wgsl for the cables (VS_Cable and PS_Cable). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue. Patterns: reflect is how a textured shader reads its environment texture (sphere: reflect, normal_reflect, spec_reflect, normal_spec_reflect and their decals; cube: the _cubemap_reflect ones; normal, normal_spec and the like reflect nothing of their own); emissive_night scales the emissive by the day/night balance (the emissivenight shaders); geometry_night collapses the vertices by day (_geomnightonly).",
+  "about": "What surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); what terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred); the trees' (tree: PS_PropFoliageDeferred, with the _camera_facing and _camera_aligned cards turned to the camera; tree_lod: PS_PropFoliageDeferredLod; tree_lod2: the billboards VS_PropFoliageDeferredLod2 builds); what fur.wgsl reads for the fur grass shaders (PS_FurDeferredTextured) and cable.wgsl for the cables (VS_Cable and PS_Cable). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue. Patterns: reflect is how a textured shader reads its environment texture (sphere: reflect, normal_reflect, spec_reflect, normal_spec_reflect and their decals; cube: the _cubemap_reflect ones; normal, normal_spec and the like reflect nothing of their own); emissive_night scales the emissive by the day/night balance (the emissivenight shaders); geometry_night collapses the vertices by day (_geomnightonly).",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
@@ -86,7 +86,15 @@
     "cable_diffuse": ["shader_cableDiffuse", "CableDiffuse"],
     "cable_diffuse2": ["shader_cableDiffuse2", "CableDiffuse2"],
     "cable_ambient": ["shader_cableAmbient", "CableAmbient"],
-    "cable_emissive": ["shader_cableEmissive", "CableEmissive"]
+    "cable_emissive": ["shader_cableEmissive", "CableEmissive"],
+    "tree_alpha_scale": ["AlphaScale"],
+    "tree_alpha_test": ["AlphaTest"],
+    "tree_normals": ["UseTreeNormals"],
+    "tree_self_shadow": ["SelfShadowing"],
+    "tree_shadow_falloff": ["ShadowFalloff"],
+    "tree_lod2_size": ["treeLod2Params"],
+    "tree_lod2_normal": ["treeLod2Normal"],
+    "tree_shadow_facing": ["ShadowFacingOffset"]
   },
   "patterns": [
     { "contains": "diffspec", "detail_mask": "diffuse", "specular_source": "diffuse" },
@@ -106,6 +114,9 @@
     { "contains": "ped_hair", "alpha_mode": "MASK" },
     { "contains": "ped_default_palette", "palette_alpha": true },
     { "contains": "ped_palette", "palette_alpha": true },
+    { "contains": "vertdecal", "alpha_mode": "OPAQUE", "render_pass": "OPAQUE" },
+    { "contains": "texdecal", "alpha_mode": "OPAQUE", "render_pass": "OPAQUE" },
+    { "contains": "nopeddamagedecals", "alpha_mode": "OPAQUE", "render_pass": "OPAQUE" },
     { "contains": "decal", "alpha_mode": "BLEND", "render_pass": "DECAL" },
     { "contains": "cutout", "alpha_mode": "MASK" },
     { "contains": "alpha", "alpha_mode": "BLEND" }
@@ -169,6 +180,13 @@
     "cable": [
       "cable"
     ],
+    "tree": [
+      "trees", "trees_camera_aligned", "trees_camera_facing", "trees_normal", "trees_normal_diffspec", "trees_normal_diffspec_tnt",
+      "trees_normal_spec", "trees_normal_spec_camera_aligned", "trees_normal_spec_camera_aligned_tnt", "trees_normal_spec_camera_facing",
+      "trees_normal_spec_camera_facing_tnt", "trees_normal_spec_tnt", "trees_shadow_proxy", "trees_tnt"
+    ],
+    "tree_lod": ["trees_lod", "trees_lod_tnt"],
+    "tree_lod2": ["trees_lod2", "trees_lod2d"],
     "ped_approximate": [
       "ped_decal_medals", "ped_fur"
     ]

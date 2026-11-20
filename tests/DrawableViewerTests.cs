@@ -156,6 +156,20 @@ public sealed class DrawableViewerTests
         Assert.Equal((0f, 0f), (solid.Uniforms[10], solid.Uniforms[73]));
     }
 
+    // Shaders named for the decal they lay over their own surface, in the game's solid bucket (palm trunks, walls, peds):
+    // drawn solid, writing depth, not blended over what's behind them as decals are.
+    [Theory]
+    [InlineData("normal_spec_detail_dpm_vertdecal_tnt")]
+    [InlineData("normal_spec_detail_dpm_texdecal_tnt")]
+    [InlineData("ped_nopeddamagedecals")]
+    public void A_shader_that_lays_its_own_decal_is_drawn_solid_as_its_bucket_says(string shader)
+    {
+        SurfaceMaterial material = ModelContent.Read("trunk.ydr", Quad(GameTarget.Legacy, shader, _ => { })).Surfaces!.Materials.Single();
+        Assert.False(material.Decal);
+        Assert.Equal(AlphaMode.Opaque, material.AlphaMode);
+        Assert.Equal((0f, 0f), (material.Uniforms[10], material.Uniforms[73]));
+    }
+
     [Fact]
     public void A_diffspec_shader_takes_its_specular_from_the_diffuse_colour_in_either_edition()
     {

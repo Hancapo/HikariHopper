@@ -209,7 +209,7 @@ internal sealed unsafe partial class ViewportRenderer
         PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
         PipelineLayout furPipelineLayout = Layout(furLayout, false), furReflectedLayout = Layout(furLayout, true);
         PipelineLayout cablePipelineLayout = Layout(cableLayout, false);
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("trees.wgsl") + "\n" + Read("surface.wgsl") }));
         Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("terrain.wgsl") }));
         Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("fur.wgsl") }));
         Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("cable.wgsl") }));
@@ -320,7 +320,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
         // their material (shadow.wgsl).
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("trees.wgsl") + "\n" + Read("shadow.wgsl") }));
         maskedShadowPipeline = gpu.Pipeline($"shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, materialLayout] }),
@@ -333,10 +333,14 @@ internal sealed unsafe partial class ViewportRenderer
                     new VertexBufferLayout
                     {
                         ArrayStride = SurfaceVertex.Size,
+                        // A tree's caster reads its billboard's size and alignment, or its card's centre, besides.
                         Attributes = new[]
                         {
                             new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 2, Offset = 24, Format = VertexFormat.Float32x4 },
                             new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                            new VertexAttribute { ShaderLocation = 4, Offset = 48, Format = VertexFormat.Float32x2 },
+                            new VertexAttribute { ShaderLocation = 7, Offset = 64, Format = VertexFormat.Float32x2 },
                         },
                     },
                 },
@@ -397,7 +401,7 @@ internal sealed unsafe partial class ViewportRenderer
                 PartKind.Cable => AlphaMode.Blend,
                 _ => material.Decal ? AlphaMode.Blend : material.AlphaMode,
             };
-            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass);
+            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass || material.CullsBack);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         partNightOnly = [.. drawable.Parts.Select(part => drawable.Materials[part.Material].NightOnly)];
@@ -588,11 +592,13 @@ internal sealed unsafe partial class ViewportRenderer
             return;
         pass.SetVertexBuffer(0, surfaceVertices);
         pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
-        // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
+        // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides, but for the
+        // trees, which cull theirs. Each is drawn only into the passes its model's mask names (a tree's shadow proxy,
+        // into none of these).
         for (int i = 0; i < surfaceParts.Length; i++)
         {
-            var (part, group, mode, kind, _, _) = surfaceParts[i];
-            if (mode != AlphaMode.Blend && partsShown[i])
+            var (part, group, mode, kind, _, culled) = surfaceParts[i];
+            if (mode != AlphaMode.Blend && partsShown[i] && Drawn(part, reflected))
             {
                 pass.SetPipeline(kind switch
                 {
@@ -601,7 +607,7 @@ internal sealed unsafe partial class ViewportRenderer
                     PartKind.Terrain => reflected ? terrainReflected! : terrainSurfaces!,
                     PartKind.Fur => reflected ? furReflected! : furSurfaces!,
                     _ => reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
-                        : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!,
+                        : mode == AlphaMode.Mask && !culled ? doubleSidedSurfaces! : solidSurfaces!,
                 });
                 pass.SetBindGroup(1, group);
                 // Fur: one instance a shell.
@@ -615,7 +621,7 @@ internal sealed unsafe partial class ViewportRenderer
         // reflection map, whose paraboloid mirrors the winding.
         Vector3 eye = Camera.Eye - origin;
         foreach (var (part, group, kind, culled) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i]
-                && !(reflected && p.Kind == PartKind.Cable))
+                && Drawn(p.Part, reflected) && !(reflected && p.Kind == PartKind.Cable))
             .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind, p.Culled)))
         {
             pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces!
@@ -625,6 +631,10 @@ internal sealed unsafe partial class ViewportRenderer
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
     }
+
+    // Whether a part's model is drawn into the main view, or into the reflection map, by its render mask.
+    internal static bool Drawn(SurfacePart part, bool reflected) =>
+        reflected ? (part.Passes & FiveFury.Drawables.DrawableRenderMask.Reflection) != 0 : part.Shown;
 
     /// <summary>The size of the missing-texture checkerboard, and how many of its squares cross a texture.</summary>
     internal const int CheckerSize = 64, CheckerSquares = 4;

@@ -38,6 +38,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Draw the glow GTA V puts on its world's lights as the game draws it: each light's corona sized and faded with distance and with the way its light faces, hidden by what stands in front of it and fogged, and the coronas of the further lights at night, from the game's own textures, timecycle and visualsettings.dat. ([#292](https://github.com/Hancapo/HikariHopper/pull/292))
 - Fog GTA V's world as the game does, from its own timecycle: distant hills, streets and water fade into the haze, tinted towards the sun at dawn and dusk, with darker fog where buildings and hills shade it from the sun. ([#294](https://github.com/Hancapo/HikariHopper/pull/294))
 - Light GTA V's world by where the camera is, as the game does: Los Santos with its own city timecycle blended in at its edges, and the maps' timecycle boxes (tunnels, coasts, zones) over it, for the light, the sky, the exposure and the bloom. ([#295](https://github.com/Hancapo/HikariHopper/pull/295))
+- Draw GTA V's trees with the game's own tree shaders in the world and the 3D viewer: far forests' billboards spread across the view where they had no area, leaf cards turned to the camera, the game's dithered cut-outs and alpha test, the light through the leaves, and shadows cast only by the models the game casts them with, shadow proxies drawn into the shadow alone. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
 
 ### Changed
 
@@ -63,6 +64,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))
 - Light GTA V's night-only lamps, windows and signs only by night, over the hours its visualsettings.dat sets, and show its night-only light shapes only then, and give its shiny metal and glass materials the environment map they reflect, in its world and the 3D viewer. ([#296](https://github.com/Hancapo/HikariHopper/pull/296))
+- Draw GTA V's surfaces that lay their own decal (the _vertdecal and _texdecal shaders, such as the palm trunks at Vespucci beach, and ped_nopeddamagedecals) solid, as the game does, instead of as see-through decals: a palm trunk no longer shows its inside or lets the sea and clouds through. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
 
 ### Removed
 

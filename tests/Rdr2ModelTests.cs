@@ -89,6 +89,8 @@ public sealed class Rdr2ModelTests
         Assert.Contains(scene.Materials, material => material.Diffuse is not null);
         // Each material RedFury's.
         Assert.All(scene.Materials, material => Assert.NotNull(material.Rdr2));
+        // Without GTA V's render masks, drawn in every pass: the main view, the shadow and the reflection map.
+        Assert.All(scene.Parts, part => Assert.True(part.Shown && part.Casts && ViewportRenderer.Drawn(part, reflected: true)));
         // Nothing of GTA V's to edit or save.
         Assert.Empty(scene.Sources);
         Assert.Null(scene.Writer);
