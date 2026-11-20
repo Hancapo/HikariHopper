@@ -449,6 +449,7 @@ internal sealed unsafe partial class ViewportRenderer
         ClearWorldSky();
         ClearWorldLensFlare();
         ClearWorldCloudHats();
+        ClearWorldCoronas();
     }
 
     private void RemoveWorldAsset(WorldAssetKey key)

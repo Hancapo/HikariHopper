@@ -492,7 +492,8 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             if (worldShown)
                 hdrPass = DrawWorld(hdrPass, encoder);
             hdrPass.End();
-            // GTA V's lens flare over its world and sky, before the post-process.
+            // GTA V's coronas on its world's lights, then its lens flare over everything, before the post-process.
+            DrawWorldCoronas(encoder);
             if (sky)
                 DrawWorldLensFlare(encoder);
             MeasureFrame(encoder);

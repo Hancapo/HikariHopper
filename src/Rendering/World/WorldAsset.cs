@@ -145,7 +145,7 @@ internal sealed class WorldAsset
                 if (identify(texture) is { } id)
                     ids[texture] = id;
         return new WorldAsset(key, scene, distances, textures.Select(texture => (ids.GetValueOrDefault(texture) ?? texture, (long)texture.Data.Length)),
-            WorldLightBones.Carrying(scene.Lights), ids);
+            WorldLightBones.Carrying(scene.Lights, scene.LightCoronas), ids);
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once.

@@ -226,6 +226,8 @@ internal readonly record struct TimecycleSample(int Index, int Next, float T)
 
     /// <summary>A field, or the default the game's code gives it (its variable table) where the timecycle hasn't it.</summary>
     internal float Get(string name, float fallback) => Timecycle.Field(name, Index, Next, T, fallback);
+    /// <summary>A field, or the default the game's code gives it (its TCVAR's) where the timecycle in use hasn't it.</summary>
+    internal float GetOr(string name, float fallback) => Timecycle.Has(name) ? Get(name) : fallback;
 
     /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
     internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));

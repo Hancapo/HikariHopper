@@ -359,7 +359,8 @@ internal sealed unsafe partial class ViewportRenderer
         hdrView = hdr.CreateView();
         hdrDepth = device.CreateTexture(new TextureDescriptor
         {
-            // Read by the lens flare's count of the sun's pixels (ViewportRenderer.LensFlare.cs).
+            // Read by the lens flare's count of the sun's pixels (ViewportRenderer.LensFlare.cs) and by the coronas
+            // (ViewportRenderer.Coronas.cs).
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,
             Size = new Extent3D((uint)hdrWidth, (uint)hdrHeight, 1),

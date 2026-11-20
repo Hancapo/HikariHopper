@@ -220,14 +220,17 @@ internal sealed class WorldLightBones
     /// </summary>
     public IReadOnlyList<WorldLightDefinition> Own { get; private init; } = [];
 
-    /// <summary>An asset without bones to attach lights to, carrying these lights itself.</summary>
-    public static WorldLightBones Carrying(IReadOnlyList<WorldLightDefinition> lights) =>
-        lights.Count == 0 ? Empty : new WorldLightBones(false, []) { Own = lights };
+    /// <summary>The corona values of <see cref="Own"/>'s lights, in their order (GTA V's); empty where they have none.</summary>
+    public IReadOnlyList<DrawableLightCorona> OwnCoronas { get; private init; } = [];
+
+    /// <summary>An asset without bones to attach lights to, carrying these lights itself, and their coronas' values if it has them.</summary>
+    public static WorldLightBones Carrying(IReadOnlyList<WorldLightDefinition> lights, IReadOnlyList<DrawableLightCorona>? coronas = null) =>
+        lights.Count == 0 ? Empty : new WorldLightBones(false, []) { Own = lights, OwnCoronas = coronas is { } c && c.Count == lights.Count ? c : [] };
 
     /// <summary>Whether any drawable had a skeleton, even an incomplete one.</summary>
     public bool HasSkeleton { get; }
 
-    internal long Bytes => transforms.Count * 96L + Own.Count * 160L;
+    internal long Bytes => transforms.Count * 96L + Own.Count * 160L + OwnCoronas.Count * 12L;
 
     /// <summary>Each bone's bind matrix, then its model's placement; a tag bound two ways stays unresolved.</summary>
     public static WorldLightBones From(IReadOnlyList<Rdr2Scene.Placed> models)
@@ -286,16 +289,26 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
     public bool IsTruncated => TotalLightCount > Lights.Count;
 
     /// <summary>
+    /// With coronas asked for, every light of the cut that carries corona values, wherever the camera is (the game
+    /// registers a corona for each it shows); otherwise none.
+    /// </summary>
+    public IReadOnlyList<WorldCoronaLight> Coronas { get; private init; } = [];
+
+    /// <summary>With coronas asked for, where each light of the cut on at the hour is, whatever it carries.</summary>
+    public IReadOnlyList<Vector3> Positions { get; private init; } = [];
+
+    /// <summary>
     /// Every light of the cut, off screen too. An asset without its bones yet (null) has none yet. A non-null
     /// <paramref name="hour"/> (0 to 23) leaves out lights whose hours don't include it.
     /// </summary>
+    /// <param name="interior">With coronas asked for: whether a placement is in an interior.</param>
     public static WorldLightBinding Resolve(WorldSelection selection, Func<WorldAssetKey, WorldLightBones?> residentBones,
-        Vector3 eye = default, int maximumCandidates = DefaultMaximumCandidates, int? hour = null)
+        Vector3 eye = default, int maximumCandidates = DefaultMaximumCandidates, int? hour = null, Func<WorldLodNode, bool>? interior = null)
     {
         CheckHour(hour);
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(residentBones);
-        var candidates = new Candidates(eye, maximumCandidates);
+        var candidates = new Candidates(eye, maximumCandidates) { Interior = interior };
         foreach (WorldLodNode node in selection.Coverage)
         {
             bool named = node.ArchetypeLights.Primary.Count != 0 || node.ArchetypeLights.Secondary.Count != 0 || node.EntityLights.Secondary.Count != 0;
@@ -314,6 +327,8 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
 
     private static void Bind(WorldLodNode node, WorldLightBones bones, Candidates candidates, string prefix, int? hour)
     {
+        bool coronas = candidates.Interior is not null;
+        bool inside = coronas && candidates.Interior!(node);
         foreach (WorldLightDefinition original in node.ArchetypeLights.Primary)
         {
             WorldLightDefinition effective = original;
@@ -328,12 +343,12 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
         }
         foreach (WorldLightDefinition definition in node.EntityLights.Secondary)
             BindDefinition(definition);
-        foreach (WorldLightDefinition definition in bones.Own)
-            BindDefinition(definition);
+        for (int i = 0; i < bones.Own.Count; i++)
+            BindDefinition(bones.Own[i], coronas && i < bones.OwnCoronas.Count ? bones.OwnCoronas[i] : null);
         if (node.ArchetypeLights.Secondary.Count != 0)
             candidates.Diagnose(prefix, "Archetype secondary light activation is not implemented.");
 
-        void BindDefinition(WorldLightDefinition definition)
+        void BindDefinition(WorldLightDefinition definition, DrawableLightCorona? corona = null)
         {
             // An override replaces the whole definition, its hours included.
             if (hour is { } h && !ActiveAt(definition, h))
@@ -357,10 +372,20 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
 
             void Add(Matrix4x4 placement)
             {
-                if (ToLocal(definition, bone * placement) is { } light)
+                Matrix4x4 transform = bone * placement;
+                if (ToLocal(definition, transform) is { } light)
                     candidates.Add(light);
                 else
                     candidates.Diagnose(prefix, "Local light contains invalid geometry, cone or photometric values; light omitted.");
+                if (coronas)
+                {
+                    Vector3 position = Vector3.Transform(definition.Position, transform);
+                    if (!VectorMath.IsFinite(position))
+                        return;
+                    candidates.Positions.Add(position);
+                    if (corona is { } values)
+                        candidates.Coronas.Add(new WorldCoronaLight(position, Vector3.TransformNormal(definition.Direction, transform), definition, values, inside));
+                }
             }
         }
     }
@@ -407,6 +432,11 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
         private readonly HashSet<string> diagnostics = [];
         private long count;
 
+        internal Func<WorldLodNode, bool>? Interior { get; init; }
+
+        internal readonly List<WorldCoronaLight> Coronas = [];
+        internal readonly List<Vector3> Positions = [];
+
         internal Candidates(Vector3 eye, int maximum)
         {
             if (!VectorMath.IsFinite(eye))
@@ -440,7 +470,12 @@ internal sealed record WorldLightBinding(IReadOnlyList<LocalLight> Lights, IRead
         internal WorldLightBinding Result()
         {
             LocalLight[] lights = [.. nearest.UnorderedItems.OrderBy(item => item.Element.Order).Select(item => item.Element.Light)];
-            return new WorldLightBinding(Array.AsReadOnly(lights), [.. diagnostics]) { TotalLightCount = count };
+            return new WorldLightBinding(Array.AsReadOnly(lights), [.. diagnostics])
+            {
+                TotalLightCount = count,
+                Coronas = Coronas.AsReadOnly(),
+                Positions = Positions.AsReadOnly(),
+            };
         }
     }
 }
