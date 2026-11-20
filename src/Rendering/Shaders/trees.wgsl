@@ -148,6 +148,13 @@ fn tree_dither(pixel: vec2f) -> f32 {
     return pattern[cell.x + 3u * cell.y];
 }
 
+// The cascades' alpha test for cut-outs (PS_CascadeShadows_texture): the diffuse alpha less 90/255, kept from the
+// cascades' cut-out reference, (128 - 90)/255: with no sub-sampled alpha, a cut-out casts where at least about half of
+// it covers.
+fn cut_out_casts(alpha: f32) -> bool {
+    return alpha - 90.0 / 255.0 >= (128.0 - 90.0) / 255.0;
+}
+
 // The cascades' alpha test for trees (PS_CascadeShadows_texture with its tree boost): twice the diffuse alpha, less
 // 90/255, kept from nought.
 fn tree_casts(alpha: f32) -> bool {

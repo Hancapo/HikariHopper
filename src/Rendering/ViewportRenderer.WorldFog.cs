@@ -147,7 +147,9 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 Module = module.Value,
                 EntryPoint = fragment,
-                Targets = new[] { new ColorTargetState { Format = format, Blend = blend, WriteMask = mask } },
+                // The fog is drawn in the world's HDR pass, its rays into their own target.
+                Targets = format == HdrFormat ? HdrTargets(new ColorTargetState { Format = format, Blend = blend, WriteMask = mask })
+                    : [new ColorTargetState { Format = format, Blend = blend, WriteMask = mask }],
             },
             DepthStencil = depth,
         };

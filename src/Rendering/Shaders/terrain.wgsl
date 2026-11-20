@@ -148,8 +148,15 @@ fn terrain_vertex(input: TerrainInput) -> TerrainOutput {
     return output;
 }
 
+// The HDR pass's targets: the colour, and no sub-sampled alpha (the terrain is never cut out), so none is left under
+// it by a cut-out it hides.
+struct TerrainTargets {
+    @location(0) colour: vec4f,
+    @location(1) sub_sampled: f32,
+};
+
 @fragment
-fn fs_terrain(input: TerrainOutput) -> @location(0) vec4f {
+fn fs_terrain(input: TerrainOutput) -> TerrainTargets {
     use_local_lights(input.position.xy, input.place);
     use_room(input.room);
     // Left out after shading, which needs uniform control flow.
@@ -157,7 +164,7 @@ fn fs_terrain(input: TerrainOutput) -> @location(0) vec4f {
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return colour;
+    return TerrainTargets(colour, 0.0);
 }
 
 // Into the reflection map: what is behind the hemisphere is left out, after shading.

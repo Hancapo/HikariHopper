@@ -317,6 +317,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         CreateExposure();
         CreateBloom();
+        CreateSubSampledPipeline();
         Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("tonemap.wgsl") }));
         tonemapPipeline = gpu.Pipeline($"tonemap/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
@@ -441,6 +442,7 @@ internal sealed unsafe partial class ViewportRenderer
         hdrDepthView = hdrDepth.CreateView();
         CreateFogRayTargets();
         CreateWaterTargets();
+        CreateSubSampledTargets();
         CreateBloomChain();
         tonemapGroup = device.CreateBindGroup(new BindGroupDescriptor
         {

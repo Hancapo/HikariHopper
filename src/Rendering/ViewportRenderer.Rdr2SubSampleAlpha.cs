@@ -88,7 +88,7 @@ internal sealed partial class ViewportRenderer
         combine.End();
         RenderPassEncoder resumed = encoder.BeginRenderPass(new RenderPassDescriptor
         {
-            ColorAttachments = [new RenderPassColorAttachment { View = hdrView!, LoadOp = LoadOp.Load, StoreOp = StoreOp.Store }],
+            ColorAttachments = HdrAttachments(clear: false),
             DepthStencilAttachment = new RenderPassDepthStencilAttachment
             {
                 View = hdrDepthView!,

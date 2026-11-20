@@ -21,7 +21,7 @@ struct Material {
     mask: vec4f,
     // Has a normal map, reads a specular map, alpha mode (0 opaque, 1 mask, 2 blend), is emissive.
     options: vec4f,
-    // Alpha cutoff, has a tint palette, tintPaletteSelector, family (0 textured, 1 vehicle).
+    // The cut-outs' alpha reference, has a tint palette, tintPaletteSelector, family (0 textured, 1 vehicle).
     extra: vec4f,
     // Vehicles: matDiffuseColor, matDiffuseSpecularRampEnabled.
     paint: vec4f,
@@ -55,7 +55,8 @@ struct Material {
     desaturate_exponent: vec4f,
     // The _pxm shaders: has parallax, heightScale, heightBias, parallaxSelfShadowAmount.
     parallax: vec4f,
-    // globalHeightScale; whether it is a decal, whose alpha is the diffuse map's times the vertex colour's.
+    // globalHeightScale; whether it is a decal, whose alpha is the diffuse map's times the vertex colour's; a cut-out's
+    // HardAlphaBlend, how hard its sub-sampled alpha is.
     parallax_global: vec4f,
     // Peds: which of PS_DeferredPedTextured's programs (0 not a ped, 1 skin and clothes, 2 diffuse only, 3 hair),
     // whether it has the rim light and the bend towards the view (all but the forward ped_alpha), whether the diffuse
@@ -248,30 +249,42 @@ struct Surface {
     alpha: f32,
 };
 
+// What the HDR pass's surfaces write: the colour, and the sub-sampled alpha the game's G-buffer keeps in its first
+// target's alpha, which its combine reads (subsample_alpha.wgsl): nought but on a cut-out's sub-sampled pixels.
+struct SurfaceTargets {
+    @location(0) colour: vec4f,
+    @location(1) sub_sampled: f32,
+};
+
+// The sub-sampled alpha a cut-out leaves (shade_surface), nought for everything else.
+var<private> sub_sampled_alpha: f32 = 0.0;
+
 @fragment
-fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+fn fs_surface(input: SurfaceOutput, @builtin(front_facing) front: bool) -> SurfaceTargets {
     use_local_lights(input.position.xy, input.place);
     use_room(input.room);
     // Left out after shading, which needs uniform control flow.
-    let colour = shade_surface(input, front);
+    let colour = shade_surface(input, front, true);
     if (!lod_fade_keeps(input.position.xy, input.lod_fade)) {
         discard;
     }
-    return colour;
+    return SurfaceTargets(colour, sub_sampled_alpha);
 }
 
 // Into the reflection map: the paraboloid mirrors the winding, and what is behind the hemisphere is left out (after
 // shading, which needs uniform control flow).
 @fragment
 fn fs_surface_reflected(input: SurfaceOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
-    let colour = shade_surface(input, !front);
+    let colour = shade_surface(input, !front, false);
     if (input.hemisphere < 0.0) {
         discard;
     }
     return colour;
 }
 
-fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
+// In the view, where the cut-outs are sub-sampled, as the game's cut-out pass draws them on PC; elsewhere
+// (the reflection map) they're clipped at their alpha reference, as its alpha-clip programs do.
+fn shade_surface(original: SurfaceOutput, front: bool, in_view: bool) -> vec4f {
     // The _pxm shaders read their maps where the view meets the height map; the rest where the first UV set says.
     var input = original;
     let uv_dx = dpdx(original.uv0);
@@ -305,8 +318,19 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     let ped = u32(material.ped.x + 0.5);
     let mode = u32(material.options.z + 0.5);
     let alpha = select(diffuse.a, ped_alpha(input, diffuse, noise1, hair_mask), ped != 0u);
-    if (mode == 1u && alpha < material.extra.x) {
-        discard;
+    if (mode == 1u) {
+        if (ped != 0u) {
+            // The ped programs' cut, at their own reference.
+            if (alpha < material.extra.x) {
+                discard;
+            }
+        } else if (in_view && material.extra.w < 0.5) {
+            sub_sampled_alpha = sub_sample(input.position.xy, alpha);
+        } else if (alpha <= material.extra.x) {
+            // PS_DeferredVehicleTextured_SubSampleAlpha clips at the vehicles' reference and keeps no sub-sampled alpha;
+            // the alpha-clip programs at the global one.
+            discard;
+        }
     }
     if (material.glass.x > 0.5) {
         return glass(input, diffuse, specular_sample, dirt);
@@ -361,6 +385,26 @@ fn shade_surface(original: SurfaceOutput, front: bool) -> vec4f {
     // With the parallax self-shadow, which the game's directional pass multiplies the sun by.
     let shadow = sun_shadow(input.place, select(-1.0, 1.0, front) * normalize(input.normal)) * self_shadow;
     return vec4f(lit(input, surface, diffuse, view, to_light, shadow), surface.alpha);
+}
+
+// PS_DeferredTextured_SubSampleAlpha's cut, checked against Enhanced's: the alpha hardened by HardAlphaBlend towards a
+// ramp a tenth of the way from the reference to whole; on the checkerboard's "opaque" pixels only what is whole is
+// kept, on the others all but nought. What it returns is what the game writes to its G-buffer's alpha for the combine:
+// the alpha in sevenths, flagged as sub-sampled.
+fn sub_sample(pixel: vec2f, alpha: f32) -> f32 {
+    let reference = material.extra.x;
+    let hard = (alpha - reference) / ((1.0 - reference) * 0.1);
+    let blended = mix(alpha, hard, material.parallax_global.z);
+    if ((ssa_opaque_pixel(pixel) && blended < 1.0) || blended <= 1.0 / 255.0) {
+        discard;
+    }
+    return f32(u32(saturate(blended) * 7.0) | 8u) / 255.0;
+}
+
+// The game's SSAIsOpaquePixelFrac: the half of a checkerboard over the frame's pixels that a sub-sampled cut-out
+// leaves to what is behind, unless it's whole.
+fn ssa_opaque_pixel(pixel: vec2f) -> bool {
+    return fract(dot(pixel, vec2f(0.5))) < 0.5;
 }
 
 // PS_VehicleTextured, as vehicle_vehglass compiles it (in its program without forward lights, PS_VehicleTextured_Zero):

@@ -94,19 +94,16 @@ internal sealed unsafe partial class ViewportRenderer
                 {
                     Module = shader.Value,
                     EntryPoint = reflected ? "fs_rdr2_reflected" : "fs_rdr2",
-                    Targets = new[]
+                    Targets = ViewTargets(new ColorTargetState
                     {
-                        new ColorTargetState
+                        Format = HdrFormat,
+                        Blend = blend ? new BlendState
                         {
-                            Format = HdrFormat,
-                            Blend = blend ? new BlendState
-                            {
-                                Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                                Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                            } : null,
-                            WriteMask = ColorWriteMask.All,
-                        },
-                    },
+                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                        } : null,
+                        WriteMask = ColorWriteMask.All,
+                    }, reflected),
                 },
                 DepthStencil = new DepthStencilState
                 {
