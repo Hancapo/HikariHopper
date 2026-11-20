@@ -47,6 +47,14 @@ public sealed class ModalOverlay : Panel
     public static readonly AttachedProperty<bool> FillsWindowProperty =
         AvaloniaProperty.RegisterAttached<ModalOverlay, Control, bool>("FillsWindow");
 
+    /// <summary>
+    /// Marks a native view that keeps drawing under a dialog (the world's). It would cover a dialog drawn in the window,
+    /// so while it shows, a dialog that doesn't fill the window opens over it in a pane of its own: a clear window laid
+    /// over the window's content, which still takes the pointer, and with nothing in it to blur or dim.
+    /// </summary>
+    public static readonly AttachedProperty<bool> KeepsDrawingProperty =
+        AvaloniaProperty.RegisterAttached<ModalOverlay, Control, bool>("KeepsDrawing");
+
     /// <summary>How soft the content behind a modal gets.</summary>
     public const double BlurRadius = 14;
 
@@ -114,8 +122,18 @@ public sealed class ModalOverlay : Panel
 
     public static void SetIsBackdrop(Control control, bool value) => control.SetValue(IsBackdropProperty, value);
 
-    /// <summary>Whether a modal overlay currently blocks <paramref name="host"/>.</summary>
-    public static bool IsOpen(TopLevel host) => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0;
+    public static bool GetKeepsDrawing(Control control) => control.GetValue(KeepsDrawingProperty);
+
+    public static void SetKeepsDrawing(Control control, bool value) => control.SetValue(KeepsDrawingProperty, value);
+
+    /// <summary>Whether a modal overlay currently blocks <paramref name="host"/>: drawn in it, or in a pane over it.</summary>
+    public static bool IsOpen(TopLevel host) => IsDrawnIn(host) || Panes.Any(pane => pane.Over == host && IsDrawnIn(pane));
+
+    /// <summary>Whether a modal overlay is drawn in <paramref name="host"/> itself, where a native view would cover it.</summary>
+    public static bool IsDrawnIn(TopLevel host) => OpenOverlays.TryGetValue(host, out var list) && list.Count > 0;
+
+    // The panes open over native views that keep drawing, each over its window.
+    private static readonly List<ModalPane> Panes = [];
 
     /// <summary>The window content a modal blurs: the control marked <see cref="IsBackdropProperty"/>.</summary>
     public static Control? BackdropOf(TopLevel host) =>
@@ -124,6 +142,9 @@ public sealed class ModalOverlay : Panel
     /// <summary>Opens <paramref name="dialog"/> over the window that contains <paramref name="anchor"/>.</summary>
     public static ModalOverlay? Show(Control anchor, Control dialog)
     {
+        if (TopLevel.GetTopLevel(anchor) is Window window && !GetFillsWindow(dialog)
+            && window.GetVisualDescendants().OfType<Control>().Any(view => GetKeepsDrawing(view) && view.IsEffectivelyVisible))
+            return ShowInPane(window, dialog);
         if (TopLevel.GetTopLevel(anchor) is not { } host || OverlayLayer.GetOverlayLayer(anchor) is not { } layer)
             return null;
         Control? backdrop = BackdropOf(host);
@@ -159,6 +180,23 @@ public sealed class ModalOverlay : Panel
         // to the modal then.
         host.AddHandler(KeyDownEvent, overlay.OnHostKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         overlay.Focus();
+        return overlay;
+    }
+
+    // Shows the dialog in a pane of its own over the window's content, which a native view that keeps drawing fills.
+    private static ModalOverlay? ShowInPane(Window window, Control dialog)
+    {
+        var pane = new ModalPane(window);
+        pane.Show(window);
+        if (Show(pane.Body, dialog) is not { } overlay)
+        {
+            pane.Close();
+            return null;
+        }
+        // Clear rather than dimmed: what's under it keeps drawing, and stays as it is. It still takes the pointer.
+        overlay.Background = Brushes.Transparent;
+        // The window is blocked, as it is under a dialog drawn in it: its menus and keys are switched off.
+        StateChanged?.Invoke(null, window);
         return overlay;
     }
 
@@ -210,6 +248,12 @@ public sealed class ModalOverlay : Panel
         {
             Blur(backdrop, false);
             StateChanged?.Invoke(null, host);
+            // A pane goes with its last dialog, once that has shrunk away.
+            if (host is ModalPane pane)
+            {
+                StateChanged?.Invoke(null, pane.Over);
+                DispatcherTimer.RunOnce(pane.Close, CloseDuration);
+            }
         }
         StackChanged?.Invoke(null, host);
         if (previousFocus is InputElement element && TopLevel.GetTopLevel(element) == host)
@@ -437,5 +481,93 @@ public sealed class ModalOverlay : Panel
             content.RequestClose();
         else
             Close();
+    }
+
+    /// <summary>
+    /// A dialog's window of its own over a native view that keeps drawing (<see cref="KeepsDrawingProperty"/>):
+    /// borderless and clear, owned by the window and laid over the part of it a modal covers (its backdrop, or all of
+    /// it), as the window moves and resizes.
+    /// </summary>
+    private sealed class ModalPane : Window
+    {
+        private readonly Control area;
+
+        public ModalPane(Window over)
+        {
+            Over = over;
+            area = BackdropOf(over) ?? over;
+            WindowDecorations = WindowDecorations.None;
+            ShowInTaskbar = false;
+            ShowActivated = true;
+            CanResize = false;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Background = Brushes.Transparent;
+            TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+            Content = Body;
+            Place();
+            Panes.Add(this);
+            over.PositionChanged += OnMoved;
+            area.PropertyChanged += OnResized;
+            over.AddHandler(KeyDownEvent, OnOverKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            // Closed as a window (Alt+F4) while it shows a dialog: the dialog is asked to close instead, as Escape asks
+            // it, and the pane goes once it has. The window it's over closing takes it along.
+            Closing += (_, e) =>
+            {
+                if (e.CloseReason == WindowCloseReason.WindowClosing && Dialog is { } shown)
+                {
+                    e.Cancel = true;
+                    shown.Dismiss();
+                }
+            };
+            Closed += (_, _) =>
+            {
+                Panes.Remove(this);
+                over.PositionChanged -= OnMoved;
+                area.PropertyChanged -= OnResized;
+                over.RemoveHandler(KeyDownEvent, OnOverKeyDown);
+            };
+        }
+
+        /// <summary>The window it's over.</summary>
+        public Window Over { get; }
+
+        /// <summary>What the dialog is shown from.</summary>
+        public Panel Body { get; } = new();
+
+        // The dialog on top in it, if one is.
+        private ModalOverlay? Dialog => OpenOverlays.TryGetValue(this, out var open) && open.Count > 0 ? open[^1] : null;
+
+        private void OnMoved(object? sender, PixelPointEventArgs e) => Place();
+
+        // The window's title bar stays usable, so the keyboard can land there (a click on Maximize, a drag): Escape and
+        // Tab are still the dialog's then, as they are for one drawn in the window.
+        private void OnOverKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Handled || Dialog is not { } shown)
+                return;
+            if (e.Key == Key.Escape)
+                shown.Dismiss();
+            else if (e.Key == Key.Tab && (e.KeyModifiers & ~KeyModifiers.Shift) == KeyModifiers.None)
+            {
+                Activate();
+                shown.MoveFocus(e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            }
+            else
+                return;
+            e.Handled = true;
+        }
+
+        private void OnResized(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == BoundsProperty)
+                Place();
+        }
+
+        private void Place()
+        {
+            Position = area.PointToScreen(default);
+            Width = area.Bounds.Width;
+            Height = area.Bounds.Height;
+        }
     }
 }
