@@ -65,6 +65,9 @@ struct Rdr2Night {
     fog: array<vec4f, 4>,
     // The camera relative to the scene's origin, where the world's shadow is cast from.
     relative_camera: vec4f,
+    // The far haze: where it starts, one over how far it builds up, its power, how much of the sky's ambient it takes
+    // in (over the isotropic phase's divisor).
+    far_haze: vec4f,
 };
 
 struct Rdr2Dome {

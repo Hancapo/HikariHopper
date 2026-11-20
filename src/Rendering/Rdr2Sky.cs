@@ -19,7 +19,7 @@ internal sealed class Rdr2Sky
     public const int TableVectors = 9, TableBytes = TableVectors * 16;
 
     /// <summary>The dome's: the tables' then the night's (rdr2_sky.wgsl's Rdr2Dome).</summary>
-    public const int Vectors = TableVectors + 25, Bytes = Vectors * 16;
+    public const int Vectors = TableVectors + 26, Bytes = Vectors * 16;
 
     /// <summary>
     /// Where the camera's rays are among the dome's constants, which the renderer writes: its forward way with the
@@ -32,6 +32,9 @@ internal sealed class Rdr2Sky
 
     /// <summary>Where the camera relative to the scene's origin is among the dome's, which the renderer writes.</summary>
     public const int RelativeCamera = TableVectors + 24;
+
+    /// <summary>Where the far haze's constants are among the dome's: after the camera relative to the scene's origin.</summary>
+    public const int FarHaze = TableVectors + 25;
 
     /// <summary>
     /// The dome's radius in metres, which the stars' height blends are by: as far as the game puts the sun and moon (it
@@ -108,6 +111,9 @@ internal sealed class Rdr2Sky
         ["postfx_exposure"] = 0,
         ["postfx_exposure_min"] = -11, ["postfx_exposure_max"] = 32,
         ["postfx_exposure_blend_curve_weight"] = 0,
+        ["far_clip"] = 1500,
+        ["far_haze_start"] = 100, ["far_haze_power"] = 1, ["far_haze_ambient_intensity"] = .5f,
+        ["fog_isotropic_phase"] = 4,
     };
 
     /// <summary>The dome it's drawn on and its textures, from the game's files; none without them (a sphere stands in).</summary>
@@ -219,6 +225,12 @@ internal sealed class Rdr2Sky
         values[Fog + 2] = new(Colour("local_atmosphere_sky_col", at, 1) * Field("local_atmosphere_sky_intensity", at, 1), 0);
         values[Fog + 3] = new(Colour("local_atmosphere_fill_ambient_light_color", at, 0) * Field("local_atmosphere_fill_ambient_light_intensity", at, 1)
             / AirGlowScale, 0);
+        // The far haze, as the game's haze is laid over the world: where it starts and one over how far it builds up,
+        // out to the camera's far clip (the timecycle's far_clip), at least as far again as it starts; its power; how
+        // much of the sky's ambient it takes in, over pi times the isotropic phase's divisor.
+        float start = Field("far_haze_start", at);
+        values[FarHaze] = new(start, 1 / (MathF.Max(Field("far_clip", at), start * 2) - start), Field("far_haze_power", at),
+            Field("far_haze_ambient_intensity", at) / Math.Max(Field("fog_isotropic_phase", at), 1e-3f));
     }
 
     /// <summary>How far the aerial perspective reaches, in metres (sky.AerialPerspectiveFarClip).</summary>
