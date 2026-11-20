@@ -78,6 +78,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- Keep the world drawing while the title bar's menus are open over it, instead of hiding it until they close. ([#327](https://github.com/Hancapo/HikariHopper/pull/327))
 - Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
 - Open Red Dead Redemption 2's texture dictionaries from inside its archives, with Save As to keep changes, instead of saying its archives can't be changed. ([#274](https://github.com/Hancapo/HikariHopper/pull/274))

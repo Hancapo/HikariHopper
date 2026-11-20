@@ -170,7 +170,7 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_time_of_day_is_the_tabs_and_the_world_hides_under_a_menu()
+    public void The_time_of_day_is_the_tabs_and_the_title_bars_menus_open_over_the_world()
     {
         var (window, session) = OpenWindow();
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
@@ -185,16 +185,59 @@ public sealed class WorldFaceTests : ExplorerTestBase
         WorldView world = Find<WorkspaceView>(window).World!;
         Assert.Equal(21, world.Viewport.Hours);
 
-        // A title-bar menu opened over it: the viewport, a native window that would cover it, hides.
+        // A title-bar menu over it opens as a window of its own, drawn over the viewport, which keeps drawing.
         MenuRow menus = Find<MenuRow>(window);
         HikariHopper.Views.Controls.RetroMenu view = menus.MenuFor(menus.ViewButton);
-        view.Open(menus.ViewButton);
+        menus.Toggle(menus.ViewButton);
         TestWait.Pump(50);
-        Assert.True(world.Covered);
-        Assert.False(world.Viewport.IsVisible);
-        view.Close();
-        TestWait.Pump(50);
+        Assert.NotNull(menus.OpenWindow);
+        Assert.True(menus.ViewButton.MenuOpen);
+        Assert.False(view.IsOpen);
         Assert.False(world.Covered);
+        Assert.True(world.Viewport.IsVisible);
+        // Pointing at another title opens its menu in the first's place.
+        HikariHopper.Views.Controls.DropdownWindow first = menus.OpenWindow!;
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        Assert.False(first.IsVisible);
+        Assert.False(menus.ViewButton.MenuOpen);
+        Assert.True(menus.GoButton.MenuOpen);
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(menus.GoButton.MenuOpen);
+
+        // One of its items closes it, after doing what it does: Back, to the files.
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        HikariHopper.Views.Controls.RetroMenuItem back = menus.MenuFor(menus.GoButton).Items
+            .OfType<HikariHopper.Views.Controls.RetroMenuItem>().Single(item => item.Text == "Back");
+        back.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
+        TestWait.Pump(200);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(tab.InWorld);
+
+        // The window's shortcuts still work while one is open, and close it: F6, to the files.
+        tab.ShowWorld();
+        TestWait.Pump(100);
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        HikariHopper.Views.Controls.DropdownWindow open = menus.OpenWindow!;
+        // The press closes it, so its release has nowhere to go.
+        open.KeyPressQwerty(PhysicalKey.F6, RawInputModifiers.None);
+        TestWait.Pump(200);
+        Assert.False(tab.InWorld);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(open.IsVisible);
+
+        // On the files' side, the menu is drawn in the main window, as before.
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        Assert.True(view.IsOpen);
+        Assert.Null(menus.OpenWindow);
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        Assert.False(view.IsOpen);
         window.Close();
     }
 
