@@ -217,6 +217,19 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.Null(menus.OpenWindow);
         Assert.False(tab.InWorld);
 
+        // The window's shortcuts still work while one is open, and close it: F6, to the files.
+        tab.ShowWorld();
+        TestWait.Pump(100);
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        HikariHopper.Views.Controls.DropdownWindow open = menus.OpenWindow!;
+        // The press closes it, so its release has nowhere to go.
+        open.KeyPressQwerty(PhysicalKey.F6, RawInputModifiers.None);
+        TestWait.Pump(200);
+        Assert.False(tab.InWorld);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(open.IsVisible);
+
         // On the files' side, the menu is drawn in the main window, as before.
         menus.Toggle(menus.ViewButton);
         TestWait.Pump(50);
