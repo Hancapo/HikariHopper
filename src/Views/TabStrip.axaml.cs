@@ -235,9 +235,14 @@ public partial class TabStrip : UserControl
     private static bool AcceptsDrag(IDataTransfer data) =>
         data.Contains(DataFormat.File) && !data.Contains(EntryPointerArea.EntryDragFormat);
 
-    /// <summary>The game's tab at <paramref name="point"/> (in the strip), or null over anything else.</summary>
+    /// <summary>
+    /// The game's tab at <paramref name="point"/> (in the strip), or null over anything else: only where the tab list
+    /// shows its tabs, so a tab scrolled out from under the new-tab button or the empty strip isn't found there.
+    /// </summary>
     internal TabStripTab? GameTabAt(Point point)
     {
+        if (TabList.TranslatePoint(default, this) is not { } list || !new Rect(list, TabList.Bounds.Size).Contains(point))
+            return null;
         foreach (Control container in TabItems.GetRealizedContainers())
         {
             if (container is not ContentPresenter { Child: TabStripTab tab } || tab.Tab is not { HasGame: true })

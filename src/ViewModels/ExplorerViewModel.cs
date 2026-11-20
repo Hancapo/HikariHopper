@@ -726,7 +726,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
             SetStatus($"Could not open folder: {error.Message}");
             return false;
         }
-        LeaveWorld();
+        // The game's world stays the tab's: only its files side changes.
+        if (InWorld)
+            SetFace(TabFace.Files);
         ClearArchiveExpansion();
         ResetNavigation();
         ExpandCurrentBranch();

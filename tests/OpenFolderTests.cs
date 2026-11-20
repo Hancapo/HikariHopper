@@ -63,6 +63,10 @@ public sealed class OpenFolderTests : ExplorerTestBase
         Assert.False(opened.ArchiveIsRoot);
         Assert.Equal(["data"], ListedNames(opened));
 
+        // Its game's world stays its own, F6 away.
+        Assert.True(opened.HasWorld);
+        Assert.True(opened.WorldReady || opened.WorldPreparing);
+
         // The game's own tab is as it was.
         Assert.False(gameTab.HasFolder);
         Assert.Contains("common.txt", ListedNames(gameTab));
@@ -252,6 +256,30 @@ public sealed class OpenFolderTests : ExplorerTestBase
         Assert.Equal(enhanced, tabs.Tabs[3].GamePath);
         Assert.Equal(folder, tabs.Tabs[3].FolderPath);
         Assert.Equal(GameSettings.EnhancedEdition, tabs.Tabs[3].GameEditionId);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_tab_scrolled_out_from_under_the_new_tab_button_isnt_dropped_on()
+    {
+        var (game, _, tabs) = Setup();
+        for (int i = 0; i < 5; i++)
+        {
+            tabs.NewTab();
+            tabs.ActiveBridge.OpenGame(game);
+        }
+        tabs.ActivateTab(0);
+        Settle(tabs);
+        var strip = new TabStrip { DataContext = tabs };
+        var window = new Window { Width = 900, Height = 80, Content = strip };
+        window.Show();
+        TestWait.Pump(50);
+        // Six tabs overflow the list; one runs on, hidden, under the + button.
+        Control plus = strip.FindControl<Control>("NewTabButton")!;
+        Point onPlus = plus.TranslatePoint(new Point(plus.Bounds.Width / 2, plus.Bounds.Height / 2), strip)!.Value;
+        Assert.Contains(Enumerable.Range(0, 6).Select(strip.TabAt), tab => tab is not null
+            && tab.TranslatePoint(default, strip) is { } at && new Rect(at, tab.Bounds.Size).Contains(onPlus));
+        Assert.Null(strip.GameTabAt(onPlus));
         window.Close();
     }
 }
