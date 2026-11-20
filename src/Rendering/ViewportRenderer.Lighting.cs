@@ -97,6 +97,9 @@ internal sealed unsafe partial class ViewportRenderer
     private BindGroup? tonemapGroup;
     private KeyLight key;
     private TimecycleLight cycle;
+
+    // visualsettings.dat's exposure curve and filmic tone map, as they were when the hour was last set.
+    private GtaToneMapVisuals toneMap = Timecycle.ToneMap;
     // Each cascade's view from the sun, its texel in metres and its depth range in metres; and how far from the camera,
     // along its view, each one reaches.
     private readonly Matrix4x4[] shadowMatrices = new Matrix4x4[ShadowCascades];
@@ -333,6 +336,7 @@ internal sealed unsafe partial class ViewportRenderer
         // Evaluated first: an hour that isn't a number throws and changes nothing.
         key = DayCycle.Evaluate(hours, Sky);
         cycle = Timecycle.Evaluate(hours);
+        toneMap = Timecycle.ToneMap;
         Hours = hours;
         // A drawable's shadow follows the sun.
         if (shadowRadius > 0)
@@ -470,9 +474,10 @@ internal sealed unsafe partial class ViewportRenderer
         vectors[3] = new Vector4(cycle.NaturalUp, cycle.OcclusionProp);
         vectors[4] = new Vector4(cycle.DirectionalAmbient, cycle.OcclusionVehicle);
         vectors[5] = new Vector4(Timecycle.DirectionalAmbientDirection(cycle, key.Direction), 0);
-        vectors[6] = new Vector4(Timecycle.ExposureScale, Timecycle.ExposurePower, Timecycle.ExposureOffset, cycle.Exposure + Exposure);
-        vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, Timecycle.BrightExposure, Timecycle.DarkExposure);
-        Filmic bright = Timecycle.Bright, dark = Timecycle.Dark;
+        vectors[6] = new Vector4(toneMap.ExposureScale, toneMap.ExposurePower, toneMap.ExposureOffset, cycle.Exposure + Exposure);
+        var (blendScale, blendOffset) = toneMap.Blend;
+        vectors[7] = new Vector4(cycle.ExposureMin, cycle.ExposureMax, blendScale, blendOffset);
+        Filmic bright = toneMap.Bright, dark = toneMap.Dark;
         vectors[8] = new Vector4(bright.A, bright.B, bright.C, bright.D);
         vectors[9] = new Vector4(bright.E, bright.F, bright.W, 1 / Timecycle.DisplayGamma);
         vectors[10] = new Vector4(dark.A, dark.B, dark.C, dark.D);

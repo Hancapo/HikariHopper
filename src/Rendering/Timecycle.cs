@@ -35,23 +35,15 @@ internal readonly record struct TimecycleLight(
 /// GTA V's timecycle for clear weather (EXTRASUNNY, its global region, the same in both editions), interpolated
 /// between its keyframes, with the exposure and filmic tone map the game's post-process builds from it
 /// (postfx: PS_CalculateExposure and PS_Composite) and from visualsettings.dat. Read from the game once one is open
-/// (<see cref="Use"/>); until then, from a copy of its values kept with the app (timecycle.json).
+/// (<see cref="Use"/>, <see cref="UseVisuals"/>); until then, the timecycle from a copy of its values kept with the
+/// app (timecycle.json) and visualsettings.dat's settings as the game's code defaults them.
 /// </summary>
 internal static class Timecycle
 {
     private static readonly float[] Hours;
     private static readonly Dictionary<string, float[]> Kept;
     private static volatile Dictionary<string, float[]> Values;
-
-    // visualsettings.dat: the curve from the scene's luminance to an exposure in stops, in both editions.
-    internal const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
-
-    /// <summary>
-    /// visualsettings.dat's filmic curves, bright and dark, and the exposures they belong to: the timecycle does not
-    /// override them in clear weather. The tone map moves from one to the other as the exposure goes up.
-    /// </summary>
-    internal static readonly Filmic Bright = new(.22f, .3f, .1f, .2f, .01f, .3f, 4), Dark = new(.22f, .3f, .1f, .2f, 0, .3f, 4);
-    internal const float BrightExposure = -.5f, DarkExposure = 3;
+    private static volatile GtaToneMapVisuals toneMap = GtaToneMapVisuals.GameDefaults;
 
     /// <summary>
     /// The gamma PS_Composite encodes with: it raises the tone-mapped colour to its Gamma, one over this, itself, and
@@ -91,6 +83,16 @@ internal static class Timecycle
                 values[name] = keyframes;
         Values = values;
     }
+
+    /// <summary>
+    /// Takes the exposure curve and filmic tone map from the game's visualsettings.dat from now on, each setting it
+    /// lacks as the game's code defaults it; null goes back to those defaults. Views pick it up the next time they set
+    /// their hour.
+    /// </summary>
+    internal static void UseVisuals(Core.GameVisualSettings? game) => toneMap = GtaToneMapVisuals.From(game);
+
+    /// <summary>The exposure curve and filmic tone map in use, the game's visualsettings.dat's or its code's defaults.</summary>
+    internal static GtaToneMapVisuals ToneMap => toneMap;
 
     /// <summary>Whether the timecycle in use has this field, the game's or the kept copy's.</summary>
     internal static bool Has(string name) => Values.ContainsKey(name);
@@ -189,16 +191,6 @@ internal static class Timecycle
     }
 
     /// <summary>
-    /// PS_CalculateExposure: the exposure in stops for a scene of this luminance, from visualsettings.dat's curve plus
-    /// the timecycle's exposure, kept in the timecycle's range.
-    /// </summary>
-    internal static float ExposureFor(float luminance, in TimecycleLight light)
-    {
-        float stops = ExposureScale * MathF.Pow(MathF.Max(luminance, 1e-6f), ExposurePower) + ExposureOffset + light.Exposure;
-        return Math.Clamp(stops, light.ExposureMin, light.ExposureMax);
-    }
-
-    /// <summary>
     /// The stand-in ground's radiance: open ground of the reference albedo under this light, lit as GTA lights it
     /// (the directional light, the natural ambient from above and the directional ambient).
     /// </summary>
@@ -210,11 +202,9 @@ internal static class Timecycle
         return ReferenceAlbedo * irradiance;
     }
 
-    /// <summary>The exposure GTA settles on for a frame of nothing but that ground.</summary>
-    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight) => ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
-
-    /// <summary>The filmic curve for this exposure: bright at or below the bright exposure, dark at or above the dark.</summary>
-    internal static Filmic FilmicFor(float stops) => Filmic.Lerp(Bright, Dark, Math.Clamp((stops - BrightExposure) / (DarkExposure - BrightExposure), 0, 1));
+    /// <summary>The exposure GTA settles on for a frame of nothing but that ground, with this exposure curve.</summary>
+    internal static float Exposure(GtaToneMapVisuals curve, in TimecycleLight light, Vector3 towardsLight) =>
+        curve.ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
 
     internal static float Luminance(Vector3 colour) => Vector3.Dot(colour, new(.2125f, .7154f, .0721f));
 }
