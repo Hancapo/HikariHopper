@@ -9,6 +9,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Added
 
+- Keep the world drawing under Settings and the other sheets, shown as it is rather than hidden, so a graphics setting shows on it as it's changed. ([#328](https://github.com/Hancapo/HikariHopper/pull/328))
 - Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
 - Browse, search and extract from Red Dead Redemption 2's archives, their folders and file names rebuilt from the names the game is known to use. ([#238](https://github.com/Hancapo/HikariHopper/pull/238), [#239](https://github.com/Hancapo/HikariHopper/pull/239))
 - Open, edit and save Red Dead Redemption 2's texture dictionaries in the texture editor. ([#240](https://github.com/Hancapo/HikariHopper/pull/240), [#241](https://github.com/Hancapo/HikariHopper/pull/241))
