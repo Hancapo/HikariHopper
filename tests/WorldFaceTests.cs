@@ -325,9 +325,17 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.NotNull(red.WorldButton);
         Assert.NotNull(legacy.WorldButton);
 
-        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        // On its World side as soon as the load is done: its files are never shown in between.
+        bool? inWorldWhenLoaded = null;
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExplorerViewModel.GameLoading) && !tab.GameLoading && tab.HasGame)
+                inWorldWhenLoaded ??= tab.InWorld;
+        };
+        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         TestWait.Until(() => tab.HasGame && !tab.GameLoading, "the game to load");
+        Assert.True(inWorldWhenLoaded);
         TestWait.Pump(100);
         Assert.True(tab.InWorld);
         Assert.Equal("World", tab.TabTitle);
@@ -375,6 +383,31 @@ public sealed class WorldFaceTests : ExplorerTestBase
         TestWait.Pump(100);
         Assert.False(world.Cover.IsVisible);
         Assert.Equal("0 maps · 0 placements", tab.WorldStatus);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Until_the_shaders_have_compiled_the_world_shows_its_loading_screen_and_the_window_stays_responsive()
+    {
+        var compiled = new TaskCompletionSource();
+        WorldView.GpuReady = () => compiled.Task;
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady, "the world's index");
+        tab.ShowWorld();
+        TestWait.Pump(300);
+        // The index is ready, but the viewport, which would wait for the shaders on the UI thread, stays hidden.
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Cover.IsVisible);
+        Assert.False(world.Viewport.IsVisible);
+        Assert.Equal("COMPILING SHADERS", world.Loading.Title);
+        Assert.Equal("Preparing the world", world.Loading.Detail);
+        Assert.Null(world.Loading.Progress);
+
+        // Compiled, the world opens by itself.
+        compiled.SetResult();
+        TestWait.Until(() => world.Viewport.IsVisible, "the world's view");
+        Assert.False(world.Cover.IsVisible);
         window.Close();
     }
 

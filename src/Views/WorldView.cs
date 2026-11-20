@@ -16,7 +16,8 @@ namespace HikariHopper.Views;
 /// starts where the tab's camera was left (<see cref="ExplorerViewModel.WorldSpot"/>) and says where it is as it moves.
 /// One view serves every tab, as the files' views do, moving its camera to the tab shown. Until the game's world index is
 /// ready, the loading screen shows in its place: the train, what the index is doing, "Preparing the world" and how far
-/// it has got; the world opens by itself when it's done. Then it streams in around the camera (<see cref="WorldStreamer"/>):
+/// it has got; the world opens by itself when it's done, and once the GPU's shaders, compiling since the app started,
+/// are ready too ("Compiling shaders" meanwhile). Then it streams in around the camera (<see cref="WorldStreamer"/>):
 /// the whole map through its lowest levels of detail, the detail near the camera. On the Files side it pauses, keeping
 /// what it streamed.
 /// <para>
@@ -34,6 +35,9 @@ internal sealed class WorldView : UserControl
     /// <summary>How long the viewport waits to come back once what covered it closed, so its closing isn't cut.</summary>
     internal static TimeSpan SettleTime { get; set; } = TimeSpan.FromMilliseconds(150);
 
+    /// <summary>When the GPU's pipelines are ready (<see cref="Rendering.GpuDevice.Ready"/>); tests give their own.</summary>
+    internal static Func<Task> GpuReady { get; set; } = () => Rendering.GpuDevice.Ready;
+
     // What's shown around the camera when it's placed: its fly speed and zoom limits follow it.
     private const float Reach = 20;
 
@@ -43,6 +47,9 @@ internal sealed class WorldView : UserControl
     private int shownRequest;
     private WorldStreamer? streamer;
     private WorldIndex? streamed;
+    // The GPU's pipelines, compiling in the background since the app started: until they're done, a viewport would wait
+    // for them on the UI thread, which would stop the whole window. The loading screen stays up meanwhile.
+    private Task? shaders;
 
     public WorldView()
     {
@@ -101,6 +108,12 @@ internal sealed class WorldView : UserControl
             top = TopLevel.GetTopLevel(this);
             ModalOverlay.StackChanged += OnCoversChanged;
             Controls.RetroMenu.OpenMenusChanged += OnMenusChanged;
+            if (shaders is null)
+            {
+                shaders = GpuReady();
+                if (!shaders.IsCompleted)
+                    shaders.ContinueWith(_ => Dispatcher.UIThread.Post(Refresh), TaskScheduler.Default);
+            }
             Refresh();
         };
         DetachedFromVisualTree += (_, _) =>
@@ -301,8 +314,10 @@ internal sealed class WorldView : UserControl
     private void Refresh()
     {
         Stream(top is null ? null : bridge?.WorldIndex);
-        // The loading screen while the index is made: the stage, small and capitalised, and how far, when known.
-        bool preparing = bridge is { InWorld: true, WorldPreparing: true };
+        // The loading screen while the index is made: the stage, small and capitalised, and how far, when known. Then
+        // while the shaders compile, if they still are.
+        bool compiling = shaders is { IsCompleted: false };
+        bool preparing = bridge is { InWorld: true } && (bridge.WorldPreparing || compiling && bridge.WorldFailure is null);
         Cover.IsVisible = preparing;
         Pattern.IsRunning = Loading.IsRunning = preparing;
         if (bridge?.WorldFailure is { } failure)
@@ -313,6 +328,13 @@ internal sealed class WorldView : UserControl
             Loading.Progress = null;
             Pattern.IsRunning = Loading.IsRunning = false;
         }
+        else if (bridge is { WorldPreparing: false } && compiling)
+        {
+            Loading.Title = "COMPILING SHADERS";
+            Loading.Detail = "Preparing the world";
+            Loading.Progress = null;
+            Loading.ProgressText = null;
+        }
         else if (bridge is not null)
         {
             Loading.Title = bridge.WorldStage.ToUpperInvariant();
@@ -321,7 +343,7 @@ internal sealed class WorldView : UserControl
             Loading.ProgressText = bridge.WorldProgress is { } share
                 ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{share * 100:0}%") : null;
         }
-        bool shown = bridge is { InWorld: true, WorldReady: true } && !Covered;
+        bool shown = bridge is { InWorld: true, WorldReady: true } && !compiling && !Covered;
         int request = ++shownRequest;
         if (!shown)
         {

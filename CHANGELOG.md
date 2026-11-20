@@ -79,6 +79,8 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- The start page's globe opens a game straight on its world, without its files showing for a moment first. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
+- Opening a world in the first seconds after the app starts no longer freezes the window for up to 15 seconds: the world shows its loading screen while its shaders compile. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
 - Keep the world drawing while the title bar's menus are open over it, instead of hiding it until they close. ([#327](https://github.com/Hancapo/HikariHopper/pull/327))
 - Draw a moving camera's world frames from where the camera is, not where it was the frame before: the world no longer lags a frame behind while flying and jumps when the camera stops. ([#269](https://github.com/Hancapo/HikariHopper/pull/269))
 - Keep the 3D view at the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))

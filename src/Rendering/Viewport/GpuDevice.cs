@@ -16,6 +16,8 @@ namespace HikariHopper.Rendering;
 internal sealed class GpuDevice
 {
     private static readonly Lock Creation = new();
+    // Around the warm-up's task alone: the warm-up makes the device under Creation, which asking after it mustn't wait for.
+    private static readonly Lock Warming = new();
     private static GpuDevice? shared;
     private static Task? warming;
 
@@ -77,7 +79,7 @@ internal sealed class GpuDevice
     /// </summary>
     internal static Task WarmUp()
     {
-        lock (Creation)
+        lock (Warming)
             return warming ??= Task.Run(() =>
             {
                 try
@@ -96,6 +98,42 @@ internal sealed class GpuDevice
                 {
                 }
             });
+    }
+
+    /// <summary>
+    /// Done once the warm-up has compiled the viewports' pipelines and let go of the device (<see cref="Gate"/>); done
+    /// already when none was started. A viewport made before then waits for it on the UI thread.
+    /// </summary>
+    internal static Task WarmingUp
+    {
+        get
+        {
+            lock (Warming)
+                return warming ?? Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Done once the warm-up has compiled the viewports' pipelines and the worlds' have compiled on the driver's threads
+    /// too; done already when no warm-up was started. A viewport made before then waits for them on the UI thread (the
+    /// warm-up holds <see cref="Gate"/>, and a world's first frames wait for its pipelines): ten seconds and more after
+    /// the app starts. It never fails: a pipeline that didn't compile is compiled again when it's used.
+    /// </summary>
+    internal static Task Ready
+    {
+        get
+        {
+            Task? started;
+            lock (Warming)
+                started = warming;
+            if (started is null)
+                return Task.CompletedTask;
+            return started.ContinueWith(_ => shared is { } gpu
+                    ? Task.WhenAll(gpu.pipelines.Values.OfType<Task<RenderPipeline>>())
+                    : Task.CompletedTask, TaskScheduler.Default)
+                .Unwrap()
+                .ContinueWith(_ => { }, TaskScheduler.Default);
+        }
     }
 
     /// <summary>
