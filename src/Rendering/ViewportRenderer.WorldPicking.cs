@@ -13,7 +13,7 @@ internal sealed record WorldPick(WorldAssetKey Asset, WorldLodNode Node, int Ins
     public Vector3 Position => Transform.Translation;
 }
 
-// What's under the pointer in the world (rdr2_world_pick.wgsl): on a click, every placement in view is drawn into a
+// What's under the pointer in the world (Rdr2/world_pick.wgsl): on a click, every placement in view is drawn into a
 // target of ids the frame's size, nearest first, and the pixel under the pointer read back; then the placement picked is
 // outlined as the model viewer outlines its parts, its shape drawn into outline.wgsl's mask.
 internal sealed unsafe partial class ViewportRenderer
@@ -96,7 +96,7 @@ internal sealed unsafe partial class ViewportRenderer
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
             Code = Shader("world_instances.wgsl") + "\n" + Read("world_pick.wgsl") + "\n"
-                + (family == WorldFamily.Rdr2 ? Read("rdr2_cutout.wgsl") + "\n" + Read("rdr2_world_pick.wgsl") : Read("gta_world_pick.wgsl")),
+                + (family == WorldFamily.Rdr2 ? Read("Rdr2/cutout.wgsl") + "\n" + Read("Rdr2/world_pick.wgsl") : Read("Gta5/world_pick.wgsl")),
         }));
         var vertex = new VertexBufferLayout
         {

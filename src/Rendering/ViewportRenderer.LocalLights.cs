@@ -8,7 +8,7 @@ namespace HikariHopper.Rendering;
 
 // The local lights (RedFury's WebGpuRenderer.LocalLights, copied): in a world, the cut's static lights the streamer
 // binds; in the viewer, the model's own, at the viewer's hour. Each frame the 512 nearest the camera that reach the
-// screen go to the GPU with the screen tiles each touches, which light.wgsl's lighting walks (rdr2_material.wgsl's
+// screen go to the GPU with the screen tiles each touches, which light.wgsl's lighting walks (Rdr2/material.wgsl's
 // local_irradiance for RDR2's materials).
 internal sealed unsafe partial class ViewportRenderer
 {

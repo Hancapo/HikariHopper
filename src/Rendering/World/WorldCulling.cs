@@ -36,7 +36,7 @@ internal sealed class WorldCullSet
     private Dictionary<WorldLodNode, PreparedNode> nextPrepared = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
-    /// A node's placements, prepared once: each one's world matrix and its inverse transpose (as rdr2_world.wgsl reads
+    /// A node's placements, prepared once: each one's world matrix and its inverse transpose (as Rdr2/world.wgsl reads
     /// them), its sphere, its squared reach and which instance it is, a field to an array.
     /// </summary>
     internal sealed class PreparedNode

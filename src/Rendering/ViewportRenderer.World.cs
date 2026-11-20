@@ -10,7 +10,7 @@ using GameTexture = FiveFury.Textures.Texture;
 namespace HikariHopper.Rendering;
 
 // A game's world (after RedFury's WebGpuRenderer.World): the streamed assets, each uploaded once and drawn once per
-// placement in view with rdr2_world.wgsl. The covered placements' matrices stay on the GPU per asset; when the view
+// placement in view with Rdr2/world.wgsl. The covered placements' matrices stay on the GPU per asset; when the view
 // changes, the camera's and the due shadow cascades' culls only write the indexes of the placements each sees, grouped
 // by the drawable level of detail each is at. The streamer (WorldStreamer) says what's covered and hands over the assets
 // it read; this keeps them within the budget. Drawing is in ViewportRenderer.WorldBundles.cs, the sun's shadow in
@@ -953,8 +953,8 @@ internal sealed unsafe partial class ViewportRenderer
 }
 
 /// <summary>
-/// Which world shaders draw a surface: RDR2's material, GTA V's surface.wgsl or terrain.wgsl, or either game's water
-/// (rdr2_water.wgsl, gta_water.wgsl).
+/// Which world shaders draw a surface: RDR2's material, GTA V's Gta5/surface.wgsl or Gta5/terrain.wgsl, or either game's water
+/// (Rdr2/water.wgsl, Gta5/water.wgsl).
 /// </summary>
 internal enum WorldFamily
 {

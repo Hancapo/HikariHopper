@@ -1,6 +1,6 @@
 // What's under the pointer in a game's world, and the outline of what's picked: each placement drawn into an id target
 // (its asset's number and its own), nearest first, cut-outs where their game's alpha test keeps them
-// (rdr2_world_pick.wgsl, gta_world_pick.wgsl, put after this); and one placement's shape into outline.wgsl's mask. Put
+// (Rdr2/world_pick.wgsl, Gta5/world_pick.wgsl, put after this); and one placement's shape into outline.wgsl's mask. Put
 // after scene.wgsl and world_instances.wgsl.
 
 // The asset being drawn: its number, from 1 (0 is nothing).

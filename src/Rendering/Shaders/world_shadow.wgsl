@@ -1,6 +1,6 @@
 // The sun's shadow of a game's world (after RedFury's vs_world_shadow): each streamed asset's casters drawn once per
-// placement into a cascade, their depth alone; cut-outs through their game's alpha test (rdr2_world_shadow.wgsl,
-// gta_world_shadow.wgsl, put after this). Standalone: the cascade's view, and the asset's placements
+// placement into a cascade, their depth alone; cut-outs through their game's alpha test (Rdr2/world_shadow.wgsl,
+// Gta5/world_shadow.wgsl, put after this). Standalone: the cascade's view, and the asset's placements
 // (world_instances.wgsl, put before this).
 
 struct ShadowView {

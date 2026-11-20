@@ -37,7 +37,7 @@ public sealed class ShaderValuesTests
         Assert.DoesNotContain(values, value => value.Name.Contains("Sampler", StringComparison.OrdinalIgnoreCase));
         string[] groups = [.. values.Select(value => value.Group).Distinct()];
         Assert.True(Array.IndexOf(groups, "Specular") < Array.IndexOf(groups, "Surface"));
-        // One values.json doesn't name keeps its own, in words, under Other.
+        // One Gta5/values.json doesn't name keeps its own, in words, under Other.
         Assert.Equal("Env eff tex tile UV", ShaderEdits.Words("envEffTexTileUV"));
         Assert.Equal("Use tessellation", ShaderEdits.Words("useTessellation"));
     }
@@ -161,7 +161,7 @@ public sealed class ShaderValuesTests
     [Fact]
     public void A_sliders_fill_spans_its_usual_range_and_a_segment_shortens_its_number()
     {
-        // values.json's range where it gives one; else 0 to 1, or to twice the file's value, rounded up to a round number.
+        // Gta5/values.json's range where it gives one; else 0 to 1, or to twice the file's value, rounded up to a round number.
         Assert.Equal((0f, 500f), Assert.Single(ShaderEdits.ValuesOf(Material()), value => value.Name == "specularFalloffMult").Range);
         Assert.Equal((0f, 1f), Views.ShaderValuesCard.RangeOf(.3f));
         Assert.Equal((0f, 50f), Views.ShaderValuesCard.RangeOf(25));

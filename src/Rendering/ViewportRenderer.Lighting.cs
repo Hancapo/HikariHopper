@@ -197,7 +197,7 @@ internal sealed unsafe partial class ViewportRenderer
                     Visibility = ShaderStage.Fragment,
                     Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth, ViewDimension = TextureViewDimension.D2 },
                 },
-                // GTA V's fog over its world and its fog rays' map (gta_world_fog.wgsl, ViewportRenderer.WorldFog.cs).
+                // GTA V's fog over its world and its fog rays' map (Gta5/world_fog.wgsl, ViewportRenderer.WorldFog.cs).
                 new BindGroupLayoutEntry
                 {
                     Binding = 9,
@@ -239,7 +239,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffers[i], Size = ShadowViewBytes }],
             });
         }
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("trees.wgsl") + "\n" + Read("shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/trees.wgsl") + "\n" + Read("shadow.wgsl") }));
         shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout] }),
