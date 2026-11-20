@@ -91,8 +91,6 @@ if (-not $app.WaitForExit(5000)) { $app.Kill(); $app.WaitForExit() }
 $changelog = (Get-Content (Join-Path $PSScriptRoot '..\CHANGELOG.md') -Raw) -replace "`r`n", "`n"
 $section = [regex]::Match($changelog, "(?ms)^## \[$([regex]::Escape($version))\].*?(?=^## \[|^\[[^\]]+\]: |\z)").Value.Trim()
 if (-not $section) { throw "CHANGELOG.md has no section for $version" }
-$notes = Join-Path $Output "$name-notes.md"
-Set-Content $notes ($section -replace '^[^\n]*\n+', '') -NoNewline
 $packageNotes = Join-Path $Output "$name-package-notes.md"
 Set-Content $packageNotes $section -NoNewline
 
@@ -126,6 +124,19 @@ if (Test-Path $unpacked) { Remove-Item $unpacked -Recurse -Force }
 Expand-Archive $zip $unpacked
 Assert-NoPrivatePaths $unpacked
 Remove-Item $unpacked -Recurse -Force
+
+# The GitHub release's notes: the version's changes without their heading, then the zip to download.
+$download = @"
+## Download
+
+| | File | Size |
+| --- | --- | --- |
+| **Windows, 64-bit** | [**$name.zip**]($repository/releases/download/v$version/$name.zip) | $([math]::Round((Get-Item $zip).Length / 1MB)) MB |
+
+Unzip it to a folder you can write to and run ``HikariHopper.exe``.
+"@
+$notes = Join-Path $Output "$name-notes.md"
+Set-Content $notes (($section -replace '^[^\n]*\n+', '') + "`n`n" + ($download -replace "`r`n", "`n") + "`n") -NoNewline
 
 # What the updater reads from the release: the feed and this version's packages (the last release's stays where it is).
 $assets = @($zip, (Join-Path $updates 'releases.win.json')) +
