@@ -129,7 +129,35 @@ public partial class MenuRow : UserControl
             shown.AddHandler(KeyDownEvent, bar.OnKeyDown, RoutingStrategies.Tunnel);
         // A menu drawn in the main window closes when one of its items is clicked; one in a window of its own is closed
         // here, once the item has done what it does.
-        shown.AddHandler(MenuItem.ClickEvent, (_, _) => shown.Close(), RoutingStrategies.Bubble, handledEventsToo: true);
+        // Closed by an item or a shortcut rather than by a press outside it, which may be on its title.
+        bool done = false;
+        shown.AddHandler(MenuItem.ClickEvent, (_, _) =>
+        {
+            done = true;
+            shown.Close();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        // The keys neither the bar nor the menu takes go on to the main window, whose shortcuts (Ctrl+T, F6, Alt+Left…)
+        // work as they do while a menu drawn in it is open; one that runs closes the menu.
+        shown.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Handled || TopLevel.GetTopLevel(this) is not { } main)
+                return;
+            var passed = new Avalonia.Input.KeyEventArgs
+            {
+                RoutedEvent = KeyDownEvent,
+                Key = e.Key,
+                KeyModifiers = e.KeyModifiers,
+                PhysicalKey = e.PhysicalKey,
+                KeySymbol = e.KeySymbol,
+                KeyDeviceType = e.KeyDeviceType,
+            };
+            main.RaiseEvent(passed);
+            if (!passed.Handled)
+                return;
+            e.Handled = true;
+            done = true;
+            shown.Close();
+        }, RoutingStrategies.Bubble);
         shown.Closed += (_, _) =>
         {
             button.MenuOpen = false;
@@ -139,7 +167,8 @@ public partial class MenuRow : UserControl
             window = null;
             windowTitle = null;
             // Taken from it, by a click on its title among others: that click doesn't open it again.
-            bar?.Closed(button);
+            if (!done)
+                bar?.Closed(button);
         };
     }
 
