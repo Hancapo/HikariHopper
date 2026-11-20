@@ -324,6 +324,9 @@ internal sealed unsafe partial class ViewportRenderer
     {
         foreach (WorldFamily family in families)
             CreateWorldFamily(family, prepare: true);
+        // GTA V's world has its sky behind it.
+        if (families.Contains(WorldFamily.Gta))
+            CreateSkyPipelines(prepare: true);
     }
 
     // RedFury's casters' depth: less or equal, pushed back by 2 and 2.5 times the slope, so surfaces don't shadow

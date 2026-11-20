@@ -27,30 +27,30 @@ struct SkySystem {
     ground: vec4f,
 };
 
+// The gradient: from east to west through the transition colour by the azimuth blend a (0 east,
+// 1 west), and up towards the zenith by the height h above (or below) the horizon, a direction's |z|.
+fn sky_gradient(east: vec3f, transition: vec3f, west: vec3f, position: f32, zenith: vec3f, zenith_transition: vec3f,
+    zc: vec4f, a: f32, h: f32) -> vec3f {
+    var azimuth: vec3f;
+    if (a < position) {
+        azimuth = mix(east, transition, a / position);
+    } else {
+        azimuth = mix(transition, west, (a - position) / (1.0 - position));
+    }
+    let blend = mix(zc.y, zc.z, a);
+    let toward = azimuth + blend * (zenith_transition - azimuth);
+    if (h < zc.x) {
+        return azimuth + (h / zc.x) * blend * (zenith_transition - azimuth);
+    }
+    let up = saturate((h - zc.x) / (1.0 - zc.x));
+    return mix(toward, zenith, saturate(up / zc.w));
+}
+
 // The sky's radiance in a unit direction (Z up, +X east).
 fn sky_system(sky: SkySystem, d: vec3f) -> vec3f {
-    // From east (0) to west (1), through the transition colour.
     let a = sqrt(max(0.5 - 0.5 * d.x, 0.0));
-    let p = sky.azimuth_east.w;
-    var azimuth: vec3f;
-    if (a < p) {
-        azimuth = mix(sky.azimuth_east.rgb, sky.azimuth_transition.rgb, a / p);
-    } else {
-        azimuth = mix(sky.azimuth_transition.rgb, sky.azimuth_west.rgb, (a - p) / (1.0 - p));
-    }
-    // Up towards the zenith, by height above (or below) the horizon.
-    let zc = sky.zenith_constants;
-    let blend = mix(zc.y, zc.z, a);
-    let toward = azimuth + blend * (sky.zenith_transition.rgb - azimuth);
-    let h = abs(d.z);
-    var gradient: vec3f;
-    if (h < zc.x) {
-        gradient = azimuth + (h / zc.x) * blend * (sky.zenith_transition.rgb - azimuth);
-    } else {
-        let up = saturate((h - zc.x) / (1.0 - zc.x));
-        gradient = mix(toward, sky.zenith.rgb, saturate(up / zc.w));
-    }
-    gradient *= sky.azimuth_west.w;
+    let gradient = sky_gradient(sky.azimuth_east.rgb, sky.azimuth_transition.rgb, sky.azimuth_west.rgb, sky.azimuth_east.w,
+        sky.zenith.rgb, sky.zenith_transition.rgb, sky.zenith_constants, a, abs(d.z)) * sky.azimuth_west.w;
 
     // The sun's glow: a Cornette-Shanks phase function, taken against the way away from the sun with g near -1.
     let sc = sky.sun_constants;

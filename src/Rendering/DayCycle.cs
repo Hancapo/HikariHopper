@@ -127,6 +127,31 @@ internal static class DayCycle
         return hour > 4.75f && hour < 21.75f ? new(SunDirection(hour, path), true) : new(MoonDirection(hour, path), false);
     }
 
+    /// <summary>
+    /// How far the sun and the moon are faded in at <paramref name="hours"/>, as the game fades them over the night:
+    /// the sun out over the quarter hour from 21:30 and the moon in over the
+    /// next, the other way round from 04:30; the moon also fades as it nears the horizon.
+    /// </summary>
+    internal static (float Sun, float Moon) Fades(float hours, SkyPath? path = null)
+    {
+        float hour = Wrap(hours), sun = 1, moon = 0;
+        if (hour > SunSet)
+        {
+            sun = 1 - Math.Clamp((hour - SunToMoon) * 4, 0, 1);
+            moon = Math.Clamp((hour - SunToMoon - .25f) * 4, 0, 1);
+        }
+        else if (hour < SunRise)
+        {
+            sun = Math.Clamp((hour - MoonToSun - .25f) * 4, 0, 1);
+            moon = 1 - Math.Clamp((hour - MoonToSun) * 4, 0, 1);
+        }
+        moon *= Math.Clamp(MoonDirection(hour, path).Z / .1f, 0, 1);
+        return (sun, moon);
+    }
+
+    // When the sun rises and sets, and when the light passes from one to the other: an hour and a half past each.
+    private const float SunRise = 6, SunSet = 20, SunToMoon = SunSet + 1.5f, MoonToSun = SunRise - 1.5f;
+
     private static float Wrap(float hours)
     {
         float hour = hours % 24;

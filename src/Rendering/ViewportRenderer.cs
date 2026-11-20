@@ -466,6 +466,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         if (lit)
         {
             DrawSceneReflections(encoder);
+            bool sky = DrawWorldSkyNoise(encoder);
             RenderPassEncoder hdrPass = encoder.BeginRenderPass(new RenderPassDescriptor
             {
                 ColorAttachments =
@@ -483,6 +484,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             });
             hdrPass.SetBindGroup(0, sceneGroup);
             hdrPass.SetBindGroup(2, lightGroup!);
+            // A world's sky first, behind it: the frame is then covered.
+            if (sky)
+                DrawWorldSky(hdrPass);
             if (drawable)
                 DrawSurfaces(hdrPass);
             if (worldShown)
@@ -635,6 +639,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         DisposeAntialiasing();
         DestroyOutline();
         ClearWorld();
+        perlinMap?.Destroy();
         ClearSurfaces();
         surface?.Unconfigure();
     }

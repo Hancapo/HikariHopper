@@ -27,8 +27,11 @@ namespace HikariHopper.Core;
 internal sealed class GtaWorldIndex : WorldIndex
 {
     private GtaWorldIndex(string root, int mapCount, WorldLodGraph lod, GameInstallation game, Dictionary<WorldEntityId, InteriorAmbient> ambients,
-        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water)
-        : base(root, mapCount, lod) => (Game, this.ambients, this.interiorEntities, this.water) = (game, ambients, interiorEntities, water);
+        Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities, GtaWorldWater water, GameVisualSettings? visuals)
+        : base(root, mapCount, lod) => (Game, this.ambients, this.interiorEntities, this.water, this.visuals) = (game, ambients, interiorEntities, water, visuals);
+
+    // The game's visualsettings.dat, read with the index.
+    private readonly GameVisualSettings? visuals;
 
     // Where each interior's placement is in its interior: an entity of it, or of one of its entity sets (Set from 0).
     private readonly Dictionary<WorldEntityId, (int Set, int Entity)> interiorEntities;
@@ -277,6 +280,36 @@ internal sealed class GtaWorldIndex : WorldIndex
         }
     }
 
+    /// <summary>
+    /// The sky as the game loads it: its dome, the "skydome" drawable of models/skydome.ydd, and the textures
+    /// of textures/skydome.ytd.
+    /// </summary>
+    public override GtaSkyDome? LoadSky()
+    {
+        var name = new Hash32("skydome");
+        try
+        {
+            byte[]? model = null, textures = null;
+            lock (Gate)
+            {
+                model = Game.FileSystem.Resolve(name, GameFileType.Ydd).Value?.ReadStandalone();
+                textures = Game.FileSystem.Resolve(name, GameFileType.Ytd).Value?.ReadStandalone();
+            }
+            if (model is null)
+                return null;
+            var drawables = Ydd.Read(model).Drawables;
+            FiveFury.Drawables.Drawable? dome = (drawables.FirstOrDefault(entry => entry.Name.Value == name.Value) ?? drawables.FirstOrDefault())?.Drawable;
+            if (dome is null)
+                return null;
+            return GtaSkyDome.From(dome, textures is null ? null : FiveFury.Ytd.Ytd.Read(textures).Dictionary, GtaSkyVisuals.From(visuals));
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException
+            or OverflowException)
+        {
+            return null;
+        }
+    }
+
     public override Func<WorldLodNode, CancellationToken, WorldLodNode>? CreateGrass() => ExpandGrass;
 
     // The maps grass was read from lately, by name hash: neighbouring batches are in the same map.
@@ -423,9 +456,10 @@ internal sealed class GtaWorldIndex : WorldIndex
             }
             // The open water, read from the game each time (its placements are none of the cache's).
             GtaWorldWater water = GtaWorldWater.Read(new LoadedGame(root, target, keys.Crypto));
+            GameVisualSettings? visuals = GameVisualSettings.Read(new LoadedGame(root, target, keys.Crypto));
             lod = new WorldLodGraph([.. catalog.Value.Nodes, .. water.Nodes()]);
             report(new WorldProgress("Ready", 1));
-            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water);
+            return new GtaWorldIndex(root, catalog.Value.Maps, lod, game, catalog.Value.Ambients, catalog.Value.Interiors, water, visuals);
         }
         catch
         {

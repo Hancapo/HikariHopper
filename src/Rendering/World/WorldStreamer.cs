@@ -51,6 +51,9 @@ internal sealed class WorldStreamer : IDisposable
     private readonly List<string> diagnostics = [];
     private readonly WorldTimeFilter timeFilter = new();
     private readonly Task[] workers;
+
+    // The sky behind the world, read once, as the streaming starts.
+    private readonly Task<GtaSkyDome?> sky;
     private WorldAssetKey[] wanted = [];
     private readonly HashSet<WorldAssetKey> loading = [];
     private HashSet<WorldAssetKey> resident = [];
@@ -98,6 +101,7 @@ internal sealed class WorldStreamer : IDisposable
         int count = index.LoadsConcurrently ? Math.Clamp(Environment.ProcessorCount / 2, 1, 4) : 1;
         workAvailable = new SemaphoreSlim(0, count);
         workers = [.. Enumerable.Range(0, count).Select(n => Task.Run(() => Work(grass: n == 0)))];
+        sky = Task.Run(index.LoadSky);
     }
 
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
@@ -116,7 +120,7 @@ internal sealed class WorldStreamer : IDisposable
         get
         {
             lock (gate)
-                return planning is not null || loading.Count > 0 || loadingGrass is not null || !prepared.IsEmpty || uploadPending
+                return !sky.IsCompleted || planning is not null || loading.Count > 0 || loadingGrass is not null || !prepared.IsEmpty || uploadPending
                     || wanted.Any(key => !resident.Contains(key) && !failed.Contains(key) && !deferred.Contains(key))
                     || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id));
         }
@@ -262,6 +266,9 @@ internal sealed class WorldStreamer : IDisposable
             selectedReady = [];
         }
         Apply(viewport);
+        // The sky as soon as it's read, and again for a viewport that hasn't it.
+        if (sky.IsCompletedSuccessfully && sky.Result is { } dome && !viewport.HasWorldSky)
+            viewport.ShowWorldSky(dome);
         selectionTime += seconds;
         // Ten times a second, as RedFury's session has it (and at once for a new viewport); the uploads go on every frame.
         bool selectionDue = selectionTime >= .1f || firstSelection;

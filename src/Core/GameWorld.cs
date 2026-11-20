@@ -166,6 +166,12 @@ internal abstract class WorldIndex(string root, int mapCount, WorldLodGraph lod)
     /// the map's entity of its number (a GTA V interior's); null for those that are.
     /// </summary>
     public virtual string? PlacementDetail(WorldLodNode node) => null;
+
+    /// <summary>
+    /// The sky the game draws behind its world, read from its files; null for a world whose sky isn't drawn (RDR2's,
+    /// for now) or whose files don't have it. On any thread.
+    /// </summary>
+    public virtual Rendering.GtaSkyDome? LoadSky() => null;
 }
 
 /// <summary>Red Dead Redemption 2's world: RedFury.World's catalog of its base map, and the archives its assets are read from.</summary>
