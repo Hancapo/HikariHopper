@@ -6,8 +6,8 @@ using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
 
-// Drawables: their surfaces drawn with surface.wgsl (terrain with terrain.wgsl, fur grass with fur.wgsl, cables with
-// cable.wgsl) into the HDR target, solid parts first, then blended ones from far to near; ViewportRenderer.Lighting.cs
+// Drawables: their surfaces drawn with Gta5/surface.wgsl (terrain with Gta5/terrain.wgsl, fur grass with Gta5/fur.wgsl, cables with
+// Gta5/cable.wgsl) into the HDR target, solid parts first, then blended ones from far to near; ViewportRenderer.Lighting.cs
 // lights and tone-maps them.
 internal sealed unsafe partial class ViewportRenderer
 {
@@ -18,11 +18,11 @@ internal sealed unsafe partial class ViewportRenderer
         Terrain,
         Fur,
         Cable,
-        /// <summary>Red Dead Redemption 2's material, RedFury's (rdr2.wgsl).</summary>
+        /// <summary>Red Dead Redemption 2's material, RedFury's (Rdr2/surface.wgsl).</summary>
         Rdr2,
     }
 
-    /// <summary>The fur grass's shells, drawn as instances of one draw (fur.wgsl's SHELLS).</summary>
+    /// <summary>The fur grass's shells, drawn as instances of one draw (Gta5/fur.wgsl's SHELLS).</summary>
     internal const uint FurShells = 8;
 
     private readonly bool compressedTextures;
@@ -209,10 +209,10 @@ internal sealed unsafe partial class ViewportRenderer
         PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
         PipelineLayout furPipelineLayout = Layout(furLayout, false), furReflectedLayout = Layout(furLayout, true);
         PipelineLayout cablePipelineLayout = Layout(cableLayout, false);
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("trees.wgsl") + "\n" + Read("surface.wgsl") }));
-        Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("terrain.wgsl") }));
-        Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("fur.wgsl") }));
-        Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("cable.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/trees.wgsl") + "\n" + Read("Gta5/surface.wgsl") }));
+        Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/terrain.wgsl") }));
+        Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/fur.wgsl") }));
+        Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/cable.wgsl") }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false, PartKind kind = PartKind.Surface)
         {
             string name = kind.ToString().ToLowerInvariant();
@@ -318,7 +318,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
         // their material (shadow.wgsl).
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("trees.wgsl") + "\n" + Read("shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/trees.wgsl") + "\n" + Read("shadow.wgsl") }));
         maskedShadowPipeline = gpu.Pipeline($"shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, materialLayout] }),
@@ -512,10 +512,10 @@ internal sealed unsafe partial class ViewportRenderer
         });
     }
 
-    /// <summary>The bytes of terrain.wgsl's Terrain uniform, the start of the material's.</summary>
+    /// <summary>The bytes of Gta5/terrain.wgsl's Terrain uniform, the start of the material's.</summary>
     private const int TerrainUniformBytes = 112;
 
-    /// <summary>The bytes of fur.wgsl's Fur uniform and of cable.wgsl's Cable uniform, the start of the material's.</summary>
+    /// <summary>The bytes of Gta5/fur.wgsl's Fur uniform and of Gta5/cable.wgsl's Cable uniform, the start of the material's.</summary>
     private const int FurUniformBytes = 144, CableUniformBytes = 64;
 
     private Buffer MaterialUniforms(SurfaceMaterial material)

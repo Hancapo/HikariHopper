@@ -3,7 +3,7 @@
 //     the game's conversion pass has it. A world's frame is measured as it is, as the game's always is.
 //   - In the 3D viewer the frame is mostly one model, more or less of it as the camera comes and goes, so measured that
 //     way the exposure would follow the framing, not the light. So the mean is of a fixed view of the world at that
-//     hour instead: all round the horizon, at the elevations a level camera sees, GTA's sky (sky_system.wgsl) above and
+//     hour instead: all round the horizon, at the elevations a level camera sees, GTA's sky (Gta5/sky_system.wgsl) above and
 //     the stand-in ground the reflections show below, without the model. Wherever the camera is, the exposure is the
 //     same; only the time of day moves it.
 //   - The target exposure from the mean, PS_CalculateExposure's CalculateTargetExposure: the curve plus the tweak
@@ -21,10 +21,10 @@
 // ln(L); then the darkest lowlights percent and the brightest highlights percent left out, the mean of the middle
 // (ComputeAverageLuminanceFromHistogramCS). The cube's luminance is the mean of its six faces' (LuminanceFromCubemap-
 // LastMipCS): the game's is the reflection probe round the camera; the viewer's, which renders none, is the sky's
-// ambient cube (rdr2_sky.wgsl's).
+// ambient cube (Rdr2/sky.wgsl's).
 // The work is laid out over the frame's size: per 16 by 16 tile, then their sum and the exposure. The tone map, the
 // bloom and the lens flare take the exposure from here.
-// Put after scene.wgsl and sky_system.wgsl.
+// Put after scene.wgsl and Gta5/sky_system.wgsl.
 
 @group(1) @binding(0) var hdr_frame: texture_2d<f32>;
 @group(1) @binding(1) var<storage, read_write> partial_sums: array<f32>;
@@ -40,7 +40,7 @@ struct Rdr2Meter {
     pixels: f32,
 };
 @group(1) @binding(5) var<storage, read_write> rdr2_meter: Rdr2Meter;
-// RDR2's sky's light (rdr2_sky.wgsl's sky_light): its ambient cube's faces after the key light.
+// RDR2's sky's light (Rdr2/sky.wgsl's sky_light): its ambient cube's faces after the key light.
 @group(1) @binding(6) var<storage, read> rdr2_cube: array<vec4f, 7>;
 
 // What the exposure is worked out with, written each frame.

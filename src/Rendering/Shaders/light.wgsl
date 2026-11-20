@@ -1,6 +1,6 @@
-// The light drawables are shaded with, shared by surface.wgsl, ground_shadow.wgsl, bloom.wgsl and tonemap.wgsl:
+// The light drawables are shaded with, shared by Gta5/surface.wgsl, ground_shadow.wgsl, bloom.wgsl and tonemap.wgsl:
 // GTA V's timecycle light at the viewer's time of day (Timecycle.cs), the exposure, bloom and filmic curve its
-// post-process settles on, the directional light's shadow map, the reflection map (reflection_map.wgsl), and the local
+// post-process settles on, the directional light's shadow map, the reflection map (Gta5/reflection_map.wgsl), and the local
 // lights. Put after scene.wgsl, as group 2.
 
 struct Light {
@@ -52,7 +52,7 @@ struct Light {
     // near plane (depth is near over distance); then the level of detail fades' clock (lod_fade_keeps).
     water: vec4f,
     // Red Dead Redemption 2's sky's light on its world, in its own units, written each frame on the GPU
-    // (rdr2_sky.wgsl's cs_rdr2_sky_light): the key light's illuminance, with one in w where it's given (none outside an
+    // (Rdr2/sky.wgsl's cs_rdr2_sky_light): the key light's illuminance, with one in w where it's given (none outside an
     // RDR2 world with its sky); then its ambient cube (+x, -x, +z, +y, -y, -z), the irradiance over pi on what faces each.
     rdr2_sun: vec4f,
     rdr2_ambient: array<vec4f, 6>,

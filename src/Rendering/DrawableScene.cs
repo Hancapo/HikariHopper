@@ -455,7 +455,7 @@ internal sealed class DrawableScene
         : $"model {index + 1}";
 
     /// <summary>
-    /// A vertex buffer read as surface.wgsl reads its vertices: where each of the fields it takes is in a vertex, and in
+    /// A vertex buffer read as Gta5/surface.wgsl reads its vertices: where each of the fields it takes is in a vertex, and in
     /// what format, looked up once for the buffer rather than once a field a vertex.
     /// </summary>
     private readonly ref struct VertexReader
@@ -493,7 +493,7 @@ internal sealed class DrawableScene
         public Vector3 Position(int vertex) => Element(vertex, position, default).AsVector3();
 
         /// <summary>
-        /// A vertex as surface.wgsl reads it. A tree's carry what its vertex shader reads besides: trees_lod2's billboards
+        /// A vertex as Gta5/surface.wgsl reads it. A tree's carry what its vertex shader reads besides: trees_lod2's billboards
         /// their size (TEXCOORD2) in the tangent's XY, their alignment (TEXCOORD3) in the third UV set; the camera cards
         /// (_camera_facing, _camera_aligned) their centre (TANGENT1), from the vertex, in the second UV set and the third's X.
         /// </summary>

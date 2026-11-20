@@ -1,7 +1,7 @@
 // The key light's shadow map: drawables' depth seen from the sun, through an orthographic view fitted to them.
 // Standalone (no scene.wgsl): its inputs are the view below and the vertices' positions; cut-out (masked) surfaces
 // also read their diffuse map, and cast only where the game's shadow pass keeps them. A
-// tree's cut-outs are moved first as the game's tree shaders move them into the cascades (trees.wgsl, put before this).
+// tree's cut-outs are moved first as the game's tree shaders move them into the cascades (Gta5/trees.wgsl, put before this).
 
 struct ShadowView {
     // From origin-relative positions to the shadow map's clip space.
@@ -15,7 +15,7 @@ fn vs_shadow(@location(0) position: vec3f) -> @builtin(position) vec4f {
     return shadow_view.matrix * vec4f(position, 1.0);
 }
 
-// surface.wgsl's Material, what of it is read: the trees' settings.
+// Gta5/surface.wgsl's Material, what of it is read: the trees' settings.
 struct ShadowMaterial {
     specular: vec4f,
     mask: vec4f,

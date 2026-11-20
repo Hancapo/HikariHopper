@@ -25,7 +25,10 @@
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
     <!-- RDR2's RPF8 tables (RedFury's RF8C format), for game build 1.0.1491.50. -->
     <EmbeddedResource Include="Assets/Keys/rpf8.dat" LogicalName="HikariHopper.rpf8.dat" />
-    <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
+    <!-- Shaders, read by name: the shared ones as they are ("scene.wgsl"), each game's after its folder ("Gta5/sky.wgsl"). -->
+    <EmbeddedResource Include="Rendering/Shaders/*.wgsl" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Games/Gta5/Shaders/*" LogicalName="HikariHopper.Shaders.Gta5/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Games/Rdr2/Shaders/*" LogicalName="HikariHopper.Shaders.Rdr2/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <!-- Arrays up to 4 MB (the most the GC takes) are allocated young rather than in the large object heap: the worlds'

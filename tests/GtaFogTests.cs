@@ -79,7 +79,7 @@ public sealed class GtaFogTests
         Assert.All(values[5..], value => Assert.Equal(Vector4.Zero, value));
     }
 
-    // The fog along each ray (gta_fog.wgsl's gta_fog, with its haze) for these constants, worked out on the GPU.
+    // The fog along each ray (Gta5/fog.wgsl's gta_fog, with its haze) for these constants, worked out on the GPU.
     private static Vector4[] Fog(ReadOnlySpan<Vector4> constants, Vector3[] rays)
     {
         GpuDevice gpu = TestGpu.Device();
@@ -89,7 +89,7 @@ public sealed class GtaFogTests
             device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
             WebGpuSharp.ShaderModule shader = device.CreateShaderModuleWGSL(new WebGpuSharp.ShaderModuleWGSLDescriptor
             {
-                Code = ViewportRenderer.Read("gta_fog.wgsl") + """
+                Code = ViewportRenderer.Read("Gta5/fog.wgsl") + """
 
                     @group(0) @binding(0) var<uniform> fog: GtaFog;
                     @group(0) @binding(1) var<storage, read> rays: array<vec4f>;
