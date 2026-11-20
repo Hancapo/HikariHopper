@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -96,7 +95,7 @@ public sealed class LoadingTrain : Control
         new([(0, -3, 3.4), (-3, 0, 3.8), (2.5, 1.5, 3.2), (-5, 3, 2.2), (4, -2, 2.4)], new Vector(-32, -32), 1.9, 25, .7),
     ];
 
-    private readonly Stopwatch clock = new();
+    private long started;
     private readonly DispatcherTimer ticker;
 
     // While it runs with motion reduced, a slow look at the Windows setting, so turning animations back on mid-load
@@ -132,7 +131,7 @@ public sealed class LoadingTrain : Control
     }
 
     /// <summary>The moment it draws: the clock while it moves, else a still moment with smoke in the air.</summary>
-    private double Time => TimeOverride ?? (ticker.IsEnabled ? clock.Elapsed.TotalSeconds : StillMoment);
+    private double Time => TimeOverride ?? (ticker.IsEnabled ? MotionClock.Since(started).TotalSeconds : StillMoment);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -160,7 +159,7 @@ public sealed class LoadingTrain : Control
         bool moving = shown && !Motion.Reduced;
         if (moving && !ticker.IsEnabled)
         {
-            clock.Restart();
+            started = MotionClock.Timestamp;
             ticker.Start();
         }
         else if (!moving)

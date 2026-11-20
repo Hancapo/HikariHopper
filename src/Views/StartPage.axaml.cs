@@ -93,7 +93,7 @@ public partial class StartPage : UserControl
                 LetterSpacing = 1.2,
             });
             foreach (LauncherEntry entry in entries)
-                Groups.Children.Add(new LauncherRow(entry, Activate));
+                Groups.Children.Add(new LauncherRow(entry, Activate, OpenWorld));
         }
         // A game that isn't set up already says "Settings…", and goes there: the button under it would say it twice.
         SettingsButton.IsVisible = Entries.All(group => group.Entries.All(entry => entry.SetUp));
@@ -107,22 +107,29 @@ public partial class StartPage : UserControl
             SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    // The row's globe: the game, on its World side.
+    private void OpenWorld(LauncherEntry entry)
+    {
+        if (entry.SetUp)
+            Bridge?.OpenGameOnWorld(entry.Path);
+    }
+
     private void OnOpenStandalone(object? sender, RoutedEventArgs e) => _ = Bridge?.OpenArchiveDialog();
 
     private void OnSettings(object? sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 }
 
 /// <summary>
-/// One launcher row: the game's mark tinted by edition, the edition (or folder) name and the path.
-/// A game that isn't set up shows a dimmed mark and a link to Settings instead. Click, Enter or Space
-/// activates it; to a screen reader it is a button, which it can invoke.
+/// One launcher row: the game's mark tinted by edition, the edition (or folder) name and the path, and, for a game whose
+/// world HikariHopper shows, a globe that opens it on its World side. A game that isn't set up shows a dimmed mark and a
+/// link to Settings instead. Click, Enter or Space activates it; to a screen reader it is a button, which it can invoke.
 /// </summary>
 public sealed class LauncherRow : Border
 {
     private readonly LauncherEntry entry;
     private readonly Action<LauncherEntry> activate;
 
-    public LauncherRow(LauncherEntry entry, Action<LauncherEntry> activate)
+    public LauncherRow(LauncherEntry entry, Action<LauncherEntry> activate, Action<LauncherEntry>? openWorld = null)
     {
         this.entry = entry;
         this.activate = activate;
@@ -134,7 +141,7 @@ public sealed class LauncherRow : Border
         Cursor = new Cursor(StandardCursorType.Hand);
         FocusAdorner = null;
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,110,*"), ColumnSpacing = 12 };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,110,*,Auto"), ColumnSpacing = 12 };
         Mark = GameMark(entry);
         grid.Children.Add(Mark);
         var title = new TextBlock
@@ -170,6 +177,30 @@ public sealed class LauncherRow : Border
             };
         Grid.SetColumn(Detail, 2);
         grid.Children.Add(Detail);
+        if (entry.SetUp && entry.Game.HasWorld && openWorld is not null)
+        {
+            WorldButton = new ChromeToolButton
+            {
+                IconKind = "globe",
+                Raised = true,
+                IconSize = 15,
+                IconThickness = 1.5,
+                Width = 30,
+                Height = 26,
+                VerticalAlignment = VerticalAlignment.Center,
+                CornerRadius = Ui.Theme.InnerCorner,
+                Focusable = true,
+            };
+            WorldButton.Click += (_, e) =>
+            {
+                e.Handled = true;
+                openWorld(entry);
+            };
+            ThemedToolTip.Set(WorldButton, "Open on World");
+            AutomationProperties.SetName(WorldButton, $"Open {entry.Game.Title} {entry.Title} on its world");
+            Grid.SetColumn(WorldButton, 3);
+            grid.Children.Add(WorldButton);
+        }
         Child = grid;
 
         PointerClick.Attach(this, _ => activate(entry));
@@ -177,6 +208,9 @@ public sealed class LauncherRow : Border
     }
 
     public LauncherEntry Entry => entry;
+
+    /// <summary>The globe that opens the game on its World side; none for a game whose world isn't shown.</summary>
+    public ChromeToolButton? WorldButton { get; }
 
     /// <summary>Opens the game, or Settings for one that isn't set up, as a click does.</summary>
     internal void Activate() => activate(entry);
@@ -190,14 +224,13 @@ public sealed class LauncherRow : Border
     public TextBlock Detail { get; }
 
     /// <summary>
-    /// The mark of <paramref name="entry"/>'s game. GTA V is the only game so far; another game
-    /// brings its own mark here, tinted the same way by edition.
+    /// The mark of <paramref name="entry"/>'s edition; for a game not set up, its first edition's, faded.
     /// </summary>
     private static Control GameMark(LauncherEntry entry) => new EditionMark
     {
         Width = 18,
         Height = 18,
-        Enhanced = entry.Edition == GameSettings.EnhancedEdition,
+        Edition = entry.Edition.Length > 0 ? entry.Edition : entry.Game.Editions[^1].Id,
         Opacity = entry.SetUp ? 1 : 0.45,
         VerticalAlignment = VerticalAlignment.Center,
     };

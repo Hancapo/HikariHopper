@@ -12,7 +12,61 @@ public partial class StatusBar : UserControl
     public StatusBar()
     {
         InitializeComponent();
+        FaceSwitch.Sides.Add(new Controls.SwitchSide { Icon = "folder", Width = 28, IconSize = 13, Label = "Files", ToolTip = "Files  F6" });
+        FaceSwitch.Sides.Add(new Controls.SwitchSide { Icon = "globe", Width = 28, IconSize = 13, Label = "World", ToolTip = "World  F6" });
+        FaceSwitch.RefreshSides();
+        FaceSwitch.SideRequested += (_, index) =>
+        {
+            if (index == 1)
+                Bridge?.ShowWorld();
+            else
+                Bridge?.ShowFiles();
+        };
+        Avalonia.Automation.AutomationProperties.SetName(FaceSwitch, "Files or world");
+        // The World side's time of day, on a dial of the day above its button, as the model viewer has it.
+        TimeButton.Click += (_, _) => ToggleTime();
+        Controls.ThemedToolTip.Set(TimeButton, "Time of day");
+        Dial.Moved += hours => Bridge?.SetWorldHours(hours);
+        timeBody = new Border { Padding = new Avalonia.Thickness(12, 10, 12, 12), Child = Dial };
+        Avalonia.Automation.AutomationProperties.SetName(Dial, "Time of day");
         Refresh();
+    }
+
+    /// <summary>The World side's time of day, in its dropdown: a dial of the day, the sun or moon on it, in quarter hours.</summary>
+    internal TimeDial Dial { get; } = new() { Width = 152, Height = 152 };
+
+    private readonly Control timeBody;
+    private Controls.DropdownWindow? timeDropdown;
+    private long timeClosedAt;
+
+    /// <summary>Whether the time of day's dropdown is open.</summary>
+    internal bool TimeOpen => timeDropdown is not null;
+
+    /// <summary>
+    /// Opens the time of day's dial above its button, a window of its own so the world's viewport doesn't cover it, or
+    /// closes it; the button sits sunken while it is open, and the dial takes the keyboard.
+    /// </summary>
+    internal void ToggleTime()
+    {
+        if (timeDropdown is not null)
+        {
+            timeDropdown.Close();
+            return;
+        }
+        // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
+        if (Ui.MotionClock.Since(timeClosedAt).TotalMilliseconds < 400)
+            return;
+        timeDropdown = Controls.DropdownWindow.OpenAbove(TimeWell, timeBody, 4, right: true);
+        if (timeDropdown is null)
+            return;
+        TimeButton.Sunken = true;
+        Dial.Focus();
+        timeDropdown.Closed += (_, _) =>
+        {
+            timeDropdown = null;
+            timeClosedAt = Ui.MotionClock.Timestamp;
+            TimeButton.Sunken = false;
+        };
     }
 
     /// <summary>The status message shown after the count, or "" when there is none worth showing.</summary>
@@ -41,7 +95,9 @@ public partial class StatusBar : UserControl
     private void OnBridgePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ExplorerViewModel.Status) or nameof(ExplorerViewModel.GameEdition)
-            or nameof(ExplorerViewModel.SelectionCount) or nameof(ExplorerViewModel.SelectedSize))
+            or nameof(ExplorerViewModel.SelectionCount) or nameof(ExplorerViewModel.SelectedSize) or nameof(ExplorerViewModel.InWorld)
+            or nameof(ExplorerViewModel.HasWorld) or nameof(ExplorerViewModel.ShowsItemCount) or nameof(ExplorerViewModel.HasWorkspace)
+            or nameof(ExplorerViewModel.WorldHours))
             Refresh();
     }
 
@@ -50,11 +106,29 @@ public partial class StatusBar : UserControl
         string edition = Bridge?.GameEdition ?? "";
         bool status = StatusWorthShowing(Bridge?.Status ?? "", edition);
         Edition.IsVisible = edition.Length > 0;
-        EditionMark.Enhanced = Bridge?.GameEditionId == Core.GameSettings.EnhancedEdition;
+        EditionMark.Edition = Bridge?.GameEditionId ?? "";
         // Without a game's well the count starts the line, at the bar's own margin.
         Count.Margin = new Avalonia.Thickness(Edition.IsVisible ? 0 : 6, 0, 0, 0);
         StatusDivider.IsVisible = StatusText.IsVisible = status;
         SelectionText.Text = Selection(Bridge?.SelectionCount ?? 0, Bridge?.SelectedSize ?? "");
+        // The tab's sides, for a game with a world; on its World side, what the world shows in the count's place, and
+        // nothing of the files'.
+        bool world = Bridge?.InWorld == true;
+        FaceSwitch.IsVisible = Bridge?.HasWorld == true;
+        FaceSwitch.SelectedIndex = world ? 1 : 0;
+        ItemCountText.IsVisible = Bridge?.ShowsItemCount == true && !world;
+        WorldText.IsVisible = world;
+        TimeWell.IsVisible = world;
+        if (!world)
+            timeDropdown?.Close();
+        float hours = Bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours;
+        TimeButton.Text = TimeDial.Clock(hours);
+        Dial.Hours = TimeGlyph.Hours = hours;
+        if (world)
+        {
+            StatusDivider.IsVisible = StatusText.IsVisible = false;
+            SelectionText.Text = "";
+        }
     }
 
     /// <summary>"3 selected · 1.2 MB", or "" with nothing selected.</summary>

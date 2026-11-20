@@ -43,6 +43,7 @@ public partial class ShortcutsDialog : ModalSheet
         [
             new("Alt+Left", "Back"),
             new("Alt+Right", "Forward"),
+            new("F6", "Files or the game's world"),
             new("Backspace", "Up one level"),
             new("Enter", "Open the selected entry"),
             new("Ctrl+L · Alt+D", "Type or paste an address"),

@@ -31,7 +31,7 @@ public sealed class GameCatalogTests : IDisposable
         Assert.Equal("Select GTA V Enhanced Installation", GameSettings.BrowseTitle(GameSettings.EnhancedEdition));
         Assert.Equal("GTA5.exe", GameSettings.GameExecutable(GameSettings.LegacyEdition));
         Assert.Equal(GameSettings.EnhancedGameRootKey, GameSettings.GameRootKey(GameSettings.EnhancedEdition));
-        Assert.Equal([GameSettings.EnhancedEdition, GameSettings.LegacyEdition], GameSettings.AllEditions);
+        Assert.Equal([GameSettings.EnhancedEdition, GameSettings.LegacyEdition], legacy.Game.Editions.Select(edition => edition.Id));
         Assert.Null(GameCatalog.Edition(""));
 
         // A folder is the first edition whose executable it holds: with both, Enhanced.
@@ -49,8 +49,8 @@ public sealed class GameCatalogTests : IDisposable
         string legacy = Install("Grand Theft Auto V", GameSettings.LegacyEdition);
 
         // Enhanced set up in Settings, Legacy only opened before.
-        var (_, entries) = Assert.Single(GameCatalog.Launcher(
-            edition => edition == GameSettings.EnhancedEdition ? enhanced : "", [legacy]));
+        var (_, entries) = GameCatalog.Launcher(
+            edition => edition == GameSettings.EnhancedEdition ? enhanced : "", [legacy]).Single(group => group.Game.Id == GameCatalog.GtaV);
         Assert.Equal(["Enhanced", "Legacy"], entries.Select(entry => entry.Title));
         Assert.Equal([enhanced, legacy], entries.Select(entry => entry.Path));
     }
@@ -61,7 +61,7 @@ public sealed class GameCatalogTests : IDisposable
         string first = Install("Grand Theft Auto V", GameSettings.LegacyEdition);
         string second = Install("GTA V modded", GameSettings.LegacyEdition);
 
-        var (_, entries) = Assert.Single(GameCatalog.Launcher(_ => "", [first, second]));
+        var (_, entries) = GameCatalog.Launcher(_ => "", [first, second]).Single(group => group.Game.Id == GameCatalog.GtaV);
         Assert.Equal(["Legacy", "GTA V modded"], entries.Select(entry => entry.Title));
     }
 }

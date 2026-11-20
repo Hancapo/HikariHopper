@@ -13,6 +13,11 @@ public static class GameSettings
     public const string OpenLastGameOnStartupKey = "openLastGameOnStartup";
     public const string LegacyEdition = "legacy";
     public const string EnhancedEdition = "enhanced";
+    public const string Rdr2Edition = "rdr2";
+    public const string Rdr2GameRootKey = "gameRoots/rdr2";
+
+    /// <summary>The build of RDR2 the shipped key tables open (<see cref="Rdr2Keys"/>).</summary>
+    public static readonly Version Rdr2SupportedBuild = new(1, 0, 1491, 50);
 
     private const string LegacyName = "Hikari Hopper";
     private const int SettingsSchemaVersion = 3;
@@ -49,6 +54,30 @@ public static class GameSettings
     }
 
     public static string ConfiguredGameRoot(string edition) => AppSettings.GetString(GameRootKey(edition));
+
+    /// <summary>
+    /// What stops HikariHopper opening the installation of <paramref name="edition"/> at <paramref name="path"/>, which
+    /// holds its executable: for RDR2, a build of the game the shipped keys don't open. Null when nothing does.
+    /// </summary>
+    public static string? InstallationProblem(string path, string edition)
+    {
+        if (edition != Rdr2Edition)
+            return null;
+        string executable = Path.Combine(path, GameExecutable(edition));
+        Version? build = null;
+        try
+        {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(executable);
+            build = new Version(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart, info.FilePrivatePart);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
+        if (build == Rdr2SupportedBuild)
+            return null;
+        string found = build is null || build == new Version(0, 0, 0, 0) ? "of an unknown version" : build.ToString();
+        return $"{GameExecutable(edition)} {found} found · HikariHopper opens {Rdr2SupportedBuild}";
+    }
 
     /// <summary>Whether the app reopens the last game when it starts (on unless turned off in Settings).</summary>
     public static bool OpenLastGameOnStartup

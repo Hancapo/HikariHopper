@@ -36,8 +36,29 @@ public class RetroMenu : ContextMenu
 
     public RetroMenu()
     {
-        Opened += (_, _) => openMenus.Add(this);
-        Closed += (_, _) => openMenus.Remove(this);
+        Opened += (_, _) =>
+        {
+            openMenus.Add(this);
+            OpenMenusChanged?.Invoke(null, EventArgs.Empty);
+        };
+        Closed += (_, _) =>
+        {
+            openMenus.Remove(this);
+            OpenMenusChanged?.Invoke(null, EventArgs.Empty);
+        };
+    }
+
+    /// <summary>
+    /// A menu opened or closed, over any window: what's drawn under a native window (the world's viewport) hides while
+    /// one is open over it.
+    /// </summary>
+    internal static event EventHandler? OpenMenusChanged;
+
+    /// <summary>Whether a menu is open over <paramref name="window"/>.</summary>
+    internal static bool AnyOpenOver(TopLevel window)
+    {
+        openMenus.RemoveAll(menu => !menu.IsOpen || menu.Window is not { IsVisible: true });
+        return openMenus.Any(menu => menu.Window == window);
     }
 
     /// <summary>

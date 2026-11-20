@@ -585,7 +585,7 @@ public sealed class ControlMetricsTests
         Assert.Equal("Choose folder…", ToolTip.GetTip(row.BrowseButton));
         Assert.False(row.ClearButton.IsEnabled);
         Assert.True(row.ClearButton.IsVisible);
-        Assert.True(row.Mark.Enhanced);
+        Assert.Equal(Core.GameSettings.EnhancedEdition, row.Mark.Edition);
         row.GamePath = @"C:\Nope";
         Assert.Equal("GTA5_Enhanced.exe isn't in this folder", row.StatusMessage);
         Assert.Equal(T.Warning, row.StatusText.Foreground);

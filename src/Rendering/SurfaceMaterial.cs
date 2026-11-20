@@ -6,6 +6,16 @@ using FiveFury.Textures;
 
 namespace HikariHopper.Rendering;
 
+/// <summary>How a _reflect shader reads its environment texture: a sphere map, or a cube for the _cubemap_reflect ones.</summary>
+internal enum EnvironmentKind
+{
+    None,
+    /// <summary>A sphere map, read at the reflected view's X and Z.</summary>
+    Sphere,
+    /// <summary>A cube, read along the reflected view (Y and Z swapped, as D3D's cubes take it).</summary>
+    Cube,
+}
+
 /// <summary>How a surface's pixels combine with what is behind them.</summary>
 internal enum AlphaMode
 {
@@ -23,13 +33,13 @@ internal enum AlphaMode
 /// Which parameter fills which role is in materials.json, by Legacy name; Enhanced materials reach those names through
 /// FiveFury's shader catalogue, and a value a material leaves out is its shader's default from the same catalogue.
 /// </summary>
-internal sealed class SurfaceMaterial
+internal sealed partial class SurfaceMaterial
 {
     /// <summary>
     /// The bytes of surface.wgsl's Material uniform; terrain.wgsl's Terrain uniform is its first 112, fur.wgsl's Fur its
     /// first 144 and cable.wgsl's Cable its first 64.
     /// </summary>
-    public const int UniformBytes = 400;
+    public const int UniformBytes = 480;
 
     /// <summary>The Material uniform, as floats: see surface.wgsl; for terrain, the Terrain uniform of terrain.wgsl.</summary>
     public float[] Uniforms { get; } = new float[UniformBytes / sizeof(float)];
@@ -76,6 +86,22 @@ internal sealed class SurfaceMaterial
     /// </summary>
     public bool Cable { get; private init; }
 
+    /// <summary>
+    /// Which of the tree shaders' programs it is (the game's tree shaders): none, PS_PropFoliageDeferred (trees, trees_normal_spec,
+    /// the cards turned to the camera and the rest), PS_PropFoliageDeferredLod (trees_lod) or the billboards of
+    /// VS_PropFoliageDeferredLod2 (trees_lod2).
+    /// </summary>
+    public TreeProgram Tree { get; private init; }
+
+    /// <summary>
+    /// Whether its back faces are culled: the tree shaders draw with the game's default raster state, which culls them,
+    /// all but trees_lod2's billboards, which draw both sides.
+    /// </summary>
+    public bool CullsBack => Tree is TreeProgram.Foliage or TreeProgram.Lod;
+
+    /// <summary>Whether it is one of the cards the tree shaders turn to the camera (_camera_facing, _camera_aligned).</summary>
+    public bool TreeCards => Tree == TreeProgram.Foliage && Uniforms[105] > 0;
+
     /// <summary>The fur grass's combo height maps (ComboHeightTexFur01, 23, 45, 67), two shells each.</summary>
     public Texture?[] FurHeights { get; private init; } = new Texture?[4];
 
@@ -88,6 +114,29 @@ internal sealed class SurfaceMaterial
     public AlphaMode AlphaMode { get; private init; }
 
     /// <summary>
+    /// The textures its group binds, as surface.wgsl or terrain.wgsl read them (fur's and cables' aside): what the
+    /// world puts up before it draws the material.
+    /// </summary>
+    internal IEnumerable<Texture?> BoundTextures() => Water is { } water ? water.Textures : Terrain
+        ? [.. Layers, Lookup, TintPalette]
+        : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask, Environment];
+
+    /// <summary>
+    /// GTA V's water, as gta_water.wgsl shades it: a water shader's own (water_river, water_shallow, water_fountain...,
+    /// not the foams), and the ocean's; the world fills in the textures the game binds itself (GtaWorldIndex).
+    /// </summary>
+    internal GtaWater? Water { get; set; }
+
+    /// <summary>The ocean's, lakes' and pools' surface (water.xml's quads).</summary>
+    internal static SurfaceMaterial ForWater(GtaWater water) => new()
+    {
+        Shader = "water",
+        Rebuilt = true,
+        AlphaMode = AlphaMode.Blend,
+        Water = water,
+    };
+
+    /// <summary>
     /// Ped hair, which covers each pixel by its alpha. Enhanced draws it with deferredsubsamplealpha: it drops pixels by
     /// a noise where the alpha is low and lets its TAA average them, with no cutoff. Without TAA, the viewer draws it
     /// twice to the same end: solid where it is all but opaque, then the rest blended over that by its alpha.
@@ -96,6 +145,18 @@ internal sealed class SurfaceMaterial
 
     /// <summary>Where hair counts as solid, for its first pass: what is less is blended in its second.</summary>
     internal const float HairSolid = .95f;
+
+    /// <summary>The game's cut-out alpha reference (global_alphaRef, which its code sets to 90 of 255).</summary>
+    internal const float GlobalAlphaRef = 90f / 255;
+
+    /// <summary>The vehicles' cut-out alpha reference (vehicle_alphaRef): all but nought.</summary>
+    internal const float VehicleAlphaRef = 1f / 255;
+
+    /// <summary>
+    /// A _geomnightonly shader's geometry, which the game's vertex programs collapse by day: it's there only while the
+    /// night's emissives are on at all.
+    /// </summary>
+    public bool NightOnly { get; private init; }
 
     /// <summary>A decal: drawn over the surface it sits on, without writing depth.</summary>
     public bool Decal { get; private init; }
@@ -131,6 +192,16 @@ internal sealed class SurfaceMaterial
     /// <summary>The ped_hair_spiked_mask shader's mask over the hair's alpha, on the second UV set.</summary>
     public Texture? DiffuseMask { get; private init; }
 
+    /// <summary>
+    /// The _reflect shaders' environment (EnvironmentSampler): a sphere map for reflect, normal_reflect, spec_reflect,
+    /// normal_spec_reflect and their decals, a cube for the _cubemap_reflect ones. Which one the shader reads is in
+    /// <see cref="Reflection"/>.
+    /// </summary>
+    public Texture? Environment { get; private init; }
+
+    /// <summary>How the shader reads <see cref="Environment"/>: not at all, as a sphere map or as a cube.</summary>
+    public EnvironmentKind Reflection { get; private init; }
+
     /// <summary>A terrain shader's four layers: their diffuse maps, then their bump maps, then their height maps (_pxm).</summary>
     public Texture?[] Layers { get; private init; } = new Texture?[12];
 
@@ -159,6 +230,9 @@ internal sealed class SurfaceMaterial
     private static readonly HashSet<string> ApproximatePeds = Family("ped_approximate");
     private static readonly HashSet<string> Furs = Family("fur");
     private static readonly HashSet<string> Cables = Family("cable");
+    private static readonly HashSet<string> Trees = Family("tree");
+    private static readonly HashSet<string> TreeLods = Family("tree_lod");
+    private static readonly HashSet<string> TreeBillboards = Family("tree_lod2");
 
     private static HashSet<string> Family(string name) => Mapping.RootElement.GetProperty("families").GetProperty(name)
         .EnumerateArray().Select(shader => shader.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -216,18 +290,52 @@ internal sealed class SurfaceMaterial
             return fallback;
         }
 
+        // A water shader's own fog texture and values (water_river.fxc's parameters); the foams are decals over it.
+        GtaWater? water = null;
+        if (shader.StartsWith("water", StringComparison.OrdinalIgnoreCase) && !shader.Contains("foam", StringComparison.OrdinalIgnoreCase))
+        {
+            float Scalar(string name, float fallback) =>
+                values.TryGetValue(name, out MaterialParameterValue? value) && value.Values.Length > 0 && float.IsFinite(value.Values.Span[0]) ? value.Values.Span[0]
+                : definition?.FindParameter(name) is { Defaults.Count: > 0 } parameter ? parameter.Defaults[0] : fallback;
+            Texture? fog = values.TryGetValue("FogTexture", out MaterialParameterValue? fogValue) && fogValue.Texture is { } fogReference ? resolve(fogReference) : null;
+            water = new GtaWater
+            {
+                Fog = fog,
+                WorldFog = fog is null,
+                RippleScale = Scalar("RippleScale", .04f),
+                SpecularIntensity = Scalar("SpecularIntensity", 1),
+                SpecularFalloff = Scalar("SpecularFalloff", 1118),
+            };
+        }
+
+        // The _reflect shaders' environment, read as their programs sample it: a texture that isn't that kind is left
+        // unread, as a missing one is.
+        Texture? environment = null;
+        var reflection = EnvironmentKind.None;
+        if (Textured.Contains(shader) && Pattern(shader, "reflect") is "sphere" or "cube" && Texture("environment") is { } found)
+        {
+            bool cube = Pattern(shader, "reflect") == "cube";
+            bool isCube = found.Shape.Dimension == CommonFury.Textures.TextureDimension.Cube && found.Shape.ArraySize == 1;
+            bool isPlane = found.Shape.IsSingleImage;
+            if (cube ? isCube : isPlane)
+                (environment, reflection) = (found, cube ? EnvironmentKind.Cube : EnvironmentKind.Sphere);
+        }
+
         var result = new SurfaceMaterial
         {
+            Water = water,
             Shader = shader,
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
                 || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Furs.Contains(shader) || Cables.Contains(shader)
-                || Glasses.Contains(shader),
+                || Glasses.Contains(shader) || Trees.Contains(shader) || TreeLods.Contains(shader) || TreeBillboards.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
             Glass = Glasses.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
             Ped = Peds.Contains(shader) || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || ApproximatePeds.Contains(shader),
             Fur = Furs.Contains(shader),
             Cable = Cables.Contains(shader),
+            Tree = Trees.Contains(shader) ? TreeProgram.Foliage : TreeLods.Contains(shader) ? TreeProgram.Lod
+                : TreeBillboards.Contains(shader) ? TreeProgram.Billboard : TreeProgram.None,
             FurHeights = Furs.Contains(shader) ? [.. new[] { "01", "23", "45", "67" }.Select(pair => Texture($"fur_height{pair}"))] : new Texture?[4],
             FurMask = Furs.Contains(shader) ? Texture("fur_mask") : null,
             DiffuseHf = Furs.Contains(shader) ? Texture("diffuse_hf") : null,
@@ -245,7 +353,12 @@ internal sealed class SurfaceMaterial
             Height = Texture("height"),
             HairNoise = PedsHair.Contains(shader) ? Texture("hair_noise") : null,
             DiffuseMask = PedsHair.Contains(shader) ? Texture("diffuse_mask") : null,
-            AlphaMode = Glasses.Contains(shader) ? AlphaMode.Blend : (material.RenderBucket & 7) switch
+            Environment = environment,
+            Reflection = reflection,
+            NightOnly = Textured.Contains(shader) && Pattern(shader, "geometry_night") == "true",
+            // The trees are always cut out, by their own alpha test.
+            AlphaMode = Glasses.Contains(shader) ? AlphaMode.Blend
+                : Trees.Contains(shader) || TreeLods.Contains(shader) || TreeBillboards.Contains(shader) ? AlphaMode.Mask : (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
                 3 => AlphaMode.Mask,
@@ -291,13 +404,20 @@ internal sealed class SurfaceMaterial
         // A tinted shader's vertex blue picks the palette's column, and a vehicle's is its dirt, so neither is an
         // emissive mask there.
         u[11] = Pattern(shader, "emissive") == "true" && result.TintPalette is null && !result.Vehicle ? 1 : 0;
-        // GTA's alpha test passes at about half coverage.
-        u[12] = .5f;
+        // The cut-outs' alpha reference: the game's global one, 90 of 255, but the vehicles' own, 1 of 255.
+        u[12] = result.Vehicle ? VehicleAlphaRef : GlobalAlphaRef;
         u[13] = result.TintPalette is not null ? 1 : 0;
         u[14] = Constant("tint_palette_selector", 0)[0];
         u[15] = result.Vehicle ? 1 : 0;
         // The specular map is read on the first UV set, untiled, unless a vehicle shader says otherwise.
         u[41] = 1;
+        // The _texdecal and _vertdecal shaders' decal, DiffuseSampler2 on the second UV set, over the diffuse by its own
+        // alpha or by one less the vertex colour's.
+        if (!result.Vehicle && result.DiffuseLayer is not null && Pattern(shader, "overlay") is { } overlay)
+        {
+            u[42] = overlay == "vertex" ? 2 : 1;
+            u[43] = 1;
+        }
         // The _pxm shaders' parallax: heightScale, heightBias and parallaxSelfShadowAmount (the decals' programs cast no
         // self-shadow); globalHeightScale, which the game leaves at one.
         if (Pattern(shader, "parallax") == "true" && result.Height is not null)
@@ -310,6 +430,8 @@ internal sealed class SurfaceMaterial
         }
         // The decals' PS_DeferredTextured blends all four targets by the diffuse map's alpha times the vertex colour's.
         u[73] = result.Decal ? 1 : 0;
+        // How hard a cut-out's sub-sampled alpha is (HardAlphaBlend): a ramp a tenth of the way from the reference to whole.
+        u[74] = Constant("hard_alpha_blend", 1)[0];
         // Where the specular comes from besides the constants and a specular map: the diffuse map's luminance
         // (emissive_speclum), or an overlay of its colour by SpecDesaturateIntensity and SpecDesaturateExponent (diffspec).
         string? source = Pattern(shader, "specular_source");
@@ -323,6 +445,13 @@ internal sealed class SurfaceMaterial
                 u[64 + i] = i < exponent.Length ? exponent[i] : 0;
             }
         }
+        // The _reflect shaders' environment term: which map, and reflectivePower. The night emissives (emissivenight,
+        // decal_emissivenight_only, normal_spec_reflect_emissivenight) scale their emissive, and a decal its alpha too,
+        // by the day/night balance (globalScalars2.y); _geomnightonly collapses its vertices by day.
+        u[100] = (float)result.Reflection;
+        u[101] = result.Reflection != EnvironmentKind.None ? Constant("reflectivity", .45f)[0] : 0;
+        u[102] = Textured.Contains(shader) && Pattern(shader, "emissive_night") == "true" ? 1 : 0;
+        u[103] = result.NightOnly ? 1 : 0;
         // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling), and what
         // masks it: the specular map's alpha, the diffuse map's for the diffspec shaders, or nothing.
         if (result.Detail is not null)
@@ -342,7 +471,47 @@ internal sealed class SurfaceMaterial
             Ped(u);
         if (result.Glass)
             Glass(u);
+        if (result.Tree != TreeProgram.None)
+            TreeUniforms(u);
         return result;
+
+        // The game's tree shaders, checked against Enhanced's. What PS_PropFoliageDeferred_AlphaClipNC,
+        // PS_PropFoliageDeferredLod_AlphaClip and PS_PropFoliageDeferredLod2_AlphaClip write: the specular map's mask by specularIntensityMult (unsquared) and its alpha by
+        // specularFalloffMult, specularFresnel, or none of them without SPECULAR (the _lod shaders write none, and the
+        // billboards an exponent of 512 and a fresnel of 0.4999); the alpha test, AlphaScale times the diffuse alpha,
+        // doubled, against AlphaTest; UseTreeNormals, SelfShadowing and ShadowFalloff; the billboards' size and normal,
+        // and whether they are trees_lod2d's; the cards' alignment and their shadow's offset; and umGlobalParams. The _tnt shaders read their palette at
+        // the second vertex colour's blue.
+        void TreeUniforms(Span<float> v)
+        {
+            bool specular = result.Tree == TreeProgram.Foliage && Declares("constants", "specular_intensity");
+            v[0] = result.Tree == TreeProgram.Billboard ? .4999f : specular ? Constant("fresnel", .97f)[0] : 0;
+            v[1] = result.Tree == TreeProgram.Billboard ? 512 : specular ? Constant("specular_falloff", 100)[0] : 0;
+            v[2] = specular ? Constant("specular_intensity", 1)[0] : 0;
+            Fill(v[4..7], specular ? Constant("specular_mask", 1, 0, 0) : [0, 0, 0]);
+            v[8] = result.Tree == TreeProgram.Foliage && Declares("textures", "normal") && result.Normal is not null ? 1 : 0;
+            v[9] = specular && Declares("textures", "specular") ? 1 : 0;
+            v[11] = 0;
+            // trees_normal_diffspec reads its own specular map, which is its diffuse map.
+            v[52] = 0;
+            v[56] = 0;
+            v[104] = (float)result.Tree;
+            v[105] = shader.Contains("camera_facing", StringComparison.OrdinalIgnoreCase) ? 1
+                : shader.Contains("camera_aligned", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+            v[106] = Constant("tree_alpha_scale", 1)[0];
+            v[107] = Constant("tree_alpha_test", 0)[0];
+            v[108] = Constant("tree_normals", 1)[0];
+            // The billboards write no self-shadow (one), the others SelfShadowing.
+            v[109] = result.Tree == TreeProgram.Billboard ? 1 : Constant("tree_self_shadow", .8f)[0];
+            v[110] = Constant("tree_shadow_falloff", 1)[0];
+            float[] size = Constant("tree_lod2_size", 1, 1, 0, 0);
+            v[112] = size.ElementAtOrDefault(0);
+            v[113] = size.ElementAtOrDefault(1);
+            v[114] = Constant("tree_shadow_facing", 0)[0];
+            // trees_lod2d's billboards (the drawables' LODs) take their placement's turn and scale as the game's do.
+            v[115] = shader.Equals("trees_lod2d", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            Fill(v[116..119], Constant("tree_lod2_normal", 0, 0, 1));
+        }
 
         // PS_VehicleTextured, as vehicle_vehglass and its _crack and _inner compile it: matDiffuseColor, dirtLevelMod and
         // dirtColor where the vehicle shaders keep them, clean as the viewer shows a vehicle; which of the programs (1
@@ -566,4 +735,16 @@ internal sealed class SurfaceMaterial
 
         static string Text(JsonElement value) => value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.ToString().ToLowerInvariant() : value.ToString();
     }
+}
+
+/// <summary>The game's tree shaders' programs, as surface.wgsl's Material.tree.x holds them.</summary>
+internal enum TreeProgram
+{
+    None,
+    /// <summary>VS_PropFoliageDeferred and PS_PropFoliageDeferred: trees, trees_normal_spec, the camera cards and the rest.</summary>
+    Foliage,
+    /// <summary>VS_PropFoliageDeferredLod and PS_PropFoliageDeferredLod: trees_lod and trees_lod_tnt.</summary>
+    Lod,
+    /// <summary>VS_PropFoliageDeferredLod2 and PS_PropFoliageDeferredLod2: trees_lod2's billboards.</summary>
+    Billboard,
 }

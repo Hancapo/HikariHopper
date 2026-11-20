@@ -217,9 +217,10 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         Assert.Equal(StartPage.AppVersion, start.FindControl<TextBlock>("VersionText")!.Text);
         Assert.Matches(@"^\d+\.\d+\.\d+", StartPage.AppVersion);
 
-        // Nothing set up: GTA V gets one row that leads to Settings.
-        LauncherRow lone = Assert.Single(start.Rows);
-        Assert.Equal((HikariHopper.Core.GameCatalog.GtaV, false), (lone.Entry.Game.Id, lone.Entry.SetUp));
+        // Nothing set up: each game gets one row that leads to Settings, GTA V's first.
+        Assert.Equal([(HikariHopper.Core.GameCatalog.GtaV, false), (HikariHopper.Core.GameCatalog.Rdr2, false)],
+            start.Rows.Select(row => (row.Entry.Game.Id, row.Entry.SetUp)));
+        LauncherRow lone = start.Rows[0];
         Assert.Contains("Settings", string.Concat(lone.Detail.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(run => run.Text)));
         // The row is the way to Settings: the button under the list doesn't say it a second time.
         Assert.False(start.SettingsButton.IsVisible);
@@ -251,16 +252,21 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         // same game joins it under its edition's name (Legacy here); the configured one isn't repeated.
         string enhanced = MakeGame("Enhanced", "GTA5_Enhanced.exe");
         string other = MakeGame("Modded GTA");
+        // And RDR2, its row named for the store it came from: none it can tell here.
+        string rdr2 = MakeGame("RDR2", "RDR2.exe");
+        HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.Rdr2GameRootKey, rdr2);
         HikariHopper.Core.AppSettings.SetString(HikariHopper.Core.GameSettings.EnhancedGameRootKey, enhanced);
         HikariHopper.Core.AppSettings.SetStringList(HikariHopper.Core.GameSettings.RecentGameRootsKey, [enhanced, other]);
         ui.Tabs.GamePathSettings.Refresh();
         Pump();
         LauncherRow[] rows = [.. start.Rows];
-        Assert.Equal([("Enhanced", enhanced), ("Legacy", other)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
+        Assert.Equal([("Enhanced", enhanced), ("Legacy", other), ("PC", rdr2)], rows.Select(row => (row.Entry.Title, row.Entry.Path)));
         // With every game set up, Settings is the button.
         Assert.True(start.SettingsButton.IsVisible);
         Assert.Equal(HikariHopper.Ui.Theme.Selection, ((Views.Controls.EditionMark)rows[0].Mark).Fill);
         Assert.Equal(HikariHopper.Ui.Theme.LegacyMark, ((Views.Controls.EditionMark)rows[1].Mark).Fill);
+        Assert.True(((Views.Controls.EditionMark)rows[2].Mark).IsRdr2);
+        Assert.Equal(HikariHopper.Ui.Theme.Rdr2Mark, ((Views.Controls.EditionMark)rows[2].Mark).Fill);
         Assert.Equal(enhanced, rows[0].Detail.Text);
 
         // Clicking a row opens it, and the explorer and its tab strip come back.
@@ -621,7 +627,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         SettingsDialog settings = menus.Settings!;
 
         // One row per edition, in the catalogue's order, each with its own executable.
-        Assert.Equal([("Enhanced", "GTA5_Enhanced.exe"), ("Legacy", "GTA5.exe")],
+        Assert.Equal([("Enhanced", "GTA5_Enhanced.exe"), ("Legacy", "GTA5.exe"), ("Red Dead Redemption 2", "RDR2.exe")],
             settings.Rows.Select(row => (row.Title, row.ExpectedExecutable)));
         GamePathRow legacyRow = settings.Rows[1];
         Assert.Equal("Not set", legacyRow.StatusMessage);
@@ -2269,7 +2275,7 @@ public sealed class ExplorerViewTests : ExplorerTestBase
         // The game in a well of its own at the start, with its edition's mark, as on its tab.
         Assert.True(status.Edition.IsVisible);
         Assert.Equal("GTA V Legacy", status.EditionText.Text);
-        Assert.False(status.EditionMark.Enhanced);
+        Assert.Equal(HikariHopper.Core.GameSettings.LegacyEdition, status.EditionMark.Edition);
         Assert.Equal(HikariHopper.Ui.Theme.InsetBg, status.Edition.Background);
         // The load confirmation only repeats the game's well.
         Assert.Equal("Loaded GTA V Legacy", ui.Bridge.Status);

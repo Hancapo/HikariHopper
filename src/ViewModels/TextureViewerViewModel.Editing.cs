@@ -362,7 +362,7 @@ public sealed partial class TextureViewerViewModel
         int count = SelectedCount;
         // Removal preserves surviving objects verbatim. Pre-existing duplicate names or malformed neighbours must not
         // prevent repairing a document. Save still validates; undo restores even an invalid input.
-        dictionary = new TextureSet(textures, original.Target);
+        dictionary = original.WithTextures(textures);
         string label = count == 1 ? "Remove texture" : "Remove textures";
         if (count > 1 || textures.Length == 0)
             PushUndo(label, TextureUndoKind.Snapshot, row, original.Textures);
@@ -387,7 +387,7 @@ public sealed partial class TextureViewerViewModel
         {
             // Undo restores an imported state verbatim, including duplicate names. Serialization still validates the
             // document before writing it.
-            dictionary = new TextureSet(action.Textures, dictionary.Target);
+            dictionary = dictionary.WithTextures(action.Textures);
             RestoreYdrBookkeeping(action);
             revision = action.PreviousRevision;
             RebuildTextureView(action.Selection, action.Row);
@@ -409,7 +409,7 @@ public sealed partial class TextureViewerViewModel
         {
             textures.Insert(Math.Clamp(action.Row, 0, textures.Count), action.Textures[0]);
             // Restore the removed object without revalidating unrelated source problems.
-            dictionary = new TextureSet(textures, dictionary.Target);
+            dictionary = dictionary.WithTextures(textures);
         }
         RestoreYdrBookkeeping(action);
 
@@ -878,7 +878,7 @@ public sealed partial class TextureViewerViewModel
     {
         if (dictionary is null)
             return false;
-        var candidate = new TextureSet(textures, dictionary.Target);
+        var candidate = dictionary.WithTextures(textures);
         try
         {
             candidate.Validate().ThrowIfInvalid();

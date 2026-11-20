@@ -7,16 +7,54 @@ namespace HikariHopper.Tests;
 /// <summary>
 /// The real game the real-asset tests read from, found as the app would: <c>HIKARI_TEST_LEGACY</c> when set, else the
 /// Legacy folder set in HikariHopper's settings, else Steam's own install of it. Read only: a test copies what it
-/// changes. Without one, those tests are skipped.
+/// changes. Without one, those tests are skipped; and with <c>HIKARI_TEST_SKIP_GAMES=1</c>, for a quick run that leaves
+/// out the slowest of them.
 /// </summary>
 internal static partial class TestGames
 {
     private const string LegacySteamApp = "271590";
+    private const string Rdr2SteamApp = "1174180";
     private static readonly Lazy<string?> legacy = new(FindLegacy);
+    private static readonly Lazy<string?> rdr2 = new(FindRdr2);
+
+    /// <summary>
+    /// The Red Dead Redemption 2 folder (<c>HIKARI_TEST_RDR2</c>, its folder in HikariHopper's settings, or Steam's),
+    /// or skips the test that needs it.
+    /// </summary>
+    internal static string Rdr2()
+    {
+        SkipWhenAsked();
+        if (rdr2.Value is not { } root)
+        {
+            Assert.Skip("No RDR2 found: set HIKARI_TEST_RDR2, its folder in HikariHopper's settings, or install it with Steam.");
+            throw new InvalidOperationException();
+        }
+        return root;
+    }
+
+    // HIKARI_TEST_SKIP_GAMES=1: the tests that read a real game are skipped.
+    private static void SkipWhenAsked()
+    {
+        if (Environment.GetEnvironmentVariable("HIKARI_TEST_SKIP_GAMES") == "1")
+            Assert.Skip("HIKARI_TEST_SKIP_GAMES=1: the tests that read a real game are left out.");
+    }
+
+    private static string? FindRdr2()
+    {
+        static bool IsRdr2(string? folder) => !string.IsNullOrEmpty(folder) && File.Exists(Path.Combine(folder, "RDR2.exe"));
+        string? named = Environment.GetEnvironmentVariable("HIKARI_TEST_RDR2");
+        if (!string.IsNullOrEmpty(named))
+            return IsRdr2(named) ? named : null;
+        if (AppSettings.ReadFrom($@"Software\{AppSettings.OrganizationName}\{AppSettings.ApplicationName}", GameSettings.Rdr2GameRootKey) is string set
+            && IsRdr2(set))
+            return set;
+        return SteamLibraries(Rdr2SteamApp).Select(library => Path.Combine(library, "steamapps", "common", "Red Dead Redemption 2")).FirstOrDefault(IsRdr2);
+    }
 
     /// <summary>The GTA V Legacy folder, or skips the test that needs it.</summary>
     internal static string Legacy()
     {
+        SkipWhenAsked();
         string? named = Environment.GetEnvironmentVariable("HIKARI_TEST_LEGACY");
         if (!string.IsNullOrEmpty(named))
             Assert.True(Directory.Exists(named), $"HIKARI_TEST_LEGACY does not exist: {named}");
@@ -38,11 +76,11 @@ internal static partial class TestGames
         if (AppSettings.ReadFrom($@"Software\{AppSettings.OrganizationName}\{AppSettings.ApplicationName}", GameSettings.LegacyGameRootKey) is string set
             && IsLegacy(set))
             return set;
-        return SteamLibraries().Select(library => Path.Combine(library, "steamapps", "common", "Grand Theft Auto V")).FirstOrDefault(IsLegacy);
+        return SteamLibraries(LegacySteamApp).Select(library => Path.Combine(library, "steamapps", "common", "Grand Theft Auto V")).FirstOrDefault(IsLegacy);
     }
 
-    /// <summary>Steam's library folders that hold the Legacy edition, as its libraryfolders.vdf lists them.</summary>
-    private static IEnumerable<string> SteamLibraries()
+    /// <summary>Steam's library folders that hold the game <paramref name="app"/>, as its libraryfolders.vdf lists them.</summary>
+    private static IEnumerable<string> SteamLibraries(string app)
     {
         string steam;
         using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
@@ -57,7 +95,7 @@ internal static partial class TestGames
         for (int i = 0; i < paths.Count; i++)
         {
             int end = i + 1 < paths.Count ? paths[i + 1].Index : text.Length;
-            if (text.AsSpan(paths[i].Index, end - paths[i].Index).Contains($"\"{LegacySteamApp}\"", StringComparison.Ordinal))
+            if (text.AsSpan(paths[i].Index, end - paths[i].Index).Contains($"\"{app}\"", StringComparison.Ordinal))
                 yield return paths[i].Groups[1].Value.Replace(@"\\", @"\");
         }
     }

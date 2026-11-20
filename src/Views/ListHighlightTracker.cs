@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Threading;
 
@@ -22,7 +21,7 @@ public sealed class ListHighlightTracker
     private readonly SmoothScrolling scrolling;
     private readonly double rowHeight;
     private readonly DispatcherTimer timer;
-    private readonly Stopwatch clock = new();
+    private long started;
     private double? position;
     private double target;
     private int targetIndex = -1;
@@ -125,12 +124,12 @@ public sealed class ListHighlightTracker
         peakVelocity = a * tp + velocity;
         peakDistance = 0.5 * a * tp * tp + velocity * tp;
         totalTime = tp + peakVelocity / decel;
-        clock.Restart();
+        started = Ui.MotionClock.Timestamp;
         if (!timer.IsEnabled)
             timer.Start();
     }
 
-    private double Elapsed => clock.Elapsed.TotalSeconds;
+    private double Elapsed => Ui.MotionClock.Since(started).TotalSeconds;
 
     private double CurrentVelocity()
     {

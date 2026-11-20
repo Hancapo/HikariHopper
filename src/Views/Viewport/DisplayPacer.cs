@@ -4,7 +4,12 @@ using System.Runtime.InteropServices;
 namespace HikariHopper.Views;
 
 /// <summary>
-/// Calls <c>tick</c> once per vertical blank of the monitor showing a window, on a thread of its own (after RedFury's).
+/// Calls <c>tick</c> on a thread of its own at a steady rate the frames keep up with (after RedFury's, which ticked at
+/// every vertical blank): every refresh of the monitor showing a window, or every second, third or fourth
+/// (<see cref="FrameTook"/> picks which). Frames a little slower than a fast display's refresh (2.8 ms at 360 Hz) went
+/// out unevenly, every 3 to 8 ms, and on a variable refresh display (G-SYNC, FreeSync) each was shown as it came; an
+/// even rate reads as smoother than a faster uneven one. A tick is every first, second, third or fourth vertical blank,
+/// so its frame is ready for the refresh it's shown at.
 /// </summary>
 internal sealed partial class DisplayPacer : IDisposable
 {
@@ -14,6 +19,15 @@ internal sealed partial class DisplayPacer : IDisposable
     private volatile bool stopped;
     private double period = 1.0 / 60;
 
+    // Refreshes a tick (1 to MaxDivisor), the display's refresh period as Windows has it (0 when it doesn't say), and
+    // the recent frames FrameTook saw: how many, how many ran past their slot, since when, and since when all were
+    // short enough for a faster rate.
+    private const int MaxDivisor = 4;
+    private volatile int divisor = 1;
+    private double refreshPeriod;
+    private int windowFrames, windowLate;
+    private long windowStart, fastSince;
+
     public DisplayPacer(nint window, Action tick)
     {
         this.window = window;
@@ -22,8 +36,50 @@ internal sealed partial class DisplayPacer : IDisposable
         thread.Start();
     }
 
-    /// <summary>The time between vertical blanks in seconds, smoothed; 1/60 until measured.</summary>
+    /// <summary>The time between ticks in seconds, smoothed; 1/60 until measured.</summary>
     public double Period => Volatile.Read(ref period);
+
+    /// <summary>How many of the display's refreshes a tick is.</summary>
+    public int Divisor => divisor;
+
+    /// <summary>The display's refresh period in seconds, once a vertical blank has been waited for; 0 before, or when Windows doesn't say.</summary>
+    public double RefreshPeriod => Volatile.Read(ref refreshPeriod);
+
+    /// <summary>
+    /// A frame took this long, from the UI thread: frames running past their slot (a few in half a second) make a tick
+    /// one refresh longer at once; two seconds of frames short enough for one refresh fewer make it shorter.
+    /// </summary>
+    public void FrameTook(double seconds)
+    {
+        double refresh = Volatile.Read(ref refreshPeriod);
+        if (refresh <= 0)
+            return;
+        long now = Stopwatch.GetTimestamp();
+        int current = divisor;
+        if (windowStart == 0 || Stopwatch.GetElapsedTime(windowStart, now).TotalSeconds > .5)
+            (windowStart, windowFrames, windowLate) = (now, 0, 0);
+        windowFrames++;
+        if (seconds > current * refresh)
+            windowLate++;
+        if (windowLate >= Math.Max(3, windowFrames / 20) && current < MaxDivisor)
+        {
+            divisor = current + 1;
+            (windowStart, fastSince) = (0, 0);
+            return;
+        }
+        // A rate one refresh faster, with room to spare.
+        if (current > 1 && seconds < (current - 1) * refresh * .8)
+        {
+            fastSince = fastSince == 0 ? now : fastSince;
+            if (Stopwatch.GetElapsedTime(fastSince, now).TotalSeconds > 2)
+            {
+                divisor = current - 1;
+                (windowStart, fastSince) = (0, 0);
+            }
+        }
+        else
+            fastSince = 0;
+    }
 
     private void Run()
     {
@@ -34,6 +90,11 @@ internal sealed partial class DisplayPacer : IDisposable
             // A display that is off or being reconfigured has no vertical blank: wait a coarse period instead.
             if (blank.Wait(window))
             {
+                Volatile.Write(ref refreshPeriod, blank.RefreshPeriod);
+                // Every divisor-th blank: one sooner than its slot, by more than half a refresh, isn't the tick's.
+                if (previous != 0 && blank.RefreshPeriod > 0
+                    && Stopwatch.GetElapsedTime(previous).TotalSeconds < blank.RefreshPeriod * (divisor - .5))
+                    continue;
                 long now = Stopwatch.GetTimestamp();
                 double interval = previous == 0 ? 0 : Stopwatch.GetElapsedTime(previous, now).TotalSeconds;
                 // A gap from a monitor change or a stalled wait isn't the refresh period.
@@ -66,6 +127,9 @@ internal sealed partial class DisplayPacer : IDisposable
         private uint source;
         private bool open;
 
+        /// <summary>The display's refresh period in seconds, as Windows has its mode; 0 when it doesn't say.</summary>
+        public double RefreshPeriod { get; private set; }
+
         public bool Wait(nint window)
         {
             // The nearest monitor follows the window from display to display.
@@ -90,6 +154,9 @@ internal sealed partial class DisplayPacer : IDisposable
             var info = new MonitorInfoEx { Size = sizeof(MonitorInfoEx) };
             if (GetMonitorInfoW(display, &info) == 0)
                 return false;
+            // Its refresh rate, from its current mode (0 and 1 mean the hardware's default).
+            var mode = new DisplayMode { Size = (ushort)sizeof(DisplayMode) };
+            RefreshPeriod = EnumDisplaySettingsW(info.Device, -1, &mode) != 0 && mode.Frequency > 1 ? 1.0 / mode.Frequency : 0;
             nint dc = CreateDCW(info.Device, null, null, 0);
             if (dc == 0)
                 return false;
@@ -118,6 +185,17 @@ internal sealed partial class DisplayPacer : IDisposable
         }
 
         public void Dispose() => Close();
+    }
+
+    // DEVMODEW, as far as the display's frequency.
+    [StructLayout(LayoutKind.Explicit, Size = 220)]
+    private struct DisplayMode
+    {
+        [FieldOffset(68)]
+        public ushort Size;
+
+        [FieldOffset(184)]
+        public uint Frequency;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -173,4 +251,7 @@ internal sealed partial class DisplayPacer : IDisposable
 
     [LibraryImport("gdi32.dll")]
     private static unsafe partial int D3DKMTCloseAdapter(CloseAdapter* close);
+
+    [LibraryImport("user32.dll")]
+    private static unsafe partial int EnumDisplaySettingsW(char* device, int mode, DisplayMode* settings);
 }

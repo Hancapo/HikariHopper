@@ -5,7 +5,8 @@ namespace HikariHopper.Rendering;
 
 /// <summary>
 /// GTA V's light at one time of day, from its timecycle: the directional light (the sun, or the moon at night), the
-/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the ambient occlusion multipliers, the
+/// natural ambient as a sky-to-ground hemisphere, the directional ambient, the artificial ambient outside interiors (the
+/// same hemisphere; nought where the timecycle in use doesn't have it), the ambient occlusion multipliers, the
 /// peds' rim light, the exposure range and the bloom: the exposed luminance its bright pass is centred on, the width it fades in over, and
 /// its intensity. Colours are already multiplied by their intensities.
 /// </summary>
@@ -25,27 +26,28 @@ internal readonly record struct TimecycleLight(
     float ExposureMax,
     float BloomThreshold,
     float BloomWidth,
-    float BloomIntensity);
+    float BloomIntensity,
+    Vector3 ArtificialDown = default,
+    Vector3 ArtificialUp = default,
+    float WaterFogLight = 0,
+    float DirectionalIntensity = 0);
 
 /// <summary>
 /// GTA V's timecycle for clear weather (EXTRASUNNY, its global region, the same in both editions), interpolated
 /// between its keyframes, with the exposure and filmic tone map the game's post-process builds from it
-/// (postfx: PS_CalculateExposure and PS_Composite) and from visualsettings.dat.
+/// (postfx: PS_CalculateExposure and PS_Composite) and from visualsettings.dat. Read from the game once one is open
+/// (<see cref="Use"/>, <see cref="UseVisuals"/>); until then, the timecycle from a copy of its values kept with the
+/// app (timecycle.json) and visualsettings.dat's settings as the game's code defaults them.
 /// </summary>
 internal static class Timecycle
 {
     private static readonly float[] Hours;
-    private static readonly Dictionary<string, float[]> Values;
+    private static readonly Dictionary<string, float[]> Kept;
+    private static volatile Dictionary<string, float[]> Values;
+    private static volatile GtaToneMapVisuals toneMap = GtaToneMapVisuals.GameDefaults;
+    // The game's weather's second region (URBAN), each field at the keyframes; none before a game is open.
+    private static volatile Dictionary<string, float[]>? Region;
 
-    // visualsettings.dat: the curve from the scene's luminance to an exposure in stops, in both editions.
-    internal const float ExposureScale = -106.2f, ExposurePower = .007f, ExposureOffset = 104.7f;
-
-    /// <summary>
-    /// visualsettings.dat's filmic curves, bright and dark, and the exposures they belong to: the timecycle does not
-    /// override them in clear weather. The tone map moves from one to the other as the exposure goes up.
-    /// </summary>
-    internal static readonly Filmic Bright = new(.22f, .3f, .1f, .2f, .01f, .3f, 4), Dark = new(.22f, .3f, .1f, .2f, 0, .3f, 4);
-    internal const float BrightExposure = -.5f, DarkExposure = 3;
 
     /// <summary>
     /// The gamma PS_Composite encodes with: it raises the tone-mapped colour to its Gamma, one over this, itself, and
@@ -68,9 +70,49 @@ internal static class Timecycle
         using JsonDocument document = JsonDocument.Parse(ViewportRenderer.Read("timecycle.json"));
         JsonElement root = document.RootElement;
         Hours = [.. root.GetProperty("hours").EnumerateArray().Select(value => value.GetSingle())];
-        Values = root.GetProperty("values").EnumerateObject()
+        Kept = root.GetProperty("values").EnumerateObject()
             .ToDictionary(field => field.Name, field => field.Value.EnumerateArray().Select(value => value.GetSingle()).ToArray());
+        Values = Kept;
     }
+
+    /// <summary>
+    /// Takes the game's clear weather from now on, each field it has at the keyframes over the copy kept with the app,
+    /// and its second region (URBAN) to blend over it by place; null goes back to the copy. The keyframes are kept as
+    /// the game keeps them, at half precision. Views pick it up the next time they set their hour.
+    /// </summary>
+    internal static void Use(Core.GameTimecycle? game)
+    {
+        var values = new Dictionary<string, float[]>(Kept);
+        foreach (var (name, keyframes) in game?.Weather ?? new Dictionary<string, float[]>())
+            if (keyframes.Length == Hours.Length)
+                values[name] = Half(keyframes);
+        Dictionary<string, float[]>? region = null;
+        // The game blends two regions at most.
+        if (game is { Regions.Count: > 1 })
+        {
+            region = [];
+            foreach (var (name, keyframes) in game.Regions[1].Fields)
+                if (keyframes.Length == Hours.Length)
+                    region[name] = Half(keyframes);
+        }
+        (Values, Region) = (values, region);
+    }
+
+    /// <summary>
+    /// Takes the exposure curve and filmic tone map from the game's visualsettings.dat from now on, each setting it
+    /// lacks as the game's code defaults it; null goes back to those defaults. Views pick it up the next time they set
+    /// their hour.
+    /// </summary>
+    internal static void UseVisuals(Core.GameVisualSettings? game) => toneMap = GtaToneMapVisuals.From(game);
+
+    /// <summary>The exposure curve and filmic tone map in use, the game's visualsettings.dat's or its code's defaults.</summary>
+    internal static GtaToneMapVisuals ToneMap => toneMap;
+
+    // A keyframe's values as the game stores them: half-precision floats.
+    private static float[] Half(float[] keyframes) => [.. keyframes.Select(value => (float)(Half)value)];
+
+    /// <summary>Whether the timecycle in use has this field, the game's or the kept copy's.</summary>
+    internal static bool Has(string name) => Values.ContainsKey(name);
 
     /// <summary>
     /// The timecycle at <paramref name="hours"/> after midnight, each field interpolated between the keyframes either
@@ -80,9 +122,7 @@ internal static class Timecycle
     {
         if (!float.IsFinite(hours))
             throw new ArgumentOutOfRangeException(nameof(hours));
-        hours %= 24;
-        if (hours < 0)
-            hours += 24;
+        hours = WrapHours(hours);
         // The keyframe at or before this hour, and how far it is towards the next; the last one runs to midnight.
         int index = Hours.Length - 1;
         while (index > 0 && Hours[index] > hours)
@@ -92,22 +132,74 @@ internal static class Timecycle
         return new(index, next, (hours - Hours[index]) / (end - Hours[index]));
     }
 
-    /// <summary>One field of the timecycle between two keyframes.</summary>
-    internal static float Field(string name, int index, int next, float t) => float.Lerp(Values[name][index], Values[name][next], t);
+    /// <summary>A finite time wrapped to the day, 0 to 24.</summary>
+    internal static float WrapHours(float hours)
+    {
+        hours %= 24;
+        return hours < 0 ? hours + 24 : hours;
+    }
 
-    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
-    internal static TimecycleLight Evaluate(float hours)
+    /// <summary>One field of the timecycle between two keyframes.</summary>
+    internal static float Field(string name, int index, int next, float t) => Field(name, index, next, t, 0);
+
+    /// <summary>One field of the timecycle between two keyframes, or <paramref name="fallback"/> where it hasn't the field.</summary>
+    internal static float Field(string name, int index, int next, float t, float fallback) =>
+        Values.TryGetValue(name, out float[]? keyframes) ? float.Lerp(keyframes[index], keyframes[next], t) : fallback;
+
+    /// <summary>
+    /// The timecycle at <paramref name="hours"/> after midnight at <paramref name="place"/> in the game's world, worked
+    /// out into <paramref name="frame"/> as the game does: every field between
+    /// its keyframes, GLOBAL's then the second region's blended over it by the region's strength (the second alone at
+    /// full strength), then each box modifier applied over that in turn, at its strength, as its field blends. A field
+    /// the second region lacks keeps GLOBAL's (the game's own regions have the same fields).
+    /// </summary>
+    internal static TimecycleSample Resolve(float hours, TimecyclePlace? place, TimecycleFrame frame)
     {
         TimecycleSample sample = Sample(hours);
-        float Get(string name) => sample.Get(name);
-        Vector3 Colour(string name) => sample.Colour(name);
+        var (index, next, t) = sample;
+        Dictionary<string, float[]> values = Values;
+        Dictionary<string, float[]>? region = Region;
+        float strength = place?.Region ?? 0;
+        Dictionary<string, float> resolved = frame.Values;
+        if (!ReferenceEquals(frame.Source, values))
+        {
+            resolved.Clear();
+            frame.Source = values;
+        }
+        foreach (var (name, keyframes) in values)
+        {
+            float value = Between(keyframes);
+            if (strength > 0 && region is not null && region.TryGetValue(name, out float[]? local))
+                value = strength >= 1 ? Between(local) : value + (Between(local) - value) * strength;
+            resolved[name] = value;
+        }
+        if (place is not null)
+            foreach (var (modifier, at) in place.Modifiers)
+                foreach (var (name, (a, b)) in modifier.Fields)
+                    if (resolved.TryGetValue(name, out float value))
+                        resolved[name] = TimecycleModifierBlend.Apply(TimecycleModifierBlend.Of(name), value, a, b, Math.Clamp(at, 0, 1));
+        return sample with { Frame = frame };
 
-        float natural = Get("natural_ambient_multiplier");
+        float Between(float[] keyframes) => keyframes[index] + (keyframes[next] - keyframes[index]) * t;
+    }
+
+    /// <summary>The light at <paramref name="hours"/> after midnight; any finite value wraps to the day.</summary>
+    internal static TimecycleLight Evaluate(float hours) => Evaluate(Sample(hours));
+
+    /// <summary>The light of a sample of the timecycle.</summary>
+    internal static TimecycleLight Evaluate(in TimecycleSample sample)
+    {
+        TimecycleSample tc = sample;
+        float Get(string name) => tc.Get(name);
+        Vector3 Colour(string name) => tc.Colour(name);
+
+        // As the game sets the frame's: the natural ambient multiplier isn't the frame's (it scales what's
+        // inside a room or a box, entity by entity), so a modifier box at the camera that sets it changes nothing here.
         float occlusion = Get("light_amb_occ_mult");
         return new(
             Colour("light_dir_col") * Get("light_dir_mult"),
-            Colour("light_natural_amb_down_col") * Get("light_natural_amb_down_intensity") * natural,
-            Colour("light_natural_amb_up_col") * Get("light_natural_amb_up_intensity") * Get("light_natural_amb_up_intensity_mult") * natural,
+            Colour("light_natural_amb_down_col") * Get("light_natural_amb_down_intensity"),
+            Colour("light_natural_amb_up_col") * Get("light_natural_amb_up_intensity") * Get("light_natural_amb_up_intensity_mult"),
             Get("light_amb_down_wrap"),
             Colour("light_directional_amb_col") * Get("light_directional_amb_intensity") * Get("light_directional_amb_intensity_mult"),
             Get("light_directional_amb_bounce_enabled"),
@@ -120,7 +212,11 @@ internal static class Timecycle
             Get("postfx_exposure_max"),
             Get("postfx_bright_pass_thresh"),
             Get("postfx_bright_pass_thresh_width"),
-            Get("postfx_intensity_bloom"));
+            Get("postfx_intensity_bloom"),
+            Colour("light_artificial_ext_down_col") * Get("light_artificial_ext_down_intensity"),
+            Colour("light_artificial_ext_up_col") * Get("light_artificial_ext_up_intensity"),
+            Get("water_foglight"),
+            Get("light_dir_mult"));
     }
 
     /// <summary>
@@ -159,16 +255,6 @@ internal static class Timecycle
     }
 
     /// <summary>
-    /// PS_CalculateExposure: the exposure in stops for a scene of this luminance, from visualsettings.dat's curve plus
-    /// the timecycle's exposure, kept in the timecycle's range.
-    /// </summary>
-    internal static float ExposureFor(float luminance, in TimecycleLight light)
-    {
-        float stops = ExposureScale * MathF.Pow(MathF.Max(luminance, 1e-6f), ExposurePower) + ExposureOffset + light.Exposure;
-        return Math.Clamp(stops, light.ExposureMin, light.ExposureMax);
-    }
-
-    /// <summary>
     /// The stand-in ground's radiance: open ground of the reference albedo under this light, lit as GTA lights it
     /// (the directional light, the natural ambient from above and the directional ambient).
     /// </summary>
@@ -180,19 +266,32 @@ internal static class Timecycle
         return ReferenceAlbedo * irradiance;
     }
 
-    /// <summary>The exposure GTA settles on for a frame of nothing but that ground.</summary>
-    internal static float Exposure(in TimecycleLight light, Vector3 towardsLight) => ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
-
-    /// <summary>The filmic curve for this exposure: bright at or below the bright exposure, dark at or above the dark.</summary>
-    internal static Filmic FilmicFor(float stops) => Filmic.Lerp(Bright, Dark, Math.Clamp((stops - BrightExposure) / (DarkExposure - BrightExposure), 0, 1));
+    /// <summary>The exposure GTA settles on for a frame of nothing but that ground, with this exposure curve.</summary>
+    internal static float Exposure(GtaToneMapVisuals curve, in TimecycleLight light, Vector3 towardsLight) =>
+        curve.ExposureFor(Luminance(GroundRadiance(light, towardsLight)), light);
 
     internal static float Luminance(Vector3 colour) => Vector3.Dot(colour, new(.2125f, .7154f, .0721f));
 }
 
-/// <summary>The timecycle between two keyframes, a fraction of the way from one to the next.</summary>
+/// <summary>
+/// The timecycle between two keyframes, a fraction of the way from one to the next: GLOBAL's, or with a frame, the
+/// frame's, worked out at a place in the world.
+/// </summary>
 internal readonly record struct TimecycleSample(int Index, int Next, float T)
 {
-    internal float Get(string name) => Timecycle.Field(name, Index, Next, T);
+    /// <summary>The fields worked out at a place (<see cref="Timecycle.Resolve"/>); none for GLOBAL's alone.</summary>
+    internal TimecycleFrame? Frame { get; init; }
+
+    internal float Get(string name) => Frame is { } frame ? frame.Get(name) : Timecycle.Field(name, Index, Next, T);
+
+    /// <summary>
+    /// A field (the place's blend, with a frame), or the default the game's code gives it (its variable table)
+    /// where the timecycle hasn't it.
+    /// </summary>
+    internal float Get(string name, float fallback) => Timecycle.Has(name) ? Get(name) : fallback;
+
+    /// <summary>The same as <see cref="Get(string, float)"/>.</summary>
+    internal float GetOr(string name, float fallback) => Get(name, fallback);
 
     /// <summary>A colour field's red, green and blue (<c>name_r</c>, <c>_g</c>, <c>_b</c>).</summary>
     internal Vector3 Colour(string name) => new(Get(name + "_r"), Get(name + "_g"), Get(name + "_b"));

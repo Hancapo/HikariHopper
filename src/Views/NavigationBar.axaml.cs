@@ -65,14 +65,15 @@ public partial class NavigationBar : UserControl
         AddressField.LostFocus += (_, _) => EndAddressEdit();
 
         WindowShortcuts.Register(this,
-            new WindowShortcut("Ctrl+F", () => Bridge?.HasWorkspace == true, FocusSearch),
-            new WindowShortcut("F3", () => Bridge?.HasWorkspace == true, FocusSearch),
-            new WindowShortcut("Ctrl+Shift+F", () => Bridge?.HasWorkspace == true, () => BeginSearch(ViewModels.SearchScope.Everywhere)),
-            new WindowShortcut("Ctrl+L", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
-            new WindowShortcut("Alt+D", () => Bridge?.HasWorkspace == true, BeginAddressEdit),
+            new WindowShortcut("Ctrl+F", () => FilesShown, FocusSearch),
+            new WindowShortcut("F3", () => FilesShown, FocusSearch),
+            new WindowShortcut("Ctrl+Shift+F", () => FilesShown, () => BeginSearch(ViewModels.SearchScope.Everywhere)),
+            new WindowShortcut("Ctrl+L", () => FilesShown, BeginAddressEdit),
+            new WindowShortcut("Alt+D", () => FilesShown, BeginAddressEdit),
             new WindowShortcut("Alt+Left", () => Bridge?.GoBack()),
             new WindowShortcut("Alt+Right", () => Bridge?.GoForward()),
-            new WindowShortcut("Back", () => Bridge?.GoUp()));
+            new WindowShortcut("Back", () => Bridge?.InWorld != true, () => Bridge?.GoUp()));
+
 
         // Esc ends a search wherever the focus is, once nothing on the way (a menu, a field being edited) took it.
         TopLevel? host = null;
@@ -108,6 +109,30 @@ public partial class NavigationBar : UserControl
 
     private ExplorerViewModel? Bridge => DataContext as ExplorerViewModel;
 
+    // A workspace on its Files side: what the files' shortcuts need.
+    private bool FilesShown => Bridge is { HasWorkspace: true, InWorld: false };
+
+    /// <summary>
+    /// On the World side, the world's address: Back and Forward (nothing is above a place in the world), and where the
+    /// camera is, in the path's and the search's places; on the Files side, those.
+    /// </summary>
+    private void RefreshFace()
+    {
+        bool world = Bridge?.InWorld == true;
+        UpButton.IsVisible = !world;
+        CoordinatesBar.IsVisible = world;
+        ViewModeSlot.IsVisible = !world;
+        if (world)
+        {
+            EndAddressEdit();
+            AddressBar.IsVisible = AddressField.IsVisible = SearchRow.IsVisible = SearchBox.IsVisible = false;
+        }
+        else
+        {
+            RefreshSearchRow();
+        }
+    }
+
     /// <summary>The "…" mark the leading segments fold into when the path doesn't fit.</summary>
     internal NavigationSegment? OverflowSegment { get; private set; }
 
@@ -134,6 +159,7 @@ public partial class NavigationBar : UserControl
         RefreshSegments();
         RefreshViewMode();
         RefreshSearchRow();
+        RefreshFace();
     }
 
     private void OnSearchFocusRequested(object? sender, EventArgs e) => FocusSearch();
@@ -154,6 +180,9 @@ public partial class NavigationBar : UserControl
             case nameof(ExplorerViewModel.ShownViewMode):
             case nameof(ExplorerViewModel.CanChooseViewMode):
                 RefreshViewMode();
+                break;
+            case nameof(ExplorerViewModel.InWorld):
+                RefreshFace();
                 break;
             case nameof(ExplorerViewModel.IsSearching):
             case nameof(ExplorerViewModel.SearchScopeValue):
@@ -438,6 +467,9 @@ public partial class NavigationBar : UserControl
         }
         SearchField.IsVisible = !searching;
         SearchBox.IsVisible = !searching;
+        // On the World side the files' address and search stay hidden, whatever the files do meanwhile.
+        if (Bridge?.InWorld == true)
+            AddressBar.IsVisible = SearchRow.IsVisible = SearchBox.IsVisible = false;
         // The selector goes where the query is: before the folder's box, or at the start of the search row.
         Panel slot = searching ? SearchScopeSlot : ScopeSlot;
         if (ScopeWell.Parent != slot)

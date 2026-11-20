@@ -18,6 +18,8 @@ internal sealed unsafe partial class ViewportRenderer
         Terrain,
         Fur,
         Cable,
+        /// <summary>Red Dead Redemption 2's material, RedFury's (rdr2.wgsl).</summary>
+        Rdr2,
     }
 
     /// <summary>The fur grass's shells, drawn as instances of one draw (fur.wgsl's SHELLS).</summary>
@@ -75,12 +77,17 @@ internal sealed unsafe partial class ViewportRenderer
     });
     private Sampler? paletteSampler;
     private TextureView? white;
+    // What a _reflect shader reads where it has no environment of its kind: nothing, as a sphere map and as a cube.
+    private TextureView? noEnvironment, noEnvironmentCube;
     private TextureView? missing;
     private TextureView? flat;
     // A missing second diffuse layer lays nothing over the paint.
     private TextureView? clear;
     private readonly Dictionary<GameTexture, TextureView?> textures = new(ReferenceEqualityComparer.Instance);
-    private readonly List<WebGpuSharp.Texture> uploaded = [];
+    // Each uploaded texture's GPU texture, and its sRGB view, for the colour slots of RDR2's material.
+    private readonly Dictionary<GameTexture, WebGpuSharp.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<GameTexture, TextureView?> srgbViews = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<WebGpuSharp.Texture> uploaded = new(ReferenceEqualityComparer.Instance);
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.
@@ -88,6 +95,8 @@ internal sealed unsafe partial class ViewportRenderer
     private (SurfacePart Part, BindGroup Material, AlphaMode Mode, PartKind Kind, BindGroup? Fringe, bool Culled)[] surfaceParts = [];
     // Which of the parts are drawn: at first each drawable's most detailed level.
     private bool[] partsShown = [];
+    // Which are night-only geometry (SurfaceMaterial.NightOnly), cast into the shadow only by night.
+    private bool[] partNightOnly = [];
     private readonly List<Buffer> materialBuffers = [];
     // Each material's uniforms, and hair's second pass's, by material: what an edit of its values writes to.
     private Buffer[] materialUniforms = [];
@@ -122,8 +131,15 @@ internal sealed unsafe partial class ViewportRenderer
                 },
                 new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Vertex, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Filtering } },
                 // A vehicle's dirt, its paint's ramp and its second diffuse layer; a _detail shader's detail map; a
-                // _pxm shader's height map; hair's noise map and mask.
-                Map(7), Map(8), Map(9), Map(10), Map(11), Map(12), Map(13),
+                // _pxm shader's height map; hair's noise map and mask; a _reflect shader's environment, a sphere map
+                // or a cube.
+                Map(7), Map(8), Map(9), Map(10), Map(11), Map(12), Map(13), Map(14),
+                new BindGroupLayoutEntry
+                {
+                    Binding = 15,
+                    Visibility = ShaderStage.Fragment,
+                    Texture = new TextureBindingLayout { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.Cube },
+                },
             ],
         });
         // Terrain: its four layers' diffuse and bump maps, the lookup map, the tint palette and the layers' height maps.
@@ -193,7 +209,7 @@ internal sealed unsafe partial class ViewportRenderer
         PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
         PipelineLayout furPipelineLayout = Layout(furLayout, false), furReflectedLayout = Layout(furLayout, true);
         PipelineLayout cablePipelineLayout = Layout(cableLayout, false);
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("surface.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("trees.wgsl") + "\n" + Read("surface.wgsl") }));
         Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("terrain.wgsl") }));
         Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("fur.wgsl") }));
         Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("cable.wgsl") }));
@@ -239,20 +255,18 @@ internal sealed unsafe partial class ViewportRenderer
             {
                 Module = module.Value,
                 EntryPoint = reflected ? $"fs_{name}_reflected" : $"fs_{name}",
-                Targets = new[]
+                // Into the view, GTA V's solid surfaces and terrain leave their sub-sampled alpha, or none.
+                Targets = ViewTargets(new ColorTargetState
                 {
-                    new ColorTargetState
+                    // Linear HDR with coverage, for the tone map.
+                    Format = HdrFormat,
+                    Blend = blend ? new BlendState
                     {
-                        // Linear HDR with coverage, for the tone map.
-                        Format = HdrFormat,
-                        Blend = blend ? new BlendState
-                        {
-                            Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                            Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
-                        } : null,
-                        WriteMask = ColorWriteMask.All,
-                    },
-                },
+                        Color = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.SrcAlpha, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                        Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
+                    } : null,
+                    WriteMask = ColorWriteMask.All,
+                }, reflected, subSampled: !blend && kind is PartKind.Surface or PartKind.Terrain),
             },
             DepthStencil = new DepthStencilState
             {
@@ -299,10 +313,12 @@ internal sealed unsafe partial class ViewportRenderer
         missing = Checker();
         flat = Solid(128, 128, 255, 255);
         clear = Solid(0, 0, 0, 0);
+        noEnvironment = Solid(0, 0, 0, 255);
+        noEnvironmentCube = SolidCube(0, 0, 0, 255);
 
         // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
         // their material (shadow.wgsl).
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("trees.wgsl") + "\n" + Read("shadow.wgsl") }));
         maskedShadowPipeline = gpu.Pipeline($"shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, materialLayout] }),
@@ -315,10 +331,14 @@ internal sealed unsafe partial class ViewportRenderer
                     new VertexBufferLayout
                     {
                         ArrayStride = SurfaceVertex.Size,
+                        // A tree's caster reads its billboard's size and alignment, or its card's centre, besides.
                         Attributes = new[]
                         {
                             new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 },
+                            new VertexAttribute { ShaderLocation = 2, Offset = 24, Format = VertexFormat.Float32x4 },
                             new VertexAttribute { ShaderLocation = 3, Offset = 40, Format = VertexFormat.Float32x2 },
+                            new VertexAttribute { ShaderLocation = 4, Offset = 48, Format = VertexFormat.Float32x2 },
+                            new VertexAttribute { ShaderLocation = 7, Offset = 64, Format = VertexFormat.Float32x2 },
                         },
                     },
                 },
@@ -344,6 +364,8 @@ internal sealed unsafe partial class ViewportRenderer
         if (drawable is null || drawable.Indices.Length == 0)
             return;
         origin = drawable.Origin;
+        modelLights = drawable.Lights;
+        modelLit = null;
         surfaceVertices = Upload((ReadOnlySpan<SurfaceVertex>)drawable.Vertices, SurfaceVertex.Size);
         surfaceIndices = Upload((ReadOnlySpan<uint>)drawable.Indices, sizeof(uint), BufferUsage.Index);
         var groups = new BindGroup[drawable.Materials.Count];
@@ -353,7 +375,8 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < groups.Length; i++)
         {
             SurfaceMaterial material = drawable.Materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material) : material.Fur ? FurGroup(material) : material.Cable ? CableGroup(material)
+            groups[i] = DrawsRdr2(material) ? Rdr2Group(material.Rdr2!)
+                : material.Terrain ? TerrainGroup(material) : material.Fur ? FurGroup(material) : material.Cable ? CableGroup(material)
                 : MaterialGroup(material, material.Uniforms);
             materialUniforms[i] = materialBuffers[^1];
             // Hair is drawn again, blended, for what isn't solid (SurfaceMaterial.HairFringe).
@@ -368,16 +391,19 @@ internal sealed unsafe partial class ViewportRenderer
         surfaceParts = [.. drawable.Parts.Select(part =>
         {
             SurfaceMaterial material = drawable.Materials[part.Material];
-            PartKind kind = material.Terrain ? PartKind.Terrain : material.Fur ? PartKind.Fur : material.Cable ? PartKind.Cable : PartKind.Surface;
+            PartKind kind = DrawsRdr2(material) ? PartKind.Rdr2
+                : material.Terrain ? PartKind.Terrain : material.Fur ? PartKind.Fur : material.Cable ? PartKind.Cable : PartKind.Surface;
             AlphaMode mode = kind switch
             {
                 PartKind.Terrain or PartKind.Fur => AlphaMode.Opaque,
                 PartKind.Cable => AlphaMode.Blend,
                 _ => material.Decal ? AlphaMode.Blend : material.AlphaMode,
             };
-            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass);
+            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass || material.CullsBack);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
+        partNightOnly = [.. drawable.Parts.Select(part => drawable.Materials[part.Material].NightOnly)];
+        partRdr2 = [.. surfaceParts.Select(p => p.Kind == PartKind.Rdr2 ? drawable.Materials[p.Part.Material].Rdr2 : null)];
         shownMaterials = drawable.Materials;
         FitShadow(Math.Max(drawable.Box.Size.Length() / 2, .25f));
         ThrowIfFailed();
@@ -402,7 +428,8 @@ internal sealed unsafe partial class ViewportRenderer
         for (int i = 0; i < materials.Count; i++)
         {
             SurfaceMaterial material = materials[i];
-            groups[i] = material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
+            groups[i] = DrawsRdr2(material) ? Rdr2Group(material.Rdr2!, materialUniforms[i])
+                : material.Terrain ? TerrainGroup(material, materialUniforms[i]) : material.Fur ? FurGroup(material, materialUniforms[i])
                 : material.Cable ? CableGroup(material, materialUniforms[i]) : MaterialGroup(material, material.Uniforms, materialUniforms[i]);
             if (fringeUniforms[i] is { } fringe)
                 fringes[i] = MaterialGroup(material, material.Uniforms, fringe);
@@ -440,15 +467,19 @@ internal sealed unsafe partial class ViewportRenderer
         shadowRadius = 0;
         surfaceParts = [];
         partsShown = [];
+        partNightOnly = [];
+        partRdr2 = [];
         partsPicked = [];
         foreach (WebGpuSharp.Texture texture in uploaded)
             texture.Destroy();
         uploaded.Clear();
         textures.Clear();
+        uploadedOf.Clear();
+        srgbViews.Clear();
     }
 
     // With a uniform buffer of its own, filled with the values; or reading one it had, as it is.
-    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null)
+    private BindGroup MaterialGroup(SurfaceMaterial material, float[] values, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -461,7 +492,7 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = materialLayout!,
             Entries =
             [
-                new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+                new BindGroupEntry { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
                 new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
                 new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
                 new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },
@@ -475,6 +506,8 @@ internal sealed unsafe partial class ViewportRenderer
                 new BindGroupEntry { Binding = 11, TextureView = View(material.Height) ?? white! },
                 new BindGroupEntry { Binding = 12, TextureView = View(material.HairNoise) ?? white! },
                 new BindGroupEntry { Binding = 13, TextureView = View(material.DiffuseMask) ?? white! },
+                new BindGroupEntry { Binding = 14, TextureView = (material.Reflection == EnvironmentKind.Sphere ? View(material.Environment) : null) ?? noEnvironment! },
+                new BindGroupEntry { Binding = 15, TextureView = (material.Reflection == EnvironmentKind.Cube ? CubeView(material.Environment) : null) ?? noEnvironmentCube! },
             ],
         });
     }
@@ -522,7 +555,7 @@ internal sealed unsafe partial class ViewportRenderer
         Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
     });
 
-    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null)
+    private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0)
     {
         Buffer uniforms = had ?? device.CreateBuffer(new BufferDescriptor { Size = SurfaceMaterial.UniformBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         if (had is null)
@@ -534,7 +567,7 @@ internal sealed unsafe partial class ViewportRenderer
         // height map as high as it goes; without a lookup map every weight is nothing, which is all the first layer.
         var entries = new List<BindGroupEntry>
         {
-            new() { Binding = 0, Buffer = uniforms, Size = SurfaceMaterial.UniformBytes },
+            new() { Binding = 0, Buffer = uniforms, Offset = offset, Size = SurfaceMaterial.UniformBytes },
             new() { Binding = 1, Sampler = surfaceSampler! },
         };
         for (int i = 0; i < 8; i++)
@@ -551,29 +584,41 @@ internal sealed unsafe partial class ViewportRenderer
         return device.CreateBindGroup(new BindGroupDescriptor { Layout = terrainLayout!, Entries = [.. entries] });
     }
 
-    private void DrawSurfaces(RenderPassEncoder pass, bool reflected = false)
+    // In the main view (with the frame's encoder), the pass goes on after RDR2's sub-sampled cut-outs are put together,
+    // between what's solid and what blends; the pass to go on with is returned.
+    private RenderPassEncoder DrawSurfaces(RenderPassEncoder pass, bool reflected = false, CommandEncoder? encoder = null)
     {
         if (surfaceVertices is null || surfaceIndices is null || surfaceParts.Length == 0)
-            return;
+            return pass;
         pass.SetVertexBuffer(0, surfaceVertices);
         pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
-        // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides.
+        // Solid parts cull their backs, as in the game; masked ones (leaves, fences) are seen from both sides, but for the
+        // trees, which cull theirs. Each is drawn only into the passes its model's mask names (a tree's shadow proxy,
+        // into none of these).
         for (int i = 0; i < surfaceParts.Length; i++)
         {
-            var (part, group, mode, kind, _, _) = surfaceParts[i];
-            if (mode != AlphaMode.Blend && partsShown[i])
+            var (part, group, mode, kind, _, culled) = surfaceParts[i];
+            if (mode != AlphaMode.Blend && partsShown[i] && Drawn(part, reflected))
             {
                 pass.SetPipeline(kind switch
                 {
+                    // RDR2's: culled only when solid and not drawn from both sides, as RedFury's CullBackFaces.
+                    PartKind.Rdr2 => reflected ? rdr2Reflected! : mode == AlphaMode.Mask || partRdr2[i]?.DoubleSided == true ? rdr2DoubleSided! : rdr2Solid!,
                     PartKind.Terrain => reflected ? terrainReflected! : terrainSurfaces!,
                     PartKind.Fur => reflected ? furReflected! : furSurfaces!,
                     _ => reflected ? (mode == AlphaMode.Mask ? doubleSidedReflected! : solidReflected!)
-                        : mode == AlphaMode.Mask ? doubleSidedSurfaces! : solidSurfaces!,
+                        : mode == AlphaMode.Mask && !culled ? doubleSidedSurfaces! : solidSurfaces!,
                 });
                 pass.SetBindGroup(1, group);
                 // Fur: one instance a shell.
                 pass.DrawIndexed(part.IndexCount, kind == PartKind.Fur ? FurShells : 1, part.FirstIndex, part.BaseVertex, 0);
             }
+        }
+        if (encoder is { } frame && SurfacesSubSampled())
+        {
+            pass = CombineSubSampledAlpha(pass, frame);
+            pass.SetVertexBuffer(0, surfaceVertices);
+            pass.SetIndexBuffer(surfaceIndices, IndexFormat.Uint32);
         }
         // Then what blends, furthest first: blended parts, and hair's second pass, which keeps the depth its first wrote
         // where it is solid and blends the rest in by its alpha, so hair covers a pixel as much as its alpha says, as the
@@ -582,14 +627,21 @@ internal sealed unsafe partial class ViewportRenderer
         // reflection map, whose paraboloid mirrors the winding.
         Vector3 eye = Camera.Eye - origin;
         foreach (var (part, group, kind, culled) in surfaceParts.Where((p, i) => (p.Mode == AlphaMode.Blend || p.Fringe is not null) && partsShown[i]
-                && !(reflected && p.Kind == PartKind.Cable))
+                && Drawn(p.Part, reflected) && !(reflected && p.Kind == PartKind.Cable))
             .OrderByDescending(p => Vector3.DistanceSquared(p.Part.Center, eye)).Select(p => (p.Part, p.Fringe ?? p.Material, p.Kind, p.Culled)))
         {
-            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces! : reflected ? blendedReflected! : culled ? blendedCulledSurfaces! : blendedSurfaces!);
+            pass.SetPipeline(kind == PartKind.Cable ? cableSurfaces!
+                : kind == PartKind.Rdr2 ? (reflected ? rdr2BlendedReflected! : rdr2Blended!)
+                : reflected ? blendedReflected! : culled ? blendedCulledSurfaces! : blendedSurfaces!);
             pass.SetBindGroup(1, group);
             pass.DrawIndexed(part.IndexCount, 1, part.FirstIndex, part.BaseVertex, 0);
         }
+        return pass;
     }
+
+    // Whether a part's model is drawn into the main view, or into the reflection map, by its render mask.
+    internal static bool Drawn(SurfacePart part, bool reflected) =>
+        reflected ? (part.Passes & FiveFury.Drawables.DrawableRenderMask.Reflection) != 0 : part.Shown;
 
     /// <summary>The size of the missing-texture checkerboard, and how many of its squares cross a texture.</summary>
     internal const int CheckerSize = 64, CheckerSquares = 4;
@@ -658,8 +710,46 @@ internal sealed unsafe partial class ViewportRenderer
         return texture.CreateView();
     }
 
-    /// <summary>A game texture on the GPU, uploaded once per scene; null when its format or shape can't be drawn.</summary>
-    private TextureView? View(GameTexture? texture)
+    // One colour on each face of a cube.
+    private TextureView SolidCube(byte r, byte g, byte b, byte a)
+    {
+        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.D2,
+            Size = new Extent3D(1, 1, 6),
+            Format = TextureFormat.RGBA8Unorm,
+            MipLevelCount = 1,
+            SampleCount = 1,
+        });
+        var copy = new TexelCopyTextureInfo { Texture = texture, Aspect = TextureAspect.All };
+        var layout = new TexelCopyBufferLayout { BytesPerRow = 4, RowsPerImage = 1 };
+        queue.WriteTexture(copy, (ReadOnlySpan<byte>)[r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a], layout, new Extent3D(1, 1, 6));
+        return ShapedView(texture);
+    }
+
+    /// <summary>A game texture's GPU texture viewed as the shaders read it: a cube's six layers as a cube.</summary>
+    private static TextureView ShapedView(WebGpuSharp.Texture texture) => texture.GetDepthOrArrayLayers() == 6
+        ? texture.CreateView(new TextureViewDescriptor
+        {
+            Format = texture.GetFormat(),
+            Dimension = TextureViewDimension.Cube,
+            MipLevelCount = texture.GetMipLevelCount(),
+            ArrayLayerCount = 6,
+            Aspect = TextureAspect.All,
+        })
+        : texture.CreateView();
+
+    /// <summary>
+    /// A game image on the GPU, uploaded once per scene; null when its format or shape can't be drawn, a cube among
+    /// them (<see cref="CubeView"/>).
+    /// </summary>
+    private TextureView? View(GameTexture? texture) => texture is { Shape.Dimension: CommonFury.Textures.TextureDimension.Cube } ? null : Uploaded(texture);
+
+    /// <summary>A game cube on the GPU, as <see cref="View"/> has an image; null for anything else.</summary>
+    private TextureView? CubeView(GameTexture? texture) => texture is { Shape.Dimension: CommonFury.Textures.TextureDimension.Cube } ? Uploaded(texture) : null;
+
+    private TextureView? Uploaded(GameTexture? texture)
     {
         if (texture is null)
             return null;
@@ -672,6 +762,19 @@ internal sealed unsafe partial class ViewportRenderer
 
     private TextureView? Upload(GameTexture source)
     {
+        if (CreateTexture(source) is not var (texture, block))
+            return null;
+        for (int level = 0; level < source.MipCount; level++)
+            WriteLevel(source, texture, block, level);
+        return Register(source, texture);
+    }
+
+    /// <summary>
+    /// A game texture's GPU texture, made but not written, and its formats' block size; null when its format or shape
+    /// can't be drawn.
+    /// </summary>
+    private (WebGpuSharp.Texture Texture, int Block)? CreateTexture(GameTexture source)
+    {
         // The shaders read texels as stored (albedo is squared by the lighting, as in the game), so sRGB formats are
         // read through their plain counterparts.
         (TextureFormat format, int block)? mapped = source.Format switch
@@ -681,36 +784,83 @@ internal sealed unsafe partial class ViewportRenderer
             GameFormat.BC3Unorm or GameFormat.BC3UnormSrgb => (TextureFormat.BC3RGBAUnorm, 4),
             GameFormat.BC4Unorm => (TextureFormat.BC4RUnorm, 4),
             GameFormat.BC5Unorm => (TextureFormat.BC5RGUnorm, 4),
-            GameFormat.BC7Unorm => (TextureFormat.BC7RGBAUnorm, 4),
+            GameFormat.BC7Unorm or GameFormat.BC7UnormSrgb => (TextureFormat.BC7RGBAUnorm, 4),
             GameFormat.R8G8B8A8Unorm or GameFormat.R8G8B8A8UnormSrgb => (TextureFormat.RGBA8Unorm, 1),
             GameFormat.B8G8R8A8Unorm or GameFormat.B8G8R8A8UnormSrgb or GameFormat.B8G8R8X8Unorm or GameFormat.B8G8R8X8UnormSrgb => (TextureFormat.BGRA8Unorm, 1),
             GameFormat.R8G8Unorm => (TextureFormat.RG8Unorm, 1),
             GameFormat.R8Unorm => (TextureFormat.R8Unorm, 1),
             _ => null,
         };
-        if (mapped is not var (format, block) || source.Shape.Dimension != CommonFury.Textures.TextureDimension.TwoD || source.Shape.ArraySize != 1
+        // A plain image, or a cube (a _cubemap_reflect shader's environment), its faces six layers.
+        bool cube = source.Shape.Dimension == CommonFury.Textures.TextureDimension.Cube && source.Width == source.Height;
+        if (mapped is not var (format, block) || source.Shape.Dimension != CommonFury.Textures.TextureDimension.TwoD && !cube || source.Shape.ArraySize != 1
             || source.Width <= 0 || source.Height <= 0 || source.Width % block != 0 || source.Height % block != 0 || (block > 1 && !compressedTextures))
             return null;
+        // Viewable as sRGB too, where the format has a variant: RDR2's material reads its colours so.
+        TextureFormat? srgb = SrgbOf(format);
         WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
-            Size = new Extent3D((uint)source.Width, (uint)source.Height, 1),
+            Size = new Extent3D((uint)source.Width, (uint)source.Height, cube ? 6u : 1u),
             Format = format,
             MipLevelCount = (uint)source.MipCount,
             SampleCount = 1,
+            ViewFormats = srgb is { } variant ? [variant] : [],
         });
-        uploaded.Add(texture);
-        for (int level = 0; level < source.MipCount; level++)
+        return (texture, block);
+    }
+
+    /// <summary>One mip level of a game texture into its GPU texture; how many bytes that was.</summary>
+    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level)
+    {
+        long bytes = 0;
+        for (int first = 0; ;)
         {
-            CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
-            // A mip smaller than a block is still a whole block.
-            uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
-            var copy = new TexelCopyTextureInfo { Texture = texture, MipLevel = (uint)level, Aspect = TextureAspect.All };
-            var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)part.Mip.RowPitch, RowsPerImage = height / (uint)block };
-            var size = new Extent3D(width, height, 1);
-            queue.WriteTexture(copy, source.GetEncodedSlice(level), layout, size);
+            var (written, done, rows) = WriteRows(source, texture, block, level, first, int.MaxValue);
+            bytes += written;
+            first += rows;
+            if (done)
+                return bytes;
         }
-        return texture.CreateView();
+    }
+
+    /// <summary>
+    /// Rows of one mip level (rows of blocks, for a compressed format) into its GPU texture, from <paramref name="first"/>
+    /// at most <paramref name="rows"/>, within one face of a cube (its faces' rows one after another): how many bytes
+    /// that was, whether the level is done, and how many rows.
+    /// </summary>
+    private (long Bytes, bool Done, int Rows) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
+    {
+        int faces = source.Shape.Faces;
+        CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
+        // A mip smaller than a block is still a whole block.
+        uint width = (uint)((part.Mip.Width + block - 1) / block * block), height = (uint)((part.Mip.Height + block - 1) / block * block);
+        int total = (int)height / block, pitch = part.Mip.RowPitch;
+        int face = first / total, start = first % total;
+        int count = Math.Min(rows, total - start);
+        var copy = new TexelCopyTextureInfo
+        {
+            Texture = texture,
+            MipLevel = (uint)level,
+            Origin = new Origin3D(0, (uint)(start * block), (uint)face),
+            Aspect = TextureAspect.All,
+        };
+        var layout = new TexelCopyBufferLayout { BytesPerRow = (uint)pitch, RowsPerImage = (uint)count };
+        var size = new Extent3D(width, (uint)(count * block), 1);
+        ReadOnlySpan<byte> data = source.GetEncodedSlice(level, 0, face).Slice(start * pitch, count * pitch);
+        queue.WriteTexture(copy, data, layout, size);
+        return (data.Length, first + count == total * faces, count);
+    }
+
+    /// <summary>The bytes a row of a game texture's mip level holds (a row of blocks, for a compressed format).</summary>
+    private static int RowBytes(GameTexture source, int level) => source.GetSubresource(level).Mip.RowPitch;
+
+    /// <summary>A written texture, kept for the scene (or the world) and viewed.</summary>
+    private TextureView Register(GameTexture source, WebGpuSharp.Texture texture)
+    {
+        uploaded.Add(texture);
+        uploadedOf[source] = texture;
+        return ShapedView(texture);
     }
 }

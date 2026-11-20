@@ -6,7 +6,7 @@ namespace HikariHopper.ViewModels;
 public sealed partial class ExplorerViewModel
 {
     /// <summary>Whether Rename can run now: one item selected, a location open and nothing else running.</summary>
-    public bool CanRenameSelection => HasWorkspace && !EntryOperationBusy && SelectedEntries() is [_];
+    public bool CanRenameSelection => HasWorkspace && !EntryOperationBusy && Provider.ArchiveWritable && SelectedEntries() is [_];
 
     /// <summary>The selected item's name, which the rename dialog starts from.</summary>
     public string RenameSource => SelectedEntries() is [var entry] ? entry.Name : "";

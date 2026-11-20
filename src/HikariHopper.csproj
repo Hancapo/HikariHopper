@@ -23,7 +23,15 @@
     <!-- Source of the static Archivo instances; regenerate them with tools/make_archivo_instances.py. -->
     <None Include="Assets/Fonts/Source/**" />
     <EmbeddedResource Include="Assets/Keys/keys.bin" LogicalName="HikariHopper.keys.bin" />
+    <!-- RDR2's RPF8 tables (RedFury's RF8C format), for game build 1.0.1491.50. -->
+    <EmbeddedResource Include="Assets/Keys/rpf8.dat" LogicalName="HikariHopper.rpf8.dat" />
     <EmbeddedResource Include="Rendering/Shaders/*.wgsl;Rendering/Shaders/*.json" LogicalName="HikariHopper.Shaders.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Arrays up to 4 MB (the most the GC takes) are allocated young rather than in the large object heap: the worlds'
+         streaming threads read and build hundreds of megabytes of those a second, which kept the large object heap's
+         background collections running and held the UI thread's own allocations, and so its frames, up behind them. -->
+    <RuntimeHostConfigurationOption Include="System.GC.LOHThreshold" Value="4194304" />
   </ItemGroup>
   <ItemGroup>
     <!-- The native linker records only the PDB's file name (MSVC's %_PDB%), not this machine's path to it. -->
@@ -37,10 +45,8 @@
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="WebGPUSharp" Version="0.5.8" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- FiveFury is consumed as a managed .NET library. -->
-    <ProjectReference Include="$(FiveFuryRoot)FiveFury/FiveFury.csproj" />
-  </ItemGroup>
+  <!-- FiveFury (GTA V), RedFury (RDR2) and the CommonFury they share. -->
+  <Import Project="../GameLibraries.props" />
   <ItemGroup>
     <InternalsVisibleTo Include="HikariHopper.Tests" />
   </ItemGroup>

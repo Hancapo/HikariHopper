@@ -76,7 +76,7 @@ public sealed partial class ExplorerViewModel
             }
             string localPath = RpfProvider.EntryLocalPath(entry);
             ResetNavigation();
-            history.Add(localPath);
+            history.Add(new HistoryStop(localPath));
             historyIndex = 1;
             currentPath = localPath;
             ExpandCurrentBranch();
@@ -338,7 +338,7 @@ public sealed partial class ExplorerViewModel
     /// <summary>A nested RPF the explorer hasn't opened: asks the probe, which reads it from its root file.</summary>
     private bool UnopenedArchiveHasChildren(EntryRecord entry) =>
         entry.ArchiveItem?.Node is not { Root.SourcePath: { } rootFile } node
-        || archiveProbe.HasTreeChildren(rootFile, entry.Path, node.Crypto);
+        || archiveProbe.HasTreeChildren(rootFile, entry.Path, node.Keys);
 
     /// <summary>The probe found an archive with nothing to expand: rebuild the tree once, on the UI thread.</summary>
     private void OnArchiveProbeFound(object? sender, EventArgs e)

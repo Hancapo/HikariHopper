@@ -60,7 +60,7 @@ internal sealed class MenuBar
             return;
         }
         // The click of the press that closed it, once: the next click opens it again, however soon.
-        if (closedAt.Remove(title, out long at) && Environment.TickCount64 - at < ClosingClick)
+        if (closedAt.Remove(title, out long at) && Ui.MotionClock.Since(at).TotalMilliseconds < ClosingClick)
             return;
         Open(title, light: false);
     }
@@ -72,7 +72,7 @@ internal sealed class MenuBar
     public void Closed(MenuBarButton button)
     {
         if (!closing)
-            closedAt[titles.Single(entry => entry.Button == button)] = Environment.TickCount64;
+            closedAt[titles.Single(entry => entry.Button == button)] = Ui.MotionClock.Timestamp;
     }
 
     private void Close(Title title)

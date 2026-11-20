@@ -67,13 +67,15 @@ public sealed class RpfProvider
     private bool archiveIsNested;
     private bool inArchive;
     private GameCrypto? crypto;
+    private string gameEdition = "";
+    private ArchiveKeys? keys;
 
     public WorkspaceInfo Info
     {
         get
         {
             if (InArchive)
-                return new WorkspaceInfo(archive!.Name, archivePath, "RPF7", archive.Archive.Platform.ToString().ToUpperInvariant());
+                return new WorkspaceInfo(archive!.Name, archivePath, archive.Format, archive.Platform);
             if (gameRoot is not null)
                 return new WorkspaceInfo(Path.GetFileName(gameRoot), gameRoot, GameEdition, "PC");
             return new WorkspaceInfo("No game", "", "—", "PC");
@@ -81,8 +83,7 @@ public sealed class RpfProvider
     }
 
     /// <summary>The open game's edition id (<see cref="GameCatalog"/>), "" without a game.</summary>
-    public string GameEditionId => gameRoot is null ? ""
-        : gameTarget == FiveFury.GameTarget.Enhanced ? GameSettings.EnhancedEdition : GameSettings.LegacyEdition;
+    public string GameEditionId => gameRoot is null ? "" : gameEdition;
 
     /// <summary>The open game's edition as the status bar and tabs name it ("GTA V Legacy"), "" without a game.</summary>
     public string GameEdition => GameCatalog.Edition(GameEditionId)?.ShortName ?? "";
@@ -97,7 +98,24 @@ public sealed class RpfProvider
 
     public GameTarget? GameTarget => gameTarget;
 
+    /// <summary>GTA V's keys while a GTA V game is open; null for RDR2 or without a game.</summary>
     public GameCrypto? Crypto => crypto;
+
+    /// <summary>
+    /// Whether what's open can be changed: loose files, or a GTA V RPF7 archive. Red Dead Redemption 2's RPF8 archives
+    /// are read only, so far.
+    /// </summary>
+    public bool ArchiveWritable => !InArchive || archive is Rpf7ArchiveNode;
+
+    /// <summary>Why an archive can't be changed, as the explorer says it.</summary>
+    public const string ReadOnlyArchive = "Red Dead Redemption 2's archives can't be changed yet";
+
+    /// <summary>The open game's keys, whatever the game; null without a game.</summary>
+    public ArchiveKeys? Keys => keys;
+
+    // What an archive of the game, or one opened on its own, is opened with: the game's keys, else GTA V's if they
+    // can be found.
+    private ArchiveKeys? KeysForArchives => keys ?? (ArchiveKeys?)GameKeys.TryLoadDefault();
 
     public string GameName => gameRoot is not null ? Path.GetFileName(gameRoot) : "No game";
 
@@ -150,6 +168,13 @@ public sealed class RpfProvider
         if (!Directory.Exists(root))
             throw new ArgumentException($"Game folder does not exist: {root}");
         string edition = GameSettings.GameEditionForPath(root);
+        if (edition == GameSettings.Rdr2Edition)
+        {
+            // The shipped tables open one build of the game: another can't be read, so it says so.
+            if (GameSettings.InstallationProblem(root, edition) is { } problem)
+                throw new ArgumentException(problem);
+            return new LoadedGame(root.TrimEnd(Path.DirectorySeparatorChar), edition, Rdr2Keys.Bundled);
+        }
         GameTarget target = edition switch
         {
             GameSettings.EnhancedEdition => FiveFury.GameTarget.Enhanced,
@@ -166,8 +191,11 @@ public sealed class RpfProvider
     {
         Close();
         gameRoot = loaded.Root;
-        gameTarget = loaded.Target;
-        crypto = loaded.Crypto;
+        gameEdition = loaded.Edition;
+        keys = loaded.Keys;
+        // FiveFury's own view of the game, GTA V's only.
+        gameTarget = loaded.IsGtaV ? loaded.Target : null;
+        crypto = loaded.IsGtaV ? loaded.Crypto : null;
         inArchive = false;
         return Info;
     }
@@ -179,7 +207,7 @@ public sealed class RpfProvider
             throw new ArgumentException($"Archive does not exist: {resolved}");
         if (!string.Equals(Path.GetExtension(resolved), ".rpf", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("HikariHopper can only open .rpf archives");
-        ArchiveNode opened = ArchiveNode.OpenRoot(resolved, crypto ?? GameKeys.TryLoadDefault());
+        ArchiveNode opened = ArchiveNode.OpenRoot(resolved, KeysForArchives);
         CloseArchiveCore();
         archive = opened;
         archivePath = resolved;
@@ -242,6 +270,8 @@ public sealed class RpfProvider
     {
         CloseArchiveCore();
         gameRoot = null;
+        gameEdition = "";
+        keys = null;
         gameTarget = null;
         crypto = null;
         inArchive = false;
@@ -262,6 +292,8 @@ public sealed class RpfProvider
         string normalized = EntryNames.NormalizedDirectory(directoryPath);
         if (InArchive)
         {
+            if (!ArchiveWritable)
+                throw new ArgumentException(ReadOnlyArchive);
             if (archive!.DirectoryAt(normalized) is null)
                 throw new ArgumentException($"Archive folder does not exist: {normalized}");
             ArchiveNode root = RootArchive()!;
@@ -273,7 +305,7 @@ public sealed class RpfProvider
                 ArchivePrefix: ArchivePrefix,
                 InternalDirectory: normalized,
                 Game: gameTarget,
-                Crypto: root.Crypto);
+                Crypto: (root as Rpf7ArchiveNode)?.Crypto);
             root.Close();
             return target;
         }
@@ -297,7 +329,7 @@ public sealed class RpfProvider
         {
             if (entries.Any(entry => !ReferenceEquals(entry.ArchiveItem?.Node, archive)))
                 throw new ArgumentException("A selected item is outside the active RPF");
-            if (entries.Any(entry => entry.ArchiveItem!.Entry.Parent is null))
+            if (entries.Any(entry => ReferenceEquals(entry.ArchiveItem!.Entry, entry.ArchiveItem.Node.RootDirectory)))
                 throw new ArgumentException("Cannot delete the archive root");
         }
         EntryCreationTarget location = CreationTarget(directoryPath);
@@ -380,17 +412,17 @@ public sealed class RpfProvider
         string target = FreeChild(root, Path.Combine(root, Path.GetFileNameWithoutExtension(entry.Name)), folder: true);
         if (InArchive)
         {
-            if (entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
+            if (entry.ArchiveItem is not { Entry.IsBinaryFile: true } item)
                 throw new ArgumentException($"Archive entry is unavailable: {entry.Name}");
             ArchiveNode nested;
             try
-            { nested = item.Node.OpenNested(binary); }
+            { nested = item.Node.OpenNested(item.Entry); }
             catch (InvalidDataException)
             { throw new ArgumentException($"FiveFury could not decode {entry.Name} as a nested RPF archive"); }
             ExportArchiveContents(nested, target);
             return target;
         }
-        ArchiveNode opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+        ArchiveNode opened = ArchiveNode.OpenRoot(GameEntryPath(entry), KeysForArchives);
         try
         { ExportArchiveContents(opened, target); }
         finally
@@ -492,11 +524,10 @@ public sealed class RpfProvider
             return new EntryProperties(entry.Name, "Folder", "folder", sections);
         }
 
-        ResourceHeader? header = ResourceHeaderOf(entry);
+        (string Format, int Version, long TotalSize)? header = ResourceOf(entry);
         var size = new List<(string, string)>();
         // A resource (YTD, YDR and the rest) is kept deflated in an archive; a binary file only when its entry says so.
-        if (entry.ArchiveItem?.Entry is RpfFileEntry stored
-            and (RpfResourceFileEntry or RpfBinaryFileEntry { Compression: not RpfBinaryCompression.None }))
+        if (entry.ArchiveItem?.Entry is { IsDirectory: false, Compressed: true } stored)
         {
             size.Add(("In the archive", $"{Formatting.FormatSize(stored.StoredSize)} · compressed"));
             size.Add(("Unpacked", Formatting.FormatSize(entry.Size)));
@@ -512,7 +543,7 @@ public sealed class RpfProvider
 
         if (header is { } resource)
         {
-            var rows = new List<(string, string)> { ("Format", $"RSC7 · version {resource.Version}") };
+            var rows = new List<(string, string)> { ("Format", $"{resource.Format} · version {resource.Version}") };
             if (GameEdition.Length > 0)
                 rows.Add(("Game", GameEdition));
             if (entry.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase) && TextureCount(entry) is { } textures)
@@ -526,18 +557,27 @@ public sealed class RpfProvider
         return new EntryProperties(entry.Name, entry.Kind, glyph, sections);
     }
 
-    private ResourceHeader? ResourceHeaderOf(EntryRecord entry)
+    // A resource's format, version and unpacked size, as its header records them: in an archive, the entry's, the
+    // archive saying which format; on disk, a GTA V resource's header (its size only known there).
+    private (string Format, int Version, long TotalSize)? ResourceOf(EntryRecord entry)
     {
         if (InArchive)
-            return entry.ArchiveItem?.Entry is RpfResourceFileEntry resource ? resource.Header : null;
+            return entry.ArchiveItem is { Entry.ResourceVersion: int version } item ? (item.Node.ResourceFormat, version, 0) : null;
         try
         {
             using FileStream stream = File.OpenRead(GameEntryPath(entry));
             Span<byte> start = stackalloc byte[ResourceHeader.ByteSize];
             if (stream.ReadAtLeast(start, start.Length, throwOnEndOfStream: false) < start.Length
-                || BitConverter.ToUInt32(start) != ResourceHeader.Magic)
+                || BitConverter.ToUInt32(start) is not (ResourceHeader.Magic or RedFury.Resources.Rsc8Header.Magic))
                 return null;
-            return ResourceHeader.Read(start);
+            // RDR2's: its RSC8 header, the version and unpacked size from its flags.
+            if (BitConverter.ToUInt32(start) == RedFury.Resources.Rsc8Header.Magic)
+            {
+                RedFury.Resources.Rsc8Header rsc8 = RedFury.Resources.Rsc8Header.Read(start);
+                return ("RSC8", rsc8.ResourceVersion, (long)rsc8.LogicalSize);
+            }
+            ResourceHeader header = ResourceHeader.Read(start);
+            return ("RSC7", (int)header.Version, header.TotalSize);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
         {
@@ -566,28 +606,20 @@ public sealed class RpfProvider
             ArchiveNode node;
             if (InArchive)
             {
-                if (entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
+                if (entry.ArchiveItem is not { Entry.IsBinaryFile: true } item)
                     return null;
-                node = item.Node.OpenNested(binary);
+                node = item.Node.OpenNested(item.Entry);
             }
             else
             {
-                node = opened = ArchiveNode.OpenRoot(GameEntryPath(entry), crypto ?? GameKeys.TryLoadDefault());
+                node = opened = ArchiveNode.OpenRoot(GameEntryPath(entry), KeysForArchives);
             }
-            RpfEntry[] entries = [.. node.Archive.EnumerateEntries().Where(item => !ReferenceEquals(item, node.Archive.Root))];
-            int files = entries.Count(item => item is RpfFileEntry);
+            ArchiveEntry[] entries = [.. node.EnumerateEntries()];
+            int files = entries.Count(item => !item.IsDirectory);
             int folders = entries.Length - files;
-            string encryption = node.Archive.Encryption switch
-            {
-                RpfEncryption.None => "None",
-                RpfEncryption.Open => "Open",
-                RpfEncryption.Aes or RpfEncryption.Ps3Aes => "AES",
-                RpfEncryption.Ng => "NG",
-                var other => other.ToString(),
-            };
             return
             [
-                ("Encryption", encryption),
+                ("Encryption", node.Encryption),
                 ("Contains", $"{(files == 1 ? "1 file" : $"{files} files")} in {(folders == 1 ? "1 folder" : $"{folders} folders")}"),
             ];
         }
@@ -609,9 +641,9 @@ public sealed class RpfProvider
             throw new ArgumentException($"Cannot read a directory as a file: {entry.Name}");
         if (InArchive)
         {
-            if (entry.ArchiveItem?.Entry is not RpfFileEntry file)
+            if (entry.ArchiveItem?.Entry is not { IsDirectory: false } file)
                 throw new ArgumentException($"Archive entry is unavailable: {entry.Name}");
-            return file.ReadStandalone();
+            return file.Read();
         }
         return File.ReadAllBytes(GameEntryPath(entry));
     }
@@ -628,13 +660,16 @@ public sealed class RpfProvider
     {
         if (!InArchive || entry.ArchiveItem is not { } item)
             throw new ArgumentException("The selected entry is not inside an RPF archive");
-        if (item.Entry.Archive is null)
+        if (item.Entry.IsDetached)
             throw new ArgumentException("The selected archive entry is detached");
+        if (item.Node.Root is not Rpf7ArchiveNode)
+            throw new ArgumentException(ReadOnlyArchive);
         ArchiveNode root = item.Node.Root;
         string rootPath = Path.GetFullPath(root.SourcePath ?? "");
         if (!File.Exists(rootPath))
             throw new ArgumentException("The root RPF archive is no longer available");
-        return new ArchiveEntryTarget(rootPath, item.FullPath, root.Crypto, root);
+        // Saving into an archive is GTA V's only, so far: an RPF7 archive's keys.
+        return new ArchiveEntryTarget(rootPath, item.FullPath, (root as Rpf7ArchiveNode)?.Crypto, root);
     }
 
     /// <summary>Reopens the archive chain after <paramref name="rootPath"/> was rewritten, keeping navigation.</summary>
@@ -650,7 +685,7 @@ public sealed class RpfProvider
         string currentPrefix = archive.Prefix;
         bool wasInArchive = inArchive;
         root.Close();
-        ArchiveNode reloadedRoot = ArchiveNode.OpenRoot(expected, crypto ?? root.Crypto);
+        ArchiveNode reloadedRoot = ArchiveNode.OpenRoot(expected, keys ?? root.Keys);
         ArchiveNode reloaded = reloadedRoot;
         if (currentPrefix.Length > 0)
         {
@@ -685,13 +720,13 @@ public sealed class RpfProvider
 
     public WorkspaceInfo OpenNested(EntryRecord entry)
     {
-        if (archive is null || entry.ArchiveItem is not { Entry: RpfBinaryFileEntry binary } item)
+        if (archive is null || entry.ArchiveItem is not { Entry.IsBinaryFile: true } item)
             throw new ArgumentException("The selected entry does not contain a nested archive");
         if (!ReferenceEquals(item.Node.Root, archive.Root))
             throw new ArgumentException("The selected entry does not belong to the open RPF");
         ArchiveNode nested;
         try
-        { nested = item.Node.OpenNested(binary); }
+        { nested = item.Node.OpenNested(item.Entry); }
         catch (InvalidDataException)
         { throw new ArgumentException($"FiveFury could not decode {entry.Name} as a nested RPF archive"); }
         archive = nested;
@@ -812,29 +847,26 @@ public sealed class RpfProvider
         // Closing only releases the file handle; the table stays listable, as in FiveFury Python.
         if (node.DirectoryAt(directoryPath) is not { } directory)
             return [];
-        return directory.Children.OfType<RpfDirectoryEntry>().Cast<RpfEntry>()
-            .Concat(directory.Children.OfType<RpfFileEntry>())
+        // Folders first, then files, each in the archive's order.
+        return directory.Children.Where(item => item.IsDirectory)
+            .Concat(directory.Children.Where(item => !item.IsDirectory))
             .Select(item => ArchiveRecord(node, item))
             .ToList();
     }
 
-    private static EntryRecord ArchiveRecord(ArchiveNode node, RpfEntry item)
+    private static EntryRecord ArchiveRecord(ArchiveNode node, ArchiveEntry item)
     {
         var native = new ArchiveItem(node, item);
-        if (item is RpfDirectoryEntry directory)
+        if (item.IsDirectory)
         {
-            int folders = directory.Children.Count(child => child is RpfDirectoryEntry);
-            int navigable = folders + directory.Children.Count(child =>
-                child is RpfFileEntry && child.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase));
+            int folders = item.Children.Count(child => child.IsDirectory);
+            int navigable = folders + item.Children.Count(child =>
+                !child.IsDirectory && child.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase));
             return new EntryRecord(item.Name, native.FullPath, EntryRecord.FolderKind, 0,
-                directory.Children.Count, native, navigable);
+                item.Children.Count, native, navigable);
         }
-        var file = (RpfFileEntry)item;
-        long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
-        // A resource (YTD, YDR and the rest) is kept deflated; a binary file only when its entry says so.
-        bool compressed = file is RpfResourceFileEntry or RpfBinaryFileEntry { Compression: not RpfBinaryCompression.None };
-        return new EntryRecord(item.Name, native.FullPath, FileKind(item.Name), size, 0, native,
-            Storage: compressed ? EntryStorage.Compressed : EntryStorage.Uncompressed, StoredSize: file.StoredSize);
+        return new EntryRecord(item.Name, native.FullPath, FileKind(item.Name), item.Size, 0, native,
+            Storage: item.Compressed ? EntryStorage.Compressed : EntryStorage.Uncompressed, StoredSize: item.StoredSize);
     }
 
     private void ExportArchiveEntry(EntryRecord entry, string destination)
@@ -847,11 +879,11 @@ public sealed class RpfProvider
                     ExportArchiveEntry(child, SafeExportChild(destination, child.Name));
             return;
         }
-        if (entry.ArchiveItem?.Entry is not RpfFileEntry file)
+        if (entry.ArchiveItem?.Entry is not { IsDirectory: false } file)
             throw new ArgumentException($"Archive entry is unavailable: {entry.Name}");
         OperationProgress.Current.Item(entry.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        File.WriteAllBytes(destination, file.ReadStandalone());
+        File.WriteAllBytes(destination, file.Read());
     }
 
     private string GameEntryPath(EntryRecord entry)

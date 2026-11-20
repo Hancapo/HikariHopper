@@ -16,6 +16,9 @@ internal sealed class OrbitCamera
     /// <summary>The furthest the near plane is, in metres.</summary>
     public const float NearPlane = .005f;
 
+    /// <summary>The near plane for the camera as it is: closer the closer it orbits, at most <see cref="NearPlane"/>.</summary>
+    public float Near => Math.Clamp(Distance * .002f, .0001f, NearPlane);
+
     public Vector3 Center { get; private set; }
 
     /// <summary>The size of what is framed, which sets the zoom limits and how fast the free camera flies.</summary>
@@ -56,6 +59,17 @@ internal sealed class OrbitCamera
         Radius = radius;
         Distance = radius * 2.8f;
         Speed = Math.Max(radius, .5f) * 1.5f;
+    }
+
+    /// <summary>
+    /// Puts the eye at <paramref name="eye"/>, looking along <paramref name="yaw"/> and <paramref name="pitch"/>, at the
+    /// distance it is at: a camera spot kept and come back to.
+    /// </summary>
+    public void Place(Vector3 eye, float yaw, float pitch)
+    {
+        Yaw = MathF.IEEERemainder(yaw, MathF.Tau);
+        Pitch = Math.Clamp(pitch, -MaxPitch, MaxPitch);
+        Center = eye + Forward * Distance;
     }
 
     /// <summary>Turns about the eye by a drag in pixels, as <see cref="Orbit"/> turns about the centre: dragging right looks right.</summary>
@@ -137,7 +151,7 @@ internal sealed class OrbitCamera
     public Matrix4x4 ViewProjection(float aspect, Vector3 origin = default)
     {
         Vector3 eye = Eye - origin;
-        float near = Math.Clamp(Distance * .002f, .0001f, NearPlane);
+        float near = Near;
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(FieldOfView, aspect, near, near * 2);
         projection.M33 = 0;
         projection.M43 = near;

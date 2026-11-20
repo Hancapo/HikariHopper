@@ -568,7 +568,7 @@ public sealed partial class ExplorerViewModel
     private (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadHit(SearchHit hit) =>
         RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
             new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
-                reader.InArchive ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
+                reader.InArchive && reader.ArchiveWritable ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
 
     /// <summary>A texture dictionary, or a drawable's own, in the texture editor, saving back into its RPF.</summary>
     private void OpenHitDictionary(string name, (byte[] Data, string Source, ArchiveEntryTarget? Target) file,

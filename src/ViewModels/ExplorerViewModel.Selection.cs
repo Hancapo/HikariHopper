@@ -33,7 +33,7 @@ public sealed partial class ExplorerViewModel
 
     public int SelectionCount => selectedRows.Count;
 
-    public bool SelectionDeletable => SelectedEntries().Count > 0;
+    public bool SelectionDeletable => SelectedEntries().Count > 0 && Provider.ArchiveWritable;
 
     /// <summary>Selects one row; Ctrl toggles it, Shift extends from the anchor (both: adds the range).</summary>
     public void SelectEntry(int row, KeyModifiers modifiers = KeyModifiers.None)
@@ -470,6 +470,8 @@ public sealed partial class ExplorerViewModel
         {
             Dictionaries = DictionariesBeside(entry),
             GameDictionaries = GameDictionaries(entry.Name),
+            CollisionMaterials = entry.Name.EndsWith(".ybn", StringComparison.OrdinalIgnoreCase) && Provider.GameEditionId == GameSettings.Rdr2Edition
+                && Provider.GamePath.Length > 0 && Provider.Keys is Rdr2Keys rdr2Keys ? Rdr2CollisionMaterials.ForGame(Provider.GamePath, rdr2Keys.Crypto) : null,
             GameHolding = GameHolding(LoadedGameOfProvider(), GamePathOf(entry)),
             GamePaints = GamePaints(entry.Name),
             GameSky = LoadedGameOfProvider() is { } game ? SkyOf(game) : null,
@@ -492,7 +494,11 @@ public sealed partial class ExplorerViewModel
 
     private Task<IReadOnlyList<Rendering.NearbyDictionary>>? GameDictionaries(string modelName)
     {
-        if (!ModelFile.IsDrawableName(modelName) || LoadedGameOfProvider() is not { } game)
+        if (!ModelFile.IsDrawableName(modelName))
+            return null;
+        if (Rdr2IndexOfProvider() is { } rdr2)
+            return Rdr2Dictionaries(rdr2, modelName);
+        if (LoadedGameOfProvider() is not { } game)
             return null;
         return Find(game, modelName);
 
@@ -511,6 +517,35 @@ public sealed partial class ExplorerViewModel
             return [.. found.Select(dictionary => GameFileDictionary(game, dictionary))];
         }
     }
+
+    /// <summary>
+    /// Red Dead Redemption 2's dictionaries for a model, in the order RedFury looks in them (<see cref="Rdr2TextureIndex"/>):
+    /// the high-definition ones bound to it, then its archetypes' and the one sharing its name, each with its parents;
+    /// each read when the search reaches it, and parsed once for every model that reads it.
+    /// </summary>
+    private static async Task<IReadOnlyList<Rendering.NearbyDictionary>> Rdr2Dictionaries(Rdr2TextureIndex index, string modelName)
+    {
+        string stem = Path.GetFileNameWithoutExtension(modelName);
+        // Named, or shown as its hash where the game's names don't say (0x1A2B3C4D.ydr).
+        uint asset = stem.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && uint.TryParse(stem[2..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out uint hash)
+            ? hash : RedFury.Hashing.Jenkins.Hash(stem);
+        byte extension = Path.GetExtension(modelName).ToLowerInvariant() switch { ".yft" => 3, ".ydd" => 4, _ => 2 };
+        var found = await index.DictionariesFor(asset, extension).ConfigureAwait(false);
+        return [.. found.Select(dictionary =>
+        {
+            string inside = string.Join('/', dictionary.Indices);
+            return new Rendering.NearbyDictionary($"{dictionary.Archive}[{inside}]", dictionary.Size,
+                () => index.ReadDictionary(dictionary.Archive, dictionary.Indices),
+                Rendering.NearbyDictionary.KeyFor(Path.Combine(index.Root, dictionary.Archive), inside));
+        })];
+    }
+
+    /// <summary>The open Red Dead Redemption 2 game's texture index; null for any other game, or none.</summary>
+    private Rdr2TextureIndex? Rdr2IndexOfProvider() =>
+        Provider.GameEditionId == GameSettings.Rdr2Edition && Provider.GamePath.Length > 0 && Provider.Keys is Rdr2Keys keys
+            ? Rdr2TextureIndex.ForGame(Provider.GamePath, keys.Crypto)
+            : null;
 
     private static Rendering.NearbyDictionary GameFileDictionary(LoadedGame game, GameDictionary dictionary) =>
         new(Path.GetFileName(dictionary.Path), dictionary.Size, () => ReadGameFile(game, dictionary.Path),
@@ -589,12 +624,13 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>
     /// A drawable's embedded textures in the texture viewer: a .ydr as it opens from the explorer, edited and saved back
-    /// into it; a .yft's or .ydd's as a dictionary of their own, to look at and save elsewhere, as their textures can't
-    /// be written back yet.
+    /// into it; a .yft's or .ydd's, and any of Red Dead Redemption 2's, as a dictionary of their own, to look at and save
+    /// elsewhere, as their textures can't be written back yet.
     /// </summary>
     internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? closedAfterSave = null)
     {
-        if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // An RDR2 drawable's, as a dictionary of their own: they can't be written back into it yet.
+        if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
         {
             OpenTextureDictionary(entry, closedAfterSave);
             return;
@@ -611,7 +647,8 @@ public sealed partial class ExplorerViewModel
     {
         ArchiveEntryTarget? where = null;
         string source = "";
-        if (Provider.InArchive && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // In an archive that can be changed: an RDR2 archive's drawable opens its textures as a dictionary of their own.
+        if (Provider.InArchive && Provider.ArchiveWritable && entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
@@ -654,11 +691,11 @@ public sealed partial class ExplorerViewModel
         ArchiveNode root = ArchiveNode.OpenRoot(where.RootPath, where.Crypto);
         try
         {
-            if (root.FindEntry(where.EntryPath) is not { Entry: FiveFury.Rpf.RpfFileEntry file })
+            if (root.FindEntry(where.EntryPath) is not { Entry: { IsDirectory: false } file })
                 throw new FileNotFoundException($"{Path.GetFileName(where.EntryPath)} is no longer in {Path.GetFileName(where.RootPath)}");
             // Its size as the explorer lists it.
-            long size = file.LogicalSize > 0 ? file.LogicalSize : file.StoredSize;
-            return (size > limit ? null : file.ReadStandalone(), size);
+            long size = file.Size;
+            return (size > limit ? null : file.Read(), size);
         }
         finally
         {
@@ -672,10 +709,16 @@ public sealed partial class ExplorerViewModel
         byte[] dictionary;
         try
         {
-            (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(name, data);
-            var own = new FiveFury.Textures.TextureDictionary();
-            own.Textures.AddRange(textures);
-            dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
+            if (Textures.Rdr2TextureSource.IsRdr2(data))
+                // RDR2's: a standalone RDR2 dictionary, which the editor opens as one.
+                dictionary = Rendering.Rdr2Scene.EmbeddedDictionary(name, data);
+            else
+            {
+                (IReadOnlyList<FiveFury.Textures.Texture> textures, FiveFury.GameTarget target) = Rendering.ModelContent.EmbeddedTextures(name, data);
+                var own = new FiveFury.Textures.TextureDictionary();
+                own.Textures.AddRange(textures);
+                dictionary = new FiveFury.Ytd.Ytd(own, target).Write();
+            }
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException or NotSupportedException or InvalidOperationException)
         {

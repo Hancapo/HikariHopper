@@ -1231,7 +1231,7 @@ public partial class ModelViewer : UserControl, IModalContent
             return;
         }
         // The press on the well that just closed it, by taking the keyboard from it, doesn't open it again.
-        if (carPaints is null || Environment.TickCount64 - paintClosedAt < 400)
+        if (carPaints is null || Ui.MotionClock.Since(paintClosedAt).TotalMilliseconds < 400)
             return;
         var panel = new PaintPanel(carPaints, paintIndices);
         panel.Changed += SetPaint;
@@ -1247,7 +1247,7 @@ public partial class ModelViewer : UserControl, IModalContent
             paintDropdown = null;
             PaintPanel = null;
             PreviewPaint(null);
-            paintClosedAt = Environment.TickCount64;
+            paintClosedAt = Ui.MotionClock.Timestamp;
             PaintPaintWell();
         };
     }
@@ -1292,7 +1292,7 @@ public partial class ModelViewer : UserControl, IModalContent
             levelsDropdown.Close();
             return;
         }
-        if (!LevelsChoosable || Environment.TickCount64 - levelsClosedAt < 400)
+        if (!LevelsChoosable || Ui.MotionClock.Since(levelsClosedAt).TotalMilliseconds < 400)
             return;
         var rows = new StackPanel { Margin = Ui.Theme.MenuInset, MinWidth = 196 };
         var listed = new List<LevelRow>();
@@ -1317,7 +1317,7 @@ public partial class ModelViewer : UserControl, IModalContent
         levelsDropdown.Closed += (_, _) =>
         {
             levelsDropdown = null;
-            levelsClosedAt = Environment.TickCount64;
+            levelsClosedAt = Ui.MotionClock.Timestamp;
             LevelRows = [];
             PaintLevelWell();
         };
@@ -1545,7 +1545,7 @@ public partial class ModelViewer : UserControl, IModalContent
             return;
         }
         // The press on the button that just closed it, by taking the keyboard from it, doesn't open it again.
-        if (Environment.TickCount64 - timeClosedAt < 400)
+        if (Ui.MotionClock.Since(timeClosedAt).TotalMilliseconds < 400)
             return;
         timeDropdown = DropdownWindow.OpenAbove(TimeWell, timeBody, 4, right: true);
         if (timeDropdown is null)
@@ -1555,7 +1555,7 @@ public partial class ModelViewer : UserControl, IModalContent
         timeDropdown.Closed += (_, _) =>
         {
             timeDropdown = null;
-            timeClosedAt = Environment.TickCount64;
+            timeClosedAt = Ui.MotionClock.Timestamp;
             TimeButton.Sunken = false;
         };
     }
@@ -1750,7 +1750,19 @@ public partial class ModelViewer : UserControl, IModalContent
     {
         try
         {
-            return (ModelContent.Read(file.Name, data, file.Dictionaries, game, savedTextures, file.GameHolding, file.Nearby), null);
+            // An RDR2 collision's materials, read off the UI thread with the game's materials.meta.
+            RedFury.Collisions.CollisionMaterialCatalog? materials = null;
+            if (file.CollisionMaterials is { } pending)
+            {
+                try
+                {
+                    materials = pending.GetAwaiter().GetResult();
+                }
+                catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+                {
+                }
+            }
+            return (ModelContent.Read(file.Name, data, file.Dictionaries, game, savedTextures, file.GameHolding, file.Nearby, materials), null);
         }
         catch (Exception error) when (error is InvalidDataException or EndOfStreamException or ArgumentException
             or NotSupportedException or OverflowException)

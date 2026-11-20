@@ -16,10 +16,22 @@ namespace HikariHopper.Rendering;
 /// <param name="Primary">Whether it is at its drawable's most detailed level and not only drawn damaged: what is shown at first.</param>
 /// <param name="VertexCount">Its geometry's vertices.</param>
 /// <param name="EdgeCount">Its triangles' distinct edges.</param>
+/// <param name="Passes">
+/// The passes its drawable model is drawn in (its render mask): the main view, the sun's shadow and the rest. The game
+/// draws a model only into the passes its mask names: a tree's shadow proxy, say, only into the shadow. A format without
+/// render masks (RDR2's) is drawn into every pass: the main view, the shadow and the reflection map.
+/// </param>
 internal readonly record struct SurfacePart(int Material, uint FirstIndex, uint IndexCount, int BaseVertex, Vector3 Center,
-    int Model = 0, int Lod = 0, string Group = "", bool Primary = true, int VertexCount = 0, int EdgeCount = 0)
+    int Model = 0, int Lod = 0, string Group = "", bool Primary = true, int VertexCount = 0, int EdgeCount = 0,
+    DrawableRenderMask Passes = DrawableScene.EveryPass)
 {
     public int TriangleCount => (int)(IndexCount / 3);
+
+    /// <summary>Whether it is drawn in the main view.</summary>
+    public bool Shown => (Passes & DrawableRenderMask.Default) != 0;
+
+    /// <summary>Whether it casts into the sun's shadow.</summary>
+    public bool Casts => (Passes & DrawableRenderMask.Shadow) != 0;
 }
 
 /// <summary>Which state of a fragment a model is drawn in: always, only intact, or only damaged.</summary>
@@ -138,6 +150,12 @@ internal sealed class DrawableScene
     /// <summary>The textures the drawables carry in their own dictionaries, each once.</summary>
     public int EmbeddedTextureCount { get; init; }
 
+    /// <summary>The lights the drawables carry (GTA V's), in their own coordinates: what lights them in the viewer.</summary>
+    public IReadOnlyList<RedFury.World.WorldLightDefinition> Lights { get; init; } = [];
+
+    /// <summary>Each of <see cref="Lights"/>' corona values, in their order.</summary>
+    public IReadOnlyList<DrawableLightCorona> LightCoronas { get; init; } = [];
+
     /// <summary>What can be drawn over the drawables: their skeletons, bounds and lights.</summary>
     public DrawableOverlays Overlays { get; init; } = DrawableOverlays.None;
 
@@ -192,7 +210,7 @@ internal sealed class DrawableScene
         // By material list: a drawable placed more than once shares its materials, as do drawables using another's.
         var firstMaterial = new Dictionary<List<DrawableMaterial>, int>(ReferenceEqualityComparer.Instance);
         var placed = new List<(DrawableGeometry Geometry, Matrix4x4 Transform, int Material, int Model, int Lod, string Group, bool Primary,
-            IReadOnlyDictionary<int, string>? Bones)>();
+            IReadOnlyDictionary<int, string>? Bones, DrawableRenderMask Passes)>();
         bool skinned = false;
         for (int index = 0; index < models.Count; index++)
         {
@@ -228,7 +246,7 @@ internal sealed class DrawableScene
                     foreach (DrawableGeometry geometry in model.Geometries)
                         if (geometry.MaterialIndex < entries.Count)
                             placed.Add((geometry, transform, first + geometry.MaterialIndex, index, lod, group,
-                                lod == best && scene.Variant != ModelVariant.Damaged, boneParts));
+                                lod == best && scene.Variant != ModelVariant.Damaged, boneParts, Passes(model.RenderMask)));
                 }
             }
         }
@@ -245,7 +263,7 @@ internal sealed class DrawableScene
         diagnostics.AddRange(lookup.Diagnostics);
 
         Aabb3 box = Aabb3.Empty;
-        foreach (var (geometry, transform, _, _, _, _, _, _) in placed.Where(p => p.Primary))
+        foreach (var (geometry, transform, _, _, _, _, _, _, _) in placed.Where(p => p.Primary))
         {
             var reader = new VertexReader(geometry.Vertices);
             for (int i = 0; i < geometry.Vertices.Count; i++)
@@ -256,55 +274,75 @@ internal sealed class DrawableScene
         }
         Vector3 origin = box.IsEmpty ? Vector3.Zero : box.Center;
 
-        var vertices = new List<SurfaceVertex>();
-        var indices = new List<uint>();
+        // Every triangle list's indexes, as many as are read below.
+        static int Corners(DrawableGeometry geometry, out int start)
+        {
+            int length = geometry.Indices.Indices.Length;
+            start = (int)Math.Min(geometry.IndexBufferOffset, (uint)length);
+            return Math.Min(geometry.IndexCount > 0 ? geometry.IndexCount : length, length - start) / 3 * 3;
+        }
+        int vertexTotal = 0, indexTotal = 0;
+        foreach (var item in placed)
+            if (item.Geometry.PrimitiveType == 3)
+            {
+                vertexTotal += item.Geometry.Vertices.Count;
+                indexTotal += Corners(item.Geometry, out _);
+            }
+        var built = new SceneGeometry(vertexTotal, indexTotal);
         var parts = new List<SurfacePart>();
-        foreach (var (geometry, transform, material, model, lod, group, primary, boneParts) in placed)
+        foreach (var (geometry, transform, material, model, lod, group, primary, boneParts, passes) in placed)
         {
             if (geometry.PrimitiveType != 3)
                 continue;
-            int baseVertex = vertices.Count;
+            int baseVertex = built.VertexCount;
             VertexBuffer source = geometry.Vertices;
             var reader = new VertexReader(source);
+            SurfaceMaterial surface = materials[material];
             for (int i = 0; i < source.Count; i++)
-                vertices.Add(reader.Read(i, transform, origin));
+                built.Add(reader.Read(i, transform, origin, surface));
             ReadOnlySpan<ushort> from = geometry.Indices.Indices;
-            int start = (int)Math.Min(geometry.IndexBufferOffset, (uint)from.Length);
-            int count = Math.Min(geometry.IndexCount > 0 ? geometry.IndexCount : from.Length, from.Length - start) / 3 * 3;
-            uint[] corners = new uint[count];
+            int count = Corners(geometry, out int start);
+            int geometryFirst = built.IndexCount;
+            Span<uint> corners = built.AddIndices(count);
             for (int i = 0; i < count; i++)
                 corners[i] = from[start + i] < source.Count ? from[start + i] : 0u;
-            // One part for the geometry, or one per part its triangles' bones belong to, in the order they first come.
-            foreach (var (name, triangles) in Split(geometry, corners, boneParts, group))
+            // One part for the geometry, or one per part its triangles' bones belong to, in the order they first come,
+            // their triangles laid out again in that order where the geometry's were.
+            List<(string Name, int First, int Count)> pieces = [(group, geometryFirst, count)];
+            if (Split(geometry, corners, boneParts, group) is { } split)
             {
-                uint first = (uint)indices.Count;
-                var used = new HashSet<uint>();
-                foreach (uint index in triangles)
+                pieces.Clear();
+                int next = geometryFirst;
+                foreach (var (name, triangles) in split)
                 {
-                    indices.Add(index);
-                    used.Add(index);
+                    triangles.CopyTo(built.Indices(next, triangles.Count));
+                    pieces.Add((name, next, triangles.Count));
+                    next += triangles.Count;
                 }
-                Vector3 sum = Vector3.Zero;
-                foreach (uint index in used)
-                    sum += vertices[baseVertex + (int)index].Position;
-                if (triangles.Count > 0)
-                    geometries.Add(geometry);
-                if (triangles.Count > 0)
-                    parts.Add(new SurfacePart(material, first, (uint)triangles.Count, baseVertex, used.Count > 0 ? sum / used.Count : Vector3.Zero,
-                        model, lod, name, primary, used.Count, CountEdges(indices, (int)first, triangles.Count)));
+            }
+            foreach (var (name, first, length) in pieces)
+            {
+                if (length == 0)
+                    continue;
+                (int used, Vector3 middle) = built.Used(first, length, baseVertex, source.Count);
+                geometries.Add(geometry);
+                parts.Add(new SurfacePart(material, (uint)first, (uint)length, baseVertex, middle, model, lod, name, primary, used,
+                    CountEdges(built.Indices(first, length)), passes));
             }
         }
         return new DrawableScene
         {
             Box = box,
             Origin = origin,
-            Vertices = [.. vertices],
-            Indices = [.. indices],
+            Vertices = built.Vertices(),
+            Indices = built.AllIndices(),
             Parts = parts,
             Models = [.. models.Select(m => (m.Name, m.Group))],
             Variants = [.. models.Select(m => m.Variant)],
             EmbeddedTextureCount = own.Count,
             Overlays = DrawableOverlays.Build(models, fragmentBound, origin, box.IsEmpty ? 1 : box.Size.Length() / 2, fragmentLights),
+            Lights = DrawableLights.Of(models, fragmentLights),
+            LightCoronas = DrawableLights.CoronasOf(models, fragmentLights),
             Materials = materials,
             Sources = sources,
             SourceLists = sourceLists,
@@ -316,16 +354,16 @@ internal sealed class DrawableScene
     }
 
     /// <summary>
-    /// A geometry's triangles, whole under <paramref name="group"/>, or split by the part named for the bone each is
-    /// bound to: the vertices' heaviest influence, through the geometry's bone table. Vehicles bind rigidly, every
-    /// triangle to one bone.
+    /// A geometry's triangles split by the part named for the bone each is bound to (<paramref name="group"/> where none
+    /// is): the vertices' heaviest influence, through the geometry's bone table; null when they aren't split, all under
+    /// <paramref name="group"/>. Vehicles bind rigidly, every triangle to one bone.
     /// </summary>
-    private static List<(string Name, List<uint> Triangles)> Split(DrawableGeometry geometry, uint[] triangles,
+    private static List<(string Name, List<uint> Triangles)>? Split(DrawableGeometry geometry, ReadOnlySpan<uint> triangles,
         IReadOnlyDictionary<int, string>? bones, string group)
     {
         VertexLayout layout = geometry.Vertices.Layout;
         if (bones is null || !layout.TryFind(VertexSemantic.BlendIndices, out VertexElement table) || !layout.TryFind(VertexSemantic.BlendWeights, out _))
-            return [(group, [.. triangles])];
+            return null;
         // Indices are kept as bytes, read back as they are or over 255.
         float scale = table.Format == VertexElementFormat.UNorm8x4 ? 255 : 1;
         string PartOf(uint vertex)
@@ -361,10 +399,25 @@ internal sealed class DrawableScene
     /// Counted by sorting them rather than in a hash set, where an edge's two corners, packed in a long, would hash to
     /// little more than their difference and collide by the thousand.
     /// </summary>
-    internal static int CountEdges(List<uint> indices, int first, int count)
+    internal static int CountEdges(List<uint> indices, int first, int count) =>
+        CountEdges(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(indices).Slice(first, count));
+
+    internal static int CountEdges(ReadOnlySpan<uint> corners)
     {
-        ReadOnlySpan<uint> corners = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(indices).Slice(first, count);
-        var edges = new ulong[corners.Length / 3 * 3];
+        // Sorted in a buffer lent for it: a model's parts would otherwise allocate one each.
+        ulong[] lent = System.Buffers.ArrayPool<ulong>.Shared.Rent(Math.Max(1, corners.Length / 3 * 3));
+        try
+        {
+            return Count(corners, lent);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<ulong>.Shared.Return(lent);
+        }
+    }
+
+    private static int Count(ReadOnlySpan<uint> corners, ulong[] edges)
+    {
         int n = 0;
         for (int i = 0; i + 2 < corners.Length; i += 3)
         {
@@ -384,6 +437,16 @@ internal sealed class DrawableScene
         static ulong Edge(uint a, uint b) => a < b ? (ulong)a << 32 | b : (ulong)b << 32 | a;
     }
 
+    /// <summary>The passes the viewer draws a model in: the main view, the sun's shadow and the reflection map.</summary>
+    internal const DrawableRenderMask EveryPass = DrawableRenderMask.Default | DrawableRenderMask.Shadow | DrawableRenderMask.Reflection;
+
+    /// <summary>
+    /// The passes a drawable model is drawn in, from its render mask; a mask naming neither the main view nor the shadow
+    /// (none set, as some made outside the game have) is taken as every pass.
+    /// </summary>
+    internal static DrawableRenderMask Passes(DrawableRenderMask mask) =>
+        (mask & (DrawableRenderMask.Default | DrawableRenderMask.Shadow)) == 0 ? mask | EveryPass : mask;
+
     /// <summary>A drawable model's name: the bone it is bound to, "skinned" for one weighted to the skeleton, else its number.</summary>
     private static string ModelName(Drawable drawable, DrawableModel model, int index) =>
         model.SkeletonBinding.HasSkin != 0 ? "skinned"
@@ -399,7 +462,7 @@ internal sealed class DrawableScene
     {
         private readonly ReadOnlySpan<byte> data;
         private readonly int stride;
-        private readonly VertexElement? position, normal, tangent, uv0, uv1, colour0, colour1, uv2;
+        private readonly VertexElement? position, normal, tangent, uv0, uv1, colour0, colour1, uv2, centre, uv2Own, uv3;
 
         public VertexReader(VertexBuffer buffer)
         {
@@ -416,6 +479,11 @@ internal sealed class DrawableScene
             colour1 = Find(VertexSemantic.Color1);
             // The parallax controls: TexCoord3, or TexCoord2 without it (SurfaceVertex.Uv2).
             uv2 = Find(VertexSemantic.TexCoord3) ?? Find(VertexSemantic.TexCoord2);
+            // The trees': the camera cards' centre (their TANGENT1, which Legacy's layouts keep in the binormal's slot), and
+            // the billboards' size and alignment (TEXCOORD2 and 3).
+            centre = Find(VertexSemantic.Tangent1) ?? Find(VertexSemantic.Binormal);
+            uv2Own = Find(VertexSemantic.TexCoord2);
+            uv3 = Find(VertexSemantic.TexCoord3);
         }
 
         private Vector4 Element(int vertex, VertexElement? element, Vector4 missing) => element is { } found
@@ -424,7 +492,31 @@ internal sealed class DrawableScene
 
         public Vector3 Position(int vertex) => Element(vertex, position, default).AsVector3();
 
-        public SurfaceVertex Read(int vertex, Matrix4x4 transform, Vector3 origin)
+        /// <summary>
+        /// A vertex as surface.wgsl reads it. A tree's carry what its vertex shader reads besides: trees_lod2's billboards
+        /// their size (TEXCOORD2) in the tangent's XY, their alignment (TEXCOORD3) in the third UV set; the camera cards
+        /// (_camera_facing, _camera_aligned) their centre (TANGENT1), from the vertex, in the second UV set and the third's X.
+        /// </summary>
+        public SurfaceVertex Read(int vertex, Matrix4x4 transform, Vector3 origin, SurfaceMaterial? material = null)
+        {
+            SurfaceVertex read = Surface(vertex, transform, origin);
+            if (material is not { Tree: not TreeProgram.None } tree)
+                return read;
+            if (tree.Tree == TreeProgram.Billboard)
+            {
+                Vector2 size = Element(vertex, uv2Own, Vector4.One).AsVector2();
+                return read with { Tangent = new Vector4(size, 0, 1), Uv2 = Element(vertex, uv3, default).AsVector2() };
+            }
+            if (tree.TreeCards && centre is not null)
+            {
+                Vector3 own = Position(vertex);
+                Vector3 towards = Vector3.TransformNormal(Element(vertex, centre, default).AsVector3() - own, transform);
+                return read with { Uv1 = new Vector2(towards.X, towards.Y), Uv2 = new Vector2(towards.Z, 0) };
+            }
+            return read;
+        }
+
+        private SurfaceVertex Surface(int vertex, Matrix4x4 transform, Vector3 origin)
         {
             Vector3 place = Vector3.Transform(Position(vertex), transform) - origin;
             // As the vertex shaders: a normal shorter than about a third (squared under 0.1) is taken as straight up.

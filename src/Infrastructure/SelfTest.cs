@@ -44,21 +44,21 @@ public static class SelfTest
         {
             LoadedGame loaded = game ?? throw new InvalidOperationException("The game didn't load");
             archive = ArchiveNode.OpenRoot(Path.Combine(loaded.Root, "x64c.rpf"), loaded.Crypto);
-            foreach (RpfBinaryFileEntry entry in archive.Archive.EnumerateEntries().OfType<RpfBinaryFileEntry>()
-                .Where(entry => entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)))
+            foreach (ArchiveEntry entry in archive.EnumerateEntries()
+                .Where(entry => entry.IsBinaryFile && entry.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase)))
             {
                 ArchiveNode nested = archive.OpenNested(entry);
-                foreach (RpfResourceFileEntry resource in nested.Archive.EnumerateEntries().OfType<RpfResourceFileEntry>())
+                foreach (ArchiveEntry resource in nested.EnumerateEntries().Where(entry => entry.IsResource))
                 {
                     // Both need at least one texture for the checks below.
                     if (ytd is null && resource.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase))
                     {
-                        byte[] data = resource.ReadStandalone();
+                        byte[] data = resource.Read();
                         if (YtdSaving.Read(data).Textures.Length > 0)
                             ytd = data;
                     }
                     else if (ydr is null && resource.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase)
-                        && YdrTextureDocument.Read(resource.ReadStandalone()) is { Dictionary.Textures.Length: > 0 } document)
+                        && YdrTextureDocument.Read(resource.Read()) is { Dictionary.Textures.Length: > 0 } document)
                         ydr = document.Original;
                 }
                 if (ytd is not null && ydr is not null)

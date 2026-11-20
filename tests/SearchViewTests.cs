@@ -298,7 +298,8 @@ public sealed class SearchViewTests : ExplorerTestBase
         TestWait.Pump(50);
         Assert.False(navigation.QueryField.IsKeyboardFocusWithin);
 
-        // A menu open over the search closes first.
+        // A menu open over the search closes first; its button is pressed where it rests, once the switch has made way.
+        TestWait.Until(() => navigation.ViewModeSlot.Bounds.Width < 0.5, "the switch to make way for the search row");
         Point at = navigation.ScopeButton.TranslatePoint(new Point(20, 12), window)!.Value;
         window.MouseMove(at, RawInputModifiers.None);
         window.MouseDown(at, MouseButton.Left, RawInputModifiers.None);

@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using FiveFury.Cryptography;
-using FiveFury.Rpf;
 
 namespace HikariHopper.Core;
 
@@ -18,7 +16,7 @@ public sealed class ArchiveTreeProbe
 {
     private readonly ConcurrentDictionary<string, bool> results = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> pending = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentQueue<(string Key, string RootFile, string Version, string NestedPath, GameCrypto? Crypto)> queue = new();
+    private readonly ConcurrentQueue<(string Key, string RootFile, string Version, string NestedPath, ArchiveKeys? Keys)> queue = new();
     private int working;
 
     /// <summary>Raised on a worker thread when an archive turns out to have nothing to expand.</summary>
@@ -28,7 +26,7 @@ public sealed class ArchiveTreeProbe
     /// Whether the archive at <paramref name="nestedPath"/> inside <paramref name="rootFile"/> (or the root itself, for an
     /// empty path) has tree children; <c>true</c> while that isn't known yet, with a read queued.
     /// </summary>
-    public bool HasTreeChildren(string rootFile, string nestedPath, GameCrypto? crypto)
+    public bool HasTreeChildren(string rootFile, string nestedPath, ArchiveKeys? keys)
     {
         string key, version;
         try
@@ -47,7 +45,7 @@ public sealed class ArchiveTreeProbe
             return known;
         if (pending.TryAdd(key, 0))
         {
-            queue.Enqueue((key, rootFile, version, nestedPath, crypto));
+            queue.Enqueue((key, rootFile, version, nestedPath, keys));
             if (Interlocked.CompareExchange(ref working, 1, 0) == 0)
                 Task.Run(Work);
         }
@@ -74,14 +72,14 @@ public sealed class ArchiveTreeProbe
                         {
                             root?.Close();
                             root = null;
-                            root = ArchiveNode.OpenRoot(request.RootFile, request.Crypto);
+                            root = ArchiveNode.OpenRoot(request.RootFile, request.Keys);
                             rootFile = request.RootFile;
                             rootVersion = request.Version;
                         }
                         ArchiveNode? archive = request.NestedPath.Length == 0 ? root
-                            : root.FindEntry(request.NestedPath) is ({ } node, RpfBinaryFileEntry entry) ? node.OpenNested(entry) : null;
+                            : root.FindEntry(request.NestedPath) is ({ } node, { IsBinaryFile: true } entry) ? node.OpenNested(entry) : null;
                         if (archive is not null)
-                            has = archive.Archive.Root.Children.Any(child => child is RpfDirectoryEntry
+                            has = archive.RootDirectory.Children.Any(child => child.IsDirectory
                                 || child.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase));
                     }
                     catch (Exception)

@@ -109,7 +109,7 @@ public sealed class EntryDeletionTests : ExplorerTestBase
         string archive = SaveArchive(Path.Combine(Work, "root.rpf"), ("file.txt", "x"));
         provider.OpenArchive(archive);
         ArchiveItem item = provider.ArchiveEntries(".")[0].ArchiveItem!;
-        var root = new EntryRecord("root", ".", EntryRecord.FolderKind, 0, NativeEntry: item with { Entry = item.Node.Archive.Root });
+        var root = new EntryRecord("root", ".", EntryRecord.FolderKind, 0, NativeEntry: item with { Entry = item.Node.RootDirectory });
         Assert.Contains("root", Assert.Throws<ArgumentException>(() => provider.DeletionTarget([root])).Message);
         provider.Close();
     }

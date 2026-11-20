@@ -20,9 +20,41 @@ public sealed class GpuDeviceTests
         foreach (string entry in new[] { "cs_edges", "cs_args_candidates", "cs_process_candidates", "cs_args_apply", "cs_apply" })
             Assert.True(gpu.Compiled($"cmaa2/{entry}"), entry);
         Assert.True(gpu.Compiled($"present/{WebGpuSharp.TextureFormat.BGRA8UnormSrgb}"));
+        // Both games' world pipelines, compiled or compiling.
+        foreach (string key in new[] { "gta-world/Back/False/False", "gta-terrain-world/None/True/True", "gta-water-world/None/True/False",
+            "rdr2-world/Back/False/False", "rdr2-water-world/None/True/False" })
+            Assert.True(gpu.Compiled($"{key}/{ViewportRenderer.FrameFormat}"), key);
+        Assert.True(gpu.Compiled("gta-world-shadow-masked") && gpu.Compiled("rdr2-world-shadow-masked"));
         // Warming up again does nothing more, and viewports share the device.
         Assert.Same(GpuDevice.WarmUp(), GpuDevice.WarmUp());
         Assert.Same(gpu, GpuDevice.Shared);
+    }
+
+    [Fact]
+    public async Task A_pipeline_compiling_in_the_background_is_waited_for_and_one_that_failed_there_compiled_again()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        await GpuDevice.WarmUp();
+        lock (gpu.Gate)
+        {
+            // A viewport's pipelines, compiled (again, if another test forgot them).
+            new ViewportRenderer(gpu).Dispose();
+            RenderPipelineOf(gpu, out WebGpuSharp.RenderPipeline compiled);
+            gpu.Prepare("test-background", () => Task.Run(async () =>
+            {
+                await Task.Delay(50);
+                return compiled;
+            }));
+            Assert.Same(compiled, gpu.Pipeline("test-background", () => throw new InvalidOperationException("Compiled again.")));
+            gpu.Prepare("test-failed", () => Task.FromException<WebGpuSharp.RenderPipeline>(new InvalidOperationException("Failed.")));
+            Assert.Same(compiled, gpu.Pipeline("test-failed", () => compiled));
+            // Taken once, it's compiled: preparing it again starts nothing.
+            gpu.Prepare("test-background", () => throw new InvalidOperationException("Started again."));
+        }
+
+        // One a viewport compiled.
+        static void RenderPipelineOf(GpuDevice gpu, out WebGpuSharp.RenderPipeline pipeline) =>
+            pipeline = gpu.Pipeline($"tonemap/{ViewportRenderer.FrameFormat}", () => throw new InvalidOperationException("Not compiled."));
     }
 
     [Fact]

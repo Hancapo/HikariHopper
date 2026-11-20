@@ -490,7 +490,8 @@ public sealed partial class ExplorerViewModel
         {
             data = Provider.ReadEntryBytes(entry);
             sourcePath = Provider.EntrySourcePath(entry);
-            sourceTarget = Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null;
+            // In an archive that can't be changed (an RDR2 archive's), it opens with nothing to save to: Save As only.
+            sourceTarget = Provider.InArchive && Provider.ArchiveWritable ? Provider.GetArchiveEntryTarget(entry) : null;
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
@@ -515,6 +516,9 @@ public sealed partial class ExplorerViewModel
     {
         try
         {
+            // Read only, in an archive that can't be changed: the viewer has nothing to save to.
+            if (!Provider.ArchiveWritable)
+                return null;
             return SaveTargetOf(Provider.EntrySourcePath(entry), Provider.InArchive ? Provider.GetArchiveEntryTarget(entry) : null, entry.Name);
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
@@ -527,8 +531,11 @@ public sealed partial class ExplorerViewModel
     /// Where a viewer (the 3D viewer, the text viewer) saves a file: into its root RPF through <paramref name="target"/>, as the texture editor does,
     /// or over the loose file at <paramref name="source"/>; then what lists it is read again.
     /// </summary>
-    private SaveTarget SaveTargetOf(string source, ArchiveEntryTarget? target, string name)
+    private SaveTarget? SaveTargetOf(string source, ArchiveEntryTarget? target, string name)
     {
+        // An archived file with nothing to save it back with (an RDR2 archive's): nothing to save to.
+        if (target is null && source.Contains("::", StringComparison.Ordinal))
+            return null;
         if (target is not null)
             return new SaveTarget(target.Save, () =>
             {
