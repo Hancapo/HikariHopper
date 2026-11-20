@@ -40,6 +40,7 @@ All notable changes to HikariHopper are documented here. The format follows
 - Light GTA V's world by where the camera is, as the game does: Los Santos with its own city timecycle blended in at its edges, and the maps' timecycle boxes (tunnels, coasts, zones) over it, for the light, the sky, the exposure and the bloom. ([#295](https://github.com/Hancapo/HikariHopper/pull/295))
 - Draw GTA V's trees with the game's own tree shaders in the world and the 3D viewer: far forests' billboards spread across the view where they had no area, leaf cards turned to the camera, the game's dithered cut-outs and alpha test, the light through the leaves, and shadows cast only by the models the game casts them with, shadow proxies drawn into the shadow alone. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
 - Lay the decal that GTA V's _texdecal and _vertdecal shaders paint over their own surface, as the game does, in its world and the 3D viewer: the graffiti on Vespucci beach's palm trunks now shows. ([#302](https://github.com/Hancapo/HikariHopper/pull/302))
+- Expose GTA V's world for the frame in view, eased towards it over a second or two as the game does, instead of for a fixed view of its sky at the hour: a view in shade comes up as the game's does, a building's shade at dusk from a mean brightness of 31 to 70. ([#304](https://github.com/Hancapo/HikariHopper/pull/304))
 
 ### Changed
 

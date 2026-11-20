@@ -45,7 +45,8 @@ fn fs_bloom_bright(in: BloomVarying) -> @location(0) vec4f {
             sum += tap(in.uv + vec2f(f32(x), f32(y)) * texel);
         }
     }
-    let stops = exposure_stops(frame_mean[0]);
+    // The exposure exposure.wgsl eased towards the frame's.
+    let stops = frame_mean[1];
     let t = filmic_blend(stops);
     let white = mix(light.filmic_bright1.z, light.filmic_dark1.z, t);
     // The HDR target is premultiplied by coverage: what isn't covered adds nothing.

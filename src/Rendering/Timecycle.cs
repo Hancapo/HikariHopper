@@ -29,7 +29,8 @@ internal readonly record struct TimecycleLight(
     float BloomIntensity,
     Vector3 ArtificialDown = default,
     Vector3 ArtificialUp = default,
-    float WaterFogLight = 0);
+    float WaterFogLight = 0,
+    float DirectionalIntensity = 0);
 
 /// <summary>
 /// GTA V's timecycle for clear weather (EXTRASUNNY, its global region, the same in both editions), interpolated
@@ -214,7 +215,8 @@ internal static class Timecycle
             Get("postfx_intensity_bloom"),
             Colour("light_artificial_ext_down_col") * Get("light_artificial_ext_down_intensity"),
             Colour("light_artificial_ext_up_col") * Get("light_artificial_ext_up_intensity"),
-            Get("water_foglight"));
+            Get("water_foglight"),
+            Get("light_dir_mult"));
     }
 
     /// <summary>
