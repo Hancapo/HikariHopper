@@ -4,13 +4,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <!-- FiveFury.NET checkout: a sibling folder by default, or FIVEFURY_ROOT / -p:FiveFuryRoot=... -->
+    <!-- FiveFury.NET checkout: beside this repository's parent folder by default, or FIVEFURY_ROOT / -p:FiveFuryRoot=... -->
     <FiveFuryRoot Condition="'$(FiveFuryRoot)' == '' and '$(FIVEFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(FIVEFURY_ROOT)'))</FiveFuryRoot>
     <FiveFuryRoot Condition="'$(FiveFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../FiveFury.NET/</FiveFuryRoot>
-    <!-- RedFury.NET checkout, for Red Dead Redemption 2: a sibling folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
+    <!-- RedFury.NET checkout, for Red Dead Redemption 2: beside this repository's parent folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
     <RedFuryRoot Condition="'$(RedFuryRoot)' == '' and '$(REDFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(REDFURY_ROOT)'))</RedFuryRoot>
     <RedFuryRoot Condition="'$(RedFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../RedFury.NET/</RedFuryRoot>
-    <!-- Both libraries build on CommonFury; they share FiveFury's checkout of it, so the app has one. -->
-    <CommonFuryRoot>$(FiveFuryRoot)external/CommonFury/</CommonFuryRoot>
+    <!-- CommonFury.NET checkout, which both libraries build on: the submodule by default, or COMMONFURY_ROOT / -p:CommonFuryRoot=... -->
+    <CommonFuryRoot Condition="'$(CommonFuryRoot)' == '' and '$(COMMONFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(COMMONFURY_ROOT)'))</CommonFuryRoot>
+    <CommonFuryRoot Condition="'$(CommonFuryRoot)' == ''">$(MSBuildThisFileDirectory)external/CommonFury/</CommonFuryRoot>
+    <!-- Restore the game libraries as they're built, with CommonFuryRoot set (see GameLibraries.props): otherwise a library
+         that has CommonFury only through another is restored against that one's own submodule. -->
+    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
   </PropertyGroup>
 </Project>

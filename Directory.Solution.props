@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- As in Directory.Build.props: a solution build doesn't read that file. -->
+    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
+  </PropertyGroup>
+</Project>
