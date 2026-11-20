@@ -85,7 +85,7 @@ The script publishes the AOT build and fails on any AOT compiler warning. It the
 opens. [Velopack](https://velopack.io) (`vpk`, pinned in `dotnet-tools.json`) packs it into
 `artifacts\`: the zip people download, which updates itself, and the files the app's updater
 reads from the GitHub release. The script ends with the `gh release create` command that
-publishes them, with the version's changelog section as the notes.
+publishes them, with the version's changelog section and a download table as the notes.
 
 ## License
 
