@@ -37,6 +37,7 @@ public partial class ShortcutsDialog : ModalSheet
             new("Ctrl+W", "Close tab"),
             new("Ctrl+O", "Open configured game"),
             new("Ctrl+Shift+O", "Open RPF archive"),
+            new("Ctrl+Shift+D", "Open folder"),
             new("Alt+F4", "Exit"),
         ]),
         new("GO",

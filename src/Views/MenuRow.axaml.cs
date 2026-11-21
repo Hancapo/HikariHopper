@@ -45,6 +45,7 @@ public partial class MenuRow : UserControl
             new WindowShortcut("Ctrl+T", () => Tabs?.NewTab()),
             new WindowShortcut("Ctrl+O", () => Tabs is { } tabs && ConfiguredGameAvailable(tabs), () => Bridge?.OpenConfiguredGame("")),
             new WindowShortcut("Ctrl+Shift+O", () => _ = Bridge?.OpenArchiveDialog()),
+            new WindowShortcut("Ctrl+Shift+D", () => Tabs is { } tabs && CanOpenFolder(tabs), OpenFolder),
             new WindowShortcut("Ctrl+W", () => Tabs?.CloseActiveTab()),
             new WindowShortcut("Ctrl+C", () => Bridge?.HasSelection == true, () => _ = Bridge?.CopySelection()),
             new WindowShortcut("Ctrl+V", () => Bridge?.HasWorkspace == true, () => _ = Bridge?.Paste()),
@@ -66,6 +67,15 @@ public partial class MenuRow : UserControl
 
     private static bool ConfiguredGameAvailable(ExplorerTabsViewModel tabs) =>
         tabs.GamePathSettings.AnyPathValid;
+
+    // A folder opens with the tab's game, or one set up.
+    private static bool CanOpenFolder(ExplorerTabsViewModel tabs) => tabs.ActiveBridge.HasGame || ConfiguredGameAvailable(tabs);
+
+    private void OpenFolder()
+    {
+        if (Tabs is { } tabs)
+            _ = FolderOpening.Pick(this, tabs);
+    }
 
     private void Bind(MenuBarButton button, string key)
     {
@@ -186,7 +196,9 @@ public partial class MenuRow : UserControl
 
     private void OnOpenArchive(object? sender, RoutedEventArgs e) => _ = Bridge?.OpenArchiveDialog();
 
-    private void OnCloseArchive(object? sender, RoutedEventArgs e) => Bridge?.CloseArchive();
+    private void OnOpenFolder(object? sender, RoutedEventArgs e) => OpenFolder();
+
+    private void OnCloseArchive(object? sender, RoutedEventArgs e) => Bridge?.CloseArchiveOrFolder();
 
     private void OnCloseTab(object? sender, RoutedEventArgs e) => Tabs?.CloseActiveTab();
 

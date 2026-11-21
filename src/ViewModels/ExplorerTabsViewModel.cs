@@ -66,15 +66,104 @@ public sealed class ExplorerTabsViewModel : ObservableObject
     private void OpenInNewTab(ExplorerViewModel source, string path)
     {
         string game = source.HasGame ? source.GamePath : "";
+        string folder = source.HasFolder ? source.FolderPath : "";
         string archive = source.HasGame ? "" : source.Provider.ArchivePath;
         int row = NewTab();
         ExplorerViewModel tab = tabs[row];
         if (game.Length > 0)
+        {
             tab.OpenGame(game);
+            if (folder.Length > 0)
+                tab.OpenFolder(folder);
+        }
         else if (archive.Length > 0)
+        {
             tab.OpenArchive(archive);
+        }
         tab.GoToAddress(path);
     }
+
+    /// <summary>
+    /// Opens <paramref name="path"/> (from the game's folder) in a new tab just after <paramref name="source"/>, on its game
+    /// alone, without the folder it may have open, and shows that tab.
+    /// </summary>
+    private void OpenInGameTab(ExplorerViewModel source, string path)
+    {
+        if (!source.HasGame || RefusedWhileWriting(source))
+            return;
+        string game = source.GamePath;
+        int row = NewTab();
+        ExplorerViewModel tab = tabs[row];
+        int after = tabs.IndexOf(source);
+        if (after >= 0 && after + 1 < tabs.Count)
+            MoveTab(row, after + 1);
+        tab.OpenGame(game);
+        tab.GoToAddress(path);
+    }
+
+    /// <summary>
+    /// The games a folder can be opened with: each edition whose installation is set up, with its folder, in the order
+    /// the start page lists them.
+    /// </summary>
+    public static IReadOnlyList<(GameEditionInfo Edition, string Root)> FolderGames() =>
+        [.. GameCatalog.Editions
+            .Select(edition => (Edition: edition, Root: GameSettings.ConfiguredGameRootToOpen(edition.Id)))
+            .Where(game => game.Root.Length > 0)];
+
+    /// <summary>
+    /// Opens <paramref name="folder"/> with the game at <paramref name="gameRoot"/> in a new tab just after the tab at
+    /// <paramref name="after"/> (at the end for -1), and shows it: at once when a tab has that game loaded, else once it
+    /// has loaded, behind the loading screen.
+    /// </summary>
+    public ExplorerViewModel OpenFolderInNewTab(string folder, string gameRoot, int after = -1)
+    {
+        bool loaded = tabs.Any(tab => tab.HasGame && SamePath(tab.GamePath, gameRoot));
+        int row = NewTab();
+        ExplorerViewModel opened = tabs[row];
+        if (after >= 0 && after + 1 < tabs.Count)
+            MoveTab(row, after + 1);
+        if (loaded)
+        {
+            opened.OpenGame(gameRoot);
+            opened.OpenFolder(folder);
+        }
+        else
+        {
+            opened.OpenFolderWithGame(folder, gameRoot);
+        }
+        return opened;
+    }
+
+    /// <summary>
+    /// Opens each of <paramref name="folders"/> in a new tab after the tab at <paramref name="after"/> (at the end for
+    /// -1), with the game at <paramref name="gameRoot"/>; with none given, with the one game set up. Returns the games
+    /// to choose from instead, opening nothing, when more than one is set up and none was given: the view asks, and
+    /// calls again with the answer. With no game set up, the status bar says so.
+    /// </summary>
+    public IReadOnlyList<(GameEditionInfo Edition, string Root)>? OpenFolders(IReadOnlyList<string> folders, string? gameRoot, int after = -1)
+    {
+        if (folders.Count == 0 || RefusedWhileWriting(ActiveBridge))
+            return null;
+        if (string.IsNullOrEmpty(gameRoot))
+        {
+            IReadOnlyList<(GameEditionInfo Edition, string Root)> games = FolderGames();
+            if (games.Count == 0)
+            {
+                ActiveBridge.ShowStatus("Set up a game in Settings to open a folder with it");
+                return null;
+            }
+            if (games.Count > 1)
+                return games;
+            gameRoot = games[0].Root;
+        }
+        foreach (string folder in folders)
+            after = tabs.IndexOf(OpenFolderInNewTab(folder, gameRoot, after));
+        return null;
+    }
+
+    private static bool SamePath(string left, string right) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Opens and activates an empty tab; returns its index.</summary>
     public int NewTab()
@@ -97,12 +186,14 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         EventHandler<object> contentChanged = (_, target) => ContentChanged(bridge, target);
         EventHandler<string> archiveWrite = (_, rootPath) => PrepareArchiveWrite(rootPath);
         EventHandler<string> newTab = (_, path) => OpenInNewTab(bridge, path);
+        EventHandler<string> gameTab = (_, path) => OpenInGameTab(bridge, path);
         bridge.PropertyChanged += propertyChanged;
         bridge.GameOpened += gameOpened;
         bridge.LooseFilesAboutToBeDeleted += looseFiles;
         bridge.ContentChanged += contentChanged;
         bridge.ArchiveWriteRequested += archiveWrite;
         bridge.OpenInNewTabRequested += newTab;
+        bridge.OpenInGameTabRequested += gameTab;
         unsubscribers[bridge] = () =>
         {
             bridge.PropertyChanged -= propertyChanged;
@@ -111,6 +202,7 @@ public sealed class ExplorerTabsViewModel : ObservableObject
             bridge.ContentChanged -= contentChanged;
             bridge.ArchiveWriteRequested -= archiveWrite;
             bridge.OpenInNewTabRequested -= newTab;
+            bridge.OpenInGameTabRequested -= gameTab;
         };
         tabs.Add(bridge);
         SynchronizeOperationState();
@@ -219,6 +311,18 @@ public sealed class ExplorerTabsViewModel : ObservableObject
         int row = tabs.IndexOf(bridge);
         if (row >= 0 && row == activeIndex)
             RaiseActiveTabChanged();
+    }
+
+    /// <summary>
+    /// Whether a tab is writing, so a new tab could open nothing until it ends: then <paramref name="asking"/>'s status bar
+    /// says so, and nothing opens.
+    /// </summary>
+    private bool RefusedWhileWriting(ExplorerViewModel asking)
+    {
+        if (!tabs.Any(bridge => bridge.LocalEntryOperationBusy))
+            return false;
+        asking.ShowStatus("Wait for the write under way to finish, then try again");
+        return true;
     }
 
     private void SynchronizeOperationState()

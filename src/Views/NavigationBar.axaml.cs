@@ -174,6 +174,7 @@ public partial class NavigationBar : UserControl
             case nameof(ExplorerViewModel.InArchive):
             case nameof(ExplorerViewModel.GameName):
             case nameof(ExplorerViewModel.ArchiveRootName):
+            case nameof(ExplorerViewModel.RootTitle):
                 RefreshSegments();
                 RefreshSearchRow();
                 break;
@@ -207,7 +208,7 @@ public partial class NavigationBar : UserControl
         RootSegment.IsVisible = true;
         if (hasWorkspace)
             RootSegment.SetHome(parts.Count == 0 ? Ui.Theme.Text : Ui.Theme.TextDim,
-                model!.ArchiveIsRoot || !model.HasGame ? model.ArchiveRootName : ExplorerViewModel.HomeTitle, named: parts.Count == 0);
+                model!.RootTitle, named: parts.Count == 0);
         else
             RootSegment.Set("Select a game folder", false, Ui.Theme.TextDim);
 

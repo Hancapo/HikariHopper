@@ -12,6 +12,9 @@
        wide as its tabs, at most the strip width - 45) on the strip's floor, then the new-tab
        button. The active tab flows into the toolbar below; the others stay bare until hovered. -->
   <Grid Name="Row" ColumnDefinitions="Auto,Auto,*">
+    <!-- A folder dragged over the strip but no game's tab: dropped, it asks for the game. -->
+    <Border Name="DropWash" Grid.ColumnSpan="3" IsVisible="False" IsHitTestVisible="False"
+            Background="{x:Static ui:Theme.AccentWash}" />
     <ScrollViewer Name="TabList" Grid.Column="0" ClipToBounds="True"
                   HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
       <ItemsControl Name="TabItems" ItemsSource="{Binding Tabs}">

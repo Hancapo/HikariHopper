@@ -229,7 +229,7 @@ public sealed partial class ExplorerViewModel
         }
         if (Provider.InArchive)
             return null;
-        if (Provider.GamePath.Length == 0)
+        if (Provider.LoosePath.Length == 0)
             return null;
         return selection.Count == 1
             ? (Path.GetFullPath(GameChildPath(selection[0].Path)), true)
@@ -572,7 +572,8 @@ public sealed partial class ExplorerViewModel
     /// <summary>An entry's path from the game folder, RPFs as folders; null outside a game or an RPF from outside it.</summary>
     private string? GamePathOf(EntryRecord entry)
     {
-        if (LoadedGameOfProvider() is null)
+        // A folder open with the game isn't in the game's folder.
+        if (LoadedGameOfProvider() is null || Provider.HasFolder)
             return null;
         string local = currentPath == "." ? entry.Name : $"{currentPath}/{entry.Name}";
         if (!Provider.InArchive)

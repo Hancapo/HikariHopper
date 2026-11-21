@@ -24,6 +24,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         nameof(ArchiveName), nameof(ArchivePath), nameof(GameName), nameof(GamePath), nameof(ArchiveTabName),
         nameof(ArchiveRootName), nameof(TabTitle), nameof(ArchiveIsRoot), nameof(HasWorkspace), nameof(HasGame), nameof(HasArchive),
         nameof(InArchive), nameof(GameEdition), nameof(GameEditionId), nameof(CanCreateHere), nameof(HasWorld),
+        nameof(HasFolder), nameof(FolderPath), nameof(RootTitle), nameof(CanCloseArchiveOrFolder),
     ];
     private static readonly string[] CurrentPathProperties = [nameof(CurrentPath), nameof(CanGoUp)];
     private static readonly string[] PathPartsProperties =
@@ -138,6 +139,12 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     public string GamePath => Provider.GamePath;
 
+    /// <summary>Whether a folder is open with the tab's game (<see cref="OpenFolder"/>), shown in the game's place.</summary>
+    public bool HasFolder => Provider.HasFolder;
+
+    /// <summary>The folder open with the tab's game, "" with none.</summary>
+    public string FolderPath => Provider.FolderPath;
+
     public string ArchiveTabName => Provider.RootArchiveName;
 
     public string ArchiveRootName => Provider.RootArchiveName;
@@ -153,7 +160,14 @@ public sealed partial class ExplorerViewModel : ObservableObject
         InWorld ? "World"
         : searching ? SearchTabTitle
         : NavigationPathSegments is [.., var current] ? current.Label
-        : ArchiveIsRoot ? Provider.RootArchiveName : Provider.HasGame ? HomeTitle : "New tab";
+        : Provider.IsOpen ? RootTitle : "New tab";
+
+    /// <summary>
+    /// What the tab's root is called, where the path bar's home mark goes: an RPF opened on its own, a folder open with
+    /// the game, or the game's own <see cref="HomeTitle"/>.
+    /// </summary>
+    public string RootTitle =>
+        ArchiveIsRoot || !Provider.HasGame ? Provider.RootArchiveName : Provider.HasFolder ? Provider.FolderName : HomeTitle;
 
     /// <summary>
     /// Whether the open RPF is the tab's root: opened on its own, from outside any game the tab has loaded.
@@ -278,6 +292,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
         foreach (string name in names)
             OnPropertyChanged(name);
     }
+
+    /// <summary>Says <paramref name="value"/> in the tab's status bar.</summary>
+    internal void ShowStatus(string value) => SetStatus(value);
 
     private void SetStatus(string value)
     {
@@ -502,6 +519,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
             SetStatus($"Could not load game: {error.Message}");
         }
         SetGameLoading(false);
+        // Loaded to open a folder with it (OpenFolderWithGame), once it's no longer loading.
+        if (folderAsked is { } folder)
+        {
+            folderAsked = null;
+            if (Provider.HasGame)
+                OpenFolder(folder);
+        }
     }
 
     private void GameLoadFailed(string message)
@@ -509,6 +533,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         SetStatus($"Could not load game: {message}");
         SetGameLoading(false);
         worldAsked = false;
+        folderAsked = null;
     }
 
     private void SetGameLoading(bool loading)
@@ -637,7 +662,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
         ResetNavigation();
         ExpandCurrentBranch();
         PublishWorkspace();
-        SetStatus($"Browsing {Provider.GameName}");
+        SetStatus($"Browsing {(Provider.HasFolder ? Provider.FolderName : Provider.GameName)}");
     }
 
     public void ShowArchive()
@@ -669,12 +694,85 @@ public sealed partial class ExplorerViewModel : ObservableObject
         {
             ResetNavigation();
             PublishWorkspace();
-            SetStatus($"Browsing {Provider.GameName}");
+            SetStatus($"Browsing {(Provider.HasFolder ? Provider.FolderName : Provider.GameName)}");
         }
         else
         {
             CloseWorkspace();
         }
+    }
+
+    // The folder the game being loaded opens with (OpenFolderWithGame), once it's open.
+    private string? folderAsked;
+
+    /// <summary>
+    /// Opens <paramref name="path"/> with the tab's game, in its place: its loose files listed from it, and its RPFs,
+    /// models and textures read with the game's keys and textures. False, with the reason in the status bar, when it
+    /// can't.
+    /// </summary>
+    public bool OpenFolder(string path)
+    {
+        if (EntryOperationBusy)
+            return false;
+        if (!Provider.HasGame)
+        {
+            SetStatus("Load a game before opening a folder with it");
+            return false;
+        }
+        try
+        {
+            Provider.OpenFolder(path);
+        }
+        catch (Exception error) when (OperationErrors.IsExpected(error))
+        {
+            SetStatus($"Could not open folder: {error.Message}");
+            return false;
+        }
+        // The game's world stays the tab's: only its files side changes.
+        if (InWorld)
+            SetFace(TabFace.Files);
+        ClearArchiveExpansion();
+        ResetNavigation();
+        ExpandCurrentBranch();
+        PublishWorkspace();
+        SetStatus($"Opened {Provider.FolderName}");
+        return true;
+    }
+
+    /// <summary>
+    /// Opens <paramref name="folder"/> with the game at <paramref name="gameRoot"/>: at once when the tab has that game
+    /// loaded, else once it has loaded it, behind the loading screen.
+    /// </summary>
+    public void OpenFolderWithGame(string folder, string gameRoot)
+    {
+        if (Provider.HasGame && SamePath(Provider.GamePath, gameRoot))
+        {
+            OpenFolder(folder);
+            return;
+        }
+        if (OpenGameAsync(gameRoot))
+            folderAsked = folder;
+    }
+
+    /// <summary>Whether File's Close has something to close: an RPF, or a folder open with the game.</summary>
+    public bool CanCloseArchiveOrFolder => Provider.HasArchive || Provider.HasFolder;
+
+    /// <summary>Closes the RPF open in the tab, or else the folder open with its game, back to the game's own files.</summary>
+    public void CloseArchiveOrFolder()
+    {
+        if (Provider.HasArchive)
+        {
+            CloseArchive();
+            return;
+        }
+        if (!Provider.HasFolder || EntryOperationBusy)
+            return;
+        Provider.CloseFolder();
+        ClearArchiveExpansion();
+        ResetNavigation();
+        ExpandCurrentBranch();
+        PublishWorkspace();
+        SetStatus($"Browsing {Provider.GameName}");
     }
 
     public void CloseWorkspace()

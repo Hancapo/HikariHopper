@@ -244,8 +244,9 @@ public sealed partial class ExplorerViewModel
     private SearchIndex? IndexFor(SearchScope scope)
     {
         bool outsideGame = Provider.InArchive && Provider.ArchiveGamePath.Length == 0;
+        // A folder open with the game is indexed as the game's folder would be.
         if (Provider.HasGame && !(outsideGame && scope != SearchScope.Everywhere))
-            return SearchIndex.ForGame(Provider.GamePath, Provider.Crypto);
+            return SearchIndex.ForGame(Provider.LoosePath, Provider.Crypto);
         if (Provider.HasArchive && Provider.ArchivePath.Length > 0)
             return SearchIndex.ForArchive(Provider.ArchivePath, Provider.Crypto);
         return null;
@@ -399,15 +400,21 @@ public sealed partial class ExplorerViewModel
         public bool InArchive => RootFull.Length > 0;
     }
 
+    // Set while the hits read are the game's own (the world's files), even in a tab showing a folder open with it.
+    private bool gameHits;
+
+    // Where hits' paths are from: the folder the tab shows, or the game's for its own.
+    private string HitRoot => gameHits ? Provider.GamePath : Provider.LoosePath;
+
     private HitPlace PlaceOf(SearchHit hit)
     {
         string[] parts = hit.Path.Split('/');
         int[] containers = [.. Enumerable.Range(0, parts.Length - 1).Where(i => parts[i].EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))];
         bool standalone = searchIndex?.StandaloneArchive == true;
         if (containers.Length == 0)
-            return new HitPlace(hit, "", "", "", hit.Path, "", Path.Combine([Provider.GamePath, .. parts]));
+            return new HitPlace(hit, "", "", "", hit.Path, "", Path.Combine([HitRoot, .. parts]));
         int first = containers[0], last = containers[^1];
-        string rootFull = standalone && first == 0 ? searchIndex!.Root : Path.Combine([Provider.GamePath, .. parts[..(first + 1)]]);
+        string rootFull = standalone && first == 0 ? searchIndex!.Root : Path.Combine([HitRoot, .. parts[..(first + 1)]]);
         string nested = string.Join('/', parts[(first + 1)..(last + 1)]);
         string inner = string.Join('/', parts[(last + 1)..^1]);
         return new HitPlace(hit, rootFull, nested, inner.Length == 0 ? "." : inner,
@@ -436,7 +443,8 @@ public sealed partial class ExplorerViewModel
     {
         HitPlace[] places = [.. hits.Select(PlaceOf)];
         LoadedGame? game = ReaderGame();
-        return () => RunReader(places, game, work);
+        string? folder = ReaderFolder();
+        return () => RunReader(places, game, folder, work);
     }
 
     /// <summary>The game a reader of results loads, with the tab's own keys; none for an RPF searched on its own.</summary>
@@ -445,7 +453,12 @@ public sealed partial class ExplorerViewModel
             ? new LoadedGame(Provider.GamePath, target, crypto)
             : null;
 
-    private static List<T> RunReader<T>(HitPlace[] places, LoadedGame? game, Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
+    /// <summary>The folder open with the game that a reader of results opens too, whose files they are; none without one.</summary>
+    private string? ReaderFolder() =>
+        !gameHits && searchIndex is { StandaloneArchive: false } && Provider.HasFolder ? Provider.FolderPath : null;
+
+    private static List<T> RunReader<T>(HitPlace[] places, LoadedGame? game, string? openFolder,
+        Func<RpfProvider, IReadOnlyList<EntryRecord>, IEnumerable<T>> work)
     {
         var results = new List<T>();
         var reader = new RpfProvider();
@@ -453,6 +466,8 @@ public sealed partial class ExplorerViewModel
         {
             if (game is not null)
                 reader.ApplyLoadedGame(game);
+            if (game is not null && openFolder is not null)
+                reader.OpenFolder(openFolder);
             foreach (var group in places.GroupBy(place => place.RootFull, StringComparer.OrdinalIgnoreCase))
             {
                 var records = new List<EntryRecord>();
@@ -566,7 +581,7 @@ public sealed partial class ExplorerViewModel
     /// can go at once.
     /// </summary>
     private (byte[] Data, string Source, ArchiveEntryTarget? Target) ReadHit(SearchHit hit) =>
-        RunReader([PlaceOf(hit)], ReaderGame(), (reader, records) =>
+        RunReader([PlaceOf(hit)], ReaderGame(), ReaderFolder(), (reader, records) =>
             new[] { (reader.ReadEntryBytes(records[0]), reader.EntrySourcePath(records[0]),
                 reader.InArchive && reader.ArchiveWritable ? reader.GetArchiveEntryTarget(records[0]) : null) })[0];
 
@@ -611,12 +626,14 @@ public sealed partial class ExplorerViewModel
             }
         }
         LoadedGame? game = ReaderGame();
+        string? folder = ReaderFolder();
         return new ModelFile(name, data)
         {
             Dictionaries = named,
             GameDictionaries = GameDictionaries(name),
-            // A result of the game's index is named by its path from the game folder.
-            GameHolding = GameHolding(game, game is not null ? hit.Path : null),
+            // A result of the game's index is named by its path from the game folder; one of a folder open with the game
+            // isn't in it.
+            GameHolding = GameHolding(game, game is not null && folder is null ? hit.Path : null),
             GamePaints = GamePaints(name),
             GameSky = game is not null ? SkyOf(game) : null,
             Nearby = [.. dictionaries.Where(sibling => !namedFor.Contains(sibling.Name, StringComparer.OrdinalIgnoreCase)).Select(sibling =>
@@ -624,7 +641,7 @@ public sealed partial class ExplorerViewModel
                 // Where it lives is worked out here, on the UI thread; the read runs on the viewer's, with a reader of its own.
                 HitPlace place = PlaceOf(sibling);
                 return new Rendering.NearbyDictionary(sibling.Name, sibling.Size,
-                    () => RunReader([place], game, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0],
+                    () => RunReader([place], game, folder, (reader, records) => new[] { reader.ReadEntryBytes(records[0]) })[0],
                     place.InArchive ? Rendering.NearbyDictionary.KeyFor(place.RootFull, place.FromRoot) : Rendering.NearbyDictionary.KeyFor(place.LooseFull, ""));
             })],
             OpenTextures = saved => OpenHitTextures(hit, saved),
@@ -654,6 +671,12 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>Asks for a tab of its own at <c>path</c> (an RPF result, to browse it); the tabs open it.</summary>
     public event EventHandler<string>? OpenInNewTabRequested;
+
+    /// <summary>
+    /// Asks for a tab of the game's own, without the folder open here, at <c>path</c> (from the game's folder): where one
+    /// of the world's files is shown.
+    /// </summary>
+    public event EventHandler<string>? OpenInGameTabRequested;
 
     /// <summary>Open location: the selected result's folder, with it selected.</summary>
     public void OpenSelectedLocation()

@@ -60,6 +60,9 @@ public sealed class RpfProvider
     };
 
     private string? gameRoot;
+    // A folder opened with the game (OpenFolder): its loose files are listed in place of the game's, with the game's
+    // keys, textures and edition.
+    private string? folderRoot;
     private GameTarget? gameTarget;
     private ArchiveNode? archive;
     private string archivePath = "";
@@ -76,6 +79,8 @@ public sealed class RpfProvider
         {
             if (InArchive)
                 return new WorkspaceInfo(archive!.Name, archivePath, archive.Format, archive.Platform);
+            if (folderRoot is not null)
+                return new WorkspaceInfo(Path.GetFileName(folderRoot), folderRoot, GameEdition, "PC");
             if (gameRoot is not null)
                 return new WorkspaceInfo(Path.GetFileName(gameRoot), gameRoot, GameEdition, "PC");
             return new WorkspaceInfo("No game", "", "—", "PC");
@@ -121,6 +126,22 @@ public sealed class RpfProvider
 
     public string GamePath => gameRoot ?? "";
 
+    /// <summary>Whether a folder is open with the game (<see cref="OpenFolder"/>), its loose files listed in the game's place.</summary>
+    public bool HasFolder => folderRoot is not null;
+
+    /// <summary>The folder open with the game, "" with none.</summary>
+    public string FolderPath => folderRoot ?? "";
+
+    public string FolderName => folderRoot is not null ? Path.GetFileName(folderRoot) : "";
+
+    /// <summary>
+    /// Where the loose files shown are, which their paths are from: the folder open with the game, else the game's
+    /// own folder; "" with neither.
+    /// </summary>
+    public string LoosePath => LooseRoot ?? "";
+
+    private string? LooseRoot => folderRoot ?? gameRoot;
+
     /// <summary>
     /// The file of the open root archive, or "" with none: the same however deep in nested archives you go,
     /// and across a reload.
@@ -129,7 +150,9 @@ public sealed class RpfProvider
 
     public string ArchiveName => archive?.Name ?? "";
 
-    /// <summary>Path of the root RPF relative to the game folder, empty when outside it.</summary>
+    /// <summary>
+    /// Path of the root RPF relative to the loose files shown (<see cref="LoosePath"/>), empty when outside them.
+    /// </summary>
     public string ArchiveGamePath => archiveGamePath;
 
     public bool ArchiveIsNested => archiveIsNested;
@@ -217,6 +240,32 @@ public sealed class RpfProvider
         return Info;
     }
 
+    /// <summary>
+    /// Opens a folder with the loaded game: its loose files are listed in place of the game's, and its RPFs, models and
+    /// textures are read with the game's keys and textures.
+    /// </summary>
+    public WorkspaceInfo OpenFolder(string path)
+    {
+        if (gameRoot is null)
+            throw new ArgumentException("Load a game before opening a folder with it");
+        string resolved = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        if (!Directory.Exists(resolved))
+            throw new ArgumentException($"Folder does not exist: {resolved}");
+        CloseArchiveCore();
+        folderRoot = resolved;
+        inArchive = false;
+        return Info;
+    }
+
+    /// <summary>Closes the folder open with the game, and any RPF of it: the game's own files are listed again.</summary>
+    public WorkspaceInfo CloseFolder()
+    {
+        CloseArchiveCore();
+        folderRoot = null;
+        inArchive = false;
+        return Info;
+    }
+
     public WorkspaceInfo ShowGame()
     {
         if (gameRoot is null)
@@ -270,6 +319,7 @@ public sealed class RpfProvider
     {
         CloseArchiveCore();
         gameRoot = null;
+        folderRoot = null;
         gameEdition = "";
         keys = null;
         gameTarget = null;
@@ -284,7 +334,7 @@ public sealed class RpfProvider
     {
         if (InArchive)
             return archive!.DirectoryAt(path) is not null;
-        return gameRoot is not null && Directory.Exists(Path.Combine(gameRoot, path));
+        return LooseRoot is { } root && Directory.Exists(Path.Combine(root, path));
     }
 
     public EntryCreationTarget CreationTarget(string directoryPath = ".")
@@ -310,14 +360,14 @@ public sealed class RpfProvider
             return target;
         }
 
-        if (gameRoot is null)
+        if (LooseRoot is not { } loose)
             throw new ArgumentException("No writable explorer location is open");
-        string rootDirectory = Path.GetFullPath(gameRoot);
+        string rootDirectory = Path.GetFullPath(loose);
         string directory = normalized == "." ? rootDirectory : Path.GetFullPath(Path.Combine(rootDirectory, normalized));
         if (!IsWithin(rootDirectory, directory))
-            throw new ArgumentException($"Folder is outside the game installation: {normalized}");
+            throw new ArgumentException($"Folder is outside {(folderRoot is null ? "the game installation" : FolderName)}: {normalized}");
         if (!Directory.Exists(directory))
-            throw new ArgumentException($"Game folder does not exist: {normalized}");
+            throw new ArgumentException($"Folder does not exist: {normalized}");
         return new EntryCreationTarget(Directory: directory, Game: gameTarget, Crypto: crypto);
     }
 
@@ -337,13 +387,13 @@ public sealed class RpfProvider
             return new EntryDeletionTarget(location, [], entries.Select(EntryLocalPath).ToArray());
 
         var loosePaths = entries.Select(GameEntryCandidate).ToArray();
-        string root = Path.GetFullPath(gameRoot!);
+        string root = Path.GetFullPath(LooseRoot!);
         if (loosePaths.Any(path => string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("Cannot delete the game root");
-        string lexicalRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot!));
+            throw new ArgumentException(folderRoot is null ? "Cannot delete the game root" : "Cannot delete the folder open here");
+        string lexicalRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(LooseRoot!));
         foreach (EntryRecord entry in entries)
         {
-            for (string? path = Path.GetFullPath(Path.Combine(gameRoot!, entry.Path)); path is not null;
+            for (string? path = Path.GetFullPath(Path.Combine(LooseRoot!, entry.Path)); path is not null;
                 path = Path.GetDirectoryName(path))
             {
                 if (string.Equals(Path.TrimEndingDirectorySeparator(path), lexicalRoot, StringComparison.OrdinalIgnoreCase))
@@ -781,12 +831,13 @@ public sealed class RpfProvider
     public static string LoadedNestedPrefix(EntryRecord entry) =>
         entry.ArchiveItem is { } item && item.Node.LoadedChild(item.Entry) is { } child ? child.Prefix : "";
 
+    /// <summary>The loose files in a folder of the game, or of the folder open with it, from <see cref="LoosePath"/>.</summary>
     public List<EntryRecord> GameEntries(string directoryPath)
     {
-        if (gameRoot is null)
+        if (LooseRoot is not { } looseRoot)
             return [];
         string relative = EntryNames.NormalizedDirectory(directoryPath);
-        string directory = relative == "." ? gameRoot : Path.Combine(gameRoot, relative);
+        string directory = relative == "." ? looseRoot : Path.Combine(looseRoot, relative);
         if (!Directory.Exists(directory))
             return [];
         List<FileSystemInfo> children;
@@ -806,7 +857,7 @@ public sealed class RpfProvider
         {
             try
             {
-                string relativePath = Path.GetRelativePath(gameRoot, item.FullName).Replace('\\', '/');
+                string relativePath = Path.GetRelativePath(looseRoot, item.FullName).Replace('\\', '/');
                 if (item is DirectoryInfo folder)
                 {
                     var (total, navigable) = ChildCounts(folder);
@@ -896,12 +947,12 @@ public sealed class RpfProvider
 
     private string GameEntryCandidate(EntryRecord entry)
     {
-        if (gameRoot is null)
+        if (LooseRoot is not { } looseRoot)
             throw new ArgumentException("No game is loaded");
-        string root = Path.GetFullPath(gameRoot);
+        string root = Path.GetFullPath(looseRoot);
         string candidate = Path.GetFullPath(Path.Combine(root, entry.Path));
         if (!IsWithin(root, candidate))
-            throw new ArgumentException($"Entry is outside the game folder: {entry.Path}");
+            throw new ArgumentException($"Entry is outside the folder shown: {entry.Path}");
         return candidate;
     }
 
@@ -942,9 +993,9 @@ public sealed class RpfProvider
 
     private string RelativeGamePath(string path)
     {
-        if (gameRoot is null)
+        if (LooseRoot is not { } looseRoot)
             return "";
-        string root = Path.GetFullPath(gameRoot);
+        string root = Path.GetFullPath(looseRoot);
         return IsWithin(root, path) && !string.Equals(Path.TrimEndingDirectorySeparator(root), path, StringComparison.OrdinalIgnoreCase)
             ? Path.GetRelativePath(root, path).Replace('\\', '/')
             : "";

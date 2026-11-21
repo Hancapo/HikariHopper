@@ -60,10 +60,11 @@ public sealed partial class ExplorerViewModel
             }
             else
             {
-                // Relative: to the game folder, or, for an RPF opened from outside it, a path that starts with its name.
+                // Relative: to the game folder (or the folder open with it), or, for an RPF opened from outside it, a
+                // path that starts with its name.
                 var bases = new List<string>();
                 if (HasGame)
-                    bases.Add(Provider.GamePath);
+                    bases.Add(Provider.LoosePath);
                 string first = path.Split('\\', 2)[0];
                 if (Provider.InArchive && Provider.ArchiveGamePath.Length == 0
                     && string.Equals(first, Path.GetFileName(Provider.ArchivePath), StringComparison.OrdinalIgnoreCase))
@@ -160,14 +161,14 @@ public sealed partial class ExplorerViewModel
 
     private bool GoToFolder(string folder, string typed)
     {
-        string root = HasGame ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.GamePath)) : "";
+        string root = HasGame ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.LoosePath)) : "";
         // A drive root keeps its separator (D:\), so it isn't doubled when the game is installed there.
         string prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
         bool inGame = root.Length > 0 && (SamePath(folder, root)
             || folder.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         if (!inGame)
         {
-            SetStatus($"Only folders inside the game can be shown here: {typed}");
+            SetStatus($"Only folders inside {(Provider.HasFolder ? Provider.FolderName : "the game")} can be shown here: {typed}");
             return false;
         }
         string relative = SamePath(folder, root) ? "." : Path.GetRelativePath(root, folder).Replace('\\', '/');

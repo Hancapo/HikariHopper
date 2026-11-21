@@ -231,7 +231,7 @@ public sealed partial class ExplorerViewModel
     private void SyncTreeFocus()
     {
         // Which game and which RPF too: another game's root, or another RPF's, is somewhere new as well.
-        string location = $"{Provider.GamePath}|{(Provider.HasArchive ? Provider.ArchivePath : "")}|{Provider.InArchive}|"
+        string location = $"{Provider.LoosePath}|{(Provider.HasArchive ? Provider.ArchivePath : "")}|{Provider.InArchive}|"
             + $"{Provider.ArchiveGamePath}|{Provider.ArchivePrefix}|{currentPath}";
         bool arrived = location != treeFocusLocation;
         treeFocusLocation = location;
@@ -290,7 +290,7 @@ public sealed partial class ExplorerViewModel
             bool hasChildren = isLoadedArchive
                 ? Provider.ArchiveHasTreeChildren("")
                 : isArchive
-                    ? archiveProbe.HasTreeChildren(Path.Combine(Provider.GamePath, entry.Path), "", Provider.Crypto)
+                    ? archiveProbe.HasTreeChildren(Path.Combine(Provider.LoosePath, entry.Path), "", Provider.Crypto)
                     : entry.NavigableChildren > 0;
             bool expanded = hasChildren && expandedNodes.Contains(key);
             bool selected = (isLoadedArchive && Provider.InArchive && Provider.ArchivePrefix.Length == 0 && currentPath == ".")
@@ -449,5 +449,5 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary><c>str(Path(game_path) / relative)</c>.</summary>
-    private string GameChildPath(string relative) => Path.Combine(Provider.GamePath, relative.Replace('/', '\\'));
+    private string GameChildPath(string relative) => Path.Combine(Provider.LoosePath, relative.Replace('/', '\\'));
 }

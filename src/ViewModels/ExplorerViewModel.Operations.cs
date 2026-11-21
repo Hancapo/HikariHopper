@@ -447,7 +447,7 @@ public sealed partial class ExplorerViewModel
         }
         if (location.Directory is null || !Provider.HasGame)
             return;
-        string gameRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.GamePath));
+        string gameRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Provider.LoosePath));
         string changedDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(location.Directory));
         if (!SamePath(changedDirectory, gameRoot)
             && !changedDirectory.StartsWith(gameRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))

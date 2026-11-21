@@ -177,7 +177,19 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>Opens a placement's model in the 3D viewer, its textures found as from its folder.</summary>
-    internal void OpenWorldModel(WorldFile model) => OpenHit(new Core.Search.SearchHit(model.Path, model.Size, []), open: true);
+    internal void OpenWorldModel(WorldFile model)
+    {
+        // The world's files are the game's, wherever the tab's files are (a folder open with the game).
+        gameHits = true;
+        try
+        {
+            OpenHit(new Core.Search.SearchHit(model.Path, model.Size, []), open: true);
+        }
+        finally
+        {
+            gameHits = false;
+        }
+    }
 
     /// <summary>
     /// Shows one of the world's files in its folder, selected, on the Files side: one more stop in Back and Forward,
@@ -185,6 +197,13 @@ public sealed partial class ExplorerViewModel
     /// </summary>
     internal void ShowWorldFile(WorldFile file)
     {
+        // A folder open with the game isn't where the world's files are: one is shown in a tab of the game's own.
+        if (Provider.HasFolder)
+        {
+            OpenInGameTabRequested?.Invoke(this, file.Path);
+            SetStatus($"Showed {file.Name} in a tab of {Provider.GameEdition}");
+            return;
+        }
         HistoryStop? from = InWorld && historyIndex >= 0 && historyIndex < history.Count ? history[historyIndex] : null;
         if (!GoToAddress(file.Path))
             return;
