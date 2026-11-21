@@ -34,16 +34,17 @@ public sealed class SunlightTests
     }
 
     [Fact]
-    public void The_natural_ambient_is_the_sky_above_and_the_ground_below()
+    public void The_natural_ambient_is_its_base_everywhere_and_the_sky_from_above()
     {
         TimecycleLight light = Timecycle.Evaluate(13);
-        AssertClose(light.NaturalDown, Timecycle.NaturalAmbient(light, Vector3.UnitZ));
+        // As the game's ambient pass adds them: the up light, its base, on everything, and the down light on what faces up.
+        AssertClose(light.NaturalUp + light.NaturalDown, Timecycle.NaturalAmbient(light, Vector3.UnitZ));
         AssertClose(light.NaturalUp, Timecycle.NaturalAmbient(light, -Vector3.UnitZ));
         // The sky's light wraps past the horizon, by the down wrap: a wall still gets some, and so does what faces a little
         // downwards, until the wrap.
         Vector3 Facing(float z) => Timecycle.NaturalAmbient(light, Vector3.Normalize(new Vector3(MathF.Sqrt(1 - z * z), 0, z)));
         Assert.InRange(light.DownWrap, .2f, .4f);
-        Assert.True(Vector3.Distance(Facing(0), light.NaturalUp) > .5f);
+        AssertClose(light.NaturalUp + light.NaturalDown * (light.DownWrap / (1 + light.DownWrap)), Facing(0));
         Assert.True(Vector3.Distance(Facing(-light.DownWrap / 2), light.NaturalUp) > .1f);
         AssertClose(light.NaturalUp, Facing(-light.DownWrap));
     }
