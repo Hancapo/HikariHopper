@@ -154,6 +154,12 @@ public sealed class WorldRenderingTests
         Assert.Equal(first.MemoryCost.Shared.Single().Identity, second.MemoryCost.Shared.Single().Identity);
         Assert.Equal(first.MemoryCost.OwnedBytes + second.MemoryCost.OwnedBytes + pixels,
             RedFury.World.WorldMemoryCost.Total([first.MemoryCost, second.MemoryCost]));
+        // One of the same name and shape but other pixels is another allocation.
+        byte[] other = TestDrawables.Triangle(diffuse: Textures.TextureTestKit.Bgra("own_d", 16, 16, [30, 20, 10, 255]));
+        FiveFury.Drawables.Drawable otherDrawable = FiveFury.Ydr.Ydr.Read(other).Drawable;
+        Rendering.World.WorldAsset third = Rendering.World.WorldAsset.FromGta(new RedFury.World.WorldAssetKey(3, 2),
+            DrawableScene.Build(otherDrawable, []), [otherDrawable]);
+        Assert.NotEqual(first.MemoryCost.Shared.Single().Identity, third.MemoryCost.Shared.Single().Identity);
     }
 
     [Fact]

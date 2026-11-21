@@ -149,11 +149,31 @@ internal sealed class WorldAsset
     }
 
     // Shared allocations are told apart by identity, so a texture several assets bind counts once: the same texture is
-    // the same allocation however many times it's read.
-    private static long nextIdentity;
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, long> Identities = new();
-
-    private static long IdentityOf(object texture) => Identities.GetOrAdd(texture, _ => Interlocked.Increment(ref nextIdentity));
+    // the same allocation however many times it's read. The identity is worked out from what the texture is, not kept:
+    // a table of every texture seen grew for as long as the app ran, past the assets that bound them. Two textures
+    // taken for one by a 64-bit hash would only be counted once.
+    private static long IdentityOf(object texture)
+    {
+        Span<ulong> fields = stackalloc ulong[4];
+        switch (texture)
+        {
+            case WorldTextureId id:
+                fields[0] = 1;
+                fields[1] = (ulong)id.Dictionary << 32 | id.Name;
+                break;
+            case WorldTextureContent content:
+                fields[0] = 2;
+                fields[1] = content.Pixels;
+                fields[2] = (ulong)(uint)content.Width << 32 | (uint)content.Height;
+                fields[3] = ((ulong)(uint)content.Format << 32 | (uint)content.Mips)
+                    ^ System.IO.Hashing.XxHash3.HashToUInt64(System.Runtime.InteropServices.MemoryMarshal.AsBytes((content.Name ?? "").AsSpan()));
+                break;
+            default:
+                throw new ArgumentException($"Not a texture's identity: {texture.GetType().Name}", nameof(texture));
+        }
+        // Identities are above nought.
+        return (long)(System.IO.Hashing.XxHash3.HashToUInt64(System.Runtime.InteropServices.MemoryMarshal.AsBytes(fields)) >> 1) + 1;
+    }
 
     // What it keeps once it's up, and no more: the vertices and indexes laid out for the GPU, each material's values,
     // and each texture's pixels on the GPU. What reading it took besides (its scene, the pixels read) goes once it's
@@ -165,8 +185,8 @@ internal sealed class WorldAsset
         long owned = (long)layout.Vertices.Length * SurfaceVertex.Size + (long)layout.Indices.Length * sizeof(uint)
             + (long)layout.Kept.Select(kept => kept.Part.Material).Distinct().Count() * Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024;
         // Two of the objects it read can be one texture: the larger says what it takes.
-        var shared = textures.GroupBy(texture => texture.Value)
-            .Select(group => new WorldSharedMemory(IdentityOf(group.Key), group.Max(texture => (long)texture.Key.Data.Length)));
+        var shared = textures.GroupBy(texture => IdentityOf(texture.Value))
+            .Select(group => new WorldSharedMemory(group.Key, group.Max(texture => (long)texture.Key.Data.Length)));
         return new WorldMemoryCost(owned, shared);
     }
 }
