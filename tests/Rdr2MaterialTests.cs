@@ -4,7 +4,7 @@ using HikariHopper.Rendering;
 
 namespace HikariHopper.Tests;
 
-/// <summary>Red Dead Redemption 2's drawables drawn with RedFury's material (rdr2.wgsl), from the installed game.</summary>
+/// <summary>Red Dead Redemption 2's drawables drawn with RedFury's material (Rdr2/surface.wgsl), from the installed game.</summary>
 public sealed class Rdr2MaterialTests
 {
     // A prop carrying every texture it names: a pile of logs, standard shader, with a colour, bump and material A map.

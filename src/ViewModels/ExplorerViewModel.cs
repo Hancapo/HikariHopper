@@ -581,11 +581,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
         // Its world, if it has one, on its way.
         PrepareWorld();
         SetStatus($"Loaded {Provider.Info.Version}");
-        // Opened from the start page's globe: on its World side, once the load has finished.
+        // Opened from the start page's globe: on its World side at once, so its files are never drawn in between, as the
+        // game's loading screen fades out over it. The load is still the tab's operation here, which ShowWorld waits for.
         if (worldAsked)
         {
             worldAsked = false;
-            Avalonia.Threading.Dispatcher.UIThread.Post(ShowWorld, Avalonia.Threading.DispatcherPriority.Background);
+            if (HasWorld)
+                EnterWorld();
         }
     }
 

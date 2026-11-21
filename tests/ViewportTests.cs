@@ -611,7 +611,7 @@ public sealed class ModelViewerTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void Textures_saved_in_the_editor_show_on_the_model_once_it_closes()
+    public void Textures_saved_in_the_editor_show_on_the_model_as_soon_as_it_saves()
     {
         byte[] Triangle(int size)
         {

@@ -39,7 +39,7 @@ public sealed record ModelFile(string Name, byte[] Data)
 
     /// <summary>
     /// Opens the file's embedded textures in the texture viewer, or none for a file that can't; the action given is
-    /// told what was saved, once the editor closes after saving.
+    /// told what each save in the editor wrote, as it is made.
     /// </summary>
     internal Action<Action<SavedDocument>>? OpenTextures { get; init; }
 

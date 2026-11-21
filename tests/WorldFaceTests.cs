@@ -170,7 +170,7 @@ public sealed class WorldFaceTests : ExplorerTestBase
     }
 
     [AvaloniaFact]
-    public void The_time_of_day_is_the_tabs_and_the_world_hides_under_a_menu()
+    public void The_time_of_day_is_the_tabs_and_the_title_bars_menus_open_over_the_world()
     {
         var (window, session) = OpenWindow();
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
@@ -185,16 +185,121 @@ public sealed class WorldFaceTests : ExplorerTestBase
         WorldView world = Find<WorkspaceView>(window).World!;
         Assert.Equal(21, world.Viewport.Hours);
 
-        // A title-bar menu opened over it: the viewport, a native window that would cover it, hides.
+        // A title-bar menu over it opens as a window of its own, drawn over the viewport, which keeps drawing.
         MenuRow menus = Find<MenuRow>(window);
         HikariHopper.Views.Controls.RetroMenu view = menus.MenuFor(menus.ViewButton);
-        view.Open(menus.ViewButton);
+        menus.Toggle(menus.ViewButton);
         TestWait.Pump(50);
-        Assert.True(world.Covered);
-        Assert.False(world.Viewport.IsVisible);
-        view.Close();
-        TestWait.Pump(50);
+        Assert.NotNull(menus.OpenWindow);
+        Assert.True(menus.ViewButton.MenuOpen);
+        Assert.False(view.IsOpen);
         Assert.False(world.Covered);
+        Assert.True(world.Viewport.IsVisible);
+        // Pointing at another title opens its menu in the first's place.
+        HikariHopper.Views.Controls.DropdownWindow first = menus.OpenWindow!;
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        Assert.False(first.IsVisible);
+        Assert.False(menus.ViewButton.MenuOpen);
+        Assert.True(menus.GoButton.MenuOpen);
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(menus.GoButton.MenuOpen);
+
+        // One of its items closes it, after doing what it does: Back, to the files.
+        menus.Toggle(menus.GoButton);
+        TestWait.Pump(50);
+        HikariHopper.Views.Controls.RetroMenuItem back = menus.MenuFor(menus.GoButton).Items
+            .OfType<HikariHopper.Views.Controls.RetroMenuItem>().Single(item => item.Text == "Back");
+        back.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
+        TestWait.Pump(200);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(tab.InWorld);
+
+        // The window's shortcuts still work while one is open, and close it: F6, to the files.
+        tab.ShowWorld();
+        TestWait.Pump(100);
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        HikariHopper.Views.Controls.DropdownWindow open = menus.OpenWindow!;
+        // The press closes it, so its release has nowhere to go.
+        open.KeyPressQwerty(PhysicalKey.F6, RawInputModifiers.None);
+        TestWait.Pump(200);
+        Assert.False(tab.InWorld);
+        Assert.Null(menus.OpenWindow);
+        Assert.False(open.IsVisible);
+
+        // On the files' side, the menu is drawn in the main window, as before.
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        Assert.True(view.IsOpen);
+        Assert.Null(menus.OpenWindow);
+        menus.Toggle(menus.ViewButton);
+        TestWait.Pump(50);
+        Assert.False(view.IsOpen);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Settings_opens_over_the_world_in_a_window_of_its_own_and_the_world_keeps_drawing()
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        tab.ShowWorld();
+        TestWait.Pump(300);
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Viewport.IsVisible);
+        MenuRow menus = Find<MenuRow>(window);
+        Control backdrop = ModalOverlay.BackdropOf(window)!;
+
+        // In a pane of its own over the window's content: the view isn't covered, nothing is blurred, and the window
+        // is blocked as under any dialog.
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        SettingsDialog settings = menus.Settings!;
+        TopLevel pane = TopLevel.GetTopLevel(settings)!;
+        Assert.NotSame(window, pane);
+        Assert.True(ModalOverlay.IsOpen(window));
+        Assert.False(ModalOverlay.IsDrawnIn(window));
+        Assert.False(world.Covered);
+        Assert.True(world.Viewport.IsVisible);
+        Assert.True(backdrop.Effect is null or Avalonia.Media.BlurEffect { Radius: 0 });
+        Assert.Equal(backdrop.Bounds.Size, pane.ClientSize);
+        Assert.Equal(Avalonia.VisualExtensions.PointToScreen(backdrop, default), ((Window)pane).Position);
+
+        // Closed as a window (Alt+F4), it closes Settings, and goes with it.
+        ((Window)pane).Close();
+        TestWait.Pump(50);
+        Assert.False(settings.IsOpen);
+        Assert.False(ModalOverlay.IsOpen(window));
+        TestWait.Pump(400);
+        Assert.False(pane.IsVisible);
+        Assert.True(world.Viewport.IsVisible);
+
+        // Shown again; with the keyboard on the window behind (its title bar clicked), Escape still closes it.
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        Assert.True(settings.IsOpen);
+        TopLevel again = TopLevel.GetTopLevel(settings)!;
+        Assert.NotSame(window, again);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        TestWait.Pump(400);
+        Assert.False(settings.IsOpen);
+        Assert.False(again.IsVisible);
+        Assert.False(ModalOverlay.IsOpen(window));
+
+        // On the files' side it's drawn in the window, over its blurred content, as before.
+        tab.ShowFiles();
+        TestWait.Pump(100);
+        menus.OpenSettings();
+        TestWait.Pump(300);
+        Assert.Same(window, TopLevel.GetTopLevel(settings));
+        Assert.True(ModalOverlay.IsDrawnIn(window));
+        Assert.True(backdrop.Effect is Avalonia.Media.BlurEffect { Radius: > 0 });
+        settings.Close();
+        TestWait.Pump(400);
         window.Close();
     }
 
@@ -220,9 +325,17 @@ public sealed class WorldFaceTests : ExplorerTestBase
         Assert.NotNull(red.WorldButton);
         Assert.NotNull(legacy.WorldButton);
 
-        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        // On its World side as soon as the load is done: its files are never shown in between.
+        bool? inWorldWhenLoaded = null;
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExplorerViewModel.GameLoading) && !tab.GameLoading && tab.HasGame)
+                inWorldWhenLoaded ??= tab.InWorld;
+        };
+        legacy.WorldButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         TestWait.Until(() => tab.HasGame && !tab.GameLoading, "the game to load");
+        Assert.True(inWorldWhenLoaded);
         TestWait.Pump(100);
         Assert.True(tab.InWorld);
         Assert.Equal("World", tab.TabTitle);
@@ -270,6 +383,31 @@ public sealed class WorldFaceTests : ExplorerTestBase
         TestWait.Pump(100);
         Assert.False(world.Cover.IsVisible);
         Assert.Equal("0 maps · 0 placements", tab.WorldStatus);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Until_the_shaders_have_compiled_the_world_shows_its_loading_screen_and_the_window_stays_responsive()
+    {
+        var compiled = new TaskCompletionSource();
+        WorldView.GpuReady = () => compiled.Task;
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady, "the world's index");
+        tab.ShowWorld();
+        TestWait.Pump(300);
+        // The index is ready, but the viewport, which would wait for the shaders on the UI thread, stays hidden.
+        WorldView world = Find<WorkspaceView>(window).World!;
+        Assert.True(world.Cover.IsVisible);
+        Assert.False(world.Viewport.IsVisible);
+        Assert.Equal("COMPILING SHADERS", world.Loading.Title);
+        Assert.Equal("Preparing the world", world.Loading.Detail);
+        Assert.Null(world.Loading.Progress);
+
+        // Compiled, the world opens by itself.
+        compiled.SetResult();
+        TestWait.Until(() => world.Viewport.IsVisible, "the world's view");
+        Assert.False(world.Cover.IsVisible);
         window.Close();
     }
 

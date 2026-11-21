@@ -3,7 +3,7 @@ using HikariHopper.Views;
 
 namespace HikariHopper.Tests;
 
-/// <summary>Show in Explorer and Open in Explorer: Windows Explorer at the item, the folder, or the RPF on disk.</summary>
+/// <summary>Show in Explorer and Open in Explorer: Windows Explorer at the item or the folder, on disk only.</summary>
 [Collection(ExplorerCollection.Name)]
 public sealed class ShowInExplorerTests : ExplorerTestBase, IDisposable
 {
@@ -46,17 +46,28 @@ public sealed class ShowInExplorerTests : ExplorerTestBase, IDisposable
     }
 
     [AvaloniaFact]
-    public void Inside_an_rpf_its_file_on_disk_is_shown_selected()
+    public void Inside_an_rpf_there_is_nowhere_to_go_and_the_menus_say_so()
     {
         ExplorerViewModel bridge = Game(out string archive);
         bridge.OpenArchive(archive);
         bridge.Navigate("data");
         Settle(bridge);
+        var menu = new ExplorerContextMenu { DataContext = bridge };
+
+        // A file in it: Explorer can't show it, so the item can't be used and the shortcut does nothing.
         bridge.SelectEntry(RowFor(bridge, "handling.meta"));
+        Assert.False(bridge.CanShowInExplorer);
+        menu.Refresh();
+        Assert.True(menu.ShowInExplorerItem.IsVisible);
+        Assert.False(menu.ShowInExplorerItem.IsEnabled);
         bridge.ShowInExplorer();
+        // Nor the folder shown inside it.
         bridge.ClearEntrySelection();
+        Assert.False(bridge.CanShowInExplorer);
+        menu.Refresh();
+        Assert.False(menu.OpenInExplorerItem.IsEnabled);
         bridge.ShowInExplorer();
-        Assert.Equal([(archive, true), (archive, true)], revealed);
+        Assert.Empty(revealed);
     }
 
     [AvaloniaFact]

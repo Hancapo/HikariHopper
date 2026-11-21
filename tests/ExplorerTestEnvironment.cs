@@ -34,6 +34,7 @@ public abstract class ExplorerTestBase : IDisposable
     private readonly TimeSpan previousFade;
     private readonly Func<string, string, long, long, GameTarget, GameCrypto?, GameTextureDirectory.Part> previousScanner;
     private readonly Func<string, ArchiveKeys, Action<WorldProgress>, CancellationToken, WorldIndex> previousWorldBuilder;
+    private readonly Func<Task> previousGpuReady;
     private readonly int previousSearchDelay = ExplorerViewModel.SearchDelay;
     private readonly IClipboardService previousClipboard;
     private readonly IFileDialogs previousDialogs;
@@ -73,6 +74,9 @@ public abstract class ExplorerTestBase : IDisposable
         // Nor RDR2's world, whose index would be made from a whole game: an empty world, at once, unless a test says.
         previousWorldBuilder = GameWorld.Builder;
         GameWorld.Builder = (root, _, _, _) => EmptyWorld(root);
+        // The GPU's pipelines are ready: a GPU test's warm-up may still be compiling the worlds' in the background.
+        previousGpuReady = HikariHopper.Views.WorldView.GpuReady;
+        HikariHopper.Views.WorldView.GpuReady = () => Task.CompletedTask;
         GameWorld.ForgetAll();
         // The changelog is never fetched from GitHub in a test, and its copy is kept in the scratch folder.
         Infrastructure.ChangelogSource.CachePath = Path.Combine(scratch, "CHANGELOG.md");
@@ -120,6 +124,7 @@ public abstract class ExplorerTestBase : IDisposable
         GameTextureDirectory.Scanner = previousScanner;
         GameTextureDirectory.ForgetAll();
         GameWorld.Builder = previousWorldBuilder;
+        HikariHopper.Views.WorldView.GpuReady = previousGpuReady;
         GameWorld.ForgetAll();
         ExplorerViewModel.SearchDelay = previousSearchDelay;
         GameKeys.CachePath = previousKeyCache;

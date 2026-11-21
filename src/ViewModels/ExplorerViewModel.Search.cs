@@ -587,13 +587,13 @@ public sealed partial class ExplorerViewModel
 
     /// <summary>A texture dictionary, or a drawable's own, in the texture editor, saving back into its RPF.</summary>
     private void OpenHitDictionary(string name, (byte[] Data, string Source, ArchiveEntryTarget? Target) file,
-        Action<SavedDocument>? closedAfterSave = null)
+        Action<SavedDocument>? afterSave = null)
     {
         ArchiveEntryTarget? target = file.Target;
         TextureViewer.OpenDictionary(name, file.Source, file.Data,
             sourceSaver: target is not null ? target.Save : null,
             sourcePrepare: target is not null ? () => PrepareTextureWrite(target) : null,
-            sourceRootPath: target?.RootPath ?? "", closedAfterSave: closedAfterSave);
+            sourceRootPath: target?.RootPath ?? "", afterSave: afterSave);
         SetStatus($"Opening {name}");
     }
 
@@ -653,15 +653,15 @@ public sealed partial class ExplorerViewModel
     /// A drawable result's embedded textures: a .ydr's in the texture editor, saving back into it; a .yft's or .ydd's as
     /// a dictionary of their own.
     /// </summary>
-    private void OpenHitTextures(SearchHit hit, Action<SavedDocument>? closedAfterSave = null)
+    private void OpenHitTextures(SearchHit hit, Action<SavedDocument>? afterSave = null)
     {
         try
         {
             var file = ReadHit(hit);
             if (hit.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
-                OpenHitDictionary(hit.Name, file, closedAfterSave);
+                OpenHitDictionary(hit.Name, file, afterSave);
             else
-                OpenEmbeddedDictionary(hit.Name, file.Data, closedAfterSave);
+                OpenEmbeddedDictionary(hit.Name, file.Data, afterSave);
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
         {
