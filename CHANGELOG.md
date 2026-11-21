@@ -58,6 +58,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- Extract all textures from the 3D viewer: every texture a model is drawn with, its own and the game's, rather than only those stored in it. ([#333](https://github.com/Hancapo/HikariHopper/pull/333))
 - Show in Explorer works only for files and folders on disk, and is greyed out inside an RPF instead of showing the RPF. ([#332](https://github.com/Hancapo/HikariHopper/pull/332))
 - The parts panel's geometry badge is named just Geometry. ([#331](https://github.com/Hancapo/HikariHopper/pull/331))
 - Draw up to 512 local lights a frame in a world, up from 128. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
