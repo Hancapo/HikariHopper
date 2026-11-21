@@ -392,5 +392,61 @@ public sealed class WorldRenderingTests
         }
     }
 
+    [Fact]
+    public void An_asset_s_bundles_are_freed_as_it_goes_and_none_is_recorded_for_a_pass_it_draws_nothing_in()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        if (!gpu.IndirectFirstInstance)
+            Assert.Skip("This GPU draws the world without bundles.");
+        lock (gpu.Gate)
+        {
+            ViewportRenderer.DirectWorldDraws = false;
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(64, 32);
+            renderer.WorldShown = true;
+            renderer.Shadows = true;
+            renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            // Whatever other renderers left to the collector is gone before counting.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            static long Bundles() => (long)WebGpuSharp.WebGpuSafeHandle.GetActiveHandles<WebGpuSharp.FFI.RenderBundleHandle>();
+            long before = Bundles();
+            FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
+            var key = new RedFury.World.WorldAssetKey(1, 2);
+            Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
+                new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, Matrix4x4.Identity, new Vector3(.5f, .5f, 0), 1, 100, 0, 0);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
+            renderer.RenderTo(view);
+            renderer.RenderTo(view);
+            // Its solid surface's, and one for each cascade it casts into; none for its decals, as it has none.
+            long recorded = Bundles() - before;
+            Assert.InRange(recorded, 1, 1 + WorldShadowCount);
+            // Gone with it, there and then: left to the collector they'd each keep their commands until it ran.
+            renderer.ClearWorld();
+            Assert.True(Bundles() <= before, $"{Bundles() - before} of {recorded} bundles left");
+            renderer.RenderTo(view);
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+
     private const long WorldShadowCount = Rendering.World.WorldShadowCascades.Count;
 }

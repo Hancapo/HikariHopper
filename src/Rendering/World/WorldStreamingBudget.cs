@@ -14,7 +14,7 @@ internal sealed class WorldStreamingBudget(long limit)
     internal long Target => Math.Max(0, Limit - 256L * 1024 * 1024);
 
     private readonly Dictionary<WorldAssetKey, long> costs = [];
-    private HashSet<WorldAssetKey> pinned = [];
+    private readonly HashSet<WorldAssetKey> pinned = [];
     private long pinnedBytes, replacementBytes;
     private readonly Dictionary<WorldAssetKey, WorldMemoryCost> footprints = [];
     private static readonly WorldMemoryCost UnknownCost = new(1024 * 1024);
@@ -38,10 +38,16 @@ internal sealed class WorldStreamingBudget(long limit)
         return (plan.Refinements, plan.Pressure);
     }
 
-    /// <summary>The costs alone, for planning in the background: it never reads the live loader's.</summary>
-    internal WorldStreamingBudget Snapshot()
+    /// <summary>
+    /// The costs alone, for planning in the background: it never reads the live loader's. Into <paramref name="reuse"/>
+    /// when there's one no plan reads any more: a copy made for each plan, ten a second while the camera moves, was a
+    /// fifth of what the world allocated then.
+    /// </summary>
+    internal WorldStreamingBudget Snapshot(WorldStreamingBudget? reuse = null)
     {
-        var snapshot = new WorldStreamingBudget(Limit);
+        WorldStreamingBudget snapshot = reuse ?? new WorldStreamingBudget(Limit);
+        snapshot.costs.Clear();
+        snapshot.footprints.Clear();
         foreach (var pair in costs)
             snapshot.costs.Add(pair.Key, pair.Value);
         foreach (var pair in footprints)
@@ -74,7 +80,15 @@ internal sealed class WorldStreamingBudget(long limit)
     /// <summary>Holds these assets' cost as taken: what's shown stays while more is admitted.</summary>
     internal void Pin(IEnumerable<WorldAssetKey> visible)
     {
-        pinned = visible.ToHashSet();
+        // Into the set there is, at each selection.
+        pinned.Clear();
+        pinned.UnionWith(visible);
+        Repin();
+    }
+
+    // The pinned assets' cost, added up again.
+    private void Repin()
+    {
         pinnedBytes = pinned.Sum(k => costs.GetValueOrDefault(k));
         pinnedShared.Clear();
         pinnedFootprintBytes = 0;
@@ -103,14 +117,14 @@ internal sealed class WorldStreamingBudget(long limit)
         pinned.Remove(key);
         pinnedBytes = pinned.Sum(k => costs.GetValueOrDefault(k));
         replacementBytes = costs.Values.DefaultIfEmpty().Max();
-        Pin(pinned);
+        Repin();
     }
 
     /// <summary>Whether the assets a refinement needs fit beside the pinned ones.</summary>
     internal bool Allows(WorldRefinement group)
     {
         if (pinnedRevision != Revision)
-            Pin(pinned);
+            Repin();
         if (footprints.Count == 0)
             return pinnedBytes + group.Required.Where(k => !pinned.Contains(k)).Distinct().Sum(k => costs.GetValueOrDefault(k)) + replacementBytes <= Limit;
         long bytes = pinnedFootprintBytes;
@@ -142,7 +156,7 @@ internal sealed class WorldStreamingBudget(long limit)
 /// </summary>
 internal sealed class WorldDeferredRequests
 {
-    private HashSet<WorldAssetKey> previousWanted = [], previousProtected = [];
+    private readonly HashSet<WorldAssetKey> previousWanted = [], previousProtected = [];
     private readonly HashSet<WorldAssetKey> deferred = [];
     private long previousBudget;
 
@@ -154,11 +168,20 @@ internal sealed class WorldDeferredRequests
 
     internal void Update(IEnumerable<WorldAssetKey> wanted, IEnumerable<WorldAssetKey> protectedAssets, long budget = 0)
     {
-        HashSet<WorldAssetKey> next = wanted.ToHashSet(), protectedSet = protectedAssets.ToHashSet();
-        if (previousBudget != budget || !previousWanted.SetEquals(next) || !previousProtected.SetEquals(protectedSet))
+        // The sets before are kept, and filled again only when they differ: this runs ten times a second.
+        bool wantedChanged = !previousWanted.SetEquals(wanted), protectedChanged = !previousProtected.SetEquals(protectedAssets);
+        if (previousBudget != budget || wantedChanged || protectedChanged)
             deferred.Clear();
         previousBudget = budget;
-        previousWanted = next;
-        previousProtected = protectedSet;
+        if (wantedChanged)
+        {
+            previousWanted.Clear();
+            previousWanted.UnionWith(wanted);
+        }
+        if (protectedChanged)
+        {
+            previousProtected.Clear();
+            previousProtected.UnionWith(protectedAssets);
+        }
     }
 }
