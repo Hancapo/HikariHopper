@@ -10,6 +10,10 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 
 ## [Unreleased]
 
+### Fixed
+
+- Title-bar menus opened over a world run their items when clicked, including menus already used on the Files side. ([#338](https://github.com/Hancapo/HikariHopper/pull/338))
+
 ## [0.3.0] - 2026-11-20
 
 ### Added

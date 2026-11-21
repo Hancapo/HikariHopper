@@ -51,6 +51,10 @@ internal sealed class DropdownWindow : Window
     {
         if (TopLevel.GetTopLevel(title) is not Window owner)
             return null;
+        // A menu last opened in its window, as a popup there, is still that popup's child once closed, which would leave
+        // it empty here: it's let go first, and its popup takes it back when it opens there again.
+        if (menu.Parent is Avalonia.Controls.Primitives.Popup { IsOpen: false } popup)
+            popup.Child = null;
         menu.ConnectionWidth = title.Bounds.Width;
         var dropdown = new DropdownWindow(menu, frame: false);
         Thickness margin = menu.Margin;
