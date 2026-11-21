@@ -878,6 +878,7 @@ internal sealed unsafe partial class ViewportRenderer
                     ],
                 });
                 asset.Instances = VertexPages.Allocate((ulong)capacity * 4);
+                asset.Data.Unwritten();
                 asset.Rewrite = true;
                 worldVisibilityDirty = true;
                 // New storage holds nothing yet: all of it goes up.
@@ -1106,6 +1107,7 @@ internal sealed unsafe partial class ViewportRenderer
             if ((asset.Data.Changed || asset.Rewrite) && asset.Data.Count > 0)
             {
                 queue.WriteBuffer(asset.Instances!.Value.Buffer, asset.Instances.Value.Offset, (ReadOnlySpan<uint>)asset.Data.Values.AsSpan(0, asset.Data.Count));
+                asset.Data.Written();
                 asset.Rewrite = false;
             }
             if (asset.ShadowData.Count > asset.ShadowCapacity)
@@ -1116,11 +1118,13 @@ internal sealed unsafe partial class ViewportRenderer
                 SetInstanceCharge(asset, asset.Capacity, Math.Max(16, Math.Max(asset.ShadowData.Count, asset.Capacity * WorldShadowCascades.Count)));
                 asset.ShadowInstances = VertexPages.Allocate((ulong)asset.ShadowCapacity * 4);
                 ReleaseAssetBundles(asset);
+                asset.ShadowData.Unwritten();
                 asset.RewriteShadow = true;
             }
             if ((asset.ShadowData.Changed || asset.RewriteShadow) && asset.ShadowData.Count > 0)
             {
                 queue.WriteBuffer(asset.ShadowInstances!.Value.Buffer, asset.ShadowInstances.Value.Offset, (ReadOnlySpan<uint>)asset.ShadowData.Values.AsSpan(0, asset.ShadowData.Count));
+                asset.ShadowData.Written();
                 asset.RewriteShadow = false;
             }
             drawn += asset.Data.Count;

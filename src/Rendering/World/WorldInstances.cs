@@ -43,6 +43,11 @@ internal sealed class WorldInstanceIndices
     internal int Count { get; private set; }
     internal bool Changed { get; private set; }
 
+    // How many of the values the GPU's range holds as they are here. Past them it holds what the range held before it
+    // was this list's, another asset's indexes once that one was let go, so a value there is written even when the
+    // same as here.
+    private int written;
+
     internal void Reserve(int count)
     {
         if (count <= Values.Length)
@@ -62,11 +67,17 @@ internal sealed class WorldInstanceIndices
     {
         if (Count == Values.Length)
             Reserve(Math.Max(16, checked(Count * 2)));
-        if (Values[Count] != source)
+        if (Count >= written || Values[Count] != source)
         {
             Values[Count] = source;
             Changed = true;
         }
         Count++;
     }
+
+    /// <summary>The values up to the count are on the GPU now.</summary>
+    internal void Written() => written = Math.Max(written, Count);
+
+    /// <summary>The GPU's range is a new one: none of the values are on it.</summary>
+    internal void Unwritten() => written = 0;
 }

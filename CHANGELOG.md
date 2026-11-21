@@ -15,6 +15,7 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 - GTA V trees and props cast their shadows in its world at every distance, instead of losing them between their most detailed model's reach and their low-detail stand-in's. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
 - Both worlds count each model's memory once, so they no longer reach their 4 GB limit and drop models, and the shadows they cast, while the camera moves. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
 - Both worlds free the draw lists they record again as models change detail, which they kept for good: 1.1 GB after two minutes of flying over GTA V's city. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
+- Shadows in both worlds hold steady after models are let go, instead of buildings' shadows flickering on and off with the camera still. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
 
 ### Performance
 
