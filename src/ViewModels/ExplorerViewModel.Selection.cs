@@ -627,15 +627,15 @@ public sealed partial class ExplorerViewModel
     /// into it; a .yft's or .ydd's, and any of Red Dead Redemption 2's, as a dictionary of their own, to look at and save
     /// elsewhere, as their textures can't be written back yet.
     /// </summary>
-    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? closedAfterSave = null)
+    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? afterSave = null)
     {
         // An RDR2 drawable's, as a dictionary of their own: they can't be written back into it yet.
         if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
         {
-            OpenTextureDictionary(entry, closedAfterSave);
+            OpenTextureDictionary(entry, afterSave);
             return;
         }
-        OpenEmbeddedDictionary(entry.Name, data, closedAfterSave);
+        OpenEmbeddedDictionary(entry.Name, data, afterSave);
     }
 
     /// <summary>
@@ -704,7 +704,7 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>
-    private void OpenEmbeddedDictionary(string name, byte[] data, Action<SavedDocument>? closedAfterSave = null)
+    private void OpenEmbeddedDictionary(string name, byte[] data, Action<SavedDocument>? afterSave = null)
     {
         byte[] dictionary;
         try
@@ -725,7 +725,7 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open the textures of {name}: {error.Message}");
             return;
         }
-        TextureViewer.OpenDictionary($"{name} textures", "", dictionary, closedAfterSave: closedAfterSave);
+        TextureViewer.OpenDictionary($"{name} textures", "", dictionary, afterSave: afterSave);
         SetStatus($"Opening the textures of {name}");
     }
 

@@ -59,9 +59,8 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
     private HashSet<string> deletedTextureOrigins = new(StringComparer.Ordinal);
     private string sourceName = "", sourcePath = "", sourceRootPath = "";
     private Action<byte[]>? sourceSaver;
-    // Told what the document last saved when it closes (or another replaces it), if it saved anything.
-    private Action<SavedDocument>? closedAfterSave;
-    private SavedDocument? lastSave;
+    // Told what the document wrote, each time it saves.
+    private Action<SavedDocument>? afterSave;
     // What the save running now wrote, set on the work thread before it reports back.
     private volatile SavedDocument? savedNow;
     private Action? sourcePrepare;
@@ -306,19 +305,18 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
     }
 
     /// <summary>
-    /// Opens a YTD/YDR after resolving unsaved changes (Python <c>open_dictionary</c>). <paramref name="closedAfterSave"/>
-    /// is told what it last saved when it closes, or another document replaces it, if it saved anything: a model
-    /// showing its textures shows them as saved.
+    /// Opens a YTD/YDR after resolving unsaved changes (Python <c>open_dictionary</c>). <paramref name="afterSave"/>
+    /// is told what it wrote each time it saves: a model showing its textures shows them as saved, at once.
     /// </summary>
     public void OpenDictionary(string name, string sourcePath, byte[] data,
         Action<byte[]>? sourceSaver = null, Action? sourcePrepare = null, string sourceRootPath = "",
-        Action<SavedDocument>? closedAfterSave = null)
+        Action<SavedDocument>? afterSave = null)
     {
         byte[] copy = data.ToArray();
         RequestDocumentChange(() =>
         {
             OpenDictionaryNow(name, sourcePath, copy, sourceSaver, sourcePrepare, sourceRootPath);
-            this.closedAfterSave = closedAfterSave;
+            this.afterSave = afterSave;
         });
     }
 
@@ -495,11 +493,8 @@ public sealed partial class TextureViewerViewModel : ObservableObject, ITextureP
 
     private void ResetDocument()
     {
-        // The document ends: whoever asked is told what it saved, once.
-        (Action<SavedDocument>? told, SavedDocument? saved) = (closedAfterSave, lastSave);
-        (closedAfterSave, lastSave) = (null, null);
-        if (told is not null && saved is not null)
-            told(saved);
+        // The document ends: whoever asked was told of each save as it was made.
+        afterSave = null;
         pendingImageImport = null;
         pendingPaste = null;
         // A task still running stops at its next look, so an extract writes nothing more once the document is gone.

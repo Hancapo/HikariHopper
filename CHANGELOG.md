@@ -58,6 +58,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Changed
 
+- A model in the 3D viewer shows its edited textures as soon as the texture editor saves them, not once it closes. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
 - Extract all textures from the 3D viewer: every texture a model is drawn with, its own and the game's, rather than only those stored in it. ([#333](https://github.com/Hancapo/HikariHopper/pull/333))
 - Show in Explorer works only for files and folders on disk, and is greyed out inside an RPF instead of showing the RPF. ([#332](https://github.com/Hancapo/HikariHopper/pull/332))
 - The parts panel's geometry badge is named just Geometry. ([#331](https://github.com/Hancapo/HikariHopper/pull/331))
@@ -82,6 +83,7 @@ All notable changes to HikariHopper are documented here. The format follows
 
 ### Fixed
 
+- A Red Dead Redemption 2 model shows its textures as saved from the texture editor, instead of failing to be read again. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
 - The start page's globe opens a game straight on its world, without its files showing for a moment first. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
 - Opening a world in the first seconds after the app starts no longer freezes the window for up to 15 seconds: the world shows its loading screen while its shaders compile. ([#329](https://github.com/Hancapo/HikariHopper/pull/329))
 - Keep the world drawing while the title bar's menus are open over it, instead of hiding it until they close. ([#327](https://github.com/Hancapo/HikariHopper/pull/327))

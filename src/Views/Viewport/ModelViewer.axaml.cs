@@ -344,8 +344,8 @@ public partial class ModelViewer : UserControl, IModalContent
     private IReadOnlyList<NearbyDictionary> gameDictionaries = [];
 
     /// <summary>
-    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; once it closes after saving,
-    /// the drawable is shown with them as saved.
+    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; each time it saves, the drawable is
+    /// shown with them as saved.
     /// </summary>
     internal bool OpenTextures()
     {
@@ -369,14 +369,15 @@ public partial class ModelViewer : UserControl, IModalContent
     private int generation, shownGeneration;
 
     /// <summary>
-    /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
-    /// the file it was saved as; a fragment's or dictionary's textures over its own.
+    /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a GTA V .ydr from
+    /// the file it was saved as; a fragment's, a dictionary's or an RDR2 drawable's textures over its own.
     /// </summary>
     private async Task ShowSaved(SavedDocument saved)
     {
         if (closed || surfaces is null)
             return;
-        if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // A GTA V .ydr takes them back into itself; RDR2's are a dictionary of their own, saved elsewhere, laid over it.
+        if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
             data = saved.Data;
         else
             savedTextures = saved.Textures;

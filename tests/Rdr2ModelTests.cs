@@ -134,6 +134,30 @@ public sealed class Rdr2ModelTests
         Assert.Equal(set.Names.Order(), ModelContent.EmbeddedTextures(name, data).Textures.Select(texture => texture.Name!).Order());
     }
 
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void Its_textures_saved_as_a_dictionary_of_their_own_show_on_it_over_its_own()
+    {
+        (string name, byte[] data) = Find(".ydr", (_, data) => RedFury.Ydr.Ydr.Read(data).Drawable.EmbeddedTextures is { Textures.Count: > 0 })
+            ?? throw new InvalidOperationException("None of the archives searched holds a drawable with textures of its own");
+        Action<ViewModels.SavedDocument>? tell = null;
+        var viewer = new Views.ModelViewer(new ViewModels.ModelFile(name, data) { OpenTextures = saved => tell = saved });
+        void Wait(Task task)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (!task.IsCompleted && clock.ElapsedMilliseconds < 20_000)
+                TestWait.Pump(10);
+            Assert.True(task.IsCompletedSuccessfully);
+        }
+        Wait(viewer.Reading);
+        string diffuse = viewer.Surfaces!.Materials.First(material => material.Diffuse is not null).Diffuse!.Name;
+        Assert.True(viewer.OpenTextures());
+        // Saved elsewhere, as an RDR2 drawable's are: the dictionary's bytes aren't the drawable's.
+        var edited = new FiveFury.Textures.Texture(diffuse, 8, 8, CommonFury.Textures.TextureFormat.BC1Unorm, 1, new byte[32]);
+        tell!(new ViewModels.SavedDocument([edited], [1, 2, 3]));
+        Wait(viewer.TexturesSaved);
+        Assert.Contains(viewer.Surfaces!.Materials, material => material.Diffuse?.Name == diffuse && material.Diffuse.Width == 8);
+    }
+
     [Fact]
     public void Its_textures_are_found_in_the_dictionary_named_for_it()
     {

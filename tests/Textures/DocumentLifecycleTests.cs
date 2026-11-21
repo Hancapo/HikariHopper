@@ -49,47 +49,54 @@ public sealed class DocumentLifecycleTests
     }
 
     [AvaloniaFact]
-    public void ClosingADocumentThatWasSavedTellsWhoOpenedItWhatItSaved()
+    public void EachSaveTellsWhoOpenedTheDocumentWhatItWrote()
     {
         using var folder = new TempFolder();
         string path = folder.File("first.ytd");
         File.WriteAllBytes(path, Bytes(Dictionary("paint")));
         TextureViewerViewModel viewer = Viewer();
         var told = new List<SavedDocument>();
-        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), closedAfterSave: told.Add);
+        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), afterSave: told.Add);
         Settle(viewer);
 
-        // Saved twice: the last save is what it's told, once, when the document closes.
+        // Saved twice, still open: told each time, what it wrote then.
         Assert.True(viewer.RenameSelected("edited"));
         Assert.True(viewer.SaveYtd());
         Settle(viewer);
+        SavedDocument first = Assert.Single(told);
+        Assert.Equal(["edited"], first.Textures.Select(texture => texture.Name));
         Assert.True(viewer.RenameSelected("again"));
         Assert.True(viewer.SaveYtd());
         Settle(viewer);
-        Assert.Empty(told);
+        Assert.Equal(2, told.Count);
+        Assert.Equal(["again"], told[1].Textures.Select(texture => texture.Name));
+        Assert.Equal(File.ReadAllBytes(path), told[1].Data);
+        // Closing tells nothing more.
         viewer.CloseDocument();
-        SavedDocument saved = Assert.Single(told);
-        Assert.Equal(["again"], saved.Textures.Select(texture => texture.Name));
-        Assert.Equal(File.ReadAllBytes(path), saved.Data);
+        Assert.Equal(2, told.Count);
 
         // Closed without saving: nothing to tell.
-        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), closedAfterSave: told.Add);
+        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), afterSave: told.Add);
         Settle(viewer);
         viewer.CloseDocument();
-        Assert.Single(told);
+        Assert.Equal(2, told.Count);
 
-        // Replaced by another after a save: it's told too, and the next document's own isn't.
-        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), closedAfterSave: told.Add);
+        // Replaced by another: the next document's saves aren't told to whoever opened the first.
+        viewer.OpenDictionary("first.ytd", path, File.ReadAllBytes(path), afterSave: told.Add);
         Settle(viewer);
         Assert.True(viewer.RenameSelected("third"));
         Assert.True(viewer.SaveYtd());
         Settle(viewer);
-        viewer.OpenDictionary("second.ytd", "", Bytes(Dictionary("other")));
+        Assert.Equal(3, told.Count);
+        Assert.Equal(["third"], told[2].Textures.Select(texture => texture.Name));
+        string second = folder.File("second.ytd");
+        File.WriteAllBytes(second, Bytes(Dictionary("other")));
+        viewer.OpenDictionary("second.ytd", second, File.ReadAllBytes(second));
         Settle(viewer);
-        Assert.Equal(2, told.Count);
-        Assert.Equal(["third"], told[1].Textures.Select(texture => texture.Name));
-        viewer.CloseDocument();
-        Assert.Equal(2, told.Count);
+        Assert.True(viewer.RenameSelected("fourth"));
+        Assert.True(viewer.SaveYtd());
+        Settle(viewer);
+        Assert.Equal(3, told.Count);
     }
 
     [AvaloniaFact]
