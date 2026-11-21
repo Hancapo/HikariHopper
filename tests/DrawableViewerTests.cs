@@ -90,7 +90,7 @@ public sealed class DrawableViewerTests
         foreach (SurfaceMaterial material in new[] { legacy, enhanced })
         {
             Assert.Equal("env_noise_05", material.Detail?.Name);
-            // surface.wgsl's detail and detail_options: detailSettings, then has a detail map and what masks it (the
+            // Gta5/surface.wgsl's detail and detail_options: detailSettings, then has a detail map and what masks it (the
             // specular map's alpha, the diffuse map's for diffspec, or nothing).
             Assert.Equal([1.2f, .3f, 11.6f, 10.4f, 1, mask], material.Uniforms[48..54]);
         }
@@ -143,7 +143,7 @@ public sealed class DrawableViewerTests
     {
         SurfaceMaterial Read(string shader, byte? bucket = null) =>
             ModelContent.Read("roof.ydr", Quad(GameTarget.Legacy, shader, material => material.RenderBucket = bucket)).Surfaces!.Materials.Single();
-        // surface.wgsl's alpha mode (blend), and whether the vertex alpha weighs the diffuse map's.
+        // Gta5/surface.wgsl's alpha mode (blend), and whether the vertex alpha weighs the diffuse map's.
         SurfaceMaterial decal = Read("normal_spec_decal");
         Assert.True(decal.Decal);
         Assert.Equal((2f, 1f), (decal.Uniforms[10], decal.Uniforms[73]));
@@ -181,7 +181,7 @@ public sealed class DrawableViewerTests
         SurfaceMaterial legacy = Read(GameTarget.Legacy), enhanced = Read(GameTarget.Enhanced);
         foreach (SurfaceMaterial material in new[] { legacy, enhanced })
         {
-            // surface.wgsl's spec_source (the diffuse colour), then SpecDesaturateIntensity and SpecDesaturateExponent.
+            // Gta5/surface.wgsl's spec_source (the diffuse colour), then SpecDesaturateIntensity and SpecDesaturateExponent.
             Assert.Equal(2, material.Uniforms[56]);
             Assert.Equal([.2f, .7f, .1f, .5f, .3f, .3f, .4f, .8f], material.Uniforms[60..68]);
         }
@@ -220,7 +220,7 @@ public sealed class DrawableViewerTests
         foreach (SurfaceMaterial material in new[] { legacy, enhanced })
         {
             Assert.Equal("wall_h", material.Height?.Name);
-            // surface.wgsl's parallax: has it, heightScale, heightBias, the self-shadow (none from the decals'
+            // Gta5/surface.wgsl's parallax: has it, heightScale, heightBias, the self-shadow (none from the decals'
             // programs); globalHeightScale.
             Assert.Equal([1, .04f, .02f, selfShadow, 1], material.Uniforms[68..73]);
         }
@@ -334,7 +334,7 @@ public sealed class DrawableViewerTests
             Assert.Equal(["ground_0", "ground_1", "ground_2", "ground_3"], material.Layers[..4].Select(t => t?.Name));
             Assert.Equal(lod ? [null, null, null, null] : ["ground_0_n", "ground_1_n", "ground_2_n", "ground_3_n"], material.Layers[4..8].Select(t => t?.Name));
             Assert.Equal(weights > 0 ? "ground_lookup" : null, material.Lookup?.Name);
-            // terrain.wgsl's Terrain uniform: specularIntensityMult (squared there), the falloff, bumpiness, the program's
+            // Gta5/terrain.wgsl's Terrain uniform: specularIntensityMult (squared there), the falloff, bumpiness, the program's
             // fixed fresnel; where the weights come from and whether there are bump maps.
             Assert.Equal([.3f, 20, lod ? 1 : .7f, .98f, weights, bumps], material.Uniforms[..6]);
         }
@@ -377,7 +377,7 @@ public sealed class DrawableViewerTests
             Assert.True(material.Rebuilt);
             Assert.Equal(["ground_0_h", "ground_1_h", "ground_2_h", "ground_3_h"], material.Layers[8..].Select(t => t?.Name));
             Assert.Equal(weights, material.Uniforms[4]);
-            // terrain.wgsl's layout: layers 1 to 3 on the second UV set (_2tex, not _2tex_blend), bumpSelfShadowAmount,
+            // Gta5/terrain.wgsl's layout: layers 1 to 3 on the second UV set (_2tex, not _2tex_blend), bumpSelfShadowAmount,
             // has parallax, parallaxSelfShadowAmount; then each layer's height scale and bias.
             Assert.Equal([second, .25f, 1, .8f], material.Uniforms[8..12]);
             Assert.Equal([.01f, .02f, .03f, .04f, .005f, .01f, .015f, .02f], material.Uniforms[12..20]);

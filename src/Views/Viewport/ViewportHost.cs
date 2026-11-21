@@ -385,6 +385,13 @@ internal sealed partial class ViewportHost : NativeControlHost
     {
         if (stopped || hwnd == 0)
             return;
+        // Not while the GPU's warm-up has the device: the renderer would wait for it here, on the UI thread, and stop the
+        // whole window for as long as the warm-up takes, seconds after the app starts. Started once it's done.
+        if (Rendering.GpuDevice.WarmingUp is { IsCompleted: false } warming)
+        {
+            warming.ContinueWith(_ => Dispatcher.UIThread.Post(Start, DispatcherPriority.Loaded), TaskScheduler.Default);
+            return;
+        }
         try
         {
             (surfaceWidth, surfaceHeight) = ClientSize();

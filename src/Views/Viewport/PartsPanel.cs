@@ -839,7 +839,7 @@ internal sealed class PartsPanel : UserControl
     {
         PartKind.Group => ("S", Ui.Theme.InkAsset, "Set of drawables"),
         PartKind.Child => ("C", Ui.Theme.Brass, "Child model, bound to a bone"),
-        PartKind.Geometry => ("G", Ui.Theme.InkData, "Geometry, named by its shader"),
+        PartKind.Geometry => ("G", Ui.Theme.InkData, "Geometry"),
         PartKind.State => ("F", Ui.Theme.Brass, "Fragment state, with what is drawn only in it"),
         _ => ("D", Ui.Theme.Accent, "Drawable"),
     };
