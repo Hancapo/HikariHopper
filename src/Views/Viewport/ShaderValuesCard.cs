@@ -761,7 +761,7 @@ internal sealed class ShaderValuesCard : Border
     }
 
     /// <summary>
-    /// What a slider's fill spans when values.json doesn't say: 0 to 1, or for a number past that, 0 to twice it, so the
+    /// What a slider's fill spans when Gta5/values.json doesn't say: 0 to 1, or for a number past that, 0 to twice it, so the
     /// file's value sits halfway; the same below zero.
     /// </summary>
     internal static (float Min, float Max) RangeOf(float value)

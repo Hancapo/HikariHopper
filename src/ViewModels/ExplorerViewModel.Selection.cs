@@ -210,8 +210,8 @@ public sealed partial class ExplorerViewModel
     /// <summary>Copies full paths: <c>C:\…\file</c> for loose items, <c>archive.rpf::inner/path</c> inside RPFs.</summary>
     /// <summary>
     /// Where Windows Explorer goes for <see cref="ShowInExplorer"/>: the one item selected, shown selected in its folder;
-    /// with nothing selected, the folder shown, opened. Explorer can't look inside an RPF, so for anything in one it is
-    /// the RPF on disk, shown selected. None for several items, or with nothing on disk to go to.
+    /// with nothing selected, the folder shown, opened. Only what is on disk itself: Explorer can't look inside an RPF,
+    /// so there is nowhere to go for anything in one, nor for the folders shown inside it. None for several items either.
     /// </summary>
     internal (string Path, bool Select)? ExplorerTarget()
     {
@@ -225,10 +225,10 @@ public sealed partial class ExplorerViewModel
             if (SelectedHits() is not [SearchHit hit])
                 return null;
             HitPlace place = PlaceOf(hit);
-            return (place.InArchive ? place.RootFull : place.LooseFull, true);
+            return place.InArchive ? null : (place.LooseFull, true);
         }
         if (Provider.InArchive)
-            return Provider.ArchivePath.Length > 0 ? (Provider.ArchivePath, true) : null;
+            return null;
         if (Provider.GamePath.Length == 0)
             return null;
         return selection.Count == 1
@@ -627,15 +627,15 @@ public sealed partial class ExplorerViewModel
     /// into it; a .yft's or .ydd's, and any of Red Dead Redemption 2's, as a dictionary of their own, to look at and save
     /// elsewhere, as their textures can't be written back yet.
     /// </summary>
-    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? closedAfterSave = null)
+    internal void OpenEmbeddedTextures(EntryRecord entry, byte[] data, Action<SavedDocument>? afterSave = null)
     {
         // An RDR2 drawable's, as a dictionary of their own: they can't be written back into it yet.
         if (entry.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
         {
-            OpenTextureDictionary(entry, closedAfterSave);
+            OpenTextureDictionary(entry, afterSave);
             return;
         }
-        OpenEmbeddedDictionary(entry.Name, data, closedAfterSave);
+        OpenEmbeddedDictionary(entry.Name, data, afterSave);
     }
 
     /// <summary>
@@ -704,7 +704,7 @@ public sealed partial class ExplorerViewModel
     }
 
     /// <summary>A .yft's or .ydd's embedded textures as a dictionary of their own, in the texture viewer.</summary>
-    private void OpenEmbeddedDictionary(string name, byte[] data, Action<SavedDocument>? closedAfterSave = null)
+    private void OpenEmbeddedDictionary(string name, byte[] data, Action<SavedDocument>? afterSave = null)
     {
         byte[] dictionary;
         try
@@ -725,7 +725,7 @@ public sealed partial class ExplorerViewModel
             SetStatus($"Could not open the textures of {name}: {error.Message}");
             return;
         }
-        TextureViewer.OpenDictionary($"{name} textures", "", dictionary, closedAfterSave: closedAfterSave);
+        TextureViewer.OpenDictionary($"{name} textures", "", dictionary, afterSave: afterSave);
         SetStatus($"Opening the textures of {name}");
     }
 

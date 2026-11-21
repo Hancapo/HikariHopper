@@ -246,6 +246,11 @@ public sealed partial class ExplorerViewModel
     {
         if (!HasWorld || InWorld || EntryOperationBusy)
             return;
+        EnterWorld();
+    }
+
+    private void EnterWorld()
+    {
         // The search is the files'; the world has its own address.
         if (searching)
             EndSearch();

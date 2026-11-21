@@ -1,7 +1,9 @@
 using System.Numerics;
 using Avalonia.Headless.XUnit;
 using FiveFury;
+using CommonFury.Vertices;
 using FiveFury.Drawables;
+using FiveFury.Textures;
 using HikariHopper.Rendering;
 using HikariHopper.Tests.Textures;
 using HikariHopper.ViewModels;
@@ -14,9 +16,11 @@ public sealed class ViewerMenuTests
     private static byte[] Textured()
     {
         var mesh = new DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        mesh.SetChannel(VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
         var builder = new DrawableBuilder { Name = "tri" };
-        builder.Materials.Add(new DrawableMaterialInput { Name = "surface", Shader = "normal_spec" });
-        builder.AdditionalTextures.Add(TextureTestKit.Red("paint"));
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "normal_spec" };
+        material.Textures["DiffuseSampler"] = new TextureReference(TextureTestKit.Red("paint"));
+        builder.Materials.Add(material);
         var model = new DrawableModelInput();
         model.Meshes.Add(mesh);
         builder.Models.Add(model);
@@ -60,7 +64,7 @@ public sealed class ViewerMenuTests
         Views.ModelViewer viewer = Open(Textured(), new SaveTarget(_ => { }));
         Views.Controls.ViewerMenuRow menus = viewer.Menus;
         Assert.Equal(["File", "Edit"], menus.Titles);
-        Assert.Equal(["Save", "Save as…", "-", "Embedded textures…", "Extract embedded textures…", "-", "Close"],
+        Assert.Equal(["Save", "Save as…", "-", "Embedded textures…", "Extract all textures…", "-", "Close"],
             menus.ItemsOf("File").Select(item => item.Text));
         Assert.Equal(["Undo", "Redo", "-", "Reset the picked shader's values", "Reset every shader value"],
             menus.ItemsOf("Edit").Select(item => item.Text));
@@ -69,7 +73,7 @@ public sealed class ViewerMenuTests
         // Nothing changed: Save, Undo, Redo and the resets can't be used; Save as and Extract can.
         Assert.False(Enabled(menus, "File", "Save"));
         Assert.True(Enabled(menus, "File", "Save as…"));
-        Assert.True(Enabled(menus, "File", "Extract embedded textures…"));
+        Assert.True(Enabled(menus, "File", "Extract all textures…"));
         Assert.False(Enabled(menus, "Edit", "Undo"));
         Assert.False(Enabled(menus, "Edit", "Reset every shader value"));
 
@@ -168,20 +172,41 @@ public sealed class ViewerMenuTests
     }
 
     [AvaloniaFact]
-    public void Extract_embedded_textures_writes_them_as_dds_files()
+    public void Extract_all_textures_writes_every_texture_the_drawable_is_drawn_with_as_dds_files()
     {
         using var folder = new TempFolder();
-        Views.ModelViewer viewer = Open(Textured());
+        // Its diffuse map of its own, and a normal map found in the dictionary beside it.
+        var mesh = new DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2], "surface");
+        mesh.SetChannel(VertexSemantic.TexCoord0, [new(0, 0, 0, 0), new(1, 0, 0, 0), new(0, 1, 0, 0)]);
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "normal" };
+        material.Textures["DiffuseSampler"] = new TextureReference(TextureTestKit.Red("paint"));
+        material.Textures["BumpSampler"] = new TextureReference("wall_n");
+        var builder = new DrawableBuilder { Name = "tri" };
+        builder.Materials.Add(material);
+        // And a shader entry of its own that none of its geometry uses, with a map of its own.
+        var spare = new DrawableMaterialInput { Name = "spare", Shader = "default" };
+        spare.Textures["DiffuseSampler"] = new TextureReference(TextureTestKit.Red("spare"));
+        builder.Materials.Add(spare);
+        var model = new DrawableModelInput();
+        model.Meshes.Add(mesh);
+        builder.Models.Add(model);
+        byte[] ydr = new FiveFury.Ydr.Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write();
+        var beside = new TextureDictionary();
+        beside.Textures.Add(TextureTestKit.Red("wall_n"));
+        beside.Textures.Add(TextureTestKit.Red("unused"));
+        var viewer = new Views.ModelViewer(new ModelFile("tri.ydr", ydr) { Dictionaries = [new FiveFury.Ytd.Ytd(beside, GameTarget.Legacy).Write()] });
+        Wait(viewer.Reading);
         viewer.Dialogs = new FakeDialogs { Folder = folder.Path };
         Task<bool> extracting = viewer.ExtractTextures();
         Wait(extracting);
         Assert.True(extracting.Result, viewer.StatusText.Text);
-        Assert.Equal(["paint.dds"], Directory.GetFiles(folder.Path).Select(Path.GetFileName));
-        Assert.Equal("Extracted 1 texture", viewer.StatusText.Text);
+        // Both it is drawn with, and not the one beside it nor the spare entry's, which it doesn't draw with.
+        Assert.Equal(["paint.dds", "wall_n.dds"], Directory.GetFiles(folder.Path).Select(Path.GetFileName).Order());
+        Assert.Equal("Extracted 2 textures", viewer.StatusText.Text);
 
-        // A drawable without textures of its own has none to extract.
+        // A drawable drawn without textures has none to extract.
         Views.ModelViewer bare = Open(ShaderValuesTests.Triangle());
-        Assert.False(Enabled(bare.Menus, "File", "Extract embedded textures…"));
+        Assert.False(Enabled(bare.Menus, "File", "Extract all textures…"));
     }
 
     [Fact]

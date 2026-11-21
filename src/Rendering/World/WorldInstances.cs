@@ -3,7 +3,7 @@ using System.Numerics;
 namespace HikariHopper.Rendering.World;
 
 /// <summary>
-/// An asset's placements as rdr2_world.wgsl reads them, each its world matrix (from the asset's own vertices) and its
+/// An asset's placements as Rdr2/world.wgsl reads them, each its world matrix (from the asset's own vertices) and its
 /// inverse transpose, a row each (after RedFury's WorldInstanceBuffer). The renderer keeps each covered node's rows
 /// where they are, and writes to the GPU only the rows it set.
 /// </summary>

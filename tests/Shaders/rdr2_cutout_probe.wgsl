@@ -1,6 +1,6 @@
 // A test's stand-in for what the HDR pass draws before RDR2's sub-sampled alpha is put together: a rectangle of one
-// colour at one depth, either solid or a cut-out kept and marked on the checkerboard as rdr2_material.wgsl's
-// fs_main does it, by rdr2_cutout.wgsl's own functions (put before this).
+// colour at one depth, either solid or a cut-out kept and marked on the checkerboard as Rdr2/material.wgsl's
+// fs_main does it, by Rdr2/cutout.wgsl's own functions (put before this).
 
 struct Probe {
     colour: vec4f,

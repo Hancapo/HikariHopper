@@ -273,11 +273,13 @@ public sealed partial class TextureViewerViewModel
             sourceRootPath = "";
         }
         savedRevision = revision;
-        if (savedNow is { } saved)
-            lastSave = saved;
+        SavedDocument? saved = savedNow;
         savedNow = null;
         SetStatus($"Saved {label}");
         EmitStateChanged();
+        // Whoever opened it is told what it wrote now, while it stays open: a model shows its textures as saved.
+        if (saved is not null)
+            afterSave?.Invoke(saved);
         SaveFinished?.Invoke(this, true);
         if (changeAfterSave)
             CompleteDocumentChange();

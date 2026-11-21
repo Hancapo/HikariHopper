@@ -344,8 +344,8 @@ public partial class ModelViewer : UserControl, IModalContent
     private IReadOnlyList<NearbyDictionary> gameDictionaries = [];
 
     /// <summary>
-    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; once it closes after saving,
-    /// the drawable is shown with them as saved.
+    /// Opens the drawable's embedded textures in the texture viewer, over this viewer; each time it saves, the drawable is
+    /// shown with them as saved.
     /// </summary>
     internal bool OpenTextures()
     {
@@ -369,14 +369,15 @@ public partial class ModelViewer : UserControl, IModalContent
     private int generation, shownGeneration;
 
     /// <summary>
-    /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a .ydr from
-    /// the file it was saved as; a fragment's or dictionary's textures over its own.
+    /// The drawable read again with its textures as saved, shown in place of the one shown, as it was: a GTA V .ydr from
+    /// the file it was saved as; a fragment's, a dictionary's or an RDR2 drawable's textures over its own.
     /// </summary>
     private async Task ShowSaved(SavedDocument saved)
     {
         if (closed || surfaces is null)
             return;
-        if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase))
+        // A GTA V .ydr takes them back into itself; RDR2's are a dictionary of their own, saved elsewhere, laid over it.
+        if (file.Name.EndsWith(".ydr", StringComparison.OrdinalIgnoreCase) && !Textures.Rdr2TextureSource.IsRdr2(data))
             data = saved.Data;
         else
             savedTextures = saved.Textures;
@@ -1015,28 +1016,49 @@ public partial class ModelViewer : UserControl, IModalContent
     /// <summary>The file pickers Save as and Extract ask; the app's, unless a test gives its own.</summary>
     internal IFileDialogs Dialogs { get; set; } = AppServices.Dialogs;
 
-    /// <summary>Whether the drawable has textures of its own to extract.</summary>
-    internal bool HasEmbeddedTextures => surfaces is { EmbeddedTextureCount: > 0 };
+    /// <summary>
+    /// Every texture the drawable is drawn with, once each by name: its own and those found for it elsewhere (beside it,
+    /// in the game's dictionaries), as they are now, edits saved in the texture editor included.
+    /// </summary>
+    internal IReadOnlyList<FiveFury.Textures.Texture> DrawnTextures()
+    {
+        if (surfaces is not { } scene)
+            return [];
+        var named = new Dictionary<string, FiveFury.Textures.Texture>(StringComparer.OrdinalIgnoreCase);
+        // The materials its geometry is drawn with: a shader entry none of it uses draws nothing.
+        IEnumerable<SurfaceMaterial> drawn = scene.Parts.Select(part => part.Material).Distinct()
+            .Where(index => index >= 0 && index < scene.Materials.Count).Order().Select(index => scene.Materials[index]);
+        foreach (SurfaceMaterial material in drawn)
+        {
+            IEnumerable<FiveFury.Textures.Texture?> textures = material.Rdr2 is { } rdr2
+                ? rdr2.Textures
+                : [.. material.BoundTextures(), .. material.FurHeights, material.FurMask, material.DiffuseHf];
+            foreach (FiveFury.Textures.Texture? texture in textures)
+                if (texture is not null)
+                    named.TryAdd(texture.Name, texture);
+        }
+        return [.. named.Values];
+    }
+
+    /// <summary>Whether the drawable is drawn with any texture to extract.</summary>
+    internal bool HasTextures => DrawnTextures().Count > 0;
 
     /// <summary>
-    /// Extracts the drawable's own textures, as they are now, to DDS files in a folder picked for them, as the texture
-    /// editor's Extract all does; false when there are none or no folder was picked.
+    /// Extracts every texture the drawable is drawn with (<see cref="DrawnTextures"/>) to DDS files in a folder picked
+    /// for them, as the texture editor's Extract all does; false when there are none or no folder was picked.
     /// </summary>
     internal async Task<bool> ExtractTextures()
     {
-        if (!HasEmbeddedTextures)
+        if (!HasTextures)
             return false;
-        string? folder = await Dialogs.PickFolderAsync("Extract embedded textures");
+        string? folder = await Dialogs.PickFolderAsync("Extract all textures");
         if (string.IsNullOrEmpty(folder) || closed)
             return false;
         int count;
         try
         {
-            (IReadOnlyList<FiveFury.Textures.Texture> own, _) = ModelContent.EmbeddedTextures(file.Name, data);
-            // A fragment's or dictionary's textures as last saved in the texture editor, over its own.
-            IReadOnlyList<FiveFury.Textures.Texture> textures = savedTextures is { Count: > 0 } saved ? saved : own;
             var dictionary = new FiveFury.Textures.TextureDictionary();
-            dictionary.Textures.AddRange(textures);
+            dictionary.Textures.AddRange(DrawnTextures());
             count = FiveFury.Textures.TextureDirectory.ExportDds(dictionary, folder).Count;
         }
         catch (Exception error) when (OperationErrors.IsExpected(error))
@@ -1073,7 +1095,7 @@ public partial class ModelViewer : UserControl, IModalContent
             new("Save as…", "Ctrl+Shift+S", () => _ = SaveAs(), () => surfaces?.Writer is not null && !saving),
             null,
             new("Embedded textures…", "T", () => OpenTextures(), () => TexturesOpenable && !saving),
-            new("Extract embedded textures…", "", () => _ = ExtractTextures(), () => HasEmbeddedTextures),
+            new("Extract all textures…", "", () => _ = ExtractTextures(), () => HasTextures),
             null,
             new("Close", "Ctrl+W", Close),
         ]),
