@@ -36,7 +36,7 @@ internal sealed class WorldCullSet
     private Dictionary<WorldLodNode, PreparedNode> nextPrepared = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
-    /// A node's placements, prepared once: each one's world matrix and its inverse transpose (as rdr2_world.wgsl reads
+    /// A node's placements, prepared once: each one's world matrix and its inverse transpose (as Rdr2/world.wgsl reads
     /// them), its sphere, its squared reach and which instance it is, a field to an array.
     /// </summary>
     internal sealed class PreparedNode
@@ -94,7 +94,7 @@ internal sealed class WorldCullSet
             }
             // An affine inverse transpose leaves M41 to M43 at zero, which the normals never read: an ordinary
             // placement's tint palette row rides there (0 keeps the material's), and an interior one's room ambient
-            // (world_instances.wgsl's instance_room): its artificial ambient from above and below packed, and minus
+            // (World/world_instances.wgsl's instance_room): its artificial ambient from above and below packed, and minus
             // one less its natural multiplier, which no plant's marker can be. M14 to M34 (the inverse's translation,
             // which the normals don't read either) carry its level of detail fade, none until the renderer sets one.
             else

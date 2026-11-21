@@ -4,8 +4,8 @@ using HikariHopper.Rendering;
 namespace HikariHopper.Tests;
 
 /// <summary>
-/// Red Dead Redemption 2's cut-outs drawn with the game's sub-sampled alpha (rdr2_cutout.wgsl), put together by its
-/// single-pass blend (rdr2_subsample_alpha.wgsl).
+/// Red Dead Redemption 2's cut-outs drawn with the game's sub-sampled alpha (Rdr2/cutout.wgsl), put together by its
+/// single-pass blend (Rdr2/subsample_alpha.wgsl).
 /// </summary>
 public sealed partial class Rdr2CutoutTests
 {
@@ -22,7 +22,7 @@ public sealed partial class Rdr2CutoutTests
     [Fact]
     public void The_shaders_read_the_flags_the_material_sets()
     {
-        Dictionary<string, uint> flags = Flag().Matches(ViewportRenderer.Read("rdr2_cutout.wgsl"))
+        Dictionary<string, uint> flags = Flag().Matches(ViewportRenderer.Read("Rdr2/cutout.wgsl"))
             .ToDictionary(m => m.Groups[1].Value, m => uint.Parse(m.Groups[2].Value));
         Assert.Equal(Rdr2Material.SubSampledFlag, flags["RDR2_SUB_SAMPLED"]);
         Assert.Equal(Rdr2Material.TreeCutoutFlag, flags["RDR2_TREE_CUTOUT"]);

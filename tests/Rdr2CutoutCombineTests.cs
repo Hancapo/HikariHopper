@@ -6,8 +6,8 @@ using Buffer = WebGpuSharp.Buffer;
 
 namespace HikariHopper.Tests;
 
-// The combine's pixels (rdr2_subsample_alpha.wgsl) from fixed surfaces: drawn into an HDR target and its depth as the HDR
-// pass draws them, the cut-outs kept and marked by rdr2_cutout.wgsl's own checkerboard and coverage, then put together
+// The combine's pixels (Rdr2/subsample_alpha.wgsl) from fixed surfaces: drawn into an HDR target and its depth as the HDR
+// pass draws them, the cut-outs kept and marked by Rdr2/cutout.wgsl's own checkerboard and coverage, then put together
 // as ViewportRenderer.CombineSubSampledAlpha does (a copy of the target read, the target loaded and drawn over).
 public sealed partial class Rdr2CutoutTests
 {
@@ -65,7 +65,7 @@ public sealed partial class Rdr2CutoutTests
             });
             ShaderModule probe = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
             {
-                Code = ViewportRenderer.Read("rdr2_cutout.wgsl") + "\n" + TestShader("rdr2_cutout_probe.wgsl"),
+                Code = ViewportRenderer.Read("Rdr2/cutout.wgsl") + "\n" + TestShader("rdr2_cutout_probe.wgsl"),
             });
             RenderPipeline probePipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
@@ -140,7 +140,7 @@ public sealed partial class Rdr2CutoutTests
                     },
                 ],
             });
-            ShaderModule combine = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = ViewportRenderer.Read("rdr2_subsample_alpha.wgsl") });
+            ShaderModule combine = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = ViewportRenderer.Read("Rdr2/subsample_alpha.wgsl") });
             RenderPipeline combinePipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [combineLayout] }),
@@ -199,7 +199,7 @@ public sealed partial class Rdr2CutoutTests
     // What the HDR target stores of a colour.
     private static Vector3 Stored(Vector3 colour) => new((float)(Half)colour.X, (float)(Half)colour.Y, (float)(Half)colour.Z);
 
-    // The game's blend of a cut-out over what's behind it, by its coverage (rdr2_subsample_alpha.wgsl's): over a solid
+    // The game's blend of a cut-out over what's behind it, by its coverage (Rdr2/subsample_alpha.wgsl's): over a solid
     // surface, the colours over their luminance mixed straight and the luminance's logarithm.
     private static Vector4 OverSolid(Vector3 behind, Vector3 front, float coverage)
     {

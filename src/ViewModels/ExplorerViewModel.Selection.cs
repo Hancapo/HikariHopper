@@ -210,8 +210,8 @@ public sealed partial class ExplorerViewModel
     /// <summary>Copies full paths: <c>C:\…\file</c> for loose items, <c>archive.rpf::inner/path</c> inside RPFs.</summary>
     /// <summary>
     /// Where Windows Explorer goes for <see cref="ShowInExplorer"/>: the one item selected, shown selected in its folder;
-    /// with nothing selected, the folder shown, opened. Explorer can't look inside an RPF, so for anything in one it is
-    /// the RPF on disk, shown selected. None for several items, or with nothing on disk to go to.
+    /// with nothing selected, the folder shown, opened. Only what is on disk itself: Explorer can't look inside an RPF,
+    /// so there is nowhere to go for anything in one, nor for the folders shown inside it. None for several items either.
     /// </summary>
     internal (string Path, bool Select)? ExplorerTarget()
     {
@@ -225,10 +225,10 @@ public sealed partial class ExplorerViewModel
             if (SelectedHits() is not [SearchHit hit])
                 return null;
             HitPlace place = PlaceOf(hit);
-            return (place.InArchive ? place.RootFull : place.LooseFull, true);
+            return place.InArchive ? null : (place.LooseFull, true);
         }
         if (Provider.InArchive)
-            return Provider.ArchivePath.Length > 0 ? (Provider.ArchivePath, true) : null;
+            return null;
         if (Provider.GamePath.Length == 0)
             return null;
         return selection.Count == 1
