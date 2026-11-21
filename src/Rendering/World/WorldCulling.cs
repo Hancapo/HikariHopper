@@ -366,6 +366,27 @@ internal static class WorldLodSelection
         }
         return last;
     }
+
+    /// <summary>
+    /// The level a placement casts into the sun's shadow at, as the game picks it for its shadow pass: a model whose
+    /// levels don't all cast (a tree whose shadow proxy is only in its most detailed one, say) casts from those that
+    /// do. With one such level, that level at any distance; with several, the level its distance asks for, but none more
+    /// detailed than the first that casts. Casting the level in view left such a model without a shadow from where its
+    /// first level ends to where its entity gives way to the next: a tree's shadow went as the camera came within its
+    /// entity's reach and came back at its first level's.
+    /// </summary>
+    /// <param name="mask">The levels it has, a bit each.</param>
+    /// <param name="casters">Those of them whose models the shadow pass draws.</param>
+    internal static int ShadowLevel(int mask, int casters, ReadOnlySpan<float> reach2, float distance2)
+    {
+        int level = Level(mask, reach2, distance2);
+        casters &= mask;
+        // None cast, or all do: the level in view (nothing is cast of a model with none).
+        if (casters == 0 || casters == mask)
+            return level;
+        int first = BitOperations.TrailingZeroCount(casters);
+        return (casters & (casters - 1)) == 0 ? first : Math.Max(level, first);
+    }
 }
 
 /// <summary>The camera's view as a sphere test (RedFury's, copied): the viewer's 55° field of view, out to 30 km.</summary>

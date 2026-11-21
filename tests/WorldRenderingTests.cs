@@ -96,6 +96,130 @@ public sealed class WorldRenderingTests
     }
 
     [Fact]
+    public void A_model_s_own_texture_read_again_is_the_one_on_the_GPU_and_its_pixels_go()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            var weak = new List<WeakReference>();
+            byte[] ydr = TestDrawables.Triangle(diffuse: Textures.TextureTestKit.Bgra("own_d", 4, 4, [10, 20, 30, 255]));
+            // Two assets with the same texture of their own, which no dictionary names, each its own read of it: different
+            // objects, the same pixels, one texture.
+            void Add(uint hash)
+            {
+                FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(ydr).Drawable;
+                DrawableScene scene = DrawableScene.Build(drawable, []);
+                weak.Add(new WeakReference(scene.Materials.Single().Diffuse ?? throw new InvalidOperationException("no texture")));
+                var asset = Rendering.World.WorldAsset.FromGta(new RedFury.World.WorldAssetKey(hash, 2), scene, [drawable]);
+                Assert.True(renderer.AddWorldAsset(asset, new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+                while (renderer.HasPendingWorldUpload)
+                    renderer.ProcessWorldUploads();
+            }
+            Add(1);
+            Add(2);
+            Assert.True(renderer.IsWorldReady(new RedFury.World.WorldAssetKey(1, 2)) && renderer.IsWorldReady(new RedFury.World.WorldAssetKey(2, 2)));
+            Assert.Equal(1, renderer.WorldTextureCount);
+            // Up, nothing holds the textures read (nor their pixels).
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Assert.All(weak, reference => Assert.False(reference.IsAlive));
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.ClearWorld();
+            Assert.Equal(0, renderer.WorldTextureCount);
+            renderer.Dispose();
+        }
+    }
+
+    [Fact]
+    public void An_asset_is_charged_what_it_keeps_on_the_GPU_and_a_texture_two_bind_once()
+    {
+        byte[] ydr = TestDrawables.Triangle(diffuse: Textures.TextureTestKit.Bgra("own_d", 16, 16, [10, 20, 30, 255]));
+        Rendering.World.WorldAsset Read(uint hash)
+        {
+            FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(ydr).Drawable;
+            return Rendering.World.WorldAsset.FromGta(new RedFury.World.WorldAssetKey(hash, 2), DrawableScene.Build(drawable, []), [drawable]);
+        }
+        Rendering.World.WorldAsset first = Read(1), second = Read(2);
+        long pixels = first.Scene.Materials.Single().Diffuse!.Data.Length;
+        // Its vertices and indexes once, its material's values, and its texture's pixels once: not what reading it took.
+        long geometry = (long)first.Layout.Vertices.Length * SurfaceVertex.Size + first.Layout.Indices.Length * sizeof(uint);
+        Assert.Equal(geometry + Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024 + first.LightBones.Bytes, first.MemoryCost.OwnedBytes);
+        Assert.Equal([pixels], first.MemoryCost.Shared.Select(shared => shared.Bytes));
+        Assert.Equal(first.MemoryCost.OwnedBytes + pixels, first.Bytes);
+        // The two read the same texture: it's one allocation, counted once between them.
+        Assert.Equal(first.MemoryCost.Shared.Single().Identity, second.MemoryCost.Shared.Single().Identity);
+        Assert.Equal(first.MemoryCost.OwnedBytes + second.MemoryCost.OwnedBytes + pixels,
+            RedFury.World.WorldMemoryCost.Total([first.MemoryCost, second.MemoryCost]));
+    }
+
+    [Fact]
+    public void A_model_whose_shadow_proxy_is_only_in_its_first_level_casts_it_past_that_level_s_reach()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var renderer = new ViewportRenderer(gpu);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            renderer.Resize(64, 32);
+            renderer.WorldShown = true;
+            renderer.Shadows = true;
+            renderer.SetTime(14);
+            renderer.Camera.Frame(new Vector3(0, -50, 1), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(0, -50, 1), -MathF.PI / 2, 0);
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            // A tree as the game's are made: its first level, to 10 m, drawn and cast; its second drawn only.
+            var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tree" };
+            builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
+            foreach (var (lod, mask) in new[]
+            {
+                (CommonFury.Assets.DrawableLod.High, FiveFury.Drawables.DrawableRenderMask.Default | FiveFury.Drawables.DrawableRenderMask.Shadow),
+                (CommonFury.Assets.DrawableLod.Medium, FiveFury.Drawables.DrawableRenderMask.Default),
+            })
+            {
+                var model = new FiveFury.Drawables.DrawableModelInput { Lod = lod, RenderMask = mask };
+                model.Meshes.Add(new FiveFury.Drawables.DrawableMeshInput([new(0, 0, 0), new(1, 0, 0), new(0, 0, 1)], [0, 1, 2], "surface"));
+                builder.Models.Add(model);
+            }
+            builder.LodDistances[CommonFury.Assets.DrawableLod.High] = 10;
+            FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(
+                new FiveFury.Ydr.Ydr(builder.Build(FiveFury.GameTarget.Legacy), FiveFury.GameTarget.Legacy).Write()).Drawable;
+            var key = new RedFury.World.WorldAssetKey(1, 2);
+            var asset = Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]);
+            Assert.Equal((0b11, 0b01), (asset.LodMask, asset.CasterLods));
+            Assert.True(renderer.AddWorldAsset(asset, new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            // 50 m from the camera: in view at its second level, which casts nothing.
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, Matrix4x4.Identity, new Vector3(.5f, 0, .5f), 1, 1000, 0, 0);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
+            renderer.RenderTo(view);
+            Assert.Equal(WorldShadowCount, renderer.CascadesCast);
+            Assert.Equal((0, 1), (renderer.WorldPlacementsAt(key, 0).View, renderer.WorldPlacementsAt(key, 1).View));
+            // Its shadow is its first level's, in every cascade it reaches; nothing is cast of the level in view.
+            Assert.True(renderer.WorldPlacementsAt(key, 0).Cast > 0, "The model cast no shadow past its first level's reach.");
+            Assert.Equal(0, renderer.WorldPlacementsAt(key, 1).Cast);
+            var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
+            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            renderer.Dispose();
+            target.Destroy();
+        }
+    }
+
+    [Fact]
     public void A_moving_camera_s_frame_is_drawn_from_where_the_camera_is_now()
     {
         GpuDevice gpu = TestGpu.Device();

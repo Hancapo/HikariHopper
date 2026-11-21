@@ -211,6 +211,26 @@ public sealed class WorldCullingTests
         Assert.Equal(expected, WorldLodSelection.Level(mask, [.. reach.Select(r => r * r)], distance * distance));
     }
 
+    // The game's shadow pass: every level casting, or none, casts the level in view; one casting level casts at any
+    // distance; several cast the level in view, but none more detailed than the first of them.
+    [Theory]
+    [InlineData(0b0111, 0b0111, 20f, 1)]
+    [InlineData(0b0111, 0b0000, 20f, 1)]
+    [InlineData(0b0001, 0b0001, 20f, 0)]
+    [InlineData(0b0111, 0b0001, 5f, 0)]
+    [InlineData(0b0111, 0b0001, 20f, 0)]
+    [InlineData(0b0111, 0b0001, 5000f, 0)]
+    [InlineData(0b0111, 0b0100, 5f, 2)]
+    [InlineData(0b0111, 0b0110, 5f, 1)]
+    [InlineData(0b0111, 0b0110, 20f, 1)]
+    [InlineData(0b0111, 0b0110, 50f, 2)]
+    [InlineData(0b0011, 0b0101, 20f, 0)]
+    public void A_placement_casts_from_a_level_that_casts_as_the_game_s_shadow_pass_picks_it(int mask, int casters, float distance, int expected)
+    {
+        float[] reach = [15, 30, 60, 9998];
+        Assert.Equal(expected, WorldLodSelection.ShadowLevel(mask, casters, [.. reach.Select(r => r * r)], distance * distance));
+    }
+
     private static WorldLodNode Node(uint id) => new(new(id, 0), null, new(id, 2), Matrix4x4.Identity, Vector3.Zero, 1, 100, 0, 0);
 
     private static WorldInstance Instance(float x) => new(new(new(1, 0, 0, x), new(0, 1, 0, 0), new(0, 0, 1, 0)), new(x, 0, 0), 1);

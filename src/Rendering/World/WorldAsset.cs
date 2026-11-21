@@ -4,7 +4,6 @@ using RedFury.Rpf;
 using RedFury.Textures;
 using RedFury.World;
 using GameTexture = FiveFury.Textures.Texture;
-using RedTexture = RedFury.Textures.Texture;
 
 namespace HikariHopper.Rendering.World;
 
@@ -15,21 +14,31 @@ namespace HikariHopper.Rendering.World;
 /// </summary>
 internal sealed class WorldAsset
 {
-    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, IEnumerable<(object Texture, long Bytes)> textures,
-        WorldLightBones lightBones, IReadOnlyDictionary<GameTexture, object>? textureIds = null)
+    private WorldAsset(WorldAssetKey key, DrawableScene scene, float[] lodDistances, WorldLightBones lightBones,
+        Func<GameTexture, WorldTextureId?>? identify = null)
     {
         Key = key;
         Scene = scene;
-        this.textureIds = textureIds ?? new Dictionary<GameTexture, object>();
         LightBones = lightBones;
         LodReach2 = [.. lodDistances.Select(d => d >= float.MaxValue ? float.MaxValue : d * d)];
         foreach (SurfacePart part in scene.Parts)
             if (part.Lod is >= 0 and < Lods)
+            {
                 LodMask |= (byte)(1 << part.Lod);
+                if (part.Casts)
+                    CasterLods |= (byte)(1 << part.Lod);
+            }
         if (LodMask == 0)
             LodMask = 1;
         Layout = WorldLayout.Of(scene);
-        WorldMemoryCost cost = Estimate(scene, textures);
+        // The textures that go up with it: those its drawn surfaces bind, each by what it is.
+        var ids = new Dictionary<GameTexture, object>(ReferenceEqualityComparer.Instance);
+        foreach (var (_, material, rdr2) in Layout.Kept)
+            foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
+                if (texture is not null && !ids.ContainsKey(texture))
+                    ids.Add(texture, identify?.Invoke(texture) is { } named ? named : Contents.GetValue(texture, ContentOf));
+        textureIds = ids;
+        WorldMemoryCost cost = Estimate(Layout, ids);
         MemoryCost = new WorldMemoryCost(cost.OwnedBytes + lightBones.Bytes, cost.Shared);
         Bytes = WorldMemoryCost.Total([MemoryCost]);
     }
@@ -54,10 +63,13 @@ internal sealed class WorldAsset
     /// <summary>Its levels of detail that have parts, a bit each.</summary>
     public byte LodMask { get; }
 
+    /// <summary>Those of them with a part its model's render mask casts.</summary>
+    public byte CasterLods { get; }
+
     /// <summary>Each level's switch distance, squared; unlimited where it has none.</summary>
     public float[] LodReach2 { get; }
 
-    /// <summary>What it costs to keep: its geometry, and its textures, which other assets may share.</summary>
+    /// <summary>What it keeps once it's up: its geometry, and its textures, which other assets may share.</summary>
     public WorldMemoryCost MemoryCost { get; }
 
     /// <summary><see cref="MemoryCost"/> in bytes, shared textures counted once.</summary>
@@ -70,9 +82,17 @@ internal sealed class WorldAsset
     /// <summary>
     /// What a texture is, for keeping it on the GPU once whichever asset read it: a dictionary's texture by the
     /// dictionary and its name (a <see cref="WorldTextureId"/>), so it's the one already up when its dictionary is read
-    /// again for another asset; any other, the texture itself.
+    /// again for another asset; any other by its pixels (a <see cref="WorldTextureContent"/>). Never the object read:
+    /// that kept every such texture's pixels in memory for as long as it was on the GPU, and put it up again each time
+    /// it was read again (all of RDR2's are read so, and GTA V's models' own).
     /// </summary>
     public object TextureId(GameTexture texture) => textureIds.TryGetValue(texture, out object? id) ? id : texture;
+
+    // Each texture read is hashed once, however many assets bind it while it's held.
+    private static readonly ConditionalWeakTable<GameTexture, object> Contents = new();
+
+    private static object ContentOf(GameTexture texture) => new WorldTextureContent(System.IO.Hashing.XxHash3.HashToUInt64(texture.Data),
+        texture.Name, texture.Width, texture.Height, (int)texture.Format, texture.MipCount);
 
     /// <summary>
     /// Reads an asset from the catalog's archives: a drawable (extension 2), a fragment's intact drawables (3) or a
@@ -94,18 +114,9 @@ internal sealed class WorldAsset
             _ => throw new NotSupportedException($"Unsupported world asset {key}."),
         }, reads);
         TextureBindingPlan binding = catalog.Bind(key.Member == 0 ? key.Hash : key.Member, key.Extension, location.RootPath, [key.TextureDictionary]);
-        var textures = new List<RedTexture>();
-        GameTexture? Find(RedFury.Drawables.TextureReference reference)
-        {
-            if (binding.Resolve(reference.NameHash) is not { } found)
-                return null;
-            textures.Add(found);
-            return Rdr2Textures.Of(found);
-        }
+        GameTexture? Find(RedFury.Drawables.TextureReference reference) =>
+            binding.Resolve(reference.NameHash) is { } found ? Rdr2Textures.Of(found) : null;
         DrawableScene scene = Rdr2Scene.BuildWorld(models, Find);
-        // The drawables' own textures count too.
-        foreach (RedFury.Ytd.Ytd own in models.Select(model => model.Drawable.EmbeddedTextures).OfType<RedFury.Ytd.Ytd>().Distinct())
-            textures.AddRange(own.Textures);
         // Each level's switch distance, the furthest of its drawables'.
         float[] distances = [0, 0, 0, 0];
         foreach (Rdr2Scene.Placed model in models)
@@ -116,7 +127,7 @@ internal sealed class WorldAsset
         for (int lod = 0; lod < Lods; lod++)
             if (distances[lod] <= 0)
                 distances[lod] = float.MaxValue;
-        return new WorldAsset(key, scene, distances, textures.Select(texture => ((object)texture, (long)texture.Data.Length)), WorldLightBones.From(models));
+        return new WorldAsset(key, scene, distances, WorldLightBones.From(models));
     }
 
     /// <summary>
@@ -134,49 +145,40 @@ internal sealed class WorldAsset
         for (int lod = 0; lod < Lods; lod++)
             if (distances[lod] <= 0)
                 distances[lod] = float.MaxValue;
-        var textures = new HashSet<GameTexture>(ReferenceEqualityComparer.Instance);
-        foreach (SurfaceMaterial material in scene.Materials)
-            foreach (GameTexture? texture in material.BoundTextures())
-                if (texture is not null)
-                    textures.Add(texture);
-        var ids = new Dictionary<GameTexture, object>(ReferenceEqualityComparer.Instance);
-        if (identify is not null)
-            foreach (GameTexture texture in textures)
-                if (identify(texture) is { } id)
-                    ids[texture] = id;
-        return new WorldAsset(key, scene, distances, textures.Select(texture => (ids.GetValueOrDefault(texture) ?? texture, (long)texture.Data.Length)),
-            WorldLightBones.Carrying(scene.Lights, scene.LightCoronas), ids);
+        return new WorldAsset(key, scene, distances, WorldLightBones.Carrying(scene.Lights, scene.LightCoronas), identify);
     }
 
-    // Shared allocations are told apart by identity, so a texture several assets bind counts once.
-    private sealed class MemoryIdentity
-    {
-        internal readonly long Value = Interlocked.Increment(ref nextIdentity);
-    }
-
+    // Shared allocations are told apart by identity, so a texture several assets bind counts once: the same texture is
+    // the same allocation however many times it's read.
     private static long nextIdentity;
-    private static readonly ConditionalWeakTable<object, MemoryIdentity> Identities = new();
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<WorldTextureId, long> NamedIdentities = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, long> Identities = new();
 
-    // A texture named by its dictionary is the same allocation however many times it's read.
-    private static long IdentityOf(object texture) => texture is WorldTextureId id
-        ? NamedIdentities.GetOrAdd(id, _ => Interlocked.Increment(ref nextIdentity))
-        : Identities.GetOrCreateValue(texture).Value;
+    private static long IdentityOf(object texture) => Identities.GetOrAdd(texture, _ => Interlocked.Increment(ref nextIdentity));
 
-    // Geometry on the GPU and while it's made (twice), each material's uniforms; each texture's pixels as read and on
-    // the GPU.
-    private static WorldMemoryCost Estimate(DrawableScene scene, IEnumerable<(object Texture, long Bytes)> textures)
+    // What it keeps once it's up, and no more: the vertices and indexes laid out for the GPU, each material's values,
+    // and each texture's pixels on the GPU. What reading it took besides (its scene, the pixels read) goes once it's
+    // up, and only the few assets read ahead of the uploads hold that meanwhile. Geometry used to count twice and
+    // textures three times, so the world was charged two and a half times what it held: GTA V's reached the limit and
+    // evicted while holding 1.7 GB, and RDR2's stood at it in Valentine holding 1.5 GB, its plan turning detail away.
+    private static WorldMemoryCost Estimate(WorldLayout layout, Dictionary<GameTexture, object> textures)
     {
-        long owned = 2 * ((long)scene.Vertices.Length * SurfaceVertex.Size + (long)scene.Indices.Length * 4)
-            + (long)scene.Materials.Count * Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024;
-        var shared = textures.DistinctBy(texture => texture.Texture)
-            .Select(texture => new WorldSharedMemory(IdentityOf(texture.Texture), texture.Bytes * 3));
+        long owned = (long)layout.Vertices.Length * SurfaceVertex.Size + (long)layout.Indices.Length * sizeof(uint)
+            + (long)layout.Kept.Select(kept => kept.Part.Material).Distinct().Count() * Math.Max(Rdr2Material.UniformBytes, SurfaceMaterial.UniformBytes) + 1024;
+        // Two of the objects it read can be one texture: the larger says what it takes.
+        var shared = textures.GroupBy(texture => texture.Value)
+            .Select(group => new WorldSharedMemory(IdentityOf(group.Key), group.Max(texture => (long)texture.Key.Data.Length)));
         return new WorldMemoryCost(owned, shared);
     }
 }
 
 /// <summary>A texture of a texture dictionary the game streams: the dictionary's name hash and the texture's.</summary>
 internal readonly record struct WorldTextureId(uint Dictionary, uint Name);
+
+/// <summary>
+/// A texture no dictionary names (a model's own, or one of RDR2's, read through its binding): its pixels' hash, with
+/// its name and its shape.
+/// </summary>
+internal readonly record struct WorldTextureContent(ulong Pixels, string? Name, int Width, int Height, int Format, int Mips);
 
 /// <summary>
 /// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials, water
