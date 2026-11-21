@@ -5,67 +5,60 @@ All notable changes to HikariHopper are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, a minor version marks a new capability
 (0.1.0 the 3D viewer, 0.2.0 editing models); every other release is a patch.
 
+The changelog is release-oriented and uses a small fixed set of categories: `Added`, `Changed`, `Fixed`,
+`Removed` and `Performance`.
+
 ## [Unreleased]
-
-### Added
-
-### Changed
-
-### Fixed
-
-### Removed
 
 ## [0.3.0] - 2026-11-20
 
 ### Added
 
-- Set up and open Red Dead Redemption 2 from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
-- Browse, search and extract from Red Dead Redemption 2's archives, their folders and file names rebuilt. ([#238](https://github.com/Hancapo/HikariHopper/pull/238), [#239](https://github.com/Hancapo/HikariHopper/pull/239))
-- Open, edit and save Red Dead Redemption 2's texture dictionaries in the texture editor, those inside its archives with Save as. ([#240](https://github.com/Hancapo/HikariHopper/pull/240), [#241](https://github.com/Hancapo/HikariHopper/pull/241), [#274](https://github.com/Hancapo/HikariHopper/pull/274))
-- Red Dead Redemption 2's models open in the 3D viewer, shaded with the game's own materials and textured from the game's own dictionaries. ([#242](https://github.com/Hancapo/HikariHopper/pull/242), [#243](https://github.com/Hancapo/HikariHopper/pull/243), [#244](https://github.com/Hancapo/HikariHopper/pull/244))
-- Open and extract the textures a Red Dead Redemption 2 model carries, and see your saved edits on the model. ([#246](https://github.com/Hancapo/HikariHopper/pull/246), [#334](https://github.com/Hancapo/HikariHopper/pull/334))
-- Red Dead Redemption 2's collisions and navmeshes open in the 3D viewer, collisions by material. ([#245](https://github.com/Hancapo/HikariHopper/pull/245))
-- A Red Dead Redemption 2 fragment's parts are listed by physics group, and it can be shown damaged. ([#247](https://github.com/Hancapo/HikariHopper/pull/247))
-- A World side for Red Dead Redemption 2 and GTA V tabs, to fly through the game's world: switch with the status bar or F6, or open a game straight on it from the globe on its start page row. ([#248](https://github.com/Hancapo/HikariHopper/pull/248), [#249](https://github.com/Hancapo/HikariHopper/pull/249), [#256](https://github.com/Hancapo/HikariHopper/pull/256), [#329](https://github.com/Hancapo/HikariHopper/pull/329))
-- Each game's world is prepared in the background as the game opens and kept until its archives change, with a loading screen while it isn't ready. ([#250](https://github.com/Hancapo/HikariHopper/pull/250), [#256](https://github.com/Hancapo/HikariHopper/pull/256))
-- Fly over the whole map in both worlds, with full detail streamed in around the camera. ([#251](https://github.com/Hancapo/HikariHopper/pull/251), [#257](https://github.com/Hancapo/HikariHopper/pull/257), [#262](https://github.com/Hancapo/HikariHopper/pull/262), [#263](https://github.com/Hancapo/HikariHopper/pull/263), [#265](https://github.com/Hancapo/HikariHopper/pull/265), [#266](https://github.com/Hancapo/HikariHopper/pull/266), [#270](https://github.com/Hancapo/HikariHopper/pull/270), [#272](https://github.com/Hancapo/HikariHopper/pull/272), [#275](https://github.com/Hancapo/HikariHopper/pull/275), [#276](https://github.com/Hancapo/HikariHopper/pull/276), [#277](https://github.com/Hancapo/HikariHopper/pull/277), [#278](https://github.com/Hancapo/HikariHopper/pull/278))
-- The sun casts shadows across both worlds. ([#252](https://github.com/Hancapo/HikariHopper/pull/252), [#257](https://github.com/Hancapo/HikariHopper/pull/257))
-- Grass grows around the camera, and lamps, windows, signs and fires light up after dark, each at its own hours. ([#253](https://github.com/Hancapo/HikariHopper/pull/253), [#258](https://github.com/Hancapo/HikariHopper/pull/258))
-- Pick what's in a world: a click outlines it, and a right click names it, opens its model, shows its file in Files or copies its name or coordinates. ([#254](https://github.com/Hancapo/HikariHopper/pull/254), [#261](https://github.com/Hancapo/HikariHopper/pull/261))
-- GTA V's interiors show in its world, each room lit as in the game. ([#259](https://github.com/Hancapo/HikariHopper/pull/259), [#279](https://github.com/Hancapo/HikariHopper/pull/279))
-- Water in both worlds reflects and refracts what's around it, as in the games. ([#260](https://github.com/Hancapo/HikariHopper/pull/260))
-- GTA V's world has the game's sky, cloud hats, lens flare, light glows and fog. ([#289](https://github.com/Hancapo/HikariHopper/pull/289), [#290](https://github.com/Hancapo/HikariHopper/pull/290), [#291](https://github.com/Hancapo/HikariHopper/pull/291), [#292](https://github.com/Hancapo/HikariHopper/pull/292), [#294](https://github.com/Hancapo/HikariHopper/pull/294))
-- GTA V's world is lit and exposed for where the camera is and what's in view, as in the game. ([#295](https://github.com/Hancapo/HikariHopper/pull/295), [#304](https://github.com/Hancapo/HikariHopper/pull/304))
-- Red Dead Redemption 2's world has the game's sky by day and by night, and is lit and exposed as in the game. ([#305](https://github.com/Hancapo/HikariHopper/pull/305), [#306](https://github.com/Hancapo/HikariHopper/pull/306), [#307](https://github.com/Hancapo/HikariHopper/pull/307), [#313](https://github.com/Hancapo/HikariHopper/pull/313), [#315](https://github.com/Hancapo/HikariHopper/pull/315))
-- Red Dead Redemption 2's world has the game's aerial perspective, height fog, sunbeams and far haze. ([#308](https://github.com/Hancapo/HikariHopper/pull/308), [#309](https://github.com/Hancapo/HikariHopper/pull/309), [#310](https://github.com/Hancapo/HikariHopper/pull/310), [#311](https://github.com/Hancapo/HikariHopper/pull/311), [#312](https://github.com/Hancapo/HikariHopper/pull/312))
-- Red Dead Redemption 2's world is colour graded as in the game. ([#314](https://github.com/Hancapo/HikariHopper/pull/314), [#330](https://github.com/Hancapo/HikariHopper/pull/330))
-- Corners and creases darken in both worlds, with ambient occlusion. ([#316](https://github.com/Hancapo/HikariHopper/pull/316))
-- Levels of detail fade into each other in both worlds instead of popping. ([#273](https://github.com/Hancapo/HikariHopper/pull/273))
-- The worlds keep drawing under the menus, Settings and the other sheets. ([#327](https://github.com/Hancapo/HikariHopper/pull/327), [#328](https://github.com/Hancapo/HikariHopper/pull/328))
-- GTA V models are lit by their own lights in the 3D viewer. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
-- GTA V's trees are drawn with the game's own tree shaders, in the world and the 3D viewer. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
-- The decals GTA V's surfaces paint over themselves show, such as the graffiti on Vespucci beach's palm trunks. ([#302](https://github.com/Hancapo/HikariHopper/pull/302))
-- Open a folder with a game in a tab of its own, from File › Open folder… or by dropping it on the tab strip. ([#336](https://github.com/Hancapo/HikariHopper/pull/336))
+- Red Dead Redemption 2 support alongside GTA V, set up from the start page and Settings, with its own mark on its tab and in the status bar. ([#237](https://github.com/Hancapo/HikariHopper/pull/237))
+- Browsing, search and extraction for Red Dead Redemption 2's archives, with folder and file names rebuilt from the names the game is known to use. ([#238](https://github.com/Hancapo/HikariHopper/pull/238), [#239](https://github.com/Hancapo/HikariHopper/pull/239))
+- Red Dead Redemption 2 texture dictionaries open, edit and save in the texture editor; those inside its read-only archives save through Save as. ([#240](https://github.com/Hancapo/HikariHopper/pull/240), [#241](https://github.com/Hancapo/HikariHopper/pull/241), [#274](https://github.com/Hancapo/HikariHopper/pull/274))
+- Red Dead Redemption 2 models open in the 3D viewer with the game's own materials, textured from its archetypes', parents' and high-definition dictionaries. ([#242](https://github.com/Hancapo/HikariHopper/pull/242), [#243](https://github.com/Hancapo/HikariHopper/pull/243), [#244](https://github.com/Hancapo/HikariHopper/pull/244))
+- A Red Dead Redemption 2 model's own textures open and extract from its 3D viewer, and saved edits show on the model. ([#246](https://github.com/Hancapo/HikariHopper/pull/246), [#334](https://github.com/Hancapo/HikariHopper/pull/334))
+- Red Dead Redemption 2 collisions, by material, and navmeshes open in the 3D viewer. ([#245](https://github.com/Hancapo/HikariHopper/pull/245))
+- Red Dead Redemption 2 fragments list their parts by physics group and show a damaged state with only their breaking pieces swapped. ([#247](https://github.com/Hancapo/HikariHopper/pull/247))
+- A World side for GTA V and Red Dead Redemption 2 tabs, reached from the status bar's switch, F6 or a game's globe on the start page, with the camera's coordinates in the address row and Back and Forward across both sides. ([#248](https://github.com/Hancapo/HikariHopper/pull/248), [#249](https://github.com/Hancapo/HikariHopper/pull/249), [#256](https://github.com/Hancapo/HikariHopper/pull/256), [#329](https://github.com/Hancapo/HikariHopper/pull/329))
+- World indexes built in the background as a game opens and cached until its archives change, with a loading screen while they're not ready. ([#250](https://github.com/Hancapo/HikariHopper/pull/250), [#256](https://github.com/Hancapo/HikariHopper/pull/256))
+- World streaming across the whole map through the games' own levels of detail, with full detail around the camera, dithered fades between levels and the sun's shadow. ([#251](https://github.com/Hancapo/HikariHopper/pull/251), [#252](https://github.com/Hancapo/HikariHopper/pull/252), [#257](https://github.com/Hancapo/HikariHopper/pull/257), [#262](https://github.com/Hancapo/HikariHopper/pull/262), [#263](https://github.com/Hancapo/HikariHopper/pull/263), [#265](https://github.com/Hancapo/HikariHopper/pull/265), [#266](https://github.com/Hancapo/HikariHopper/pull/266), [#270](https://github.com/Hancapo/HikariHopper/pull/270), [#272](https://github.com/Hancapo/HikariHopper/pull/272), [#273](https://github.com/Hancapo/HikariHopper/pull/273), [#275](https://github.com/Hancapo/HikariHopper/pull/275), [#276](https://github.com/Hancapo/HikariHopper/pull/276), [#277](https://github.com/Hancapo/HikariHopper/pull/277), [#278](https://github.com/Hancapo/HikariHopper/pull/278))
+- Grass around the camera and lights after dark in both worlds, each light on at its own hours. ([#253](https://github.com/Hancapo/HikariHopper/pull/253), [#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- Picking in both worlds: a click outlines a placement, and a right click names it, opens its model, shows its model or map file in Files and copies its name or coordinates. ([#254](https://github.com/Hancapo/HikariHopper/pull/254), [#261](https://github.com/Hancapo/HikariHopper/pull/261))
+- GTA V interiors with their default entity sets, each room lit by its own timecycle modifiers. ([#259](https://github.com/Hancapo/HikariHopper/pull/259), [#279](https://github.com/Hancapo/HikariHopper/pull/279))
+- Water in both worlds, refracting and reflecting the scene: GTA V's ocean, lakes, pools and rivers from its own water data and shaders, and Red Dead Redemption 2's rivers and lakes. ([#260](https://github.com/Hancapo/HikariHopper/pull/260))
+- GTA V's sky, cloud hats, lens flare, light coronas and fog, from the game's own sky dome, textures, timecycle and visualsettings.dat. ([#289](https://github.com/Hancapo/HikariHopper/pull/289), [#290](https://github.com/Hancapo/HikariHopper/pull/290), [#291](https://github.com/Hancapo/HikariHopper/pull/291), [#292](https://github.com/Hancapo/HikariHopper/pull/292), [#294](https://github.com/Hancapo/HikariHopper/pull/294))
+- GTA V lighting by camera position, with Los Santos's city timecycle and the maps' timecycle boxes, and exposure adapting to the frame in view. ([#295](https://github.com/Hancapo/HikariHopper/pull/295), [#304](https://github.com/Hancapo/HikariHopper/pull/304))
+- Red Dead Redemption 2's day and night sky, sky lighting, exposure and filmic tone mapping, from its own timecycle and visualsettings.dat. ([#305](https://github.com/Hancapo/HikariHopper/pull/305), [#306](https://github.com/Hancapo/HikariHopper/pull/306), [#307](https://github.com/Hancapo/HikariHopper/pull/307), [#313](https://github.com/Hancapo/HikariHopper/pull/313), [#315](https://github.com/Hancapo/HikariHopper/pull/315))
+- Red Dead Redemption 2's aerial perspective, height fog, sunbeams, far haze and long-distance fog. ([#308](https://github.com/Hancapo/HikariHopper/pull/308), [#309](https://github.com/Hancapo/HikariHopper/pull/309), [#310](https://github.com/Hancapo/HikariHopper/pull/310), [#311](https://github.com/Hancapo/HikariHopper/pull/311), [#312](https://github.com/Hancapo/HikariHopper/pull/312))
+- Red Dead Redemption 2 colour grading, with its gradient filter, night-time blue shift, colour correction and weather colour tables. ([#314](https://github.com/Hancapo/HikariHopper/pull/314), [#330](https://github.com/Hancapo/HikariHopper/pull/330))
+- Ambient occlusion in both worlds. ([#316](https://github.com/Hancapo/HikariHopper/pull/316))
+- Worlds keep drawing under the title bar's menus, Settings and the other sheets. ([#327](https://github.com/Hancapo/HikariHopper/pull/327), [#328](https://github.com/Hancapo/HikariHopper/pull/328))
+- GTA V models in the 3D viewer are lit by the lights they carry. ([#258](https://github.com/Hancapo/HikariHopper/pull/258))
+- GTA V's tree shaders in the world and the 3D viewer: far billboards, camera-facing leaf cards, dithered cut-outs and light through the leaves. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
+- GTA V surfaces with the _texdecal and _vertdecal shaders paint their own decals, such as the graffiti on Vespucci beach's palm trunks. ([#302](https://github.com/Hancapo/HikariHopper/pull/302))
+- Folders open with a game in a tab of their own, from File › Open folder… or by dropping them on the tab strip, keeping the game's keys, textures and search. ([#336](https://github.com/Hancapo/HikariHopper/pull/336))
 
 ### Changed
 
-- Extract all textures in the 3D viewer saves every texture a model is drawn with, not only those stored in it. ([#333](https://github.com/Hancapo/HikariHopper/pull/333))
-- A model in the 3D viewer shows its edited textures as soon as the texture editor saves them, not once it closes. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
-- Show in Explorer is greyed out inside an RPF, instead of showing the RPF. ([#332](https://github.com/Hancapo/HikariHopper/pull/332))
-- The parts panel's geometry badge is called just Geometry. ([#331](https://github.com/Hancapo/HikariHopper/pull/331))
-- GTA V is lit with the timecycle and visual settings from the game's own files once it's open. ([#259](https://github.com/Hancapo/HikariHopper/pull/259), [#293](https://github.com/Hancapo/HikariHopper/pull/293))
-- Fences, leaves, hair and other cut-outs have soft edges as in the games, in the worlds and the 3D viewer. ([#298](https://github.com/Hancapo/HikariHopper/pull/298), [#299](https://github.com/Hancapo/HikariHopper/pull/299))
-- The 3D view keeps a steady frame rate on fast and variable refresh displays. ([#271](https://github.com/Hancapo/HikariHopper/pull/271))
-- The free camera follows the mouse's raw motion, with the pointer held in the view while dragging. ([#267](https://github.com/Hancapo/HikariHopper/pull/267), [#269](https://github.com/Hancapo/HikariHopper/pull/269))
+- Extract all textures replaces Extract embedded textures in the 3D viewer and saves every texture a model is drawn with. ([#333](https://github.com/Hancapo/HikariHopper/pull/333))
+- The 3D viewer shows edited textures on a model after each save in the texture editor, instead of once the editor closes. ([#334](https://github.com/Hancapo/HikariHopper/pull/334))
+- Show in Explorer covers only files and folders on disk and is unavailable inside RPFs. ([#332](https://github.com/Hancapo/HikariHopper/pull/332))
+- The parts panel's geometry badge reads Geometry. ([#331](https://github.com/Hancapo/HikariHopper/pull/331))
+- GTA V lighting uses the open game's own timecycle and visualsettings.dat, artificial ambient included. ([#259](https://github.com/Hancapo/HikariHopper/pull/259), [#293](https://github.com/Hancapo/HikariHopper/pull/293))
+- Cut-outs such as fences, leaves and hair use the games' sub-sampled alpha in the worlds and the 3D viewer, with soft edges instead of a hard cut. ([#298](https://github.com/Hancapo/HikariHopper/pull/298), [#299](https://github.com/Hancapo/HikariHopper/pull/299))
+- The 3D view paces its frames at a steady fraction of the display's refresh rate on fast and variable refresh displays. ([#271](https://github.com/Hancapo/HikariHopper/pull/271))
+- The free camera turns by raw mouse motion, with the pointer hidden and held in the view while dragging. ([#267](https://github.com/Hancapo/HikariHopper/pull/267), [#269](https://github.com/Hancapo/HikariHopper/pull/269))
 
 ### Fixed
 
 - The 3D view keeps the display's frame rate when a frame starts late, instead of dropping to half of it. ([#255](https://github.com/Hancapo/HikariHopper/pull/255))
-- GTA V's night-only lamps, windows and signs light up only by night in the 3D viewer, and shiny metal and glass reflect their surroundings. ([#296](https://github.com/Hancapo/HikariHopper/pull/296))
-- GTA V's surfaces that paint their own decal are drawn solid, not see-through. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
-- GTA V files that two archives hold are read from the one the game uses: the LOD pylons along the river in Legacy are no longer magenta. ([#303](https://github.com/Hancapo/HikariHopper/pull/303))
-- Shadowed parts of GTA V models are no longer too dark in the 3D viewer, floors and ground most of all. ([#335](https://github.com/Hancapo/HikariHopper/pull/335))
-- A game or archive that opens quickly fades in from the start page too. ([#231](https://github.com/Hancapo/HikariHopper/pull/231))
+- GTA V's night-only lamps, windows and signs light only during the night hours its visualsettings.dat sets, and metal and glass reflect their environment map. ([#296](https://github.com/Hancapo/HikariHopper/pull/296))
+- GTA V surfaces that paint their own decal render solid instead of see-through. ([#297](https://github.com/Hancapo/HikariHopper/pull/297))
+- GTA V files held by two archives are read from the one the game registers; Legacy's LOD pylons, poles and freight cars along the river are no longer magenta. ([#303](https://github.com/Hancapo/HikariHopper/pull/303))
+- GTA V models receive the timecycle's full up ambient on every surface, so their shadowed parts are no longer too dark, floors and ground most of all. ([#335](https://github.com/Hancapo/HikariHopper/pull/335))
+- Games and archives that open quickly fade in from the start page too. ([#231](https://github.com/Hancapo/HikariHopper/pull/231))
 - Updates no longer leave temporary files in the app's folder. ([#232](https://github.com/Hancapo/HikariHopper/pull/232))
 
 ## [0.2.1] - 2026-11-14
