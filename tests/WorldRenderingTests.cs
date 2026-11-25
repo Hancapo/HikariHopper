@@ -16,16 +16,16 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.CreateWorldPipelines();
             renderer.CreatePickPipelines();
             // Each game's: RDR2's material, and GTA V's surfaces and terrain, drawn, cast and picked.
@@ -45,7 +45,7 @@ public sealed class WorldRenderingTests
             // Nothing streamed: nothing under the pointer.
             Assert.Null(renderer.PickWorldAt(32, 16));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             Assert.Equal(WorldShadowCount, renderer.CascadesCast);
             renderer.Dispose();
             target.Destroy();
@@ -60,7 +60,7 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             var weak = new List<WeakReference>();
             // Two assets reading the same dictionary's texture, each its own read of it: different objects, one texture.
             void Add(uint hash)
@@ -88,7 +88,7 @@ public sealed class WorldRenderingTests
             GC.Collect();
             Assert.All(weak, reference => Assert.False(reference.IsAlive));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.ClearWorld();
             Assert.Equal(0, renderer.WorldTextureCount);
             renderer.Dispose();
@@ -102,7 +102,7 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             var weak = new List<WeakReference>();
             byte[] ydr = TestDrawables.Triangle(diffuse: Textures.TextureTestKit.Bgra("own_d", 4, 4, [10, 20, 30, 255]));
             // Two assets with the same texture of their own, which no dictionary names, each its own read of it: different
@@ -127,7 +127,7 @@ public sealed class WorldRenderingTests
             GC.Collect();
             Assert.All(weak, reference => Assert.False(reference.IsAlive));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.ClearWorld();
             Assert.Equal(0, renderer.WorldTextureCount);
             renderer.Dispose();
@@ -169,16 +169,16 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Shadows = true;
@@ -186,7 +186,7 @@ public sealed class WorldRenderingTests
             renderer.Camera.Frame(new Vector3(0, -50, 1), 20);
             renderer.Camera.Free = true;
             renderer.Camera.Place(new Vector3(0, -50, 1), -MathF.PI / 2, 0);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             // A tree as the game's are made: its first level, to 10 m, drawn and cast; its second drawn only.
             var builder = new FiveFury.Drawables.DrawableBuilder { Name = "tree" };
             builder.Materials.Add(new FiveFury.Drawables.DrawableMaterialInput { Name = "surface", Shader = "default" });
@@ -219,7 +219,7 @@ public sealed class WorldRenderingTests
             Assert.True(renderer.WorldPlacementsAt(key, 0).Cast > 0, "The model cast no shadow past its first level's reach.");
             Assert.Equal(0, renderer.WorldPlacementsAt(key, 1).Cast);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -232,16 +232,16 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Camera.Frame(new Vector3(195, -1030, 62), 20);
@@ -269,22 +269,22 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
             renderer.Camera.Free = true;
             renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             // A low-detail model and the one replacing it, both up.
             RedFury.World.WorldLodNode Place(uint hash, int index)
             {
@@ -308,7 +308,7 @@ public sealed class WorldRenderingTests
             renderer.RenderTo(view);
             Assert.Equal(0, renderer.WorldFadingOut);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -321,22 +321,22 @@ public sealed class WorldRenderingTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
             renderer.Camera.Free = true;
             renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
             var key = new RedFury.World.WorldAssetKey(1, 2);
             Assert.True(renderer.AddWorldAsset(Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]),
@@ -386,7 +386,7 @@ public sealed class WorldRenderingTests
             Cover(a, b);
             Assert.Equal((2, 2), renderer.WorldSourceRows(key));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -402,27 +402,27 @@ public sealed class WorldRenderingTests
         {
             ViewportRenderer.DirectWorldDraws = false;
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.Resize(64, 32);
             renderer.WorldShown = true;
             renderer.Shadows = true;
             renderer.Camera.Frame(new Vector3(0, -5, 1), 20);
             renderer.Camera.Free = true;
             renderer.Camera.Place(new Vector3(0, -5, 1), -MathF.PI / 2, 0);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             // Whatever other renderers left to the collector is gone before counting.
             GC.Collect();
             GC.WaitForPendingFinalizers();
-            static long Bundles() => (long)WebGpuSharp.WebGpuSafeHandle.GetActiveHandles<WebGpuSharp.FFI.RenderBundleHandle>();
+            long Bundles() => gpu.Instance.LiveObjects("render bundles");
             long before = Bundles();
             FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle()).Drawable;
             var key = new RedFury.World.WorldAssetKey(1, 2);
@@ -442,7 +442,7 @@ public sealed class WorldRenderingTests
             Assert.True(Bundles() <= before, $"{Bundles() - before} of {recorded} bundles left");
             renderer.RenderTo(view);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }

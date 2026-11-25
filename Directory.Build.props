@@ -10,6 +10,10 @@
     <!-- RedFury.NET checkout, for Red Dead Redemption 2: beside this repository's parent folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
     <RedFuryRoot Condition="'$(RedFuryRoot)' == '' and '$(REDFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(REDFURY_ROOT)'))</RedFuryRoot>
     <RedFuryRoot Condition="'$(RedFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../RedFury.NET/</RedFuryRoot>
+    <!-- WGpuFury checkout, the wgpu bindings the 3D views draw with: beside this repository's parent folder by default, or
+         WGPUFURY_ROOT / -p:WGpuFuryRoot=... Its wgpu-native is built there (eng/build-native.cs), into native/<rid>. -->
+    <WGpuFuryRoot Condition="'$(WGpuFuryRoot)' == '' and '$(WGPUFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(WGPUFURY_ROOT)'))</WGpuFuryRoot>
+    <WGpuFuryRoot Condition="'$(WGpuFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../WGpuFury/</WGpuFuryRoot>
     <!-- CommonFury.NET checkout, which both libraries build on: the submodule by default, or COMMONFURY_ROOT / -p:CommonFuryRoot=... -->
     <CommonFuryRoot Condition="'$(CommonFuryRoot)' == '' and '$(COMMONFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(COMMONFURY_ROOT)'))</CommonFuryRoot>
     <CommonFuryRoot Condition="'$(CommonFuryRoot)' == ''">$(MSBuildThisFileDirectory)external/CommonFury/</CommonFuryRoot>

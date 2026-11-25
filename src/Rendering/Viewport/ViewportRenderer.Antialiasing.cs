@@ -1,5 +1,5 @@
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 

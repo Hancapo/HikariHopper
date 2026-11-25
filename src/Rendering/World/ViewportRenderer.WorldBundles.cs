@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using HikariHopper.Rendering.World;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 
@@ -65,11 +65,11 @@ internal sealed unsafe partial class ViewportRenderer
         return (asset.ShadowCount[c] | asset.ShadowCount[c + 1] | asset.ShadowCount[c + 2] | asset.ShadowCount[c + 3]) != 0;
     }
 
-    // Its bundles are freed here and now (GpuReferences): a pass that executed one this frame keeps it until it's drawn.
+    // Its bundles are let go of here and now: a pass that executed one this frame keeps it in wgpu until it's drawn.
     private static void ReleaseAssetBundles(WorldGpuAsset asset)
     {
         foreach (RenderBundle? bundle in asset.Bundles)
-            GpuReferences.Free(bundle);
+            bundle?.Dispose();
         Array.Clear(asset.Bundles);
         Array.Clear(asset.BundleLods);
     }
@@ -533,7 +533,7 @@ internal sealed unsafe partial class ViewportRenderer
             target.SetBindGroup(2, lightGroup!);
         }
         EncodeWorldAsset(target, asset, bundle, asset.NeededLods);
-        return encoder.Finish().Owned();
+        return encoder.Finish();
     }
 
     // A pass's world draws: each asset with placements in it, from its bundle (recorded first if it has none), or directly.
@@ -559,8 +559,8 @@ internal sealed unsafe partial class ViewportRenderer
             // A new light group (a new shadow map): the colour bundles bound the old one.
             foreach (WorldGpuAsset asset in worldAssets.Values)
             {
-                GpuReferences.Free(asset.Bundles[OpaqueBundle]);
-                GpuReferences.Free(asset.Bundles[DecalBundle]);
+                asset.Bundles[OpaqueBundle]?.Dispose();
+                asset.Bundles[DecalBundle]?.Dispose();
                 asset.Bundles[OpaqueBundle] = asset.Bundles[DecalBundle] = null;
                 asset.BundleLods[OpaqueBundle] = asset.BundleLods[DecalBundle] = 0;
             }

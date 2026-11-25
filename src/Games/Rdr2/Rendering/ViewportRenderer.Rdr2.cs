@@ -1,5 +1,5 @@
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -30,7 +30,7 @@ internal sealed unsafe partial class ViewportRenderer
         {
             if (rdr2Supported is { } known)
                 return known;
-            Limits limits = default;
+            var limits = new WGpuFury.WGPULimits();
             device.GetLimits(ref limits);
             rdr2Supported = limits.MaxSampledTexturesPerShaderStage >= Rdr2TextureSlots;
             return rdr2Supported.Value;
@@ -226,7 +226,7 @@ internal sealed unsafe partial class ViewportRenderer
             return null;
         if (srgbViews.TryGetValue(texture!, out TextureView? known))
             return known;
-        WebGpuSharp.Texture gpuTexture = uploadedOf[texture!];
+        HikariHopper.Gpu.Texture gpuTexture = uploadedOf[texture!];
         TextureView view = SrgbOf(gpuTexture.GetFormat()) is { } srgb
             ? gpuTexture.CreateView(new TextureViewDescriptor
             {

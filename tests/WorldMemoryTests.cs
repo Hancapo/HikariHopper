@@ -16,14 +16,14 @@ public sealed class WorldMemoryTests
     private const int Width = 64, Height = 32;
 
     // A view of the origin from a few metres south, with nothing in it that changes from one frame to the next.
-    private static (ViewportRenderer Renderer, WebGpuSharp.Texture Target, WebGpuSharp.TextureView View) Scene(GpuDevice gpu)
+    private static (ViewportRenderer Renderer, HikariHopper.Gpu.Texture Target, HikariHopper.Gpu.TextureView View) Scene(GpuDevice gpu)
     {
         var renderer = new ViewportRenderer(gpu);
-        WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+        HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
         {
-            Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-            Dimension = WebGpuSharp.TextureDimension.D2,
-            Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+            Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+            Dimension = HikariHopper.Gpu.TextureDimension.D2,
+            Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
             Format = renderer.PresentFormat,
             MipLevelCount = 1,
             SampleCount = 1,
@@ -52,7 +52,7 @@ public sealed class WorldMemoryTests
         return new WorldLodNode(new WorldEntityId(1, (int)hash), null, key, Matrix4x4.CreateTranslation(at), at + new Vector3(.5f, .5f, 0), 1, 100, 0, 0);
     }
 
-    private static void FadesEnd(ViewportRenderer renderer, WebGpuSharp.TextureView view)
+    private static void FadesEnd(ViewportRenderer renderer, HikariHopper.Gpu.TextureView view)
     {
         Thread.Sleep(TimeSpan.FromSeconds(ViewportRenderer.LodFadeSeconds + .15));
         renderer.RenderTo(view);
@@ -66,7 +66,7 @@ public sealed class WorldMemoryTests
         lock (gpu.Gate)
         {
             var (renderer, target, view) = Scene(gpu);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             WorldLodNode a = Place(renderer, 1, new Vector3(0, 0, 0), [200, 20, 20, 255]), b = Place(renderer, 2, new Vector3(1, 0, 0), [20, 200, 20, 255]),
                 c = Place(renderer, 3, new Vector3(2, 0, 0), [20, 20, 200, 255]);
             long second = Stopwatch.Frequency;
@@ -114,7 +114,7 @@ public sealed class WorldMemoryTests
             renderer.RenderTo(view);
             Assert.True(renderer.WorldSourcesMatchCoverage());
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -127,7 +127,7 @@ public sealed class WorldMemoryTests
         lock (gpu.Gate)
         {
             var (renderer, target, view) = Scene(gpu);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             // Two assets reading the same dictionary's texture, each its own read of it.
             WorldAsset Read(uint hash)
             {
@@ -159,7 +159,7 @@ public sealed class WorldMemoryTests
             Assert.Equal(0, renderer.WorldTextureCount);
             renderer.RenderTo(view);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -175,7 +175,7 @@ public sealed class WorldMemoryTests
             // Pages of a few assets each, so two dozen triangles take several.
             renderer.WorldPageBytes = 4096;
             renderer.Shadows = false;
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             WorldLodNode[] nodes = [.. Enumerable.Range(0, 24).Select(i => Place(renderer, (uint)i + 1, new Vector3(i * .25f - 3, 0, 0), [(byte)(i * 10), 120, 60, 255]))];
             WorldAssetKey[] keys = [.. nodes.Select(node => node.Asset)];
             renderer.KeepWorldAssets(keys, 0);
@@ -215,27 +215,27 @@ public sealed class WorldMemoryTests
             Assert.Equal(before, Read(gpu, target));
             Assert.Contains(before, value => value != before[0]);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
     }
 
     // The frame's pixels.
-    private static byte[] Read(GpuDevice gpu, WebGpuSharp.Texture target)
+    private static byte[] Read(GpuDevice gpu, HikariHopper.Gpu.Texture target)
     {
         const uint Row = 256;
-        WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+        HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
         {
             Size = Row * Height,
-            Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+            Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
         });
-        WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-        encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
-            new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = Row, RowsPerImage = Height } },
-            new WebGpuSharp.Extent3D(Width, Height, 1));
+        HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+        encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = target },
+            new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = Row, RowsPerImage = Height } },
+            new HikariHopper.Gpu.Extent3D(Width, Height, 1));
         gpu.Queue.Submit(encoder.Finish());
-        readback.MapSync(WebGpuSharp.MapMode.Read);
+        readback.MapSync(HikariHopper.Gpu.MapMode.Read);
         byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, Row * Height, span => span.ToArray());
         readback.Unmap();
         readback.Destroy();
@@ -312,27 +312,14 @@ public sealed class WorldMemoryTests
         }
     }
 
-    private struct AllocatorMemoryInfo
-    {
-        public ulong Used, Allocated, LazyAllocated, LazyUsed;
-    }
-
-    // Dawn's own count of the memory its device holds (dawn::native::GetAllocatorMemoryInfo, which WebGPU's API hasn't).
-    [DllImport("webgpu_dawn", EntryPoint = "?GetAllocatorMemoryInfo@native@dawn@@YA?AUAllocatorMemoryInfo@12@PEAUWGPUDeviceImpl@@@Z")]
-    private static extern nint GetAllocatorMemoryInfo(ref AllocatorMemoryInfo result, nuint device);
-
+    // wgpu's own count of the memory its device's buffers and textures hold.
     private static ulong DeviceBytes(GpuDevice gpu)
     {
-        AllocatorMemoryInfo info = default;
-        try
-        {
-            GetAllocatorMemoryInfo(ref info, WebGpuSharp.Marshalling.WebGPUMarshal.GetHandle(gpu.Device).GetAddress());
-        }
-        catch (EntryPointNotFoundException)
-        {
-            Assert.Skip("This build of Dawn doesn't say what its device holds.");
-        }
-        return info.Allocated;
+        gpu.Device.Poll(wait: true);
+        var (buffers, textures, allocations) = gpu.Device.MemoryCounters();
+        if (allocations == 0 && buffers == 0)
+            Assert.Skip("This build of wgpu doesn't count what its device holds.");
+        return (ulong)(buffers + textures);
     }
 
     [Fact]
@@ -345,7 +332,7 @@ public sealed class WorldMemoryTests
             // What other renderers destroyed is gone before counting.
             Submit(gpu);
             ulong before = DeviceBytes(gpu);
-            var pages = new WorldBufferPages(gpu.Device, WebGpuSharp.BufferUsage.Vertex | WebGpuSharp.BufferUsage.CopyDst);
+            var pages = new WorldBufferPages(gpu.Device, HikariHopper.Gpu.BufferUsage.Vertex | HikariHopper.Gpu.BufferUsage.CopyDst);
             // Four pages' worth of ranges, each written so the memory is there.
             byte[] data = new byte[2 * Megabyte];
             WorldSlice[] slices = [.. Enumerable.Range(0, (int)(4 * WorldBufferPages.DefaultPageBytes / (2 * Megabyte))).Select(_ => pages.Allocate(2 * Megabyte))];
@@ -400,20 +387,20 @@ public sealed class WorldMemoryTests
         GpuDevice gpu = TestGpu.Device();
         lock (gpu.Gate)
         {
-            WebGpuSharp.Buffer buffer = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = 4096, Usage = WebGpuSharp.BufferUsage.Vertex });
+            HikariHopper.Gpu.Buffer buffer = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor { Size = 4096, Usage = HikariHopper.Gpu.BufferUsage.Vertex });
             // Each bundle keeps 16 KB for its commands: these would leave 128 MB behind were they never freed.
             const int Count = 8000;
             long before = HeapBytes();
             for (int i = 0; i < Count; i++)
             {
-                WebGpuSharp.RenderBundleEncoder encoder = gpu.Device.CreateRenderBundleEncoder(new WebGpuSharp.RenderBundleEncoderDescriptor
+                HikariHopper.Gpu.RenderBundleEncoder encoder = gpu.Device.CreateRenderBundleEncoder(new HikariHopper.Gpu.RenderBundleEncoderDescriptor
                 {
-                    ColorFormats = [WebGpuSharp.TextureFormat.RGBA8Unorm],
-                    DepthStencilFormat = WebGpuSharp.TextureFormat.Depth32Float,
+                    ColorFormats = [HikariHopper.Gpu.TextureFormat.RGBA8Unorm],
+                    DepthStencilFormat = HikariHopper.Gpu.TextureFormat.Depth32Float,
                     SampleCount = 1,
                 });
                 encoder.SetVertexBuffer(0, buffer, 0, 4096);
-                GpuReferences.Free(encoder.Finish().Owned());
+                encoder.Finish().Dispose();
             }
             long left = HeapBytes() - before;
             Assert.True(left < 32L * 1024 * 1024, $"{left:N0} bytes left by {Count} bundles");

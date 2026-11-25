@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -15,7 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
     // A geometry of a layer, on the GPU: its buffers, its constants and its group.
     private sealed record CloudHatDraw(Buffer Vertices, Buffer Indices, uint IndexCount, Buffer Uniforms, BindGroup Group);
 
-    private sealed record WorldCloudHatResources(GtaCloudHats Hats, CloudHatDraw[] Draws, WebGpuSharp.Texture[] Textures);
+    private sealed record WorldCloudHatResources(GtaCloudHats Hats, CloudHatDraw[] Draws, HikariHopper.Gpu.Texture[] Textures);
 
     private WorldCloudHatResources? worldCloudHats;
     private BindGroupLayout? cloudHatLayout, cloudHatDepthLayout;
@@ -169,7 +169,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         cloudHatClampAlong ??= Hat(AddressMode.ClampToEdge);
         cloudHatWrap ??= Hat(AddressMode.Repeat);
-        var owned = new List<WebGpuSharp.Texture>();
+        var owned = new List<HikariHopper.Gpu.Texture>();
         var views = new Dictionary<GameTexture, TextureView>(ReferenceEqualityComparer.Instance);
         TextureView Own(GameTexture? source)
         {
@@ -225,7 +225,7 @@ internal sealed unsafe partial class ViewportRenderer
             draw.Indices.Destroy();
             draw.Uniforms.Destroy();
         }
-        foreach (WebGpuSharp.Texture texture in hats.Textures)
+        foreach (HikariHopper.Gpu.Texture texture in hats.Textures)
             texture.Destroy();
     }
 

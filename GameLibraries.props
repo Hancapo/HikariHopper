@@ -16,7 +16,14 @@
     <!-- RDR2's world: its index of maps and placements, and their levels of detail (no rendering of its own). -->
     <ProjectReference Include="$(RedFuryRoot)RedFury.World/RedFury.World.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
     <ProjectReference Include="$(CommonFuryRoot)CommonFury/CommonFury.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
+    <!-- wgpu, which the 3D views draw with, and its native library as built in the WGpuFury checkout. -->
+    <ProjectReference Include="$(WGpuFuryRoot)src/WGpuFury/WGpuFury.csproj" AdditionalProperties="Configuration=Release" />
+    <None Include="$(WGpuFuryRoot)native/win-x64/lib/wgpu_native.dll" Link="wgpu_native.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CheckWGpuFury" BeforeTargets="_GetProjectReferenceTargetFrameworkProperties;ResolveProjectReferences"
+          Condition="!Exists('$(WGpuFuryRoot)native/win-x64/lib/wgpu_native.dll')">
+    <Error Text="WGpuFury's wgpu-native was not found at $(WGpuFuryRoot)native/win-x64/lib. Set WGPUFURY_ROOT to a WGpuFury checkout and build it there (dotnet run eng/build-native.cs)." />
+  </Target>
   <Target Name="CheckCommonFury" BeforeTargets="_GetProjectReferenceTargetFrameworkProperties;ResolveProjectReferences"
           Condition="!Exists('$(CommonFuryRoot)CommonFury/CommonFury.csproj')">
     <Error Text="CommonFury was not found at $(CommonFuryRoot). Run 'git submodule update --init', or set COMMONFURY_ROOT to a CommonFury.NET checkout." />

@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -19,12 +19,12 @@ internal sealed unsafe partial class ViewportRenderer
     private const uint DiscCorners = 88 * 3;
 
     /// <summary>The sky's GPU side: the dome's buffers, its textures, and its groups.</summary>
-    private sealed record WorldSkyResources(Buffer Vertices, Buffer Indices, uint IndexCount, WebGpuSharp.Texture[] Textures, BindGroup Group,
+    private sealed record WorldSkyResources(Buffer Vertices, Buffer Indices, uint IndexCount, HikariHopper.Gpu.Texture[] Textures, BindGroup Group,
         BindGroup PerlinGroup, GtaSkyVisuals Visuals);
 
     private WorldSkyResources? worldSky;
     private Buffer? skyUniforms;
-    private WebGpuSharp.Texture? perlinMap;
+    private HikariHopper.Gpu.Texture? perlinMap;
     private TextureView? perlinView;
     private BindGroupLayout? gtaSkyLayout, gtaPerlinLayout;
     private Sampler? skyWrap, skyClamp;
@@ -179,7 +179,7 @@ internal sealed unsafe partial class ViewportRenderer
             });
             perlinView = perlinMap.CreateView();
         }
-        var owned = new List<WebGpuSharp.Texture>();
+        var owned = new List<HikariHopper.Gpu.Texture>();
         TextureView Own(GameTexture? source, TextureView missing)
         {
             if (source is null || CreateTexture(source) is not var (texture, block))
@@ -230,7 +230,7 @@ internal sealed unsafe partial class ViewportRenderer
         ClearWorldFog();
         sky.Vertices.Destroy();
         sky.Indices.Destroy();
-        foreach (WebGpuSharp.Texture texture in sky.Textures)
+        foreach (HikariHopper.Gpu.Texture texture in sky.Textures)
             texture.Destroy();
     }
 

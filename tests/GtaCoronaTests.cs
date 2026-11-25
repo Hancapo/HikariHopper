@@ -307,16 +307,16 @@ public sealed class GtaCoronaTests
         {
             var renderer = new ViewportRenderer(gpu);
             const int Width = 64, Height = 32;
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.Resize(Width, Height);
             renderer.WorldShown = true;
             var eye = new Vector3(0, 0, 50);
@@ -343,7 +343,7 @@ public sealed class GtaCoronaTests
             Assert.Equal(1, renderer.WorldCoronaCount);
             float with = Middle();
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             // Its light's colour is red at full: the glow adds its intensity, the light's ten times sprite_brightness.
             Assert.True(with > without + 5, $"{with} over {without}");
             renderer.ClearWorld();
@@ -364,20 +364,20 @@ public sealed class GtaCoronaTests
 
     private static float HdrRed(GpuDevice gpu, ViewportRenderer renderer, int x, int y)
     {
-        var hdr = (WebGpuSharp.Texture)typeof(ViewportRenderer).GetField("hdr", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+        var hdr = (HikariHopper.Gpu.Texture)typeof(ViewportRenderer).GetField("hdr", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(renderer)!;
         uint width = hdr.GetWidth(), height = hdr.GetHeight(), row = (width * 8 + 255) / 256 * 256;
-        WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+        HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
         {
             Size = row * height,
-            Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+            Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
         });
-        WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-        encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = hdr },
-            new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = row, RowsPerImage = height } },
-            new WebGpuSharp.Extent3D(width, height, 1));
+        HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+        encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = hdr },
+            new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = row, RowsPerImage = height } },
+            new HikariHopper.Gpu.Extent3D(width, height, 1));
         gpu.Queue.Submit(encoder.Finish());
-        readback.MapSync(WebGpuSharp.MapMode.Read);
+        readback.MapSync(HikariHopper.Gpu.MapMode.Read);
         byte[] bytes = readback.GetConstMappedRange<byte[], byte>(0, (nuint)(row * height), span => span.ToArray());
         readback.Unmap();
         readback.Destroy();

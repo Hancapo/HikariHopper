@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameFormat = CommonFury.Textures.TextureFormat;
 using GameTexture = FiveFury.Textures.Texture;
 
@@ -85,9 +85,9 @@ internal sealed unsafe partial class ViewportRenderer
     private TextureView? clear;
     private readonly Dictionary<GameTexture, TextureView?> textures = new(ReferenceEqualityComparer.Instance);
     // Each uploaded texture's GPU texture, and its sRGB view, for the colour slots of RDR2's material.
-    private readonly Dictionary<GameTexture, WebGpuSharp.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<GameTexture, HikariHopper.Gpu.Texture> uploadedOf = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GameTexture, TextureView?> srgbViews = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<WebGpuSharp.Texture> uploaded = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<HikariHopper.Gpu.Texture> uploaded = new(ReferenceEqualityComparer.Instance);
     private Buffer? surfaceVertices;
     private Buffer? surfaceIndices;
     // Fringe: cut-out hair's material again, blended, for its second pass.
@@ -470,7 +470,7 @@ internal sealed unsafe partial class ViewportRenderer
         partNightOnly = [];
         partRdr2 = [];
         partsPicked = [];
-        foreach (WebGpuSharp.Texture texture in uploaded)
+        foreach (HikariHopper.Gpu.Texture texture in uploaded)
             texture.Destroy();
         uploaded.Clear();
         textures.Clear();
@@ -673,7 +673,7 @@ internal sealed unsafe partial class ViewportRenderer
     private TextureView Checker()
     {
         byte[][] mips = CheckerMips();
-        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
@@ -694,7 +694,7 @@ internal sealed unsafe partial class ViewportRenderer
 
     private TextureView Solid(byte r, byte g, byte b, byte a)
     {
-        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
@@ -713,7 +713,7 @@ internal sealed unsafe partial class ViewportRenderer
     // One colour on each face of a cube.
     private TextureView SolidCube(byte r, byte g, byte b, byte a)
     {
-        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
@@ -729,7 +729,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     /// <summary>A game texture's GPU texture viewed as the shaders read it: a cube's six layers as a cube.</summary>
-    private static TextureView ShapedView(WebGpuSharp.Texture texture) => texture.GetDepthOrArrayLayers() == 6
+    private static TextureView ShapedView(HikariHopper.Gpu.Texture texture) => texture.GetDepthOrArrayLayers() == 6
         ? texture.CreateView(new TextureViewDescriptor
         {
             Format = texture.GetFormat(),
@@ -773,7 +773,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// A game texture's GPU texture, made but not written, and its formats' block size; null when its format or shape
     /// can't be drawn.
     /// </summary>
-    private (WebGpuSharp.Texture Texture, int Block)? CreateTexture(GameTexture source)
+    private (HikariHopper.Gpu.Texture Texture, int Block)? CreateTexture(GameTexture source)
     {
         // The shaders read texels as stored (albedo is squared by the lighting, as in the game), so sRGB formats are
         // read through their plain counterparts.
@@ -798,7 +798,7 @@ internal sealed unsafe partial class ViewportRenderer
             return null;
         // Viewable as sRGB too, where the format has a variant: RDR2's material reads its colours so.
         TextureFormat? srgb = SrgbOf(format);
-        WebGpuSharp.Texture texture = device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture texture = device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
@@ -812,7 +812,7 @@ internal sealed unsafe partial class ViewportRenderer
     }
 
     /// <summary>One mip level of a game texture into its GPU texture; how many bytes that was.</summary>
-    private long WriteLevel(GameTexture source, WebGpuSharp.Texture texture, int block, int level)
+    private long WriteLevel(GameTexture source, HikariHopper.Gpu.Texture texture, int block, int level)
     {
         long bytes = 0;
         for (int first = 0; ;)
@@ -830,7 +830,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// at most <paramref name="rows"/>, within one face of a cube (its faces' rows one after another): how many bytes
     /// that was, whether the level is done, and how many rows.
     /// </summary>
-    private (long Bytes, bool Done, int Rows) WriteRows(GameTexture source, WebGpuSharp.Texture texture, int block, int level, int first, int rows)
+    private (long Bytes, bool Done, int Rows) WriteRows(GameTexture source, HikariHopper.Gpu.Texture texture, int block, int level, int first, int rows)
     {
         int faces = source.Shape.Faces;
         CommonFury.Textures.TextureSubresource part = source.GetSubresource(level);
@@ -857,7 +857,7 @@ internal sealed unsafe partial class ViewportRenderer
     private static int RowBytes(GameTexture source, int level) => source.GetSubresource(level).Mip.RowPitch;
 
     /// <summary>A written texture, kept for the scene (or the world) and viewed.</summary>
-    private TextureView Register(GameTexture source, WebGpuSharp.Texture texture)
+    private TextureView Register(GameTexture source, HikariHopper.Gpu.Texture texture)
     {
         uploaded.Add(texture);
         uploadedOf[source] = texture;

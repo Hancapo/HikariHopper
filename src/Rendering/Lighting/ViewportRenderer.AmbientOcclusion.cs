@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 
@@ -25,7 +25,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>Whether a world's solid surfaces are darkened by their screen-space ambient occlusion.</summary>
     public bool AmbientOcclusion { get; set; } = true;
 
-    private WebGpuSharp.Texture? occludableAmbient, occludableNormal, rawOcclusion, occlusion;
+    private HikariHopper.Gpu.Texture? occludableAmbient, occludableNormal, rawOcclusion, occlusion;
     private TextureView? occludableAmbientView, occludableNormalView, rawOcclusionView, occlusionView;
     private BindGroupLayout? occlusionLayout;
     private BindGroup? gtaoGroup, denoiseGroup, occlusionApplyGroup;
@@ -88,7 +88,7 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateAmbientOcclusionTargets()
     {
         DestroyAmbientOcclusionTargets();
-        WebGpuSharp.Texture Target(TextureFormat format) => device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture Target(TextureFormat format) => device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding,
             Dimension = TextureDimension.D2,

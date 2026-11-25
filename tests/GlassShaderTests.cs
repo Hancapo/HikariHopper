@@ -74,29 +74,29 @@ public sealed class GlassShaderTests
                 renderer.Show(new ViewportMesh(Vector3.Zero));
             renderer.Frame(box);
             renderer.Camera.Orbit(0, above ? 1000 : -1000);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Size, Size, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             for (int i = 0; i < 4; i++)
                 renderer.RenderTo(view);
-            WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+            HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
             {
                 Size = Size * Size * 4,
-                Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
             });
-            WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-            encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
-                new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
-                new WebGpuSharp.Extent3D(Size, Size, 1));
+            HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+            encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = target },
+                new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
+                new HikariHopper.Gpu.Extent3D(Size, Size, 1));
             gpu.Queue.Submit(encoder.Finish());
-            readback.MapSync(WebGpuSharp.MapMode.Read);
+            readback.MapSync(HikariHopper.Gpu.MapMode.Read);
             byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, Size * Size * 4, span => span.ToArray());
             readback.Unmap();
             readback.Destroy();

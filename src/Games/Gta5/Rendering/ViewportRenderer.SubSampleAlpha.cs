@@ -1,4 +1,4 @@
-using WebGpuSharp;
+using HikariHopper.Gpu;
 
 namespace HikariHopper.Rendering;
 

@@ -59,40 +59,40 @@ public sealed class SubSampledAlphaTests
         {
             var renderer = new ViewportRenderer(gpu) { Antialiasing = false, Shadows = false, SubSampledCombine = combine };
             renderer.Resize(Size, Size);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             if (ydr is not null)
                 renderer.Show(ModelContent.Read("fence.ydr", ydr).Surfaces!);
             else
                 renderer.Show(new ViewportMesh(Vector3.Zero));
             renderer.Frame(new CommonFury.Numerics.Aabb3(new Vector3(-1, -1, 0), new Vector3(1, 1, 2)));
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Size, Size, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             for (int i = 0; i < 4; i++)
                 renderer.RenderTo(view);
-            WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+            HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
             {
                 Size = Size * Size * 4,
-                Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
             });
-            WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-            encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
-                new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
-                new WebGpuSharp.Extent3D(Size, Size, 1));
+            HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+            encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = target },
+                new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
+                new HikariHopper.Gpu.Extent3D(Size, Size, 1));
             gpu.Queue.Submit(encoder.Finish());
-            readback.MapSync(WebGpuSharp.MapMode.Read);
+            readback.MapSync(HikariHopper.Gpu.MapMode.Read);
             byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, Size * Size * 4, span => span.ToArray());
             readback.Unmap();
             readback.Destroy();
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            error = type == WebGpuSharp.ErrorType.NoError ? null : $"{type}: {message}";
+            error = type == HikariHopper.Gpu.ErrorType.NoError ? null : $"{type}: {message}";
             target.Destroy();
             renderer.Dispose();
             return pixels;
@@ -176,9 +176,9 @@ public sealed class SubSampledAlphaTests
 
     private static Frame ReadFrame(GpuDevice gpu, ViewportRenderer renderer)
     {
-        WebGpuSharp.Texture Field(string name) => (WebGpuSharp.Texture)typeof(ViewportRenderer)
+        HikariHopper.Gpu.Texture Field(string name) => (HikariHopper.Gpu.Texture)typeof(ViewportRenderer)
             .GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(renderer)!;
-        WebGpuSharp.Texture hdr = Field("hdr");
+        HikariHopper.Gpu.Texture hdr = Field("hdr");
         int width = (int)hdr.GetWidth(), height = (int)hdr.GetHeight();
         Vector4[] Colours(byte[] bytes, int row) => [.. Enumerable.Range(0, width * height).Select(i =>
         {
@@ -193,20 +193,20 @@ public sealed class SubSampledAlphaTests
             Colours(after, colourRow));
     }
 
-    private static (byte[] Bytes, int Row) Read(GpuDevice gpu, WebGpuSharp.Texture texture, int texel)
+    private static (byte[] Bytes, int Row) Read(GpuDevice gpu, HikariHopper.Gpu.Texture texture, int texel)
     {
         uint width = texture.GetWidth(), height = texture.GetHeight(), row = (width * (uint)texel + 255) / 256 * 256;
-        WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+        HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
         {
             Size = row * height,
-            Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+            Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
         });
-        WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-        encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = texture },
-            new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = row, RowsPerImage = height } },
-            new WebGpuSharp.Extent3D(width, height, 1));
+        HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+        encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = texture },
+            new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = row, RowsPerImage = height } },
+            new HikariHopper.Gpu.Extent3D(width, height, 1));
         gpu.Queue.Submit(encoder.Finish());
-        readback.MapSync(WebGpuSharp.MapMode.Read);
+        readback.MapSync(HikariHopper.Gpu.MapMode.Read);
         byte[] bytes = readback.GetConstMappedRange<byte[], byte>(0, (nuint)(row * height), span => span.ToArray());
         readback.Unmap();
         readback.Destroy();
@@ -312,7 +312,7 @@ public sealed class SubSampledAlphaTests
         {
             var renderer = new ViewportRenderer(gpu) { Antialiasing = false, Shadows = false };
             renderer.Resize(Size, Size);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.Show(ModelContent.Read("scene.ydr", ydr).Surfaces!);
             renderer.Frame(new CommonFury.Numerics.Aabb3(new Vector3(-1, -1, 0), new Vector3(1, 1, 2)));
             return Finish(gpu, renderer);
@@ -327,7 +327,7 @@ public sealed class SubSampledAlphaTests
         {
             var renderer = new ViewportRenderer(gpu) { Antialiasing = false };
             renderer.Resize(Size, Size);
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.WorldShown = true;
             var eye = new Vector3(0, -4, 1);
             renderer.Camera.Frame(eye, 20);
@@ -351,21 +351,21 @@ public sealed class SubSampledAlphaTests
 
     private static Frame Finish(GpuDevice gpu, ViewportRenderer renderer)
     {
-        WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+        HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
         {
-            Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-            Dimension = WebGpuSharp.TextureDimension.D2,
-            Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+            Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+            Dimension = HikariHopper.Gpu.TextureDimension.D2,
+            Size = new HikariHopper.Gpu.Extent3D(Size, Size, 1),
             Format = renderer.PresentFormat,
             MipLevelCount = 1,
             SampleCount = 1,
         });
-        WebGpuSharp.TextureView view = target.CreateView();
+        HikariHopper.Gpu.TextureView view = target.CreateView();
         for (int i = 0; i < 4; i++)
             renderer.RenderTo(view);
         Frame frame = ReadFrame(gpu, renderer);
         var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-        Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+        Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
         target.Destroy();
         renderer.Dispose();
         return frame;

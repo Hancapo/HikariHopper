@@ -109,7 +109,7 @@ public sealed class PickingTests
             gpu = GpuDevice.Shared;
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
+            or HikariHopper.Gpu.GpuException)
         {
             Assert.Skip($"No GPU to test on: {error.Message}");
             return;
@@ -117,41 +117,41 @@ public sealed class PickingTests
         const int Size = 128;
         DrawableScene scene = FragmentViewerTests.DamagedScene();
         byte[] plain, outlined;
-        (WebGpuSharp.ErrorType Type, string Message) result;
+        (HikariHopper.Gpu.ErrorType Type, string Message) result;
         bool bgra;
         lock (gpu.Gate)
         {
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             var renderer = new ViewportRenderer(gpu);
             renderer.Resize(Size, Size);
             renderer.Show(scene);
             renderer.Frame(new CommonFury.Numerics.Aabb3(new Vector3(0, 0, 0), new Vector3(4, 1, 0)));
             renderer.Antialiasing = false;
-            bgra = renderer.PresentFormat is WebGpuSharp.TextureFormat.BGRA8UnormSrgb or WebGpuSharp.TextureFormat.BGRA8Unorm;
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            bgra = renderer.PresentFormat is HikariHopper.Gpu.TextureFormat.BGRA8UnormSrgb or HikariHopper.Gpu.TextureFormat.BGRA8Unorm;
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Size, Size, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             byte[] Draw()
             {
                 renderer.RenderTo(view);
-                WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+                HikariHopper.Gpu.Buffer readback = gpu.Device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor
                 {
                     Size = Size * Size * 4,
-                    Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                    Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead,
                 });
-                WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
-                encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
-                    new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
-                    new WebGpuSharp.Extent3D(Size, Size, 1));
+                HikariHopper.Gpu.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+                encoder.CopyTextureToBuffer(new HikariHopper.Gpu.TexelCopyTextureInfo { Texture = target },
+                    new HikariHopper.Gpu.TexelCopyBufferInfo { Buffer = readback, Layout = new HikariHopper.Gpu.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
+                    new HikariHopper.Gpu.Extent3D(Size, Size, 1));
                 gpu.Queue.Submit(encoder.Finish());
-                readback.MapSync(WebGpuSharp.MapMode.Read);
+                readback.MapSync(HikariHopper.Gpu.MapMode.Read);
                 byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, Size * Size * 4, span => span.ToArray());
                 readback.Unmap();
                 readback.Destroy();
@@ -167,7 +167,7 @@ public sealed class PickingTests
             renderer.Dispose();
             result = gpu.Device.PopErrorScopeSync(10_000_000_000);
         }
-        Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
+        Assert.True(result.Type == HikariHopper.Gpu.ErrorType.NoError, $"{result.Type}: {result.Message}");
 
         // Pixels round the picked triangle take the accent, #5E8BD0, give or take the dither; inside it nothing is
         // drawn over it, so every pixel the pick changes is the outline's.

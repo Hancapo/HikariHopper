@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 
@@ -15,7 +15,7 @@ internal sealed unsafe partial class ViewportRenderer
     private const int Rdr2GradeBytes = 112;
 
     private Buffer? rdr2GradeBuffer;
-    private WebGpuSharp.Texture? rdr2LevelsTable, rdr2WeatherTable;
+    private HikariHopper.Gpu.Texture? rdr2LevelsTable, rdr2WeatherTable;
     private TextureView? rdr2LevelsView, rdr2WeatherView;
     // What the tables were last baked from, so they're baked again only when it changes.
     private (Vector4 Correct, Vector4 Shift, float Desaturation)? rdr2LevelsBaked;
@@ -26,7 +26,7 @@ internal sealed unsafe partial class ViewportRenderer
     private void CreateRdr2Grading()
     {
         rdr2GradeBuffer = device.CreateBuffer(new BufferDescriptor { Size = Rdr2GradeBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
-        WebGpuSharp.Texture Table() => device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture Table() => device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
             Dimension = TextureDimension.D2,
@@ -48,7 +48,7 @@ internal sealed unsafe partial class ViewportRenderer
     // The constants with the grading off.
     private static readonly Vector4[] NoGrade = new Vector4[Rdr2GradeBytes / 16];
 
-    private void WriteRdr2Table(WebGpuSharp.Texture table, float[] texels)
+    private void WriteRdr2Table(HikariHopper.Gpu.Texture table, float[] texels)
     {
         var halves = new Half[texels.Length];
         for (int i = 0; i < texels.Length; i++)

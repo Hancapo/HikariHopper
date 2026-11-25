@@ -230,11 +230,11 @@ public sealed class Rdr2SkyTests
             {
                 var renderer = new ViewportRenderer(gpu);
                 const int Width = 64, Height = 32;
-                WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+                HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
                 {
-                    Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                    Dimension = WebGpuSharp.TextureDimension.D2,
-                    Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                    Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                    Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                    Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
                     Format = renderer.PresentFormat,
                     MipLevelCount = 1,
                     SampleCount = 1,
@@ -390,16 +390,16 @@ public sealed class Rdr2SkyTests
         {
             var renderer = new ViewportRenderer(gpu);
             const int Width = 64, Height = 32;
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.Resize(Width, Height);
             renderer.WorldShown = true;
             renderer.Camera.Frame(new Vector3(0, 0, 100), 20);
@@ -452,7 +452,7 @@ public sealed class Rdr2SkyTests
             // By night, the moon's light: thousands of times less.
             Assert.True(Luminance(renderer.Rdr2SkyLight()[0]) < Luminance(noon[0]) / 1000);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.ClearWorld();
             Assert.False(renderer.HasRdr2Sky);
             renderer.Dispose();

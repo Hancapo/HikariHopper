@@ -2,9 +2,8 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using CommonFury.Numerics;
-using WebGpuSharp;
-using WebGpuSharp.FFI;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 
@@ -85,13 +84,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         {
             if (window != 0)
             {
-                var source = new SurfaceSourceWindowsHWNDFFI
-                {
-                    Chain = new ChainedStruct { SType = SType.SurfaceSourceWindowsHWND },
-                    Hwnd = (void*)window,
-                    Hinstance = (void*)module,
-                };
-                surface = gpu.Instance.CreateSurface(new SurfaceDescriptor(ref source)) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
+                surface = gpu.Instance.CreateSurface(window, module) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
                 // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is
                 // drawn through an sRGB view of it.
                 SurfaceCapabilities capabilities = surface.GetCapabilities(adapter) ?? throw new NotSupportedException("The window's capabilities are unknown.");
@@ -400,6 +393,9 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     /// </summary>
     internal void Render(TextureView target)
     {
+        // What the GPU finished since the last frame: its buffer maps call back (the lens flare's counts), and what
+        // nothing uses any more is let go.
+        device.Poll();
         CommandEncoder encoder = device.CreateCommandEncoder();
         // A drawable's shadow first: the ground under it and the drawable itself both read it. A world's casters into
         // the cascades due this frame, once its visibility has culled them.
