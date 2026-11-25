@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 
 namespace HikariHopper.Rendering;
 
@@ -12,7 +12,7 @@ namespace HikariHopper.Rendering;
 internal sealed unsafe partial class ViewportRenderer
 {
     private GtaCoronaData? coronaData;
-    private WebGpuSharp.Texture[] coronaTextures = [];
+    private HikariHopper.Gpu.Texture[] coronaTextures = [];
     private TextureView? coronaView, flareView;
     private Buffer? coronaInstances, coronaUniforms;
     private int coronaCapacity, coronaCount;
@@ -35,7 +35,7 @@ internal sealed unsafe partial class ViewportRenderer
         ClearWorldCoronas();
         if (data is null)
             return;
-        var owned = new List<WebGpuSharp.Texture>();
+        var owned = new List<HikariHopper.Gpu.Texture>();
         TextureView Own(FiveFury.Textures.Texture? source)
         {
             if (source is null || CreateTexture(source) is not var (texture, block))
@@ -80,7 +80,7 @@ internal sealed unsafe partial class ViewportRenderer
     {
         coronaData = null;
         coronaCount = 0;
-        foreach (WebGpuSharp.Texture texture in coronaTextures)
+        foreach (HikariHopper.Gpu.Texture texture in coronaTextures)
             texture.Destroy();
         coronaTextures = [];
         coronaView = flareView = null;

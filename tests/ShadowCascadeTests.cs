@@ -27,7 +27,7 @@ public sealed class ShadowCascadeTests
             gpu = GpuDevice.Shared;
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
+            or HikariHopper.Gpu.GpuException)
         {
             Assert.Skip($"No GPU to test on: {error.Message}");
             return;
@@ -36,17 +36,17 @@ public sealed class ShadowCascadeTests
         float radius = scene.Box.Size.Length() / 2;
         lock (gpu.Gate)
         {
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             var renderer = new ViewportRenderer(gpu);
             renderer.Resize(256, 128);
             renderer.Show(scene);
             renderer.Frame(scene.Box);
             renderer.SetTime(17);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(256, 128, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(256, 128, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
@@ -57,8 +57,8 @@ public sealed class ShadowCascadeTests
             Vector4 texels = renderer.ShadowTexels, splits = renderer.ShadowSplits;
             target.Destroy();
             renderer.Dispose();
-            (WebGpuSharp.ErrorType Type, string Message) result = gpu.Device.PopErrorScopeSync(10_000_000_000);
-            Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
+            (HikariHopper.Gpu.ErrorType Type, string Message) result = gpu.Device.PopErrorScopeSync(10_000_000_000);
+            Assert.True(result.Type == HikariHopper.Gpu.ErrorType.NoError, $"{result.Type}: {result.Message}");
 
             // One map over the whole model would have a texel of its diameter over the resolution: about 14 cm here.
             float whole = radius * 2 / Core.GraphicsSettings.DefaultShadowResolution;

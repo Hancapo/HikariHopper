@@ -67,21 +67,21 @@ public sealed partial class Rdr2CutoutTests
             renderer.Show(scene);
             renderer.Frame(scene.Box);
             renderer.SetTime(13);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Size, Size, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
-            WebGpuSharp.TextureView view = target.CreateView();
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             for (int i = 0; i < 3; i++)
                 renderer.RenderTo(view);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             target.Destroy();
             renderer.Dispose();
         }

@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using HikariHopper.Rendering.World;
-using WebGpuSharp;
+using HikariHopper.Gpu;
 
 namespace HikariHopper.Rendering;
 
@@ -24,7 +24,7 @@ internal sealed unsafe partial class ViewportRenderer
     private bool shadowsValid, worldShadowDirty = true;
     private long shadowSlot;
     private (Vector3 Eye, Vector3 Forward, int Width, int Height, Vector3 Sun, int Resolution) worldShadowView;
-    private WebGpuSharp.Texture? shadowCastInto;
+    private HikariHopper.Gpu.Texture? shadowCastInto;
 
     /// <summary>How many cascades have been cast since the view was made.</summary>
     internal long CascadesCast { get; private set; }

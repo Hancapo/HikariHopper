@@ -615,7 +615,7 @@ internal sealed class WorldStreamer : IDisposable
                         lock (gate)
                             deferred.Add(asset.Key);
                 }
-                catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
+                catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or HikariHopper.Gpu.GpuException)
                 {
                     MarkFailed(asset.Key, error);
                 }
@@ -646,7 +646,7 @@ internal sealed class WorldStreamer : IDisposable
         {
             viewport.ProcessWorldUploads(uploadTicks);
         }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or WebGpuSharp.WebGPUException)
+        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentException or HikariHopper.Gpu.GpuException)
         {
             MarkFailed(key, error);
             lock (gate)

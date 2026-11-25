@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;

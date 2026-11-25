@@ -1,7 +1,7 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
-using Texture = WebGpuSharp.Texture;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
+using Texture = HikariHopper.Gpu.Texture;
 
 namespace HikariHopper.Rendering;
 

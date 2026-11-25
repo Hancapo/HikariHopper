@@ -48,10 +48,14 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Velopack" Version="1.2.161" />
-    <PackageReference Include="WebGPUSharp" Version="0.5.8" />
   </ItemGroup>
   <!-- FiveFury (GTA V), RedFury (RDR2) and the CommonFury they share. -->
   <Import Project="../GameLibraries.props" />
+  <!-- The GPU layer's implementation for the backend built (Directory.Build.props). -->
+  <ItemGroup>
+    <Compile Remove="Rendering/Gpu/D3D12/**" Condition="'$(GpuBackend)' != 'D3D12'" />
+    <Compile Remove="Rendering/Gpu/Wgpu/**" Condition="'$(GpuBackend)' != 'Wgpu'" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="HikariHopper.Tests" />
   </ItemGroup>

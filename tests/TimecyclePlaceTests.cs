@@ -217,16 +217,16 @@ public sealed class TimecyclePlaceTests
             lock (gpu.Gate)
             {
                 var renderer = new ViewportRenderer(gpu);
-                WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+                HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
                 {
-                    Usage = WebGpuSharp.TextureUsage.RenderAttachment,
-                    Dimension = WebGpuSharp.TextureDimension.D2,
-                    Size = new WebGpuSharp.Extent3D(64, 32, 1),
+                    Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment,
+                    Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                    Size = new HikariHopper.Gpu.Extent3D(64, 32, 1),
                     Format = renderer.PresentFormat,
                     MipLevelCount = 1,
                     SampleCount = 1,
                 });
-                gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+                gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
                 renderer.Resize(64, 32);
                 renderer.WorldShown = true;
                 renderer.SetTime(13);
@@ -240,7 +240,7 @@ public sealed class TimecyclePlaceTests
                 renderer.WorldShown = false;
                 Assert.Equal(6 + .5f / 3, renderer.TimecycleSample.Get("light_dir_mult"), 4);
                 var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-                Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+                Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
                 renderer.Dispose();
                 target.Destroy();
             }

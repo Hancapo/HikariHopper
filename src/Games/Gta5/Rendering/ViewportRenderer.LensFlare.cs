@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -27,7 +27,7 @@ internal sealed unsafe partial class ViewportRenderer
     private const int FlareSpriteBytes = GtaLensFlareState.SpriteVectors * 16;
 
     /// <summary>The flare's GPU side: its state, its textures, a group for each texture, and its sprites.</summary>
-    private sealed record WorldLensFlareResources(GtaLensFlare Flare, GtaLensFlareState State, WebGpuSharp.Texture[] Textures, BindGroup[] Groups,
+    private sealed record WorldLensFlareResources(GtaLensFlare Flare, GtaLensFlareState State, HikariHopper.Gpu.Texture[] Textures, BindGroup[] Groups,
         Buffer Sprites, Vector4[] Values, (int First, int Count)[] Layout);
 
     private enum FlareReadback { Free, Copied, Mapping }
@@ -39,10 +39,10 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly long[] flareReadbackFrames = new long[FlareReadbacks];
     // The pixels the whole sun disc would have covered on each count's frame, which the count is measured against.
     private readonly float[] flareReadbackExpected = new float[FlareReadbacks];
-    // Each readback's map, as its callback says it ended (nought while under way, one mapped, two failed): WebGpuSharp
-    // lets go of the buffer before it calls back, while Dawn may say it's mapped sooner, so this is what's polled.
+    // Each readback's map, as its callback says it ended (nought while under way, one mapped, two failed): wgpu calls
+    // back from a device poll, which each frame makes, so this is what's read.
     private readonly int[] flareReadbackEnds = new int[FlareReadbacks];
-    private Action<MapAsyncStatus, ReadOnlySpan<byte>>[]? flareReadbackCallbacks;
+    private Action<MapAsyncStatus, string>[]? flareReadbackCallbacks;
     // The frame; the first frame whose counts the flare shown goes by (those drawn before it was shown are the last
     // flare's, another world's); and the frame of the count it goes by.
     private long flareFrame, flareFirstFrame, flareResultFrame = -1;
@@ -181,7 +181,7 @@ internal sealed unsafe partial class ViewportRenderer
         (int First, int Count)[] layout = state.Layout();
         int sprites = Math.Max(1, layout.Sum(room => room.Count));
         Buffer buffer = device.CreateBuffer(new BufferDescriptor { Size = (ulong)(sprites * FlareSpriteBytes), Usage = BufferUsage.Storage | BufferUsage.CopyDst });
-        var owned = new List<WebGpuSharp.Texture>();
+        var owned = new List<HikariHopper.Gpu.Texture>();
         var groups = new BindGroup[GtaLensFlare.TextureCount];
         for (int i = 0; i < groups.Length; i++)
         {
@@ -214,7 +214,7 @@ internal sealed unsafe partial class ViewportRenderer
             return;
         worldLensFlare = null;
         flare.Sprites.Destroy();
-        foreach (WebGpuSharp.Texture texture in flare.Textures)
+        foreach (HikariHopper.Gpu.Texture texture in flare.Textures)
             texture.Destroy();
     }
 
@@ -244,7 +244,7 @@ internal sealed unsafe partial class ViewportRenderer
     /// <summary>Asks for this frame's count once the frame is submitted; it's read on a later frame, never waited for.</summary>
     private void MapLensFlareCount()
     {
-        flareReadbackCallbacks ??= [.. Enumerable.Range(0, FlareReadbacks).Select(slot => (Action<MapAsyncStatus, ReadOnlySpan<byte>>)((status, _) =>
+        flareReadbackCallbacks ??= [.. Enumerable.Range(0, FlareReadbacks).Select(slot => (Action<MapAsyncStatus, string>)((status, _) =>
             Volatile.Write(ref flareReadbackEnds[slot], status == MapAsyncStatus.Success ? 1 : 2)))];
         for (int i = 0; i < FlareReadbacks; i++)
             if (flareReadbackStates[i] == FlareReadback.Copied)

@@ -1,5 +1,5 @@
-using WebGpuSharp;
-using Texture = WebGpuSharp.Texture;
+using HikariHopper.Gpu;
+using Texture = HikariHopper.Gpu.Texture;
 
 namespace HikariHopper.Rendering;
 

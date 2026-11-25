@@ -17,6 +17,23 @@
     <ProjectReference Include="$(RedFuryRoot)RedFury.World/RedFury.World.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
     <ProjectReference Include="$(CommonFuryRoot)CommonFury/CommonFury.csproj" AdditionalProperties="CommonFuryRoot=$(CommonFuryRoot);Configuration=Release" />
   </ItemGroup>
+  <!-- wgpu, when the 3D views draw with it, and its native library as built in the WGpuFury checkout. -->
+  <ItemGroup Condition="'$(GpuBackend)' == 'Wgpu'">
+    <ProjectReference Include="$(WGpuFuryRoot)src/WGpuFury/WGpuFury.csproj" AdditionalProperties="Configuration=Release" />
+    <None Include="$(WGpuFuryRoot)native/win-x64/lib/wgpu_native.dll" Link="wgpu_native.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- Direct3D 12, when they draw with it: Vortice's bindings, AMD's allocator for placing resources in heaps, and PIX's event
+       markers. -->
+  <ItemGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3D12MemoryAllocator" Version="3.8.3" />
+    <PackageReference Include="WinPixEventRuntime" Version="1.0.240308001" />
+  </ItemGroup>
+  <Target Name="CheckWGpuFury" BeforeTargets="_GetProjectReferenceTargetFrameworkProperties;ResolveProjectReferences"
+          Condition="'$(GpuBackend)' == 'Wgpu' and !Exists('$(WGpuFuryRoot)native/win-x64/lib/wgpu_native.dll')">
+    <Error Text="WGpuFury's wgpu-native was not found at $(WGpuFuryRoot)native/win-x64/lib. Set WGPUFURY_ROOT to a WGpuFury checkout and build it there (dotnet run eng/build-native.cs)." />
+  </Target>
   <Target Name="CheckCommonFury" BeforeTargets="_GetProjectReferenceTargetFrameworkProperties;ResolveProjectReferences"
           Condition="!Exists('$(CommonFuryRoot)CommonFury/CommonFury.csproj')">
     <Error Text="CommonFury was not found at $(CommonFuryRoot). Run 'git submodule update --init', or set COMMONFURY_ROOT to a CommonFury.NET checkout." />

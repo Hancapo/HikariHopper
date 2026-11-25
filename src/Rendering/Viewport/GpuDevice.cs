@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
-using WebGpuSharp;
+using HikariHopper.Gpu;
 
 namespace HikariHopper.Rendering;
 
@@ -44,11 +44,12 @@ internal sealed class GpuDevice
 
     private GpuDevice()
     {
-        Instance = WebGPU.CreateInstance() ?? throw new InvalidOperationException("WebGPU is unavailable.");
+        // Direct3D 12 alone; Direct3D 12's removal data kept when WGPU_D3D12_DRED=1, for a lost device to say what the GPU
+        // was doing.
+        Instance = Instance.Create();
         // Any window can be drawn into from the Direct3D 12 adapter, so none is needed to pick it.
         Adapter = Instance.RequestAdapterSync(new RequestAdapterOptions
         {
-            CompatibleSurface = null!,
             BackendType = BackendType.D3D12,
             PowerPreference = PowerPreference.HighPerformance,
         }) ?? throw new NotSupportedException("No Direct3D 12 GPU is available.");
@@ -94,7 +95,7 @@ internal sealed class GpuDevice
                     }
                 }
                 catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-                    or EntryPointNotFoundException or TimeoutException or WebGPUException)
+                    or EntryPointNotFoundException or TimeoutException or GpuException)
                 {
                 }
             });
@@ -150,7 +151,7 @@ internal sealed class GpuDevice
         {
             made = compiling.GetAwaiter().GetResult();
         }
-        catch (Exception error) when (error is WebGPUException or InvalidOperationException)
+        catch (Exception error) when (error is GpuException or InvalidOperationException)
         {
             made = create();
         }
@@ -199,23 +200,43 @@ internal sealed class GpuDevice
 
     private const string LostPrefix = "WebGPU device lost";
 
+    /// <summary>What a viewport says when the GPU device is lost.</summary>
+    internal const string LostMessage = "The GPU device was lost. Restart HikariHopper to see the 3D view again.";
+
+    /// <summary>
+    /// Whether an error is the device being lost: reported by the device's lost callback, or met first as a call on it
+    /// fails (a swap chain that gives errors, a map that can't be made).
+    /// </summary>
+    internal static bool IsLost(Exception error) => error.Message.StartsWith(LostPrefix, StringComparison.Ordinal)
+        || error.Message.Contains("is lost", StringComparison.Ordinal) || error.Message == LostMessage;
+
+    /// <summary>
+    /// Marks the device lost when a viewport finds it so (its swap chain failing), for every viewport on it to stop with
+    /// why, and the next to be made on a new one.
+    /// </summary>
+    internal void Lose(string why)
+    {
+        if (!lost)
+            Report($"{LostPrefix} ({why})");
+    }
+
     private static Device RequestDevice(Adapter adapter, bool compressedTextures, bool indirectFirstInstance, Action<string> failed)
     {
         // What the adapter allows, asked for whole: Red Dead Redemption 2's material reads more textures at once than
         // WebGPU's defaults let a shader (Rdr2/surface.wgsl, Rdr2TextureSlots).
-        adapter.GetLimits(out Limits limits);
-        // The descriptor is a ref struct, so it is built where the request is made, off the caller's context.
-        return Task.Run(() => adapter.RequestDeviceAsync(new DeviceDescriptor
+        return adapter.RequestDeviceSync(new DeviceDescriptor
         {
-            RequiredLimits = limits,
+            AdapterLimits = true,
             RequiredFeatures = [.. compressedTextures ? [FeatureName.TextureCompressionBC] : Array.Empty<FeatureName>(),
                 .. indirectFirstInstance ? [FeatureName.IndirectFirstInstance] : Array.Empty<FeatureName>()],
-            UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {Encoding.UTF8.GetString(message)}"),
+            UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {message}"),
+            // Its reason with it: Direct3D 12's removal reason, and with WGPU_D3D12_DRED=1 what the GPU was doing. A device
+            // let go of, or destroyed, isn't lost.
             DeviceLostCallback = (reason, message) =>
             {
-                if (reason != DeviceLostReason.Destroyed)
-                    failed($"{LostPrefix} ({reason}): {Encoding.UTF8.GetString(message)}");
+                if (reason is not (DeviceLostReason.Destroyed or DeviceLostReason.CallbackCancelled))
+                    failed($"{LostPrefix} ({reason}): {message}");
             },
-        })).GetAwaiter().GetResult();
+        }) ?? throw new NotSupportedException("The GPU refused a device.");
     }
 }

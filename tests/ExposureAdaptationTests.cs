@@ -18,16 +18,16 @@ public sealed class ExposureAdaptationTests
         {
             var renderer = new ViewportRenderer(gpu);
             const int Width = 128, Height = 64;
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.Resize(Width, Height);
             renderer.WorldShown = true;
             renderer.Camera.Frame(new Vector3(0, 0, 50), 20);
@@ -36,10 +36,10 @@ public sealed class ExposureAdaptationTests
             renderer.SetTime(14);
             renderer.ShowWorldSky(GtaSkyTests.Octahedron());
             Assert.True(renderer.HasWorldSky);
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             test(renderer, () => renderer.RenderTo(view));
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             renderer.Dispose();
             target.Destroy();
         }
@@ -107,11 +107,11 @@ public sealed class ExposureAdaptationTests
         lock (gpu.Gate)
         {
             var renderer = new ViewportRenderer(gpu);
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(64, 64, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(64, 64, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
@@ -119,7 +119,7 @@ public sealed class ExposureAdaptationTests
             renderer.Resize(64, 64);
             renderer.Show(new ViewportMesh(Vector3.Zero));
             renderer.SetTime(14);
-            WebGpuSharp.TextureView view = target.CreateView();
+            HikariHopper.Gpu.TextureView view = target.CreateView();
             renderer.RenderTo(view);
             // The exposure two stops down, a frame with a time: the viewer's fixed view takes the target at once.
             renderer.Exposure = -2;

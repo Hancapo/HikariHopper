@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using HikariHopper.Rendering.World;
 using RedFury.World;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -30,7 +30,7 @@ internal sealed unsafe partial class ViewportRenderer
         // The textures still to go up, the one going up (with its mip level), and those it put up (by what they are).
         internal readonly Queue<GameTexture> Textures = new();
         internal GameTexture? Texture;
-        internal WebGpuSharp.Texture? GpuTexture;
+        internal HikariHopper.Gpu.Texture? GpuTexture;
         internal int Block, Level, Row;
         internal readonly List<object> Registered = [];
 

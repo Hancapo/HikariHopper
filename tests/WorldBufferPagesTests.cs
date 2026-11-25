@@ -1,5 +1,5 @@
 using HikariHopper.Rendering.World;
-using WebGpuSharp;
+using HikariHopper.Gpu;
 
 namespace HikariHopper.Tests;
 

@@ -85,9 +85,9 @@ public sealed class GtaFogTests
         GpuDevice gpu = TestGpu.Device();
         lock (gpu.Gate)
         {
-            WebGpuSharp.Device device = gpu.Device;
-            device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
-            WebGpuSharp.ShaderModule shader = device.CreateShaderModuleWGSL(new WebGpuSharp.ShaderModuleWGSLDescriptor
+            HikariHopper.Gpu.Device device = gpu.Device;
+            device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
+            HikariHopper.Gpu.ShaderModule shader = device.CreateShaderModuleWGSL(new HikariHopper.Gpu.ShaderModuleWGSLDescriptor
             {
                 Code = ViewportRenderer.Read("Gta5/fog.wgsl") + """
 
@@ -101,51 +101,51 @@ public sealed class GtaFogTests
                     }
                     """,
             });
-            WebGpuSharp.BindGroupLayout layout = device.CreateBindGroupLayout(new WebGpuSharp.BindGroupLayoutDescriptor
+            HikariHopper.Gpu.BindGroupLayout layout = device.CreateBindGroupLayout(new HikariHopper.Gpu.BindGroupLayoutDescriptor
             {
                 Entries =
                 [
-                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 0, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.Uniform } },
-                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 1, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.ReadOnlyStorage } },
-                    new WebGpuSharp.BindGroupLayoutEntry { Binding = 2, Visibility = WebGpuSharp.ShaderStage.Compute, Buffer = new WebGpuSharp.BufferBindingLayout { Type = WebGpuSharp.BufferBindingType.Storage } },
+                    new HikariHopper.Gpu.BindGroupLayoutEntry { Binding = 0, Visibility = HikariHopper.Gpu.ShaderStage.Compute, Buffer = new HikariHopper.Gpu.BufferBindingLayout { Type = HikariHopper.Gpu.BufferBindingType.Uniform } },
+                    new HikariHopper.Gpu.BindGroupLayoutEntry { Binding = 1, Visibility = HikariHopper.Gpu.ShaderStage.Compute, Buffer = new HikariHopper.Gpu.BufferBindingLayout { Type = HikariHopper.Gpu.BufferBindingType.ReadOnlyStorage } },
+                    new HikariHopper.Gpu.BindGroupLayoutEntry { Binding = 2, Visibility = HikariHopper.Gpu.ShaderStage.Compute, Buffer = new HikariHopper.Gpu.BufferBindingLayout { Type = HikariHopper.Gpu.BufferBindingType.Storage } },
                 ],
             });
-            WebGpuSharp.ComputePipeline pipeline = device.CreateComputePipelineSync(new WebGpuSharp.ComputePipelineDescriptor
+            HikariHopper.Gpu.ComputePipeline pipeline = device.CreateComputePipelineSync(new HikariHopper.Gpu.ComputePipelineDescriptor
             {
-                Layout = device.CreatePipelineLayout(new WebGpuSharp.PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),
-                Compute = new WebGpuSharp.ComputeState { Module = shader, EntryPoint = "cs_fog" },
+                Layout = device.CreatePipelineLayout(new HikariHopper.Gpu.PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),
+                Compute = new HikariHopper.Gpu.ComputeState { Module = shader, EntryPoint = "cs_fog" },
             });
             ulong bytes = (ulong)rays.Length * 16;
-            WebGpuSharp.Buffer uniforms = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = (ulong)constants.Length * 16, Usage = WebGpuSharp.BufferUsage.Uniform | WebGpuSharp.BufferUsage.CopyDst });
-            WebGpuSharp.Buffer input = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.Storage | WebGpuSharp.BufferUsage.CopyDst });
-            WebGpuSharp.Buffer output = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.Storage | WebGpuSharp.BufferUsage.CopySrc });
-            WebGpuSharp.Buffer readback = device.CreateBuffer(new WebGpuSharp.BufferDescriptor { Size = bytes, Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead });
+            HikariHopper.Gpu.Buffer uniforms = device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor { Size = (ulong)constants.Length * 16, Usage = HikariHopper.Gpu.BufferUsage.Uniform | HikariHopper.Gpu.BufferUsage.CopyDst });
+            HikariHopper.Gpu.Buffer input = device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor { Size = bytes, Usage = HikariHopper.Gpu.BufferUsage.Storage | HikariHopper.Gpu.BufferUsage.CopyDst });
+            HikariHopper.Gpu.Buffer output = device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor { Size = bytes, Usage = HikariHopper.Gpu.BufferUsage.Storage | HikariHopper.Gpu.BufferUsage.CopySrc });
+            HikariHopper.Gpu.Buffer readback = device.CreateBuffer(new HikariHopper.Gpu.BufferDescriptor { Size = bytes, Usage = HikariHopper.Gpu.BufferUsage.CopyDst | HikariHopper.Gpu.BufferUsage.MapRead });
             gpu.Queue.WriteBuffer(uniforms, 0, constants);
             gpu.Queue.WriteBuffer(input, 0, (ReadOnlySpan<Vector4>)[.. rays.Select(ray => new Vector4(ray, 0))]);
-            WebGpuSharp.BindGroup group = device.CreateBindGroup(new WebGpuSharp.BindGroupDescriptor
+            HikariHopper.Gpu.BindGroup group = device.CreateBindGroup(new HikariHopper.Gpu.BindGroupDescriptor
             {
                 Layout = layout,
                 Entries =
                 [
-                    new WebGpuSharp.BindGroupEntry { Binding = 0, Buffer = uniforms, Size = uniforms.GetSize() },
-                    new WebGpuSharp.BindGroupEntry { Binding = 1, Buffer = input, Size = bytes },
-                    new WebGpuSharp.BindGroupEntry { Binding = 2, Buffer = output, Size = bytes },
+                    new HikariHopper.Gpu.BindGroupEntry { Binding = 0, Buffer = uniforms, Size = uniforms.GetSize() },
+                    new HikariHopper.Gpu.BindGroupEntry { Binding = 1, Buffer = input, Size = bytes },
+                    new HikariHopper.Gpu.BindGroupEntry { Binding = 2, Buffer = output, Size = bytes },
                 ],
             });
-            WebGpuSharp.CommandEncoder encoder = device.CreateCommandEncoder();
-            WebGpuSharp.ComputePassEncoder pass = encoder.BeginComputePass();
+            HikariHopper.Gpu.CommandEncoder encoder = device.CreateCommandEncoder();
+            HikariHopper.Gpu.ComputePassEncoder pass = encoder.BeginComputePass();
             pass.SetPipeline(pipeline);
             pass.SetBindGroup(0, group);
             pass.DispatchWorkgroups((uint)rays.Length, 1, 1);
             pass.End();
             encoder.CopyBufferToBuffer(output, 0, readback, 0, bytes);
             gpu.Queue.Submit(encoder.Finish());
-            readback.MapSync(WebGpuSharp.MapMode.Read);
+            readback.MapSync(HikariHopper.Gpu.MapMode.Read);
             Vector4[] fogged = readback.GetConstMappedRange<Vector4[], Vector4>(0, (nuint)rays.Length, span => span.ToArray());
             readback.Unmap();
             var (type, message) = device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
-            foreach (WebGpuSharp.Buffer buffer in new[] { uniforms, input, output, readback })
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
+            foreach (HikariHopper.Gpu.Buffer buffer in new[] { uniforms, input, output, readback })
                 buffer.Destroy();
             return fogged;
         }
@@ -195,17 +195,17 @@ public sealed class GtaFogTests
         {
             var renderer = new ViewportRenderer(gpu);
             const int Width = 64, Height = 32;
-            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            HikariHopper.Gpu.Texture target = gpu.Device.CreateTexture(new HikariHopper.Gpu.TextureDescriptor
             {
-                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
-                Dimension = WebGpuSharp.TextureDimension.D2,
-                Size = new WebGpuSharp.Extent3D(Width, Height, 1),
+                Usage = HikariHopper.Gpu.TextureUsage.RenderAttachment | HikariHopper.Gpu.TextureUsage.CopySrc,
+                Dimension = HikariHopper.Gpu.TextureDimension.D2,
+                Size = new HikariHopper.Gpu.Extent3D(Width, Height, 1),
                 Format = renderer.PresentFormat,
                 MipLevelCount = 1,
                 SampleCount = 1,
             });
-            WebGpuSharp.TextureView view = target.CreateView();
-            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            HikariHopper.Gpu.TextureView view = target.CreateView();
+            gpu.Device.PushErrorScope(HikariHopper.Gpu.ErrorFilter.Validation);
             renderer.Resize(Width, Height);
             renderer.WorldShown = true;
             renderer.Shadows = true;
@@ -237,7 +237,7 @@ public sealed class GtaFogTests
             // In the sun's shadow's reach, with the timecycle's fog rays: they're drawn.
             Assert.True(renderer.WorldFogRays);
             var (type, message) = gpu.Device.PopErrorScopeSync(5_000_000_000);
-            Assert.True(type == WebGpuSharp.ErrorType.NoError, message);
+            Assert.True(type == HikariHopper.Gpu.ErrorType.NoError, message);
             // Red fog over the white surface: its green all but gone, its red and blue apart.
             static (int Low, int Green, int High) Channels(uint pixel) => ((int)(pixel & 0xFF), (int)((pixel >> 8) & 0xFF), (int)((pixel >> 16) & 0xFF));
             var (clearLow, clearGreen, clearHigh) = Channels(clearPixel);

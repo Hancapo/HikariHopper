@@ -1,6 +1,6 @@
 using System.Numerics;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -24,10 +24,10 @@ internal sealed unsafe partial class ViewportRenderer
     /// The RDR2 sky's GPU side: its tables, the totals' two (added into in turn), the dome's mesh, its textures, and its
     /// groups.
     /// </summary>
-    private sealed record Rdr2SkyResources(Rdr2Sky Sky, WebGpuSharp.Texture Transmittance, WebGpuSharp.Texture Delta, WebGpuSharp.Texture Gathered,
-        WebGpuSharp.Texture[] Totals, BindGroup[] Passes, BindGroup[] Domes, Buffer Tables, Buffer Dome, Buffer Vertices, Buffer Indices,
-        uint IndexCount, WebGpuSharp.Texture[] Textures, Buffer Light, WebGpuSharp.Texture[] GatheredSums, BindGroup[] GatheredAdds,
-        WebGpuSharp.Texture[] Aerial, BindGroup AerialOut, TextureView[] AerialViews);
+    private sealed record Rdr2SkyResources(Rdr2Sky Sky, HikariHopper.Gpu.Texture Transmittance, HikariHopper.Gpu.Texture Delta, HikariHopper.Gpu.Texture Gathered,
+        HikariHopper.Gpu.Texture[] Totals, BindGroup[] Passes, BindGroup[] Domes, Buffer Tables, Buffer Dome, Buffer Vertices, Buffer Indices,
+        uint IndexCount, HikariHopper.Gpu.Texture[] Textures, Buffer Light, HikariHopper.Gpu.Texture[] GatheredSums, BindGroup[] GatheredAdds,
+        HikariHopper.Gpu.Texture[] Aerial, BindGroup AerialOut, TextureView[] AerialViews);
 
     // The aerial perspective's grid: 32 by 32 over the frame, 32 slices out to its far clip.
     private static readonly Extent3D Rdr2AerialSize = new(32, 32, 32);
@@ -299,7 +299,7 @@ internal sealed unsafe partial class ViewportRenderer
             LodMaxClamp = 32,
             MaxAnisotropy = 1,
         });
-        WebGpuSharp.Texture Table(Extent3D size, TextureUsage extra = TextureUsage.None) => device.CreateTexture(new TextureDescriptor
+        HikariHopper.Gpu.Texture Table(Extent3D size, TextureUsage extra = TextureUsage.None) => device.CreateTexture(new TextureDescriptor
         {
             Usage = TextureUsage.StorageBinding | TextureUsage.TextureBinding | extra,
             Dimension = size.DepthOrArrayLayers > 1 ? TextureDimension.D3 : TextureDimension.D2,
@@ -308,11 +308,11 @@ internal sealed unsafe partial class ViewportRenderer
             MipLevelCount = 1,
             SampleCount = 1,
         });
-        WebGpuSharp.Texture transmittance = Table(Rdr2TransmittanceSize), delta = Table(Rdr2ScatteringSize, TextureUsage.CopySrc),
+        HikariHopper.Gpu.Texture transmittance = Table(Rdr2TransmittanceSize), delta = Table(Rdr2ScatteringSize, TextureUsage.CopySrc),
             gathered = Table(Rdr2GatherSize, TextureUsage.CopySrc);
-        WebGpuSharp.Texture[] gatheredSums = [Table(Rdr2GatherSize, TextureUsage.CopyDst), Table(Rdr2GatherSize, TextureUsage.CopyDst)];
-        WebGpuSharp.Texture[] aerial = [Table(Rdr2AerialSize), Table(Rdr2AerialSize), Table(Rdr2FogSize), Table(Rdr2FogSize)];
-        WebGpuSharp.Texture[] totals = [Table(Rdr2ScatteringSize, TextureUsage.CopyDst), Table(Rdr2ScatteringSize, TextureUsage.CopyDst)];
+        HikariHopper.Gpu.Texture[] gatheredSums = [Table(Rdr2GatherSize, TextureUsage.CopyDst), Table(Rdr2GatherSize, TextureUsage.CopyDst)];
+        HikariHopper.Gpu.Texture[] aerial = [Table(Rdr2AerialSize), Table(Rdr2AerialSize), Table(Rdr2FogSize), Table(Rdr2FogSize)];
+        HikariHopper.Gpu.Texture[] totals = [Table(Rdr2ScatteringSize, TextureUsage.CopyDst), Table(Rdr2ScatteringSize, TextureUsage.CopyDst)];
         Buffer tables = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.TableBytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         Buffer dome = device.CreateBuffer(new BufferDescriptor { Size = Rdr2Sky.Bytes, Usage = BufferUsage.Uniform | BufferUsage.CopyDst });
         TextureView transmittanceView = transmittance.CreateView(), deltaView = delta.CreateView(), gatheredView = gathered.CreateView();
@@ -344,7 +344,7 @@ internal sealed unsafe partial class ViewportRenderer
             View(3, aerialViews[3]));
         // The game's dome and its textures, or a sphere where its files haven't them, with nothing on it.
         Rdr2SkyDome shape = sky.Dome ?? Rdr2SkyDome.Sphere();
-        var owned = new List<WebGpuSharp.Texture>();
+        var owned = new List<HikariHopper.Gpu.Texture>();
         TextureView Own(GameTexture? source)
         {
             if (source is null || CreateTexture(source) is not var (texture, block))
@@ -375,7 +375,7 @@ internal sealed unsafe partial class ViewportRenderer
             return;
         rdr2Sky = null;
         rdr2AerialApply = null;
-        foreach (WebGpuSharp.Texture texture in (ReadOnlySpan<WebGpuSharp.Texture>)[sky.Transmittance, sky.Delta, sky.Gathered, .. sky.Totals, .. sky.Textures,
+        foreach (HikariHopper.Gpu.Texture texture in (ReadOnlySpan<HikariHopper.Gpu.Texture>)[sky.Transmittance, sky.Delta, sky.Gathered, .. sky.Totals, .. sky.Textures,
             .. sky.GatheredSums, .. sky.Aerial])
             texture.Destroy();
         foreach (Buffer buffer in (ReadOnlySpan<Buffer>)[sky.Tables, sky.Dome, sky.Vertices, sky.Indices, sky.Light])

@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using HikariHopper.Rendering.World;
 using RedFury.World;
-using WebGpuSharp;
-using Buffer = WebGpuSharp.Buffer;
+using HikariHopper.Gpu;
+using Buffer = HikariHopper.Gpu.Buffer;
 using GameTexture = FiveFury.Textures.Texture;
 
 namespace HikariHopper.Rendering;
@@ -180,9 +180,9 @@ internal sealed unsafe partial class ViewportRenderer
     // The world's textures on the GPU by what they are (WorldAsset.TextureId), not by the object read: the pixels read
     // go once they're up, as nothing here holds them, and a texture read again is the one up. Each with how many
     // assets bind it; one that can't be drawn has no GPU texture and reads as missing.
-    private sealed class WorldTexture(WebGpuSharp.Texture? gpu)
+    private sealed class WorldTexture(HikariHopper.Gpu.Texture? gpu)
     {
-        internal readonly WebGpuSharp.Texture? Gpu = gpu;
+        internal readonly HikariHopper.Gpu.Texture? Gpu = gpu;
         internal readonly TextureView? View = gpu is null ? null : ShapedView(gpu);
         internal TextureView? Srgb;
         internal int Users;

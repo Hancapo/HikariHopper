@@ -12,7 +12,7 @@ internal static class TestGpu
             return GpuDevice.Shared;
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
-            or WebGpuSharp.WebGPUException)
+            or HikariHopper.Gpu.GpuException)
         {
             Assert.Skip($"No GPU to test on: {error.Message}");
             throw;
