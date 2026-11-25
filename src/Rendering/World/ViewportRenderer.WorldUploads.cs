@@ -34,8 +34,12 @@ internal sealed unsafe partial class ViewportRenderer
         internal int Block, Level, Row;
         internal readonly List<object> Registered = [];
 
-        // Every texture its materials bind, as read.
+        // Every texture its materials bind, as read, and what each is (WorldAsset.TextureId).
         internal readonly HashSet<GameTexture> Read = new(ReferenceEqualityComparer.Instance);
+        internal readonly HashSet<object> Ids = [];
+
+        // Those already up that their last asset let go of meanwhile, kept for this one.
+        internal readonly List<object> Adopted = [];
 
         internal WorldSlice? VertexBuffer, IndexBuffer;
         internal long VertexOffset, IndexOffset;
@@ -56,9 +60,11 @@ internal sealed unsafe partial class ViewportRenderer
         var queued = new HashSet<object>();
         foreach (var (_, material, rdr2) in asset.Layout.Kept)
             foreach (GameTexture? texture in rdr2 is not null ? rdr2.Textures : material.BoundTextures())
-                if (texture is not null && pending.Read.Add(texture) && asset.TextureId(texture) is var id && !worldTextures.ContainsKey(id) && queued.Add(id))
+                if (texture is not null && pending.Read.Add(texture) && asset.TextureId(texture) is var id && pending.Ids.Add(id)
+                    && !worldTextures.ContainsKey(id) && queued.Add(id))
                     pending.Textures.Enqueue(texture);
         pendingWorld = pending;
+        WorldResidentRevision++;
     }
 
     /// <summary>
@@ -170,10 +176,15 @@ internal sealed unsafe partial class ViewportRenderer
         foreach (object id in uploaded.Textures)
             if (worldTextures.TryGetValue(id, out WorldTexture? texture))
                 texture.Users++;
+        ForgetUnused(pending.Adopted);
         uploaded.Used = worldClock;
+        // Asked for until the streamer says otherwise: it's up because the cut wanted it.
+        uploaded.Wanted = worldWantedNow;
         uploaded.Id = ++worldAssetIds;
         worldAssets.Add(pending.Source.Key, uploaded);
         pendingWorld = null;
+        WorldReadyRevision++;
+        WorldMemoryRevision++;
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
     }
 
@@ -241,12 +252,19 @@ internal sealed unsafe partial class ViewportRenderer
         if (pendingWorld is not { } pending)
             return;
         pendingWorld = null;
+        WorldResidentRevision++;
         pending.GpuTexture?.Destroy();
         FreeSlice(VertexPages, pending.VertexBuffer);
         FreeSlice(IndexPages, pending.IndexBuffer);
-        foreach (object id in pending.Registered)
+        ForgetUnused(pending.Registered);
+        ForgetUnused(pending.Adopted);
+        ReleaseWorldMemory(pending.Source.MemoryCost);
+    }
+
+    private void ForgetUnused(List<object> ids)
+    {
+        foreach (object id in ids)
             if (worldTextures.TryGetValue(id, out WorldTexture? texture) && texture.Users == 0)
                 ForgetWorldTexture(id);
-        ReleaseWorldMemory(pending.Source.MemoryCost);
     }
 }

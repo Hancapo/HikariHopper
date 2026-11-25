@@ -51,15 +51,57 @@ public sealed class WorldBufferPagesTests
     }
 
     [Fact]
+    public void TheEmptiestPageMovesIntoTheFullerOnesUntilNoneTakesMore()
+    {
+        var gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            var pages = new WorldBufferPages(gpu.Device, BufferUsage.Vertex | BufferUsage.CopyDst | BufferUsage.CopySrc, Page);
+            // Three pages of four ranges each, then holes: the first keeps three, the second one, the third two.
+            WorldSlice[] slices = [.. Enumerable.Range(0, 12).Select(_ => pages.Allocate(Page / 4))];
+            Assert.Equal(3, pages.Buffers);
+            foreach (int gone in new[] { 3, 5, 6, 7, 10, 11 })
+                pages.Free(slices[gone]);
+            // The second, holding least, is the one to empty, and only into a fuller page: the first, which has the room.
+            Assert.Same(slices[4].Buffer, pages.Sparsest());
+            WorldSlice moved = pages.Move(Page / 4, slices[4].Buffer)!.Value;
+            Assert.Same(slices[0].Buffer, moved.Buffer);
+            pages.Free(slices[4]);
+            // Emptied, it's the page kept for what comes next. The third's two ranges have no fuller page with room for
+            // both: the first is full, and an emptier page takes nothing, or the two would trade ranges for ever.
+            Assert.Equal(3, pages.Buffers);
+            Assert.Null(pages.Sparsest());
+            Assert.Null(pages.Move(Page / 4, slices[8].Buffer));
+            // Room in the first again: the third can go, a range at a time, and its page with it.
+            pages.Free(slices[0]);
+            pages.Free(slices[1]);
+            Assert.Same(slices[8].Buffer, pages.Sparsest());
+            foreach (int index in new[] { 8, 9 })
+            {
+                Assert.Same(slices[2].Buffer, pages.Move(Page / 4, slices[index].Buffer)!.Value.Buffer);
+                pages.Free(slices[index]);
+            }
+            Assert.Equal(2, pages.Buffers);
+            Assert.Null(pages.Sparsest());
+            pages.Clear();
+        }
+    }
+
+    [Fact]
     public void ALargeRangeIsABufferOfItsOwnAndEmptyPagesGo()
     {
         var gpu = TestGpu.Device();
         lock (gpu.Gate)
         {
             var pages = new WorldBufferPages(gpu.Device, BufferUsage.Index | BufferUsage.CopyDst, Page);
-            WorldSlice large = pages.Allocate(Page / 2);
+            // Half a page still shares one; more is a buffer of its own, of its size.
+            WorldSlice half = pages.Allocate(Page / 2);
+            Assert.Equal(Page, pages.Bytes);
+            pages.Free(half);
+            pages.Clear();
+            WorldSlice large = pages.Allocate(Page / 2 + 256);
             Assert.Equal(0UL, large.Offset);
-            Assert.Equal(Page / 2, pages.Bytes);
+            Assert.Equal(Page / 2 + 256, pages.Bytes);
             pages.Free(large);
             Assert.Equal(0, pages.Buffers);
             // Two pages' worth of ranges, then all of them back: one empty page is kept for what comes next.

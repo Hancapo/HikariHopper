@@ -15,10 +15,14 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 - Title-bar menus opened over a world run their items when clicked, including menus already used on the Files side. ([#338](https://github.com/Hancapo/HikariHopper/pull/338))
 - GTA V trees and props cast their shadows in its world at every distance, instead of losing them between their most detailed model's reach and their low-detail stand-in's. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
 - Both worlds count each model's memory once, so they no longer reach their 4 GB limit and drop models, and the shadows they cast, while the camera moves. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
+- Both worlds free the draw lists they record again as models change detail, which they kept for good: 1.1 GB after two minutes of flying over GTA V's city. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
+- Shadows in both worlds hold steady after models are let go, instead of buildings' shadows flickering on and off with the camera still. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
 
 ### Performance
 
 - Red Dead Redemption 2's world keeps 967 MB less in memory at Valentine by letting go of texture pixels once they're on the GPU, and puts 194 MB fewer textures on it. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
+- Both worlds let go of the models the camera left behind half a minute ago, so their memory comes back down: back at Legion Square after a 3.5 km flight out, the process holds 5.3 GB instead of 8.2 GB and the GPU 2.2 GB instead of 4.5 GB. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
+- Moving through a world allocates 11–14 MB a second instead of 80, and standing still none instead of 29. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
 
 ## [0.3.0] - 2026-11-20
 

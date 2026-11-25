@@ -65,8 +65,11 @@ internal sealed unsafe partial class ViewportRenderer
         return (asset.ShadowCount[c] | asset.ShadowCount[c + 1] | asset.ShadowCount[c + 2] | asset.ShadowCount[c + 3]) != 0;
     }
 
+    // Its bundles are freed here and now (GpuReferences): a pass that executed one this frame keeps it until it's drawn.
     private static void ReleaseAssetBundles(WorldGpuAsset asset)
     {
+        foreach (RenderBundle? bundle in asset.Bundles)
+            GpuReferences.Free(bundle);
         Array.Clear(asset.Bundles);
         Array.Clear(asset.BundleLods);
     }
@@ -394,6 +397,30 @@ internal sealed unsafe partial class ViewportRenderer
         public void Draw(int argument) => encoder.DrawIndexedIndirect(arguments, (ulong)argument * 20);
     }
 
+    // Nowhere: only how many draws there would be is wanted.
+    private readonly struct NoTarget : IWorldTarget
+    {
+        public void SetPipeline(RenderPipeline pipeline)
+        {
+        }
+
+        public void SetBindGroup(uint index, BindGroup group)
+        {
+        }
+
+        public void SetVertexBuffer(uint slot, WorldSlice slice)
+        {
+        }
+
+        public void SetIndexBuffer(WorldSlice slice)
+        {
+        }
+
+        public void Draw(int argument)
+        {
+        }
+    }
+
     private readonly struct PassTarget(RenderPassEncoder pass, WorldDrawArguments[] arguments) : IWorldTarget
     {
         public void SetPipeline(RenderPipeline pipeline) => pass.SetPipeline(pipeline);
@@ -481,6 +508,13 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderBundle? RecordWorldBundle(WorldGpuAsset asset, int bundle)
     {
         bool shadow = bundle >= ShadowBundle;
+        asset.BundleLods[bundle] = asset.NeededLods;
+        // One with nothing to draw in this pass (an asset without decals, say) has no bundle, and no encoder is made
+        // for it: an encoder that's never finished is never let go, 1.6 KB of the system's memory at each recording
+        // of each such asset, and one finished for nothing is a bundle of 16 KB to free.
+        asset.BundleDraws[bundle] = EncodeWorldAsset(default(NoTarget), asset, bundle, asset.NeededLods);
+        if (asset.BundleDraws[bundle] == 0)
+            return null;
         RenderBundleEncoder encoder = device.CreateRenderBundleEncoder(new RenderBundleEncoderDescriptor
         {
             ColorFormats = shadow ? [] : [HdrFormat, SubSampledFormat, OccludableFormat, OccludableFormat],
@@ -498,9 +532,8 @@ internal sealed unsafe partial class ViewportRenderer
             target.SetBindGroup(0, sceneGroup);
             target.SetBindGroup(2, lightGroup!);
         }
-        asset.BundleLods[bundle] = asset.NeededLods;
-        asset.BundleDraws[bundle] = EncodeWorldAsset(target, asset, bundle, asset.NeededLods);
-        return asset.BundleDraws[bundle] == 0 ? null : encoder.Finish();
+        EncodeWorldAsset(target, asset, bundle, asset.NeededLods);
+        return encoder.Finish().Owned();
     }
 
     // A pass's world draws: each asset with placements in it, from its bundle (recorded first if it has none), or directly.
@@ -526,6 +559,8 @@ internal sealed unsafe partial class ViewportRenderer
             // A new light group (a new shadow map): the colour bundles bound the old one.
             foreach (WorldGpuAsset asset in worldAssets.Values)
             {
+                GpuReferences.Free(asset.Bundles[OpaqueBundle]);
+                GpuReferences.Free(asset.Bundles[DecalBundle]);
                 asset.Bundles[OpaqueBundle] = asset.Bundles[DecalBundle] = null;
                 asset.BundleLods[OpaqueBundle] = asset.BundleLods[DecalBundle] = 0;
             }

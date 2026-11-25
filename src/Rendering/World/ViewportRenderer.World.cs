@@ -99,6 +99,9 @@ internal sealed unsafe partial class ViewportRenderer
         // When the coverage last held it: the oldest go first when room is needed.
         internal long Used;
 
+        // When the cut last asked for it, on the streamer's clock: one it left behind is let go after a while.
+        internal double Wanted;
+
         internal int Level(float distance2) => WorldLodSelection.Level(LodMask, LodReach2, distance2);
 
         internal int ShadowLevel(float distance2) => WorldLodSelection.ShadowLevel(LodMask, CasterLods, LodReach2, distance2);
@@ -148,13 +151,17 @@ internal sealed unsafe partial class ViewportRenderer
     // and materials' values.
     private WorldBufferPages? worldVertexPages, worldIndexPages, worldStoragePages, worldUniformPages;
 
-    private WorldBufferPages VertexPages => worldVertexPages ??= new(device, BufferUsage.Vertex | BufferUsage.CopyDst);
+    // Copied from, too, but for the materials' values: what a page still holds is moved to the others (CompactWorldBuffers).
+    private WorldBufferPages VertexPages => worldVertexPages ??= new(device, BufferUsage.Vertex | BufferUsage.CopyDst | BufferUsage.CopySrc, WorldPageBytes);
 
-    private WorldBufferPages IndexPages => worldIndexPages ??= new(device, BufferUsage.Index | BufferUsage.CopyDst);
+    private WorldBufferPages IndexPages => worldIndexPages ??= new(device, BufferUsage.Index | BufferUsage.CopyDst | BufferUsage.CopySrc, WorldPageBytes);
 
-    private WorldBufferPages StoragePages => worldStoragePages ??= new(device, BufferUsage.Storage | BufferUsage.CopyDst);
+    private WorldBufferPages StoragePages => worldStoragePages ??= new(device, BufferUsage.Storage | BufferUsage.CopyDst | BufferUsage.CopySrc, WorldPageBytes);
 
     private WorldBufferPages UniformPages => worldUniformPages ??= new(device, BufferUsage.Uniform | BufferUsage.CopyDst, 1024 * 1024);
+
+    /// <summary>How big the pages of the assets' vertices, indexes and placements are; smaller for tests, before the first asset.</summary>
+    internal ulong WorldPageBytes { get; set; } = WorldBufferPages.DefaultPageBytes;
 
     /// <summary>The GPU memory the world's buffer pages take, what's used of it, and how many buffers they are.</summary>
     internal (ulong Bytes, ulong Used, int Buffers) WorldBufferMemory
@@ -234,8 +241,37 @@ internal sealed unsafe partial class ViewportRenderer
     public IReadOnlySet<WorldAssetKey> WorldResident => pendingWorld is { } pending
         ? worldAssets.Keys.Append(pending.Source.Key).ToHashSet() : worldAssets.Keys.ToHashSet();
 
+    /// <summary>
+    /// <see cref="WorldResident"/> into a set that's kept, for the streamer: it asks ten times a second, and a set made
+    /// each time for a city's assets was most of what the world allocated while nothing was loading.
+    /// </summary>
+    public void CopyWorldResident(HashSet<WorldAssetKey> into)
+    {
+        into.Clear();
+        foreach (WorldAssetKey key in worldAssets.Keys)
+            into.Add(key);
+        if (pendingWorld is { } pending)
+            into.Add(pending.Source.Key);
+    }
+
+    /// <summary>Changes whenever <see cref="WorldResident"/> does.</summary>
+    public long WorldResidentRevision { get; private set; }
+
+    /// <summary>Changes whenever the assets uploaded do: which <see cref="IsWorldReady"/> says yes to.</summary>
+    public long WorldReadyRevision { get; private set; }
+
+    /// <summary>Changes whenever what an uploaded asset costs to keep does (<see cref="ObserveWorldMemory"/>).</summary>
+    public long WorldMemoryRevision { get; private set; }
+
     /// <summary>Whether an asset is uploaded and can be drawn.</summary>
     public bool IsWorldReady(WorldAssetKey key) => worldAssets.ContainsKey(key);
+
+    /// <summary>Tells what each uploaded asset costs to keep, with its placements' storage.</summary>
+    public void ObserveWorldMemory(Action<WorldAssetKey, WorldMemoryCost> observe)
+    {
+        foreach (var (key, asset) in worldAssets)
+            observe(key, asset.MemoryCost);
+    }
 
     /// <summary>An uploaded asset's bones, where its lights are attached; null when it isn't uploaded.</summary>
     public WorldLightBones? WorldAssetLightBones(WorldAssetKey key) => worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? asset.LightBones : null;
@@ -328,6 +364,167 @@ internal sealed unsafe partial class ViewportRenderer
         ChargeWorldMemory(asset.MemoryCost);
         BeginWorldUpload(asset);
         return true;
+    }
+
+    // The assets the cut left behind, the longest left first, as the streamer last asked (QueueWorldReleases), and how
+    // far through them the frames since have got.
+    private readonly List<WorldGpuAsset> worldLeft = [];
+    private int worldLeftNext;
+    private double worldLeftBefore = double.NegativeInfinity, worldWantedNow;
+
+    /// <summary>The assets let go for having been left behind (<see cref="ReleaseWorldAssets"/>).</summary>
+    public long WorldReleased { get; private set; }
+
+    /// <summary>
+    /// The assets up that the cut no longer asks for and nothing draws, at the last line-up: those waiting their time
+    /// to be let go.
+    /// </summary>
+    public int WorldLeftBehind { get; private set; }
+
+    /// <summary>
+    /// Says the cut asks for these assets at <paramref name="now"/>, in seconds on the streamer's clock: those it stops
+    /// asking for are kept from then for as long as the streamer says (<see cref="QueueWorldReleases"/>).
+    /// </summary>
+    public void KeepWorldAssets(IReadOnlyList<WorldAssetKey> wanted, double now)
+    {
+        worldWantedNow = now;
+        for (int i = 0; i < wanted.Count; i++)
+            if (worldAssets.TryGetValue(wanted[i], out WorldGpuAsset? asset))
+                asset.Wanted = now;
+    }
+
+    /// <summary>
+    /// Lines up the assets the cut hasn't asked for since <paramref name="before"/>, the longest left first, for
+    /// <see cref="ReleaseWorldAssets"/> to let go a few a frame; how many there are.
+    /// </summary>
+    public int QueueWorldReleases(double before)
+    {
+        worldLeft.Clear();
+        worldLeftNext = 0;
+        worldLeftBefore = before;
+        int behind = 0;
+        foreach (WorldGpuAsset asset in worldAssets.Values)
+        {
+            if (asset.Wanted < before)
+                worldLeft.Add(asset);
+            if (asset.Wanted < worldWantedNow && asset.Slots.Count == 0 && !asset.Listed)
+                behind++;
+        }
+        WorldLeftBehind = behind;
+        worldLeft.Sort(static (a, b) => a.Wanted.CompareTo(b.Wanted));
+        return worldLeft.Count;
+    }
+
+    /// <summary>
+    /// Lets go of the next assets lined up, for <paramref name="ticks"/> of the stopwatch at most (one at least): their
+    /// buffers' ranges, and the textures no other asset binds. One the cut asked for again meanwhile stays, and so does
+    /// one still drawn (fading out, say), until it's lined up again. How many went.
+    /// </summary>
+    public int ReleaseWorldAssets(long ticks)
+    {
+        if (worldLeftNext >= worldLeft.Count)
+            return 0;
+        long until = System.Diagnostics.Stopwatch.GetTimestamp() + ticks;
+        int released = 0;
+        while (worldLeftNext < worldLeft.Count)
+        {
+            WorldGpuAsset asset = worldLeft[worldLeftNext++];
+            if (asset.Wanted >= worldLeftBefore || asset.Slots.Count > 0 || asset.Listed
+                || !worldAssets.TryGetValue(asset.Key, out WorldGpuAsset? resident) || !ReferenceEquals(resident, asset))
+                continue;
+            RemoveWorldAsset(asset.Key);
+            released++;
+            if (System.Diagnostics.Stopwatch.GetTimestamp() >= until)
+                break;
+        }
+        if (worldLeftNext >= worldLeft.Count)
+            worldLeft.Clear();
+        WorldReleased += released;
+        return released;
+    }
+
+    // The ranges moved out of a page, given back once the copies are on their way.
+    private readonly List<(WorldBufferPages Pages, WorldSlice Slice)> worldMovedSlices = [];
+
+    /// <summary>The bytes <see cref="CompactWorldBuffers"/> has moved out of pages it emptied.</summary>
+    public long WorldBytesCompacted { get; private set; }
+
+    /// <summary>
+    /// Empties the emptiest page of the vertices', the indexes' and the placements' into the free room of their others,
+    /// <paramref name="bytes"/> and <paramref name="assets"/> a call at most, so the page goes back to the system: the
+    /// GPU copies each range, the asset reads it where it is now, and its bundles are recorded again. Called while
+    /// nothing else is going on (the camera still, nothing uploading, nothing left to let go); how many bytes it moved.
+    /// </summary>
+    public long CompactWorldBuffers(long bytes, int assets)
+    {
+        long moved = 0;
+        int movedAssets = 0;
+        CommandEncoder? encoder = null;
+        for (int kind = 0; kind < 3 && moved < bytes && movedAssets < assets; kind++)
+        {
+            WorldBufferPages? pages = kind switch { 0 => worldVertexPages, 1 => worldIndexPages, _ => worldStoragePages };
+            if (pages?.Sparsest() is not { } page)
+                continue;
+            bool stuck = false, more = false;
+            int before = movedAssets;
+            foreach (WorldGpuAsset asset in worldAssets.Values)
+            {
+                if (moved >= bytes || movedAssets >= assets)
+                {
+                    more = true;
+                    break;
+                }
+                bool any = kind switch
+                {
+                    0 => Move(ref asset.Vertices) | Move(ref asset.Instances) | Move(ref asset.ShadowInstances),
+                    1 => Move(ref asset.Indices),
+                    _ => Move(ref asset.SourceInstances),
+                };
+                if (!any)
+                    continue;
+                movedAssets++;
+                // Its placements are read where they are now, and its bundles bind its ranges as they were.
+                if (kind == 2 && asset.SourceInstances is { } sources)
+                    asset.SourceGroup = device.CreateBindGroup(new BindGroupDescriptor
+                    {
+                        Layout = worldInstanceLayout!,
+                        Entries =
+                        [
+                            new BindGroupEntry { Binding = 0, Buffer = sources.Buffer, Offset = sources.Offset, Size = sources.Size },
+                        ],
+                    });
+                ReleaseAssetBundles(asset);
+            }
+            // What stays in it has nowhere to go, or isn't an asset's yet (one on its way up): another time.
+            if (stuck || !more && movedAssets == before)
+                pages.Stick(page);
+
+            bool Move(ref WorldSlice? slice)
+            {
+                if (slice is not { } range || !ReferenceEquals(range.Buffer, page))
+                    return false;
+                if (pages.Move(range.Size, page) is not { } target)
+                {
+                    stuck = true;
+                    return false;
+                }
+                encoder ??= device.CreateCommandEncoder();
+                encoder.Value.CopyBufferToBuffer(range.Buffer, range.Offset, target.Buffer, target.Offset, (range.Size + 3) & ~3UL);
+                worldMovedSlices.Add((pages, range));
+                slice = target;
+                moved += (long)range.Size;
+                return true;
+            }
+        }
+        if (encoder is null)
+            return 0;
+        // The copies go before the ranges they read are given back: an emptied page is destroyed.
+        queue.Submit(encoder.Value.Finish());
+        foreach (var (pages, slice) in worldMovedSlices)
+            pages.Free(slice);
+        worldMovedSlices.Clear();
+        WorldBytesCompacted += moved;
+        return moved;
     }
 
     /// <summary>
@@ -455,6 +652,8 @@ internal sealed unsafe partial class ViewportRenderer
         worldFadingOut.Clear();
         foreach (WorldAssetKey key in worldAssets.Keys.ToArray())
             RemoveWorldAsset(key);
+        worldLeft.Clear();
+        worldLeftNext = 0;
         worldSelection = new WorldSelection([], []);
         worldCull.Update([]);
         localLights = [];
@@ -477,8 +676,15 @@ internal sealed unsafe partial class ViewportRenderer
     {
         if (!worldAssets.Remove(key, out WorldGpuAsset? asset))
             return;
-        worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
-        listedAssets.Remove(asset);
+        WorldResidentRevision++;
+        WorldReadyRevision++;
+        // One with no rows in the coverage drawn, and in no view's lists, changes nothing that's drawn: letting go of
+        // the assets left behind doesn't have every frame they go in cull the world again.
+        if (asset.Slots.Count > 0 || asset.Listed)
+        {
+            worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
+            listedAssets.Remove(asset);
+        }
         ReleaseWorldMemory(asset.MemoryCost);
         ReleaseAssetBundles(asset);
         if (asset.IndirectFirst >= 0)
@@ -493,7 +699,14 @@ internal sealed unsafe partial class ViewportRenderer
             UniformPages.Free(uniforms);
         foreach (object id in asset.Textures)
             if (worldTextures.TryGetValue(id, out WorldTexture? texture) && --texture.Users <= 0)
-                ForgetWorldTexture(id);
+            {
+                // The asset on its way up counted on it being there, and didn't put it up itself: it's kept for it.
+                // Destroyed now, that asset would be drawn without it for as long as it's up.
+                if (pendingWorld is { } pending && pending.Ids.Contains(id))
+                    pending.Adopted.Add(id);
+                else
+                    ForgetWorldTexture(id);
+            }
     }
     private static void FreeSlice(WorldBufferPages pages, WorldSlice? slice)
     {
@@ -665,6 +878,7 @@ internal sealed unsafe partial class ViewportRenderer
                     ],
                 });
                 asset.Instances = VertexPages.Allocate((ulong)capacity * 4);
+                asset.Data.Unwritten();
                 asset.Rewrite = true;
                 worldVisibilityDirty = true;
                 // New storage holds nothing yet: all of it goes up.
@@ -792,6 +1006,7 @@ internal sealed unsafe partial class ViewportRenderer
         long change = InstanceBytes(asset) - before;
         if (change == 0)
             return;
+        WorldMemoryRevision++;
         worldOwnedBytes += change;
         asset.MemoryCost = new WorldMemoryCost(asset.MemoryCost.OwnedBytes + change, asset.MemoryCost.Shared);
     }
@@ -829,6 +1044,8 @@ internal sealed unsafe partial class ViewportRenderer
                 worldNodeAsset[n] = resident;
                 worldNodeCasts[n] = resident is { CastsShadows: true };
             }
+            // Past the coverage's nodes, a bigger coverage's assets would stay in memory through this array once let go.
+            Array.Clear(worldNodeAsset, set.Nodes.Length, worldNodeAsset.Length - set.Nodes.Length);
             worldNodeAssetsDirty = false;
         }
         var frustum = new CameraFrustum(eye, forward, Aspect);
@@ -890,6 +1107,7 @@ internal sealed unsafe partial class ViewportRenderer
             if ((asset.Data.Changed || asset.Rewrite) && asset.Data.Count > 0)
             {
                 queue.WriteBuffer(asset.Instances!.Value.Buffer, asset.Instances.Value.Offset, (ReadOnlySpan<uint>)asset.Data.Values.AsSpan(0, asset.Data.Count));
+                asset.Data.Written();
                 asset.Rewrite = false;
             }
             if (asset.ShadowData.Count > asset.ShadowCapacity)
@@ -900,11 +1118,13 @@ internal sealed unsafe partial class ViewportRenderer
                 SetInstanceCharge(asset, asset.Capacity, Math.Max(16, Math.Max(asset.ShadowData.Count, asset.Capacity * WorldShadowCascades.Count)));
                 asset.ShadowInstances = VertexPages.Allocate((ulong)asset.ShadowCapacity * 4);
                 ReleaseAssetBundles(asset);
+                asset.ShadowData.Unwritten();
                 asset.RewriteShadow = true;
             }
             if ((asset.ShadowData.Changed || asset.RewriteShadow) && asset.ShadowData.Count > 0)
             {
                 queue.WriteBuffer(asset.ShadowInstances!.Value.Buffer, asset.ShadowInstances.Value.Offset, (ReadOnlySpan<uint>)asset.ShadowData.Values.AsSpan(0, asset.ShadowData.Count));
+                asset.ShadowData.Written();
                 asset.RewriteShadow = false;
             }
             drawn += asset.Data.Count;
@@ -954,6 +1174,8 @@ internal sealed unsafe partial class ViewportRenderer
                 else
                     Flush(asset, asset.ShadowData, asset.ShadowStart, asset.ShadowCount, cascade * WorldAsset.Lods);
             }
+            // Not held until the next view: an asset let go meanwhile would stay in memory through this list.
+            gatheredAssets.Clear();
         }
 
         static void Flush(WorldGpuAsset asset, WorldInstanceIndices destination, int[] start, int[] count, int offset)

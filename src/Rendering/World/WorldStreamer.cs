@@ -30,8 +30,24 @@ internal sealed class WorldStreamer : IDisposable
     // as it flies doesn't hold its frames back (the rest goes up once it stops).
     private static readonly long FrameUploadTicks = System.Diagnostics.Stopwatch.Frequency / 400, MovingUploadTicks = System.Diagnostics.Stopwatch.Frequency / 1000;
 
-    // Where the camera was at the last frame's uploads.
+    /// <summary>
+    /// How long an asset the cut no longer asks for stays up, in seconds of streaming: see <see cref="ReleaseAfter"/>.
+    /// </summary>
+    internal const double ReleaseAfterSeconds = 30;
+
+    // How long a frame lets go of assets left behind: a quarter of a millisecond is a dozen or more of them, several
+    // times as many as a flight brings in.
+    private static readonly long ReleaseTicks = System.Diagnostics.Stopwatch.Frequency / 4000;
+
+    // What a frame moves out of the buffer pages the assets let go left half empty, once the camera is still, nothing
+    // is coming in and nothing is left to let go (what's about to go isn't worth moving): two assets' bundles are
+    // recorded again in a frame (RecordsPerFrame), no more.
+    private const long CompactBytes = 1024 * 1024;
+    private const int CompactAssets = 2;
+
+    // Where the camera was at the last frame's uploads, and whether it was there the frame before too.
     private Vector3 uploadEye = new(float.NaN);
+    private bool cameraStill;
 
     // The largest asset uploaded at once.
     private const long LargestAsset = 384L * 1024 * 1024;
@@ -72,7 +88,25 @@ internal sealed class WorldStreamer : IDisposable
     private readonly List<GtaCoronaInstance> coronaBuffer = [];
     private WorldAssetKey[] wanted = [];
     private readonly HashSet<WorldAssetKey> loading = [];
-    private HashSet<WorldAssetKey> resident = [];
+
+    // What the viewport holds, copied when it changed (its WorldResidentRevision) into the one set, which the workers
+    // read under the lock; and the revision the workers were last told of.
+    private readonly HashSet<WorldAssetKey> resident = [];
+    private long residentRevision = -1, signalledRevision = -1;
+
+    // The viewport's costs last told to the budget (its WorldMemoryRevision).
+    private long memoryRevision = -1;
+    private readonly Action<WorldAssetKey, WorldMemoryCost> observe;
+
+    // The budget's costs as the plan in the background reads them: one copy, filled again once no plan reads it.
+    private WorldStreamingBudget? planCosts;
+
+    // The ready assets the cut asks for, which an upload doesn't evict: filled again each frame that uploads.
+    private readonly HashSet<WorldAssetKey> uploadProtect = [];
+
+    // The seconds streamed, which say how long ago the cut last asked for an asset. A frame counts for a second at
+    // most: time the streaming was stalled or paused for isn't time an asset was left behind.
+    private double clock;
     private long preparedBytes;
     private float selectionTime;
     private Task<(IReadOnlySet<WorldEntityId> Cut, bool Pressure)>? planning;
@@ -85,7 +119,7 @@ internal sealed class WorldStreamer : IDisposable
     private Vector3 selectedPosition = new(float.NaN);
     private long selectedRevision = -1;
     private IReadOnlySet<WorldEntityId>? selectedPlan;
-    private HashSet<WorldAssetKey> selectedReady = [];
+    private long selectedReady = -1;
     private int selectedFailures = -1;
     private int? selectedHour;
     private bool selectionPending = true, firstSelection = true;
@@ -104,7 +138,7 @@ internal sealed class WorldStreamer : IDisposable
 
     // What the lights were last bound for.
     private IReadOnlyList<WorldLodNode> lightCoverage = [];
-    private HashSet<WorldAssetKey> lightReady = [];
+    private long lightReady = -1;
     private bool lightsTruncated;
     private Vector3 lightEye;
     private int? lightHour;
@@ -116,6 +150,7 @@ internal sealed class WorldStreamer : IDisposable
     {
         ambient = index.AmbientOf;
         this.index = index;
+        observe = budget.Observe;
         // Half the cores, at most four, leave the UI thread and the GPU's driver theirs.
         int count = index.LoadsConcurrently ? Math.Clamp(Environment.ProcessorCount / 2, 1, 4) : 1;
         workAvailable = new SemaphoreSlim(0, count);
@@ -130,6 +165,20 @@ internal sealed class WorldStreamer : IDisposable
     /// <summary>The cut's lights bound to their placements, last time they were.</summary>
     public int LightCount { get; private set; }
 
+
+    /// <summary>
+    /// How long an asset the cut no longer asks for stays up before it's let go, in seconds of streaming; infinity keeps
+    /// them until the budget needs their room. Without it the world kept every model the camera had passed until the
+    /// budget was full: a flight across the city held all of it, and the memory never came back down.
+    /// </summary>
+    /// <remarks>
+    /// Thirty seconds: the cut itself is never let go (it's asked for at every selection), so this only says how long
+    /// what's behind waits for the camera to come back. Flying straight across GTA V's city for 90 seconds at 50 m/s,
+    /// the cut dropped assets 37,700 times and asked again for 30,200 of them: 26,900 within a second (the plan
+    /// settling), 3,100 within thirty, 200 later. A shorter wait reads those again (1,000 more with ten seconds); a
+    /// longer one only keeps more of the trail, about 150 assets and 40 MB of the budget for each second of that flight.
+    /// </remarks>
+    internal double ReleaseAfter { get; set; } = ReleaseAfterSeconds;
 
     /// <summary>The plants expanded and shown.</summary>
     public int GrassInstances { get; private set; }
@@ -181,12 +230,19 @@ internal sealed class WorldStreamer : IDisposable
 
     private bool LoadNext()
     {
-        WorldAssetKey? next;
+        WorldAssetKey? next = null;
         lock (gate)
         {
-            next = prepared.Count + loading.Count >= PreparedLimit || preparedBytes >= PreparedBytesLimit ? null
-                : wanted.Cast<WorldAssetKey?>().FirstOrDefault(k => !resident.Contains(k!.Value) && !queued.Contains(k.Value)
-                    && !failed.Contains(k.Value) && !deferred.Contains(k.Value) && !loading.Contains(k.Value));
+            // Looked for in place: as a sequence of nullable keys, each one wanted was boxed at every look, 10 MB a
+            // second of them while a city came in.
+            if (prepared.Count + loading.Count < PreparedLimit && preparedBytes < PreparedBytesLimit)
+                foreach (WorldAssetKey candidate in wanted)
+                    if (!resident.Contains(candidate) && !queued.Contains(candidate) && !failed.Contains(candidate) && !deferred.Contains(candidate)
+                        && !loading.Contains(candidate))
+                    {
+                        next = candidate;
+                        break;
+                    }
             if (next is { } taken)
                 loading.Add(taken);
         }
@@ -286,8 +342,9 @@ internal sealed class WorldStreamer : IDisposable
             viewport.PrepareWorldFamilies(index.Families);
             selectionPending = true;
             firstSelection = true;
-            selectedReady = [];
+            selectedReady = lightReady = residentRevision = signalledRevision = memoryRevision = -1;
         }
+        clock += Math.Clamp(seconds, 0, 1);
         Apply(viewport);
         // The timecycle at the camera's place, every frame as the game works it out; the view takes it only where it changed.
         // A world without them (RDR2's) has GLOBAL's alone, whatever world the view showed before.
@@ -320,6 +377,12 @@ internal sealed class WorldStreamer : IDisposable
         }
         UploadPrepared(viewport);
         uploadPending = viewport.HasPendingWorldUpload;
+        // What the cut left behind long enough ago, a few a frame.
+        viewport.ReleaseWorldAssets(ReleaseTicks);
+        // And, once the camera rests with nothing coming in and all of them gone, the pages they left half empty are
+        // emptied into the others.
+        if (cameraStill && !uploadPending && prepared.IsEmpty && viewport.WorldLeftBehind == 0)
+            viewport.CompactWorldBuffers(CompactBytes, CompactAssets);
         if (selectionDue)
             Status = string.Create(System.Globalization.CultureInfo.CurrentCulture,
                 $"{viewport.WorldDrawnCount:N0} entities · {viewport.WorldBytes / 1048576:N0} MB streamed");
@@ -332,10 +395,12 @@ internal sealed class WorldStreamer : IDisposable
         bool selectionChanged;
         lock (gate)
         {
-            IReadOnlySet<WorldAssetKey> currentResident = viewport.WorldResident;
-            foreach (WorldAssetKey key in currentResident)
-                if (viewport.WorldAssetMemory(key) is { } cost)
-                    budget.Observe(key, cost);
+            // Only when an asset's cost changed: an upload, or its placements' storage growing.
+            if (memoryRevision != viewport.WorldMemoryRevision)
+            {
+                memoryRevision = viewport.WorldMemoryRevision;
+                viewport.ObserveWorldMemory(observe);
+            }
             if (planning?.IsCompleted == true)
             {
                 (plan, planPressure) = planning.GetAwaiter().GetResult();
@@ -343,7 +408,8 @@ internal sealed class WorldStreamer : IDisposable
             }
             if (planning is null && (plannedPosition != eye || plannedRevision != budget.Revision || plannedFailures != failed.Count || plannedHour != hour))
             {
-                WorldStreamingBudget costs = budget.Snapshot();
+                // No plan is running, so none reads the copy made for the last one: it's filled again.
+                WorldStreamingBudget costs = planCosts = budget.Snapshot(planCosts);
                 HashSet<WorldAssetKey> unavailable = [.. failed];
                 plannedPosition = eye;
                 plannedRevision = budget.Revision;
@@ -352,9 +418,9 @@ internal sealed class WorldStreamer : IDisposable
                 // The plan reads the graph's metadata alone; only Select changes its state.
                 planning = Task.Run(() => costs.Plan(graph, eye, unavailable.Contains, hour));
             }
-            HashSet<WorldAssetKey> ready = [.. currentResident.Where(viewport.IsWorldReady)];
+            long ready = viewport.WorldReadyRevision;
             selectionChanged = selectionPending || selectedPosition != eye || selectedRevision != budget.Revision
-                || !ReferenceEquals(selectedPlan, plan) || selectedFailures != failed.Count || !selectedReady.SetEquals(ready)
+                || !ReferenceEquals(selectedPlan, plan) || selectedFailures != failed.Count || selectedReady != ready
                 || selectedHour != hour || timeFilter.HasPendingSwitches || selectedGrassRevision != grassRevision;
             if (selectionChanged)
             {
@@ -406,17 +472,30 @@ internal sealed class WorldStreamer : IDisposable
             // Applied on the next frame, so this one carries the selection and the next the coverage's new storage.
             applying = (display, eye, hour);
         }
+        // The cut is asked for now; what it hasn't asked for in a while is lined up to go, a few a frame.
+        viewport.KeepWorldAssets(selected.Requested, clock);
+        if (double.IsFinite(ReleaseAfter))
+            viewport.QueueWorldReleases(clock - ReleaseAfter);
         lock (gate)
         {
-            HashSet<WorldAssetKey> protect = [.. selected.Requested.Where(viewport.IsWorldReady)];
-            deferred.Update(selected.Requested, protect, budget.Limit);
-            HashSet<WorldAssetKey> current = [.. viewport.WorldResident];
-            bool changed = selectionChanged || !resident.SetEquals(current);
-            resident = current;
-            wanted = [.. selected.Requested];
+            deferred.Update(selected.Requested, selected.Requested.Where(viewport.IsWorldReady), budget.Limit);
+            bool changed = selectionChanged || signalledRevision != viewport.WorldResidentRevision;
+            signalledRevision = viewport.WorldResidentRevision;
+            SyncResident(viewport);
+            if (selectionChanged)
+                wanted = [.. selected.Requested];
             if (changed || admissionPressure || planPressure || wantedGrass.Any(node => !readyGrass.ContainsKey(node.Id) && !failedGrass.Contains(node.Id)))
                 SignalWorker();
         }
+    }
+
+    // Under the lock: what the viewport holds, for the workers, copied only when it changed.
+    private void SyncResident(ViewportRenderer viewport)
+    {
+        if (residentRevision == viewport.WorldResidentRevision)
+            return;
+        residentRevision = viewport.WorldResidentRevision;
+        viewport.CopyWorldResident(resident);
     }
 
     // The selection made last frame, applied: the renderer's coverage, and the lights bound again when the cut or its
@@ -429,9 +508,9 @@ internal sealed class WorldStreamer : IDisposable
         viewport.WorldAmbient = ambient;
         viewport.SetWorldSelection(display);
         // The lights again when the cut or its uploads changed, the hour did, or the camera moved and some were left out.
-        HashSet<WorldAssetKey> ready = [.. viewport.WorldResident.Where(viewport.IsWorldReady)];
+        long ready = viewport.WorldReadyRevision;
         lightDisplay = (display, eye, hour);
-        if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || !lightReady.SetEquals(ready)
+        if (!lightCoverage.SequenceEqual(display.Coverage, ReferenceEqualityComparer.Instance) || lightReady != ready
             || lightsTruncated && lightEye != eye || lightHour != hour)
             BindLights(viewport, display, eye, hour, ready);
     }
@@ -440,7 +519,7 @@ internal sealed class WorldStreamer : IDisposable
     private (WorldSelection Display, Vector3 Eye, int Hour)? lightDisplay;
 
     // The cut's lights bound to their placements, with their coronas' once those can be drawn.
-    private void BindLights(ViewportRenderer viewport, WorldSelection display, Vector3 eye, int hour, HashSet<WorldAssetKey> ready)
+    private void BindLights(ViewportRenderer viewport, WorldSelection display, Vector3 eye, int hour, long ready)
     {
         bool withCoronas = coronas.IsCompletedSuccessfully && coronas.Result is not null;
         WorldLightBinding lighting = WorldLightBinding.Resolve(display, viewport.WorldAssetLightBones, eye, hour: hour,
@@ -480,7 +559,7 @@ internal sealed class WorldStreamer : IDisposable
             coronasDue = true;
             // The cut's lights again, with their coronas this time.
             if (lightDisplay is var (display, eye0, hour0))
-                BindLights(viewport, display, eye0, hour0, [.. viewport.WorldResident.Where(viewport.IsWorldReady)]);
+                BindLights(viewport, display, eye0, hour0, viewport.WorldReadyRevision);
         }
         int hour = Math.Clamp((int)hours, 0, 23);
         Vector3 eye = viewport.Camera.Eye;
@@ -500,18 +579,19 @@ internal sealed class WorldStreamer : IDisposable
     private void UploadPrepared(ViewportRenderer viewport)
     {
         Vector3 eye = viewport.Camera.Eye;
-        long uploadTicks = eye == uploadEye ? FrameUploadTicks : MovingUploadTicks;
+        cameraStill = eye == uploadEye;
+        long uploadTicks = cameraStill ? FrameUploadTicks : MovingUploadTicks;
         uploadEye = eye;
         if (viewport.WorldUploadKey is { } uploading && !selected.Requested.Contains(uploading))
         {
             viewport.CancelWorldUpload();
             lock (gate)
-                resident = [.. viewport.WorldResident];
+                SyncResident(viewport);
         }
         if (viewport.HasPendingWorldUpload && !Step(viewport, uploadTicks))
             return;
         long until = System.Diagnostics.Stopwatch.GetTimestamp() + uploadTicks;
-        HashSet<WorldAssetKey>? protect = null;
+        bool protecting = false;
         List<WorldAsset>? taken = null;
         while (System.Diagnostics.Stopwatch.GetTimestamp() < until && prepared.TryDequeue(out WorldAsset? asset))
         {
@@ -519,11 +599,18 @@ internal sealed class WorldStreamer : IDisposable
             if (selected.Requested.Contains(asset.Key))
             {
                 // The ready assets the cut asks for aren't evicted for it, nor those put up before it this frame.
-                protect ??= [.. selected.Requested.Where(viewport.IsWorldReady)];
+                if (!protecting)
+                {
+                    protecting = true;
+                    uploadProtect.Clear();
+                    foreach (WorldAssetKey key in selected.Requested)
+                        if (viewport.IsWorldReady(key))
+                            uploadProtect.Add(key);
+                }
                 try
                 {
-                    if (viewport.AddWorldAsset(asset, protect, budget.Limit))
-                        protect.Add(asset.Key);
+                    if (viewport.AddWorldAsset(asset, uploadProtect, budget.Limit))
+                        uploadProtect.Add(asset.Key);
                     else
                         lock (gate)
                             deferred.Add(asset.Key);
@@ -541,7 +628,7 @@ internal sealed class WorldStreamer : IDisposable
         lock (gate)
         {
             // What's uploaded is told before its place in the queue is let go, so a worker doesn't read it again.
-            resident = [.. viewport.WorldResident];
+            SyncResident(viewport);
             foreach (WorldAsset asset in taken)
             {
                 queued.Remove(asset.Key);
@@ -564,7 +651,7 @@ internal sealed class WorldStreamer : IDisposable
             MarkFailed(key, error);
             lock (gate)
             {
-                resident = [.. viewport.WorldResident];
+                SyncResident(viewport);
                 SignalWorker();
             }
         }
