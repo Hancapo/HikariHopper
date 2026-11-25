@@ -13,11 +13,10 @@ internal readonly record struct WorldSlice(Buffer Buffer, ulong Offset, ulong Si
 /// each had its own.
 /// </summary>
 /// <remarks>
-/// A page, and a buffer of its own, is bigger than 4 MB, so that destroying it gives its memory back. Dawn places
-/// every buffer and texture up to 4 MB in heaps of its own that it keeps for the device's life, each rounded up to a
-/// power of two: such a buffer destroyed leaves the process holding what it held (the heap is only used again), and
-/// what the world's assets let go never came off what the system showed. A bigger one is an allocation of its own,
-/// freed with it.
+/// A page, and a buffer of its own, is bigger than 4 MB, so that destroying it gives its memory back. Direct3D 12
+/// allocators keep small buffers and textures in heaps they reuse (Dawn, which the app drew with before wgpu, kept every
+/// one up to 4 MB for the device's life): a small buffer destroyed can leave the process holding what it held, while a
+/// bigger one is an allocation of its own, freed with it.
 /// </remarks>
 internal sealed class WorldBufferPages(Device device, BufferUsage usage, ulong pageBytes = WorldBufferPages.DefaultPageBytes)
 {

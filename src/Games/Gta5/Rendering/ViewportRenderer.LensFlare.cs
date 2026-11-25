@@ -39,8 +39,8 @@ internal sealed unsafe partial class ViewportRenderer
     private readonly long[] flareReadbackFrames = new long[FlareReadbacks];
     // The pixels the whole sun disc would have covered on each count's frame, which the count is measured against.
     private readonly float[] flareReadbackExpected = new float[FlareReadbacks];
-    // Each readback's map, as its callback says it ended (nought while under way, one mapped, two failed): WebGpuSharp
-    // lets go of the buffer before it calls back, while Dawn may say it's mapped sooner, so this is what's polled.
+    // Each readback's map, as its callback says it ended (nought while under way, one mapped, two failed): wgpu calls
+    // back from a device poll, which each frame makes, so this is what's read.
     private readonly int[] flareReadbackEnds = new int[FlareReadbacks];
     private Action<MapAsyncStatus, string>[]? flareReadbackCallbacks;
     // The frame; the first frame whose counts the flare shown goes by (those drawn before it was shown are the last

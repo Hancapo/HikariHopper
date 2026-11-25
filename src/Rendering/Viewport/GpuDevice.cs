@@ -200,6 +200,26 @@ internal sealed class GpuDevice
 
     private const string LostPrefix = "WebGPU device lost";
 
+    /// <summary>What a viewport says when the GPU device is lost.</summary>
+    internal const string LostMessage = "The GPU device was lost. Restart HikariHopper to see the 3D view again.";
+
+    /// <summary>
+    /// Whether an error is the device being lost: reported by the device's lost callback, or met first as a call on it
+    /// fails (a swap chain that gives errors, a map that can't be made).
+    /// </summary>
+    internal static bool IsLost(Exception error) => error.Message.StartsWith(LostPrefix, StringComparison.Ordinal)
+        || error.Message.Contains("is lost", StringComparison.Ordinal) || error.Message == LostMessage;
+
+    /// <summary>
+    /// Marks the device lost when a viewport finds it so (its swap chain failing), for every viewport on it to stop with
+    /// why, and the next to be made on a new one.
+    /// </summary>
+    internal void Lose(string why)
+    {
+        if (!lost)
+            Report($"{LostPrefix} ({why})");
+    }
+
     private static Device RequestDevice(Adapter adapter, bool compressedTextures, bool indirectFirstInstance, Action<string> failed)
     {
         // What the adapter allows, asked for whole: Red Dead Redemption 2's material reads more textures at once than

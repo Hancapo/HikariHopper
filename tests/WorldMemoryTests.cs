@@ -366,7 +366,7 @@ public sealed class WorldMemoryTests
     [DllImport("kernel32")]
     private static extern int HeapSummary(nint heap, uint flags, ref HeapSummaryInfo summary);
 
-    // What's allocated in the process's own heaps, where Dawn keeps what isn't the GPU's.
+    // What's allocated in the process's own heaps, where wgpu keeps what isn't the GPU's.
     private static long HeapBytes()
     {
         var heaps = new nint[256];

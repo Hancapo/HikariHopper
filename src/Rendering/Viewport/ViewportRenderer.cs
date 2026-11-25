@@ -8,7 +8,7 @@ using Buffer = HikariHopper.Gpu.Buffer;
 namespace HikariHopper.Rendering;
 
 /// <summary>
-/// Draws the 3D viewport into a window's swap chain with WebGPU (Dawn, on Direct3D 12): the backdrop, a sky and the
+/// Draws the 3D viewport into a window's swap chain with WebGPU (wgpu through WGpuFury, on Direct3D 12): the backdrop, a sky and the
 /// ground grid, and in front of it a mesh of triangles or a drawable's textured surfaces, seen through the
 /// <see cref="Camera"/>.
 /// </summary>
@@ -22,9 +22,15 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
     private readonly GpuDevice gpu;
+
+    /// <summary>The GPU this viewport draws with.</summary>
+    internal GpuDevice Gpu => gpu;
     // The device's errors, until this viewport is gone (the device holds it weakly).
     private readonly Action<string> failed;
-    private readonly Surface? surface;
+    private Surface? surface;
+    // The window the swap chain shows in, for its surface to be made again (SwapChainRecovery).
+    private readonly nint window, module;
+    private readonly SwapChainRecovery swapChain = new();
     private readonly Adapter adapter;
     private readonly Device device;
     private readonly Queue queue;
@@ -82,9 +88,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // Made while the background warm-up isn't using the device, which then has the pipelines ready.
         lock (gpu.Gate)
         {
+            this.window = window;
+            this.module = module;
             if (window != 0)
             {
-                surface = gpu.Instance.CreateSurface(window, module) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
+                surface = CreateSurface();
                 // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is
                 // drawn through an sRGB view of it.
                 SurfaceCapabilities capabilities = surface.GetCapabilities(adapter) ?? throw new NotSupportedException("The window's capabilities are unknown.");
@@ -107,6 +115,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             };
             Create(width, height);
         }
+    }
+
+    private Surface CreateSurface()
+    {
+        return gpu.Instance.CreateSurface(window, module) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
     }
 
     private void Create(int width, int height)
@@ -335,15 +348,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         this.width = width;
         this.height = height;
-        surface?.Configure(new SurfaceConfiguration
-        {
-            Device = device,
-            Format = surfaceFormat,
-            ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
-            Width = (uint)width,
-            Height = (uint)height,
-            PresentMode = PresentMode.Fifo,
-        });
+        ConfigureSurface();
         depth?.Destroy();
         depth = device.CreateTexture(new TextureDescriptor
         {
@@ -360,21 +365,60 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         CreateOutlineTargets();
     }
 
-    /// <summary>Draws and presents a frame.</summary>
-    public void Draw()
+    // The swap chain at the window's size, as last resized; the frame's own targets stay as they are.
+    private void ConfigureSurface() => surface?.Configure(new SurfaceConfiguration
+    {
+        Device = device,
+        Format = surfaceFormat,
+        ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
+        Width = (uint)width,
+        Height = (uint)height,
+        PresentMode = PresentMode.Fifo,
+    });
+
+    // The window's swap chain made anew: let go of, then configured again, which builds a new one. Never a new surface
+    // for the window instead: a second surface for a window loses the GPU device, for good.
+    internal void RecreateSurface()
+    {
+        surface?.Unconfigure();
+        ConfigureSurface();
+    }
+
+    /// <summary>The frames in a row the window's swap chain gave nothing to draw into.</summary>
+    internal int MissedFrames => swapChain.Missed;
+
+    /// <summary>
+    /// Draws and presents a frame; whether it did. One the swap chain gives no texture for isn't drawn: it sets the
+    /// swap chain up again, and makes the window's surface again when that doesn't help (<see cref="SwapChainRecovery"/>).
+    /// </summary>
+    public bool Draw()
     {
         if (disposed || width == 0 || height == 0 || depthView is null || surface is null)
-            return;
+            return false;
         ThrowIfFailed();
         WriteScene();
         SurfaceTexture frame = surface.GetCurrentTexture();
-        if (frame.Status is not (SurfaceGetCurrentTextureStatus.SuccessOptimal or SurfaceGetCurrentTextureStatus.SuccessSuboptimal)
-            || frame.Texture is not { } texture)
+        SwapChainStep step = swapChain.Next(frame.Status, frame.Texture is not null);
+        if (step != SwapChainStep.Draw && frame.Texture is { } unused)
+            unused.Dispose();
+        switch (step)
         {
-            // Lost or outdated (a resize, a display change): configure again and draw the next frame.
-            Resize(width, height);
-            return;
+            case SwapChainStep.Skip:
+                return false;
+            case SwapChainStep.Configure:
+                ConfigureSurface();
+                return false;
+            case SwapChainStep.Recreate:
+                RecreateSurface();
+                return false;
+            case SwapChainStep.Fail when frame.Status == SurfaceGetCurrentTextureStatus.Error:
+                // Its device lost: every surface of the process gives errors from then on.
+                gpu.Lose("the window's swap chain gives errors");
+                throw new InvalidOperationException(GpuDevice.LostMessage);
+            case SwapChainStep.Fail:
+                throw new InvalidOperationException($"The window's swap chain gave nothing to draw into ({frame.Status}) for {swapChain.Missed} frames in a row.");
         }
+        Texture texture = frame.Texture!;
         TextureView view = texture.CreateView(new TextureViewDescriptor
         {
             Format = presentFormat,
@@ -385,6 +429,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         });
         Render(view);
         surface.Present();
+        // The frame's texture and view go now, not when the collector gets to them.
+        view.Dispose();
+        texture.Dispose();
+        return true;
     }
 
     /// <summary>
@@ -647,6 +695,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         ClearWorld();
         perlinMap?.Destroy();
         ClearSurfaces();
-        surface?.Unconfigure();
+        if (surface is not null)
+        {
+            surface.Unconfigure();
+            surface.Dispose();
+            surface = null;
+        }
     }
 }
