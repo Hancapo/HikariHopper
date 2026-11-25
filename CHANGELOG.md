@@ -10,6 +10,10 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 
 ## [Unreleased]
 
+### Fixed
+
+- A 3D view whose GPU device is lost says so and to restart, instead of freezing on its last frame while every other view stops drawing too; a click on it no longer closes the app, and a view no longer keeps every frame's swap chain texture. ([#341](https://github.com/Hancapo/HikariHopper/pull/341))
+
 ## [0.3.0] - 2026-11-20
 
 ### Added
