@@ -30,8 +30,7 @@ internal sealed unsafe partial class ViewportRenderer
         {
             if (rdr2Supported is { } known)
                 return known;
-            var limits = new WGpuFury.WGPULimits();
-            device.GetLimits(ref limits);
+            device.GetLimits(out Limits limits);
             rdr2Supported = limits.MaxSampledTexturesPerShaderStage >= Rdr2TextureSlots;
             return rdr2Supported.Value;
         }

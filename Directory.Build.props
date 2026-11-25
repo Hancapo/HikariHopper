@@ -10,6 +10,10 @@
     <!-- RedFury.NET checkout, for Red Dead Redemption 2: beside this repository's parent folder by default, or REDFURY_ROOT / -p:RedFuryRoot=... -->
     <RedFuryRoot Condition="'$(RedFuryRoot)' == '' and '$(REDFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(REDFURY_ROOT)'))</RedFuryRoot>
     <RedFuryRoot Condition="'$(RedFuryRoot)' == ''">$(MSBuildThisFileDirectory)../../RedFury.NET/</RedFuryRoot>
+    <!-- What the 3D views draw with: Wgpu (WGpuFury) or D3D12 (Vortice), chosen at build (-p:GpuBackend=D3D12). The app's GPU
+         layer (src/Rendering/Gpu) has an implementation of each; GPU_WGPU or GPU_D3D12 is defined for the one built. -->
+    <GpuBackend Condition="'$(GpuBackend)' == ''">Wgpu</GpuBackend>
+    <DefineConstants>$(DefineConstants);GPU_$(GpuBackend.ToUpperInvariant())</DefineConstants>
     <!-- WGpuFury checkout, the wgpu bindings the 3D views draw with: beside this repository's parent folder by default, or
          WGPUFURY_ROOT / -p:WGpuFuryRoot=... Its wgpu-native is built there (eng/build-native.cs), into native/<rid>. -->
     <WGpuFuryRoot Condition="'$(WGpuFuryRoot)' == '' and '$(WGPUFURY_ROOT)' != ''">$([MSBuild]::EnsureTrailingSlash('$(WGPUFURY_ROOT)'))</WGpuFuryRoot>

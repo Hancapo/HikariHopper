@@ -416,7 +416,8 @@ public struct DeviceDescriptor
 {
     public string? Label;
     public FeatureName[]? RequiredFeatures;
-    public WGpuFury.WGPULimits? RequiredLimits;
+    /// <summary>Asks for everything the adapter allows, not WebGPU's defaults.</summary>
+    public bool AdapterLimits;
     /// <summary>Called once if the device is lost, with why; not when it's released.</summary>
     public Action<DeviceLostReason, string>? DeviceLostCallback;
     /// <summary>An error no error scope caught.</summary>
@@ -428,4 +429,18 @@ public readonly record struct SurfaceTexture(SurfaceGetCurrentTextureStatus Stat
 
 public sealed record SurfaceCapabilities(TextureFormat[] Formats, PresentMode[] PresentModes, CompositeAlphaMode[] AlphaModes);
 
+/// <summary>What the GPU allows, as the renderer reads it.</summary>
+public struct Limits
+{
+    public uint MaxSampledTexturesPerShaderStage;
+    public uint MaxSamplersPerShaderStage;
+    public uint MaxStorageBuffersPerShaderStage;
+    public uint MaxBindGroups;
+    public ulong MaxBufferSize;
+    public uint MaxTextureDimension2D;
+}
+
 public sealed record AdapterInfo(string Vendor, string Architecture, string Device, string Description, BackendType BackendType, uint VendorId, uint DeviceId);
+
+/// <summary>A GPU call that failed, or a GPU object that couldn't be made.</summary>
+public sealed class GpuException(string message) : Exception(message);

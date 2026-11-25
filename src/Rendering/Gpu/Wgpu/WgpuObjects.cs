@@ -51,7 +51,9 @@ public sealed unsafe class Instance : GpuObject
     /// An instance with only the given backends. With <paramref name="dred"/>, Direct3D 12's Device Removed Extended Data
     /// is kept, for a lost device to say what the GPU was doing; WGPU_D3D12_DRED=1 does the same at run time.
     /// </summary>
-    public static Instance Create(WGPUInstanceBackend backends, bool dred = false)
+    public static Instance Create(bool dred = false) => Create(WGPUInstanceBackend.DX12, dred);
+
+    private static Instance Create(WGPUInstanceBackend backends, bool dred)
     {
         var extras = new WGPUInstanceExtras
         {
@@ -129,12 +131,24 @@ public sealed unsafe class Adapter : GpuObject
 
     public bool HasFeature(FeatureName feature) => WGPU.wgpuAdapterHasFeature(Native, (WGPUFeatureName)feature);
 
-    public void GetLimits(out WGPULimits limits)
+    public void GetLimits(out Limits limits) => limits = Limit(NativeLimits());
+
+    internal WGPULimits NativeLimits()
     {
-        limits = new WGPULimits();
-        fixed (WGPULimits* pointer = &limits)
-            WGPU.wgpuAdapterGetLimits(Native, pointer);
+        var native = new WGPULimits();
+        WGPU.wgpuAdapterGetLimits(Native, &native);
+        return native;
     }
+
+    internal static Limits Limit(in WGPULimits native) => new()
+    {
+        MaxSampledTexturesPerShaderStage = native.MaxSampledTexturesPerShaderStage,
+        MaxSamplersPerShaderStage = native.MaxSamplersPerShaderStage,
+        MaxStorageBuffersPerShaderStage = native.MaxStorageBuffersPerShaderStage,
+        MaxBindGroups = native.MaxBindGroups,
+        MaxBufferSize = native.MaxBufferSize,
+        MaxTextureDimension2D = native.MaxTextureDimension2D,
+    };
 
     public AdapterInfo GetInfo()
     {
@@ -157,13 +171,13 @@ public sealed unsafe class Adapter : GpuObject
         var callbacks = new DeviceCallbacks(descriptor.DeviceLostCallback, descriptor.UncapturedErrorCallback);
         // Kept for the device's life: wgpu calls back with it as long as the device is.
         GCHandle kept = GCHandle.Alloc(callbacks);
-        WGPULimits limits = descriptor.RequiredLimits ?? default;
+        WGPULimits limits = descriptor.AdapterLimits ? NativeLimits() : default;
         var native = new WGPUDeviceDescriptor
         {
             Label = scratch.Text(descriptor.Label),
             RequiredFeatureCount = (nuint)(descriptor.RequiredFeatures?.Length ?? 0),
             RequiredFeatures = (WGPUFeatureName*)scratch.Copy<FeatureName>(descriptor.RequiredFeatures ?? []),
-            RequiredLimits = descriptor.RequiredLimits is null ? null : &limits,
+            RequiredLimits = descriptor.AdapterLimits ? &limits : null,
             DeviceLostCallbackInfo = new WGPUDeviceLostCallbackInfo
             {
                 Mode = WGPUCallbackMode.AllowSpontaneous,
@@ -249,10 +263,11 @@ public sealed unsafe class Device : GpuObject
 
     public Queue GetQueue() => Queue;
 
-    public void GetLimits(ref WGPULimits limits)
+    public void GetLimits(out Limits limits)
     {
-        fixed (WGPULimits* pointer = &limits)
-            WGPU.wgpuDeviceGetLimits(Native, pointer);
+        var native = new WGPULimits();
+        WGPU.wgpuDeviceGetLimits(Native, &native);
+        limits = Adapter.Limit(native);
     }
 
     public bool HasFeature(FeatureName feature) => WGPU.wgpuDeviceHasFeature(Native, (WGPUFeatureName)feature);

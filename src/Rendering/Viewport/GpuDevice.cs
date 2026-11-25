@@ -46,7 +46,7 @@ internal sealed class GpuDevice
     {
         // Direct3D 12 alone; Direct3D 12's removal data kept when WGPU_D3D12_DRED=1, for a lost device to say what the GPU
         // was doing.
-        Instance = Instance.Create(WGpuFury.WGPUInstanceBackend.DX12);
+        Instance = Instance.Create();
         // Any window can be drawn into from the Direct3D 12 adapter, so none is needed to pick it.
         Adapter = Instance.RequestAdapterSync(new RequestAdapterOptions
         {
@@ -224,10 +224,9 @@ internal sealed class GpuDevice
     {
         // What the adapter allows, asked for whole: Red Dead Redemption 2's material reads more textures at once than
         // WebGPU's defaults let a shader (Rdr2/surface.wgsl, Rdr2TextureSlots).
-        adapter.GetLimits(out WGpuFury.WGPULimits limits);
         return adapter.RequestDeviceSync(new DeviceDescriptor
         {
-            RequiredLimits = limits,
+            AdapterLimits = true,
             RequiredFeatures = [.. compressedTextures ? [FeatureName.TextureCompressionBC] : Array.Empty<FeatureName>(),
                 .. indirectFirstInstance ? [FeatureName.IndirectFirstInstance] : Array.Empty<FeatureName>()],
             UncapturedErrorCallback = (type, message) => failed($"WebGPU {type}: {message}"),

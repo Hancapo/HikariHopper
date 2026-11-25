@@ -53,6 +53,3 @@ internal sealed unsafe class GpuScratch : IDisposable
         blocks.Clear();
     }
 }
-
-/// <summary>A GPU call that failed, or a GPU object that couldn't be made.</summary>
-public sealed class GpuException(string message) : Exception(message);
