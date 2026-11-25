@@ -22,6 +22,9 @@ internal sealed unsafe partial class ViewportRenderer
         internal readonly WorldAssetKey Key = source.Key;
         internal WorldMemoryCost MemoryCost = source.MemoryCost;
         internal readonly byte LodMask = source.LodMask;
+
+        // Its levels whose models cast, which says the level each placement casts at (WorldLodSelection.ShadowLevel).
+        internal readonly byte CasterLods = source.CasterLods;
         internal readonly WorldLightBones LightBones = source.LightBones;
         internal readonly float[] LodReach2 = source.LodReach2;
 
@@ -97,6 +100,8 @@ internal sealed unsafe partial class ViewportRenderer
         internal long Used;
 
         internal int Level(float distance2) => WorldLodSelection.Level(LodMask, LodReach2, distance2);
+
+        internal int ShadowLevel(float distance2) => WorldLodSelection.ShadowLevel(LodMask, CasterLods, LodReach2, distance2);
     }
 
     // A covered node's rows in its asset's storage, the fade they were written with, and the update that last saw it.
@@ -707,6 +712,20 @@ internal sealed unsafe partial class ViewportRenderer
     internal (int Rows, int Live) WorldSourceRows(WorldAssetKey key) =>
         worldAssets.TryGetValue(key, out WorldGpuAsset? asset) ? (asset.SourceRows, asset.LiveSources) : default;
 
+    /// <summary>
+    /// How many of an uploaded asset's placements the camera drew at a level of detail last time they were culled, and
+    /// how many the cascades culled then cast at it; for tests.
+    /// </summary>
+    internal (int View, int Cast) WorldPlacementsAt(WorldAssetKey key, int level)
+    {
+        if (!worldAssets.TryGetValue(key, out WorldGpuAsset? asset))
+            return default;
+        int cast = 0;
+        for (int c = 0; c < WorldShadowCascades.Count; c++)
+            cast += asset.ShadowCount[c * WorldAsset.Lods + level];
+        return (asset.LodCount[level], cast);
+    }
+
     /// <summary>The row a covered node's first placement is in, and its normal matrix there; for tests.</summary>
     internal (int Row, Matrix4x4 Normal) WorldSourceRow(WorldLodNode node)
     {
@@ -923,7 +942,9 @@ internal sealed unsafe partial class ViewportRenderer
                     listedAssets.Add(asset);
                 }
                 float x = set.X[entry] - eye.X, y = set.Y[entry] - eye.Y, z = set.Z[entry] - eye.Z;
-                asset.Buckets[asset.Level(x * x + y * y + z * z)].Add((uint)(worldNodeRow[node] + entry - set.First[node]));
+                float distance2 = x * x + y * y + z * z;
+                // A cascade's casters at the level the shadow takes, which isn't always the one in view.
+                asset.Buckets[cascade < 0 ? asset.Level(distance2) : asset.ShadowLevel(distance2)].Add((uint)(worldNodeRow[node] + entry - set.First[node]));
             }
             foreach (WorldGpuAsset asset in gatheredAssets)
             {

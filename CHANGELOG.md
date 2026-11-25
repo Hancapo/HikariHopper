@@ -13,6 +13,12 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 ### Fixed
 
 - Title-bar menus opened over a world run their items when clicked, including menus already used on the Files side. ([#338](https://github.com/Hancapo/HikariHopper/pull/338))
+- GTA V trees and props cast their shadows in its world at every distance, instead of losing them between their most detailed model's reach and their low-detail stand-in's. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
+- Both worlds count each model's memory once, so they no longer reach their 4 GB limit and drop models, and the shadows they cast, while the camera moves. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
+
+### Performance
+
+- Red Dead Redemption 2's world keeps 967 MB less in memory at Valentine by letting go of texture pixels once they're on the GPU, and puts 194 MB fewer textures on it. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
 
 ## [0.3.0] - 2026-11-20
 
