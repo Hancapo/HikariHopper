@@ -383,7 +383,8 @@ internal sealed partial class ViewportHost : NativeControlHost
 
     private void Start()
     {
-        if (stopped || hwnd == 0)
+        // Once per window: a second renderer would make a second surface for it, which loses the GPU device.
+        if (stopped || hwnd == 0 || renderer is not null)
             return;
         // Not while the GPU's warm-up has the device: the renderer would wait for it here, on the UI thread, and stop the
         // whole window for as long as the warm-up takes, seconds after the app starts. Started once it's done.
@@ -476,8 +477,7 @@ internal sealed partial class ViewportHost : NativeControlHost
                 Drawing?.Invoke(renderer, seconds);
                 // The exposure eases over the frames' times, as the game's does.
                 renderer.FrameSeconds = seconds;
-                renderer.Draw();
-                drew = true;
+                drew = renderer.Draw();
                 if ((renderer.Camera.Yaw, renderer.Camera.Pitch) != turned)
                 {
                     turned = (renderer.Camera.Yaw, renderer.Camera.Pitch);
@@ -606,7 +606,14 @@ internal sealed partial class ViewportHost : NativeControlHost
         dragging = false;
         pacer?.Dispose();
         pacer = null;
-        renderer?.Dispose();
+        try
+        {
+            renderer?.Dispose();
+        }
+        catch (Exception error) when (error is InvalidOperationException or WebGpuSharp.WebGPUException)
+        {
+            // A lost device can't let go of what it held; it goes with the device.
+        }
         renderer = null;
     }
 
@@ -622,11 +629,33 @@ internal sealed partial class ViewportHost : NativeControlHost
         base.DestroyNativeControlCore(control);
     }
 
+    // Not started again in its window: a second surface for a window loses the GPU device, and a lost one doesn't come
+    // back in this process (Direct3D 12 keeps one device per GPU, which every object WebGPUSharp never lets go holds).
     private void Fail(Exception error)
     {
+        if (Rendering.GpuDevice.IsLost(error) && error.Message != Rendering.GpuDevice.LostMessage)
+        {
+            renderer?.Gpu.Lose(error.Message);
+            error = new InvalidOperationException(Rendering.GpuDevice.LostMessage, error);
+        }
         Stop();
         // Never unwinding through the native window procedure.
         Dispatcher.UIThread.Post(() => Failed?.Invoke(error));
+    }
+
+    // A click's handlers read the renderer, whose device may have been lost meanwhile: that stops the view, with why,
+    // rather than the app.
+    private void Clicking(Action click)
+    {
+        try
+        {
+            click();
+        }
+        catch (Exception error) when (error is InvalidOperationException or WebGpuSharp.WebGPUException)
+        {
+            if (!stopped)
+                Fail(error);
+        }
     }
 
     [UnmanagedCallersOnly]
@@ -725,9 +754,9 @@ internal sealed partial class ViewportHost : NativeControlHost
                     if (!right)
                     {
                         (System.Numerics.Vector3 from, System.Numerics.Vector3 direction) = r.Camera.Ray(clickX, clickY, surfaceWidth, surfaceHeight);
-                        Dispatcher.UIThread.Post(() => Clicked?.Invoke(from, direction));
+                        Dispatcher.UIThread.Post(() => Clicking(() => Clicked?.Invoke(from, direction)));
                     }
-                    Dispatcher.UIThread.Post(() => PixelClicked?.Invoke(clickX, clickY, right));
+                    Dispatcher.UIThread.Post(() => Clicking(() => PixelClicked?.Invoke(clickX, clickY, right)));
                 }
                 dragging = false;
                 EndLook();

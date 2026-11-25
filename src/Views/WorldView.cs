@@ -46,6 +46,8 @@ internal sealed class WorldView : UserControl
     private TopLevel? top;
     private int shownRequest;
     private WorldStreamer? streamer;
+    // Why the 3D view stopped, shown over it in place of its last frame; none while it draws.
+    private string? viewFailure;
     private WorldIndex? streamed;
     // The GPU's pipelines, compiling in the background since the app started: until they're done, a viewport would wait
     // for them on the UI thread, which would stop the whole window. The loading screen stays up meanwhile.
@@ -57,6 +59,11 @@ internal sealed class WorldView : UserControl
         // Settings and the other sheets open over it in a pane of their own, so it keeps drawing under them.
         ModalOverlay.SetKeepsDrawing(Viewport, true);
         Viewport.Drawing += (renderer, seconds) => streamer?.Update(renderer, seconds, bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours);
+        Viewport.Failed += error =>
+        {
+            viewFailure = error.Message;
+            Refresh();
+        };
         Viewport.PixelClicked += PickAt;
         Pattern = new RailPattern { IsRunning = false };
         Loading = new LoadingOverlay { Background = Avalonia.Media.Brushes.Transparent, Detail = "Preparing the world" };
@@ -83,6 +90,11 @@ internal sealed class WorldView : UserControl
         Background = Ui.Theme.WindowBg;
         Viewport.Started += _ =>
         {
+            if (viewFailure is not null)
+            {
+                viewFailure = null;
+                Refresh();
+            }
             Place();
             Viewport.SetTime(bridge?.WorldHours ?? Rendering.DayCycle.DefaultHours);
         };
@@ -318,9 +330,17 @@ internal sealed class WorldView : UserControl
         // while the shaders compile, if they still are.
         bool compiling = shaders is { IsCompleted: false };
         bool preparing = bridge is { InWorld: true } && (bridge.WorldPreparing || compiling && bridge.WorldFailure is null);
-        Cover.IsVisible = preparing;
+        Cover.IsVisible = preparing || viewFailure is not null && bridge is { InWorld: true };
         Pattern.IsRunning = Loading.IsRunning = preparing;
-        if (bridge?.WorldFailure is { } failure)
+        if (viewFailure is not null && !preparing)
+        {
+            // The 3D view stopped: why, in place of a frozen frame.
+            Loading.Title = "THE 3D VIEW STOPPED";
+            Loading.Detail = viewFailure;
+            Loading.Progress = null;
+            Loading.ProgressText = null;
+        }
+        else if (bridge?.WorldFailure is { } failure)
         {
             // Why it couldn't be made, the train standing still.
             Loading.Title = "COULDN'T PREPARE THE WORLD";

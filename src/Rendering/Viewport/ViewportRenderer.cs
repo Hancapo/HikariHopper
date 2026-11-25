@@ -23,9 +23,15 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
     private const TextureFormat DepthFormat = TextureFormat.Depth32Float;
 
     private readonly GpuDevice gpu;
+
+    /// <summary>The GPU this viewport draws with.</summary>
+    internal GpuDevice Gpu => gpu;
     // The device's errors, until this viewport is gone (the device holds it weakly).
     private readonly Action<string> failed;
-    private readonly Surface? surface;
+    private Surface? surface;
+    // The window the swap chain shows in, for its surface to be made again (SwapChainRecovery).
+    private readonly nint window, module;
+    private readonly SwapChainRecovery swapChain = new();
     private readonly Adapter adapter;
     private readonly Device device;
     private readonly Queue queue;
@@ -83,15 +89,11 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         // Made while the background warm-up isn't using the device, which then has the pipelines ready.
         lock (gpu.Gate)
         {
+            this.window = window;
+            this.module = module;
             if (window != 0)
             {
-                var source = new SurfaceSourceWindowsHWNDFFI
-                {
-                    Chain = new ChainedStruct { SType = SType.SurfaceSourceWindowsHWND },
-                    Hwnd = (void*)window,
-                    Hinstance = (void*)module,
-                };
-                surface = gpu.Instance.CreateSurface(new SurfaceDescriptor(ref source)) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
+                surface = CreateSurface();
                 // Colours are blended in linear light and stored as sRGB. A swap chain that can't be sRGB itself is
                 // drawn through an sRGB view of it.
                 SurfaceCapabilities capabilities = surface.GetCapabilities(adapter) ?? throw new NotSupportedException("The window's capabilities are unknown.");
@@ -114,6 +116,17 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             };
             Create(width, height);
         }
+    }
+
+    private Surface CreateSurface()
+    {
+        var source = new SurfaceSourceWindowsHWNDFFI
+        {
+            Chain = new ChainedStruct { SType = SType.SurfaceSourceWindowsHWND },
+            Hwnd = (void*)window,
+            Hinstance = (void*)module,
+        };
+        return gpu.Instance.CreateSurface(new SurfaceDescriptor(ref source)) ?? throw new InvalidOperationException("WebGPU can't draw into this window.");
     }
 
     private void Create(int width, int height)
@@ -342,15 +355,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
         this.width = width;
         this.height = height;
-        surface?.Configure(new SurfaceConfiguration
-        {
-            Device = device,
-            Format = surfaceFormat,
-            ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
-            Width = (uint)width,
-            Height = (uint)height,
-            PresentMode = PresentMode.Fifo,
-        });
+        ConfigureSurface();
         depth?.Destroy();
         depth = device.CreateTexture(new TextureDescriptor
         {
@@ -367,21 +372,60 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         CreateOutlineTargets();
     }
 
-    /// <summary>Draws and presents a frame.</summary>
-    public void Draw()
+    // The swap chain at the window's size, as last resized; the frame's own targets stay as they are.
+    private void ConfigureSurface() => surface?.Configure(new SurfaceConfiguration
+    {
+        Device = device,
+        Format = surfaceFormat,
+        ViewFormats = surfaceFormat == presentFormat ? [] : [presentFormat],
+        Width = (uint)width,
+        Height = (uint)height,
+        PresentMode = PresentMode.Fifo,
+    });
+
+    // The window's swap chain made anew: let go of, then configured again, which builds a new one. Never a new surface
+    // for the window instead: a second surface for a window loses the GPU device, for good.
+    internal void RecreateSurface()
+    {
+        surface?.Unconfigure();
+        ConfigureSurface();
+    }
+
+    /// <summary>The frames in a row the window's swap chain gave nothing to draw into.</summary>
+    internal int MissedFrames => swapChain.Missed;
+
+    /// <summary>
+    /// Draws and presents a frame; whether it did. One the swap chain gives no texture for isn't drawn: it sets the
+    /// swap chain up again, and makes the window's surface again when that doesn't help (<see cref="SwapChainRecovery"/>).
+    /// </summary>
+    public bool Draw()
     {
         if (disposed || width == 0 || height == 0 || depthView is null || surface is null)
-            return;
+            return false;
         ThrowIfFailed();
         WriteScene();
         SurfaceTexture frame = surface.GetCurrentTexture();
-        if (frame.Status is not (SurfaceGetCurrentTextureStatus.SuccessOptimal or SurfaceGetCurrentTextureStatus.SuccessSuboptimal)
-            || frame.Texture is not { } texture)
+        SwapChainStep step = swapChain.Next(frame.Status, frame.Texture is not null);
+        if (step != SwapChainStep.Draw && frame.Texture is { } unused)
+            Release(unused);
+        switch (step)
         {
-            // Lost or outdated (a resize, a display change): configure again and draw the next frame.
-            Resize(width, height);
-            return;
+            case SwapChainStep.Skip:
+                return false;
+            case SwapChainStep.Configure:
+                ConfigureSurface();
+                return false;
+            case SwapChainStep.Recreate:
+                RecreateSurface();
+                return false;
+            case SwapChainStep.Fail when frame.Status == SurfaceGetCurrentTextureStatus.Error:
+                // Its device lost: every surface of the process gives errors from then on.
+                gpu.Lose("the window's swap chain gives errors");
+                throw new InvalidOperationException(GpuDevice.LostMessage);
+            case SwapChainStep.Fail:
+                throw new InvalidOperationException($"The window's swap chain gave nothing to draw into ({frame.Status}) for {swapChain.Missed} frames in a row.");
         }
+        Texture texture = frame.Texture!;
         TextureView view = texture.CreateView(new TextureViewDescriptor
         {
             Format = presentFormat,
@@ -392,6 +436,10 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         });
         Render(view);
         surface.Present();
+        // The frame's texture and view go now: left to WebGPUSharp, a texture and a view were kept for good every frame.
+        Release(view);
+        Release(texture);
+        return true;
     }
 
     /// <summary>
@@ -651,6 +699,36 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         ClearWorld();
         perlinMap?.Destroy();
         ClearSurfaces();
-        surface?.Unconfigure();
+        if (surface is not null)
+        {
+            surface.Unconfigure();
+            Release(surface);
+            surface = null;
+        }
+    }
+
+    private static readonly bool KnownWrapper = typeof(Device).Assembly.GetName().Version is { Major: 0, Minor: 5, Build: 8 };
+
+    /// <summary>
+    /// Lets go of one of the window's objects for good: its surface, or a frame's texture and view of the swap chain.
+    /// WebGPUSharp 0.5.8 takes a reference of its own as it wraps an object, and its wrapper gives back one: left to it,
+    /// they're never destroyed, a frame's texture and view about 0.9 KB a frame, every frame the window shows. Only for
+    /// the version known to take the extra reference; with another, they're left to WebGPUSharp.
+    /// </summary>
+    private static void Release<THandle>(WebGpuSharp.Internal.WebGPUManagedHandleBase<THandle> wrapped)
+        where THandle : unmanaged, IWebGpuHandle<THandle>, IEquatable<THandle>
+    {
+        if (!KnownWrapper)
+            return;
+        THandle.Release(WebGpuSharp.Marshalling.WebGPUMarshal.GetHandle(wrapped));
+        Wrapper<THandle>.SafeHandle(wrapped).Dispose();
+    }
+
+    // The handle a wrapper keeps to itself. A field of a generic type is reached from a generic type of the same shape.
+    private static class Wrapper<THandle>
+        where THandle : unmanaged, IWebGpuHandle<THandle>, IEquatable<THandle>
+    {
+        [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_safeHandle")]
+        internal static extern ref WebGpuSafeHandle<THandle> SafeHandle(WebGpuSharp.Internal.WebGPUManagedHandleBase<THandle> wrapper);
     }
 }
