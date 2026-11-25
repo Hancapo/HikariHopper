@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using HikariHopper.Core;
@@ -238,6 +239,59 @@ public sealed class WorldFaceTests : ExplorerTestBase
         menus.Toggle(menus.ViewButton);
         TestWait.Pump(50);
         Assert.False(view.IsOpen);
+        window.Close();
+    }
+
+    // Clicks a title of the menu bar, or an item in a menu's window, with the pointer, as a person does.
+    private static void Click(Window window, Avalonia.Controls.Control control)
+    {
+        Avalonia.Point at = control.TranslatePoint(new Avalonia.Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(at);
+        window.MouseDown(at, MouseButton.Left);
+        window.MouseUp(at, MouseButton.Left);
+        TestWait.Pump(100);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_title_bar_menus_items_work_over_the_world_when_clicked(bool usedOnTheFilesFirst)
+    {
+        var (window, session) = OpenWindow();
+        ExplorerViewModel tab = session.Tabs.ActiveBridge;
+        TestWait.Until(() => tab.WorldReady || tab.WorldFailure is not null, "the world's index");
+        MenuRow menus = Find<MenuRow>(window);
+        // Used on the files' side first: drawn in the main window, then closed.
+        if (usedOnTheFilesFirst)
+        {
+            Click(window, menus.GoButton);
+            Assert.True(menus.MenuFor(menus.GoButton).IsOpen);
+            Click(window, menus.GoButton);
+            Assert.False(menus.MenuFor(menus.GoButton).IsOpen);
+        }
+        tab.ShowWorld();
+        TestWait.Pump(100);
+
+        // Over the world: the title opens its menu as a window of its own, and a click on Back goes back to the files.
+        Click(window, menus.GoButton);
+        HikariHopper.Views.Controls.DropdownWindow open = Assert.IsType<HikariHopper.Views.Controls.DropdownWindow>(menus.OpenWindow);
+        HikariHopper.Views.Controls.RetroMenuItem back = menus.MenuFor(menus.GoButton).Items
+            .OfType<HikariHopper.Views.Controls.RetroMenuItem>().Single(item => item.Text == "Back");
+        Assert.True(back.IsEffectivelyEnabled);
+        Click(open, back);
+        TestWait.Pump(200);
+        Assert.False(tab.InWorld);
+        Assert.Null(menus.OpenWindow);
+
+        // Back on the files' side, the same menu is drawn in the main window again, and its items work there too: Forward,
+        // to the world.
+        Click(window, menus.GoButton);
+        Assert.True(menus.MenuFor(menus.GoButton).IsOpen);
+        HikariHopper.Views.Controls.RetroMenuItem forward = menus.MenuFor(menus.GoButton).Items
+            .OfType<HikariHopper.Views.Controls.RetroMenuItem>().Single(item => item.Text == "Forward");
+        Click(window, forward);
+        TestWait.Pump(200);
+        Assert.True(tab.InWorld);
         window.Close();
     }
 
