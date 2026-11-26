@@ -134,7 +134,7 @@ internal sealed unsafe partial class ViewportRenderer
             Entries = [new BindGroupEntry { Binding = 0, Buffer = skyBuffer, Size = SkyBytes }],
         });
 
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/sky_system.wgsl") + "\n" + Read("Gta5/reflection_map.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/reflection-map", Code = Module("gta5/reflection-map") }));
         RenderPipeline Pipeline(string entry, BindGroupLayout[] layouts) => gpu.Pipeline($"reflection-map/{entry}/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = layouts }),

@@ -38,7 +38,7 @@ internal sealed partial class ViewportRenderer
         BindGroupLayout layout = subSampleAlphaLayout;
         subSampleAlphaPipeline = gpu.Pipeline("rdr2-subsample-alpha", () =>
         {
-            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Rdr2/subsample_alpha.wgsl") });
+            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "rdr2/subsample-alpha", Code = Module("rdr2/subsample-alpha") });
             return device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),

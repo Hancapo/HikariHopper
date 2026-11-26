@@ -26,6 +26,7 @@
     <!-- RDR2's RPF8 tables (RedFury's RF8C format), for game build 1.0.1491.50. -->
     <EmbeddedResource Include="Assets/Keys/rpf8.dat" LogicalName="HikariHopper.rpf8.dat" />
     <!-- Shaders, read by their folder and name: the shared ones by concern ("Scene/scene.wgsl"), each game's by game ("Gta5/sky.wgsl"). -->
+    <EmbeddedResource Include="Rendering/Shaders/modules.txt" LogicalName="HikariHopper.Shaders.modules.txt" />
     <EmbeddedResource Include="Rendering/Shaders/Scene/*" LogicalName="HikariHopper.Shaders.Scene/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Rendering/Shaders/Post/*" LogicalName="HikariHopper.Shaders.Post/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Rendering/Shaders/World/*" LogicalName="HikariHopper.Shaders.World/%(Filename)%(Extension)" />

@@ -64,7 +64,7 @@ internal sealed unsafe partial class ViewportRenderer
         // The outline's mask needs no material.
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Shader("World/world_instances.wgsl") + "\n" + Read("World/world_pick.wgsl"),
+            Label = "world/pick", Code = Module("world/pick"),
         }));
         var instance = WorldInstanceLayout();
         worldMask = gpu.Pipeline($"world-mask/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
@@ -95,8 +95,8 @@ internal sealed unsafe partial class ViewportRenderer
         CreatePickPipelines();
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Shader("World/world_instances.wgsl") + "\n" + Read("World/world_pick.wgsl") + "\n"
-                + (family == WorldFamily.Rdr2 ? Read("Rdr2/cutout.wgsl") + "\n" + Read("Rdr2/world_pick.wgsl") : Read("Gta5/world_pick.wgsl")),
+            Label = family == WorldFamily.Rdr2 ? "world/rdr2-pick" : "world/gta-pick",
+            Code = Module(family == WorldFamily.Rdr2 ? "world/rdr2-pick" : "world/gta-pick"),
         }));
         var vertex = new VertexBufferLayout
         {

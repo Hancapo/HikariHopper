@@ -56,7 +56,7 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             ],
         });
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Post/bloom.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "post/bloom", Code = Module("post/bloom") }));
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, bloomLayout, lightLayout!] });
         // The upsample blends halfway (its alpha, UpsampleWeight) into the level it's drawn to; the others replace it.
         BlendState upsampleBlend = new()

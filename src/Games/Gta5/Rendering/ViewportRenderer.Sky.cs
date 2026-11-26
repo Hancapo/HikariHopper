@@ -77,7 +77,7 @@ internal sealed unsafe partial class ViewportRenderer
         CreateSkyLayouts();
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Gta5/sky_system.wgsl") + "\n" + Read("Gta5/fog.wgsl") + "\n" + Read("Gta5/sky.wgsl"),
+            Label = "gta5/sky", Code = Module("gta5/sky"),
         }));
         PipelineLayout skyPipelineLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, gtaSkyLayout!] });
         // At the far plane, behind whatever the world draws over it.

@@ -59,7 +59,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Post/ambient_occlusion.wgsl"),
+            Label = "post/ambient-occlusion", Code = Module("post/ambient-occlusion"),
         }));
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, occlusionLayout] });
         RenderPipeline Pass(string entry, ColorTargetState target) => gpu.Pipeline($"ambient-occlusion/{entry}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor

@@ -168,7 +168,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         Lazy<ShaderModule> tables = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Rdr2/atmosphere.wgsl") + "\n" + Read("Rdr2/sky_tables.wgsl"),
+            Label = "rdr2/sky-tables", Code = Module("rdr2/sky-tables"),
         }));
         ComputePipeline Pass(string entry, BindGroupLayout layout) => gpu.Compute($"rdr2-sky/{entry}", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
@@ -182,7 +182,7 @@ internal sealed unsafe partial class ViewportRenderer
         rdr2AccumulatePipeline = Pass("cs_accumulate", rdr2AccumulateLayout);
         Lazy<ShaderModule> dome = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Rdr2/atmosphere.wgsl") + "\n" + Read("Rdr2/sky.wgsl"),
+            Label = "rdr2/sky", Code = Module("rdr2/sky"),
         }));
         rdr2SkyLightPipeline = gpu.Compute("rdr2-sky/light", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
@@ -191,8 +191,7 @@ internal sealed unsafe partial class ViewportRenderer
         }));
         Lazy<ShaderModule> aerial = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Scene/light.wgsl") + "\n" + Read("Rdr2/atmosphere.wgsl") + "\n" + Read("Rdr2/sky.wgsl") + "\n"
-                + Read("Rdr2/aerial.wgsl"),
+            Label = "rdr2/aerial", Code = Module("rdr2/aerial"),
         }));
         rdr2AerialPipeline = gpu.Compute("rdr2-sky/aerial", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {

@@ -95,7 +95,7 @@ internal sealed unsafe partial class ViewportRenderer
         BindGroupLayout layout = subSampledLayout;
         subSampledCombine = gpu.Pipeline("subsample-alpha", () =>
         {
-            ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/subsample_alpha.wgsl") });
+            ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/subsample-alpha", Code = Module("gta5/subsample-alpha") });
             return device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),
