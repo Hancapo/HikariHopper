@@ -212,8 +212,7 @@ public sealed class GpuLayerTests
         GpuDevice gpu = TestGpu.Device();
         lock (gpu.Gate)
         {
-            gpu.Device.Poll(wait: true);
-            int before = gpu.Instance.LiveObjects("textures");
+            int before = Settled(gpu);
             Texture target = Target(gpu, 32, 32, TextureFormat.RGBA8Unorm);
             TextureView view = target.CreateView();
             CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
@@ -227,7 +226,17 @@ public sealed class GpuLayerTests
             gpu.Device.Poll();
             gpu.Queue.Submit(encoder.Finish());
             Assert.True(gpu.Device.Poll(wait: true));
-            Assert.Equal(before, gpu.Instance.LiveObjects("textures"));
+            // Other tests' textures may go meanwhile, so none more than before.
+            Assert.True(Settled(gpu) <= before);
+        }
+
+        // The textures alive once what was let go of is freed: finalized, and the GPU done with it.
+        static int Settled(GpuDevice gpu)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            gpu.Device.Poll(wait: true);
+            return gpu.Instance.LiveObjects("textures");
         }
     }
 

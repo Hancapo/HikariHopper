@@ -853,14 +853,3 @@ public sealed class ComputePipeline : GpuObject
             device.Retire(Life);
     }
 }
-
-public sealed class RenderBundle : GpuObject
-{
-    private RenderBundle()
-    {
-    }
-
-    private protected override void Release()
-    {
-    }
-}

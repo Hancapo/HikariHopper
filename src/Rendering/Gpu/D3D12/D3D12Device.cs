@@ -356,6 +356,13 @@ public sealed unsafe class Device : GpuObject
     internal ShaderHeaps Heaps => LazyInitializer.EnsureInitialized(ref heaps, ref heapsMade, ref heapsLock, () => new ShaderHeaps(this))!;
 
     private ShaderHeaps? heaps;
+
+    /// <summary>How indirect draws and dispatches read their arguments.</summary>
+    internal CommandSignatures Signatures => LazyInitializer.EnsureInitialized(ref signatures, ref signaturesMade, ref signaturesLock, () => new CommandSignatures(Native))!;
+
+    private CommandSignatures? signatures;
+    private bool signaturesMade;
+    private object? signaturesLock;
     private bool heapsMade;
     private object? heapsLock;
 
@@ -509,7 +516,7 @@ public sealed unsafe class Device : GpuObject
 
     public CommandEncoder CreateCommandEncoder() => new(new Recorder(this));
 
-    public RenderBundleEncoder CreateRenderBundleEncoder(in RenderBundleEncoderDescriptor descriptor) => throw D3D12Pending.Bundles();
+    public RenderBundleEncoder CreateRenderBundleEncoder(in RenderBundleEncoderDescriptor descriptor) => new(new BundleRecording(instance));
 
     public void PushErrorScope(ErrorFilter filter)
     {
@@ -876,14 +883,6 @@ internal sealed class CpuDescriptors(ID3D12Device device, DescriptorHeapType typ
         lock (free)
             free.Push(handle);
     }
-}
-
-/// <summary>What isn't made on Direct3D 12 yet, while it's built in steps.</summary>
-internal static class D3D12Pending
-{
-    internal static NotSupportedException Bundles() => new("Direct3D 12 doesn't record render bundles yet.");
-
-    internal static NotSupportedException Draws() => new("Direct3D 12 doesn't draw or dispatch yet.");
 }
 
 /// <summary>What Device Removed Extended Data says the GPU was doing when it lost the device, when it's kept.</summary>

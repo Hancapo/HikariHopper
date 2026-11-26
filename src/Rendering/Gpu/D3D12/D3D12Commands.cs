@@ -15,7 +15,7 @@ namespace HikariHopper.Gpu;
 /// for it (a UAV barrier, or a full one for copies).
 /// </para>
 /// </summary>
-internal sealed class Recorder
+internal sealed partial class Recorder
 {
     private const ResourceStates Writes = ResourceStates.RenderTarget | ResourceStates.UnorderedAccess | ResourceStates.DepthWrite
         | ResourceStates.CopyDest | ResourceStates.ResolveDest | ResourceStates.StreamOut;
@@ -441,10 +441,15 @@ public readonly struct CommandEncoder
     public RenderPassEncoder BeginRenderPass(in RenderPassDescriptor descriptor)
     {
         recorder.BeginPass(descriptor);
+        recorder.ResetBindings(computing: false);
         return new RenderPassEncoder(recorder);
     }
 
-    public ComputePassEncoder BeginComputePass() => new(recorder);
+    public ComputePassEncoder BeginComputePass()
+    {
+        recorder.ResetBindings(computing: true);
+        return new ComputePassEncoder(recorder);
+    }
 
     public void CopyBufferToBuffer(Buffer source, ulong sourceOffset, Buffer destination, ulong destinationOffset, ulong size) =>
         recorder.CopyBuffer(source.Life, sourceOffset, destination.Life, destinationOffset, size);
@@ -475,15 +480,17 @@ public readonly struct RenderPassEncoder
 
     internal RenderPassEncoder(Recorder recorder) => this.recorder = recorder;
 
-    public void SetPipeline(RenderPipeline pipeline) => throw D3D12Pending.Draws();
+    public void SetPipeline(RenderPipeline pipeline) => recorder.SetPipeline(pipeline);
 
-    public void SetBindGroup(uint index, BindGroup? group) => throw D3D12Pending.Draws();
+    public void SetBindGroup(uint index, BindGroup? group) => recorder.SetBindGroup(index, group, []);
 
-    public void SetBindGroup(uint index, BindGroup group, params ReadOnlySpan<uint> dynamicOffsets) => throw D3D12Pending.Draws();
+    public void SetBindGroup(uint index, BindGroup group, params ReadOnlySpan<uint> dynamicOffsets) => recorder.SetBindGroup(index, group, dynamicOffsets);
 
-    public void SetVertexBuffer(uint slot, Buffer buffer, ulong offset = 0, ulong size = ulong.MaxValue) => throw D3D12Pending.Draws();
+    public void SetVertexBuffer(uint slot, Buffer buffer, ulong offset = 0, ulong size = ulong.MaxValue) =>
+        recorder.SetVertexBuffer(slot, buffer.Life, offset, size == ulong.MaxValue ? buffer.GetSize() - offset : size);
 
-    public void SetIndexBuffer(Buffer buffer, IndexFormat format, ulong offset = 0, ulong size = ulong.MaxValue) => throw D3D12Pending.Draws();
+    public void SetIndexBuffer(Buffer buffer, IndexFormat format, ulong offset = 0, ulong size = ulong.MaxValue) =>
+        recorder.SetIndexBuffer(buffer.Life, format, offset, size == ulong.MaxValue ? buffer.GetSize() - offset : size);
 
     public void SetViewport(float x, float y, float width, float height, float minDepth, float maxDepth) =>
         recorder.List.RSSetViewport(x, y, width, height, minDepth, maxDepth);
@@ -493,15 +500,21 @@ public readonly struct RenderPassEncoder
 
     public void SetBlendConstant(in Color color) => recorder.List.OMSetBlendFactor(new Color4((float)color.R, (float)color.G, (float)color.B, (float)color.A));
 
-    public void Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0) => throw D3D12Pending.Draws();
+    public void Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0) =>
+        recorder.Draw(vertexCount, instanceCount, firstVertex, firstInstance);
 
-    public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int baseVertex = 0, uint firstInstance = 0) => throw D3D12Pending.Draws();
+    public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int baseVertex = 0, uint firstInstance = 0) =>
+        recorder.DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
 
-    public void DrawIndexedIndirect(Buffer indirect, ulong offset) => throw D3D12Pending.Draws();
+    public void DrawIndexedIndirect(Buffer indirect, ulong offset) => recorder.DrawIndexedIndirect(indirect.Life, offset);
 
-    public void ExecuteBundles(ReadOnlySpan<RenderBundle> bundles) => throw D3D12Pending.Bundles();
+    public void ExecuteBundles(ReadOnlySpan<RenderBundle> bundles) => recorder.ExecuteBundles(bundles);
 
-    public void End() => recorder.EndPass();
+    public void End()
+    {
+        recorder.EndPass();
+        recorder.ResetBindings(computing: false);
+    }
 }
 
 /// <summary>A compute pass; used up by <see cref="End"/>.</summary>
@@ -511,37 +524,15 @@ public readonly struct ComputePassEncoder
 
     internal ComputePassEncoder(Recorder recorder) => this.recorder = recorder;
 
-    public void SetPipeline(ComputePipeline pipeline) => throw D3D12Pending.Draws();
+    public void SetPipeline(ComputePipeline pipeline) => recorder.SetPipeline(pipeline);
 
-    public void SetBindGroup(uint index, BindGroup group) => throw D3D12Pending.Draws();
+    public void SetBindGroup(uint index, BindGroup group) => recorder.SetBindGroup(index, group, []);
 
-    public void DispatchWorkgroups(uint x, uint y = 1, uint z = 1) => throw D3D12Pending.Draws();
+    public void DispatchWorkgroups(uint x, uint y = 1, uint z = 1) => recorder.Dispatch(x, y, z);
 
-    public void DispatchWorkgroupsIndirect(Buffer indirect, ulong offset) => throw D3D12Pending.Draws();
+    public void DispatchWorkgroupsIndirect(Buffer indirect, ulong offset) => recorder.DispatchIndirect(indirect.Life, offset);
 
-    public void End()
-    {
-    }
-}
-
-/// <summary>Records a render bundle; used up by <see cref="Finish"/>.</summary>
-public readonly struct RenderBundleEncoder
-{
-    public void SetPipeline(RenderPipeline pipeline) => throw D3D12Pending.Bundles();
-
-    public void SetBindGroup(uint index, BindGroup group) => throw D3D12Pending.Bundles();
-
-    public void SetVertexBuffer(uint slot, Buffer buffer, ulong offset = 0, ulong size = ulong.MaxValue) => throw D3D12Pending.Bundles();
-
-    public void SetIndexBuffer(Buffer buffer, IndexFormat format, ulong offset = 0, ulong size = ulong.MaxValue) => throw D3D12Pending.Bundles();
-
-    public void Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0) => throw D3D12Pending.Bundles();
-
-    public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int baseVertex = 0, uint firstInstance = 0) => throw D3D12Pending.Bundles();
-
-    public void DrawIndexedIndirect(Buffer indirect, ulong offset) => throw D3D12Pending.Bundles();
-
-    public RenderBundle Finish() => throw D3D12Pending.Bundles();
+    public void End() => recorder.ResetBindings(computing: false);
 }
 
 /// <summary>A recorded command list, waiting to be submitted; let go of unsubmitted, it's thrown away.</summary>
