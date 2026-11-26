@@ -1,0 +1,14 @@
+[package]
+name = "shader-compiler"
+version = "0.1.0"
+edition = "2024"
+description = "Compiles HikariHopper's WGSL shader modules to DXIL for its Direct3D 12 builds: Naga to HLSL, DXC to DXIL."
+license = "MIT"
+publish = false
+
+[dependencies]
+# The Naga wgpu 30.0.2 translates with, so Direct3D 12 builds get the HLSL wgpu would make of the same WGSL.
+naga = { version = "=30.0.2", features = ["wgsl-in", "hlsl-out"] }
+
+[profile.release]
+debug = false
