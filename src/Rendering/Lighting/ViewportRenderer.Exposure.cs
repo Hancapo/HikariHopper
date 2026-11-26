@@ -98,7 +98,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Gta5/sky_system.wgsl") + "\n" + Read("Post/exposure.wgsl"),
+            Label = "post/exposure", Code = Module("post/exposure"),
         }));
         PipelineLayout layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, exposureLayout] });
         luminancePipeline = gpu.Compute($"luminance/{viewFormat}", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor

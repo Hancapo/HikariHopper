@@ -338,6 +338,13 @@ public sealed unsafe class Device : GpuObject
 
     internal Instance Instance => instance;
 
+    /// <summary>The shader-visible heaps bind groups and samplers go into, made with the first that does.</summary>
+    internal ShaderHeaps Heaps => LazyInitializer.EnsureInitialized(ref heaps, ref heapsMade, ref heapsLock, () => new ShaderHeaps(this))!;
+
+    private ShaderHeaps? heaps;
+    private bool heapsMade;
+    private object? heapsLock;
+
     /// <summary>What submits and retires hold.</summary>
     internal object Sync { get; } = new();
 
@@ -470,21 +477,21 @@ public sealed unsafe class Device : GpuObject
 
     public Sampler CreateSampler() => CreateSampler(new SamplerDescriptor());
 
-    public Sampler CreateSampler(in SamplerDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public Sampler CreateSampler(in SamplerDescriptor descriptor) => new(this, descriptor);
 
-    public BindGroupLayout CreateBindGroupLayout(in BindGroupLayoutDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public BindGroupLayout CreateBindGroupLayout(in BindGroupLayoutDescriptor descriptor) => new(descriptor);
 
-    public BindGroup CreateBindGroup(in BindGroupDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public BindGroup CreateBindGroup(in BindGroupDescriptor descriptor) => new(this, descriptor);
 
-    public PipelineLayout CreatePipelineLayout(in PipelineLayoutDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public PipelineLayout CreatePipelineLayout(in PipelineLayoutDescriptor descriptor) => new(this, descriptor);
 
-    public ShaderModule CreateShaderModuleWGSL(in ShaderModuleWGSLDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public ShaderModule CreateShaderModuleWGSL(in ShaderModuleWGSLDescriptor descriptor) => new(this, descriptor);
 
-    public RenderPipeline CreateRenderPipelineSync(in RenderPipelineDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public RenderPipeline CreateRenderPipelineSync(in RenderPipelineDescriptor descriptor) => new(this, descriptor);
 
     public Task<RenderPipeline> CreateRenderPipelineAsync(RenderPipelineDescriptor descriptor) => Task.Run(() => CreateRenderPipelineSync(descriptor));
 
-    public ComputePipeline CreateComputePipelineSync(in ComputePipelineDescriptor descriptor) => throw D3D12Pending.Bindings();
+    public ComputePipeline CreateComputePipelineSync(in ComputePipelineDescriptor descriptor) => new(this, descriptor);
 
     public CommandEncoder CreateCommandEncoder() => new(new Recorder(this));
 
@@ -860,8 +867,6 @@ internal sealed class CpuDescriptors(ID3D12Device device, DescriptorHeapType typ
 /// <summary>What isn't made on Direct3D 12 yet, while it's built in steps.</summary>
 internal static class D3D12Pending
 {
-    internal static NotSupportedException Bindings() => new("Direct3D 12 doesn't make shaders, pipelines or bind groups yet.");
-
     internal static NotSupportedException Bundles() => new("Direct3D 12 doesn't record render bundles yet.");
 
     internal static NotSupportedException Draws() => new("Direct3D 12 doesn't draw or dispatch yet.");

@@ -43,7 +43,7 @@ internal sealed unsafe partial class ViewportRenderer
                 },
             ],
         });
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("Scene/outline.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/outline", Code = Module("scene/outline") }));
         maskPipeline = gpu.Pipeline($"outline-mask/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout] }),

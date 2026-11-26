@@ -27,6 +27,8 @@
     <PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
     <PackageReference Include="Vortice.D3D12MemoryAllocator" Version="3.8.3" />
+    <!-- DXC, which compiles the shaders to DXIL as the app is built (tools/ShaderCompiler); nothing of it ships. -->
+    <PackageReference Include="Microsoft.Direct3D.DXC" Version="1.9.2609.5" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
   <Target Name="CheckWGpuFury" BeforeTargets="_GetProjectReferenceTargetFrameworkProperties;ResolveProjectReferences"
           Condition="'$(GpuBackend)' == 'Wgpu' and !Exists('$(WGpuFuryRoot)native/win-x64/lib/wgpu_native.dll')">

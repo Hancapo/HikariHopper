@@ -209,10 +209,10 @@ internal sealed unsafe partial class ViewportRenderer
         PipelineLayout terrainPipelineLayout = Layout(terrainLayout, false), terrainReflectedLayout = Layout(terrainLayout, true);
         PipelineLayout furPipelineLayout = Layout(furLayout, false), furReflectedLayout = Layout(furLayout, true);
         PipelineLayout cablePipelineLayout = Layout(cableLayout, false);
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/trees.wgsl") + "\n" + Read("Gta5/surface.wgsl") }));
-        Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/terrain.wgsl") }));
-        Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/fur.wgsl") }));
-        Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Gta5/cable.wgsl") }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/surface", Code = Module("gta5/surface") }));
+        Lazy<ShaderModule> terrainShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/terrain", Code = Module("gta5/terrain") }));
+        Lazy<ShaderModule> furShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/fur", Code = Module("gta5/fur") }));
+        Lazy<ShaderModule> cableShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "gta5/cable", Code = Module("gta5/cable") }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool reflected = false, PartKind kind = PartKind.Surface)
         {
             string name = kind.ToString().ToLowerInvariant();
@@ -318,7 +318,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         // The sun's shadow of cut-out surfaces: their depth where the diffuse map's alpha passes the cutoff, read through
         // their material (Scene/shadow.wgsl).
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/trees.wgsl") + "\n" + Read("Scene/shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/shadow", Code = Module("scene/shadow") }));
         maskedShadowPipeline = gpu.Pipeline($"shadow-masked/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, materialLayout] }),

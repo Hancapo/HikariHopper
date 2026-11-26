@@ -232,6 +232,110 @@ public sealed class GpuLayerTests
     }
 
     [Fact]
+    public void Every_listed_shader_module_is_made()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            foreach (string name in ViewportRenderer.ModuleNames)
+            {
+                gpu.Device.PushErrorScope(ErrorFilter.Validation);
+                gpu.Device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = name, Code = ViewportRenderer.Module(name) }).Dispose();
+                Assert.True(gpu.Device.PopErrorScopeSync() == NoError, name);
+            }
+        }
+    }
+
+    [Fact]
+    public void Bind_groups_of_every_kind_of_binding_and_their_pipelines_are_made()
+    {
+        GpuDevice gpu = TestGpu.Device();
+        lock (gpu.Gate)
+        {
+            gpu.Device.PushErrorScope(ErrorFilter.Validation);
+            const ShaderStage All = ShaderStage.Vertex | ShaderStage.Fragment | ShaderStage.Compute;
+            BindGroupLayout layout = gpu.Device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+            {
+                Entries =
+                [
+                    new BindGroupLayoutEntry { Binding = 0, Visibility = All, Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform } },
+                    new BindGroupLayoutEntry { Binding = 1, Visibility = All, Buffer = new BufferBindingLayout { Type = BufferBindingType.Uniform, HasDynamicOffset = true, MinBindingSize = 256 } },
+                    new BindGroupLayoutEntry { Binding = 2, Visibility = ShaderStage.Compute, Buffer = new BufferBindingLayout { Type = BufferBindingType.ReadOnlyStorage } },
+                    new BindGroupLayoutEntry { Binding = 3, Visibility = ShaderStage.Compute, Buffer = new BufferBindingLayout { Type = BufferBindingType.Storage } },
+                    new BindGroupLayoutEntry { Binding = 4, Visibility = All, Texture = new TextureBindingLayout() },
+                    new BindGroupLayoutEntry { Binding = 5, Visibility = All, Texture = new TextureBindingLayout { SampleType = TextureSampleType.Depth } },
+                    new BindGroupLayoutEntry { Binding = 6, Visibility = ShaderStage.Compute, StorageTexture = new StorageTextureBindingLayout { Format = TextureFormat.RGBA16Float } },
+                    new BindGroupLayoutEntry { Binding = 7, Visibility = All, Sampler = new SamplerBindingLayout() },
+                    new BindGroupLayoutEntry { Binding = 9, Visibility = All, Sampler = new SamplerBindingLayout { Type = SamplerBindingType.Comparison } },
+                    new BindGroupLayoutEntry { Binding = 10, Visibility = All, Texture = new TextureBindingLayout { ViewDimension = TextureViewDimension.Cube } },
+                ],
+            });
+            GpuBuffer uniforms = gpu.Device.CreateBuffer(new BufferDescriptor { Size = 1024, Usage = BufferUsage.Uniform });
+            GpuBuffer storage = gpu.Device.CreateBuffer(new BufferDescriptor { Size = 1024, Usage = BufferUsage.Storage });
+            Texture colour = gpu.Device.CreateTexture(new TextureDescriptor
+            {
+                Usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding,
+                Size = new Extent3D(8, 8, 1),
+                Format = TextureFormat.RGBA16Float,
+            });
+            Texture depth = gpu.Device.CreateTexture(new TextureDescriptor
+            {
+                Usage = TextureUsage.TextureBinding | TextureUsage.RenderAttachment,
+                Size = new Extent3D(8, 8, 1),
+                Format = TextureFormat.Depth32Float,
+            });
+            Texture cube = gpu.Device.CreateTexture(new TextureDescriptor { Usage = TextureUsage.TextureBinding, Size = new Extent3D(4, 4, 6), Format = TextureFormat.RGBA8Unorm });
+            Sampler filtering = gpu.Device.CreateSampler(new SamplerDescriptor { MagFilter = FilterMode.Linear, MinFilter = FilterMode.Linear, AddressModeU = AddressMode.Repeat });
+            Sampler comparison = gpu.Device.CreateSampler(new SamplerDescriptor { Compare = CompareFunction.Less });
+            TextureView colourView = colour.CreateView(), depthView = depth.CreateView();
+            TextureView cubeView = cube.CreateView(new TextureViewDescriptor { Dimension = TextureViewDimension.Cube });
+            BindGroup group = gpu.Device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = layout,
+                Entries =
+                [
+                    new BindGroupEntry { Binding = 0, Buffer = uniforms, Size = 256 },
+                    new BindGroupEntry { Binding = 1, Buffer = uniforms, Size = 256 },
+                    new BindGroupEntry { Binding = 2, Buffer = storage, Offset = 256, Size = 512 },
+                    new BindGroupEntry { Binding = 3, Buffer = storage },
+                    new BindGroupEntry { Binding = 4, TextureView = colourView },
+                    new BindGroupEntry { Binding = 5, TextureView = depthView },
+                    new BindGroupEntry { Binding = 6, TextureView = colourView },
+                    new BindGroupEntry { Binding = 7, Sampler = filtering },
+                    new BindGroupEntry { Binding = 9, Sampler = comparison },
+                    new BindGroupEntry { Binding = 10, TextureView = cubeView },
+                ],
+            });
+            PipelineLayout pipelineLayout = gpu.Device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout, layout] });
+            // A real one too: the window's present pipeline.
+            BindGroupLayout presentLayout = gpu.Device.CreateBindGroupLayout(new BindGroupLayoutDescriptor
+            {
+                Entries =
+                [
+                    new BindGroupLayoutEntry { Binding = 0, Visibility = ShaderStage.Fragment, Texture = new TextureBindingLayout() },
+                    new BindGroupLayoutEntry { Binding = 1, Visibility = ShaderStage.Fragment, Texture = new TextureBindingLayout() },
+                ],
+            });
+            ShaderModule present = gpu.Device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "post/present", Code = ViewportRenderer.Module("post/present") });
+            RenderPipeline pipeline = gpu.Device.CreateRenderPipelineSync(new RenderPipelineDescriptor
+            {
+                Layout = gpu.Device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [presentLayout] }),
+                Vertex = new VertexState { Module = present, EntryPoint = "vs_present" },
+                Fragment = new FragmentState { Module = present, EntryPoint = "fs_present", Targets = [new ColorTargetState { Format = TextureFormat.BGRA8UnormSrgb }] },
+            });
+            BindGroup presented = gpu.Device.CreateBindGroup(new BindGroupDescriptor
+            {
+                Layout = pipeline.GetBindGroupLayout(0),
+                Entries = [new BindGroupEntry { Binding = 0, TextureView = colourView }, new BindGroupEntry { Binding = 1, TextureView = colourView }],
+            });
+            Assert.Equal(NoError, gpu.Device.PopErrorScopeSync());
+            foreach (GpuObject made in new GpuObject[] { presented, pipeline, present, presentLayout, pipelineLayout, group, cubeView, depthView, colourView, cube, depth, colour, storage, uniforms, layout })
+                made.Dispose();
+            Assert.True(gpu.Device.Poll(wait: true));
+        }
+    }
+
+    [Fact]
     public void A_window_swap_chain_presents_and_resizes()
     {
         GpuDevice gpu = TestGpu.Device();

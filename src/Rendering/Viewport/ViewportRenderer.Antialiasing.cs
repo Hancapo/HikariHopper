@@ -98,7 +98,7 @@ internal sealed unsafe partial class ViewportRenderer
             Entries = [FloatTexture(0, ShaderStage.Fragment), FloatTexture(1, ShaderStage.Fragment)],
         });
 
-        Lazy<ShaderModule> cmaa = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Post/cmaa2.wgsl") }));
+        Lazy<ShaderModule> cmaa = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "post/cmaa2", Code = Module("post/cmaa2") }));
         ComputePipeline Compute(string entry, BindGroupLayout layout) => gpu.Compute($"cmaa2/{entry}", () => device.CreateComputePipelineSync(new ComputePipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout] }),
@@ -112,7 +112,7 @@ internal sealed unsafe partial class ViewportRenderer
 
         presentPipeline = gpu.Pipeline($"present/{presentFormat}", () =>
         {
-            ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Post/present.wgsl") });
+            ShaderModule shader = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "post/present", Code = Module("post/present") });
             return device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [presentLayout] }),

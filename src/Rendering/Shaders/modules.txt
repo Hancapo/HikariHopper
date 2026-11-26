@@ -1,0 +1,49 @@
+# Every shader module the renderer makes: its name, then the .wgsl files it's made of, as the app's resources name them,
+# joined with a newline between each (WGSL has no includes). ViewportRenderer.Module makes a module's source from here;
+# a Direct3D 12 build compiles every module here when it's built (tools/ShaderCompiler), so a module has to be listed
+# to be drawn with.
+
+scene/backdrop = Scene/scene.wgsl Scene/backdrop.wgsl
+scene/mesh = Scene/scene.wgsl Scene/mesh.wgsl
+scene/lines = Scene/scene.wgsl Scene/lines.wgsl
+scene/outline = Scene/scene.wgsl Scene/outline.wgsl
+scene/shadow = Gta5/trees.wgsl Scene/shadow.wgsl
+scene/ground-shadow = Scene/scene.wgsl Scene/light.wgsl Scene/ground_shadow.wgsl
+
+post/ambient-occlusion = Scene/scene.wgsl Post/ambient_occlusion.wgsl
+post/bloom = Scene/scene.wgsl Scene/light.wgsl Post/bloom.wgsl
+post/exposure = Scene/scene.wgsl Gta5/sky_system.wgsl Post/exposure.wgsl
+post/tonemap = Scene/scene.wgsl Scene/light.wgsl Post/tonemap.wgsl
+post/cmaa2 = Post/cmaa2.wgsl
+post/present = Post/present.wgsl
+
+gta5/surface = Scene/scene.wgsl Scene/light.wgsl Gta5/trees.wgsl Gta5/surface.wgsl
+gta5/terrain = Scene/scene.wgsl Scene/light.wgsl Gta5/terrain.wgsl
+gta5/fur = Scene/scene.wgsl Scene/light.wgsl Gta5/fur.wgsl
+gta5/cable = Scene/scene.wgsl Scene/light.wgsl Gta5/cable.wgsl
+gta5/sky = Scene/scene.wgsl Gta5/sky_system.wgsl Gta5/fog.wgsl Gta5/sky.wgsl
+gta5/cloud-hats = Scene/scene.wgsl Gta5/sky_system.wgsl Gta5/fog.wgsl Gta5/sky.wgsl Gta5/cloud_hats.wgsl
+gta5/coronas = Scene/scene.wgsl Gta5/sky_system.wgsl Gta5/fog.wgsl Gta5/sky.wgsl Gta5/coronas.wgsl
+gta5/lens-flare = Scene/scene.wgsl Gta5/sky_system.wgsl Gta5/fog.wgsl Gta5/sky.wgsl Gta5/lens_flare.wgsl
+gta5/reflection-map = Gta5/sky_system.wgsl Gta5/reflection_map.wgsl
+gta5/subsample-alpha = Gta5/subsample_alpha.wgsl
+gta5/world-fog = Scene/scene.wgsl Scene/light.wgsl Gta5/fog.wgsl Gta5/world_fog.wgsl Gta5/world_fog_pass.wgsl
+
+rdr2/surface = Scene/scene.wgsl Scene/light.wgsl Rdr2/light.wgsl Rdr2/terrain_blending.wgsl Rdr2/cutout.wgsl Rdr2/material.wgsl Rdr2/vertex.wgsl Rdr2/surface.wgsl
+rdr2/shadow = Rdr2/cutout.wgsl Rdr2/shadow.wgsl
+rdr2/sky-tables = Rdr2/atmosphere.wgsl Rdr2/sky_tables.wgsl
+rdr2/sky = Scene/scene.wgsl Rdr2/atmosphere.wgsl Rdr2/sky.wgsl
+rdr2/aerial = Scene/scene.wgsl Scene/light.wgsl Rdr2/atmosphere.wgsl Rdr2/sky.wgsl Rdr2/aerial.wgsl
+rdr2/subsample-alpha = Rdr2/subsample_alpha.wgsl
+
+world/gta = Scene/scene.wgsl Scene/light.wgsl Gta5/trees.wgsl Gta5/surface.wgsl World/world_instances.wgsl Gta5/fog.wgsl Gta5/world_fog.wgsl Gta5/world.wgsl
+world/gta-terrain = Scene/scene.wgsl Scene/light.wgsl Gta5/terrain.wgsl World/world_instances.wgsl Gta5/fog.wgsl Gta5/world_fog.wgsl Gta5/world_terrain.wgsl
+world/gta-water = Scene/scene.wgsl Scene/light.wgsl World/water_common.wgsl World/world_instances.wgsl Gta5/fog.wgsl Gta5/world_fog.wgsl Gta5/water.wgsl
+world/rdr2 = Scene/scene.wgsl Scene/light.wgsl Rdr2/light.wgsl Rdr2/terrain_blending.wgsl Rdr2/cutout.wgsl Rdr2/material.wgsl Rdr2/vertex.wgsl World/world_instances.wgsl Rdr2/world.wgsl
+world/rdr2-water = Scene/scene.wgsl Scene/light.wgsl Rdr2/light.wgsl Rdr2/terrain_blending.wgsl Rdr2/cutout.wgsl Rdr2/material.wgsl Rdr2/vertex.wgsl World/world_instances.wgsl Rdr2/world.wgsl World/water_common.wgsl Rdr2/water.wgsl
+world/shadow = World/world_instances.wgsl World/world_shadow.wgsl
+world/gta-shadow-masked = World/world_instances.wgsl World/world_shadow.wgsl Gta5/trees.wgsl Gta5/world_shadow.wgsl
+world/rdr2-shadow-masked = World/world_instances.wgsl World/world_shadow.wgsl Rdr2/cutout.wgsl Rdr2/world_shadow.wgsl
+world/pick = Scene/scene.wgsl World/world_instances.wgsl World/world_pick.wgsl
+world/gta-pick = Scene/scene.wgsl World/world_instances.wgsl World/world_pick.wgsl Gta5/world_pick.wgsl
+world/rdr2-pick = Scene/scene.wgsl World/world_instances.wgsl World/world_pick.wgsl Rdr2/cutout.wgsl Rdr2/world_pick.wgsl

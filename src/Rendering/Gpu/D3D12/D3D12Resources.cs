@@ -475,9 +475,102 @@ public sealed class TextureView : GpuObject
     }
 }
 
-/// <summary>How Direct3D 12 sees a texture's mip and layers as a render or depth target.</summary>
+/// <summary>How Direct3D 12 sees a texture's mips and layers: as a render or depth target, read or written by shaders.</summary>
 internal static class D3D12Views
 {
+    /// <summary>D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING: each channel read as itself.</summary>
+    internal const uint DefaultMapping = 0x1688;
+
+    /// <summary>The view as shaders sample or load it.</summary>
+    internal static ShaderResourceViewDescription Read(TextureView view)
+    {
+        TextureLife texture = view.Texture.Life;
+        bool stencil = view.Aspect == TextureAspect.StencilOnly && texture.Planes > 1;
+        DxgiFormat format = stencil
+            ? D3D12Formats.View(texture.Format) == DxgiFormat.D24_UNorm_S8_UInt ? DxgiFormat.X24_Typeless_G8_UInt : DxgiFormat.X32_Typeless_G8X24_UInt
+            : D3D12Formats.ShaderRead(view.Format);
+        uint plane = stencil ? 1u : 0u;
+        var description = new ShaderResourceViewDescription { Format = format, Shader4ComponentMapping = DefaultMapping };
+        switch (view.Dimension)
+        {
+            case TextureViewDimension.D1:
+                description.ViewDimension = ShaderResourceViewDimension.Texture1D;
+                description.Texture1D = new Texture1DShaderResourceView { MostDetailedMip = view.BaseMip, MipLevels = view.Mips };
+                break;
+            case TextureViewDimension.D3:
+                description.ViewDimension = ShaderResourceViewDimension.Texture3D;
+                description.Texture3D = new Texture3DShaderResourceView { MostDetailedMip = view.BaseMip, MipLevels = view.Mips };
+                break;
+            case TextureViewDimension.Cube when view.BaseLayer == 0:
+                description.ViewDimension = ShaderResourceViewDimension.TextureCube;
+                description.TextureCube = new TextureCubeShaderResourceView { MostDetailedMip = view.BaseMip, MipLevels = view.Mips };
+                break;
+            case TextureViewDimension.Cube or TextureViewDimension.CubeArray:
+                description.ViewDimension = ShaderResourceViewDimension.TextureCubeArray;
+                description.TextureCubeArray = new TextureCubeArrayShaderResourceView
+                {
+                    MostDetailedMip = view.BaseMip,
+                    MipLevels = view.Mips,
+                    First2DArrayFace = view.BaseLayer,
+                    NumCubes = Math.Max(1, view.Layers / 6),
+                };
+                break;
+            default:
+                if (texture.Samples > 1)
+                {
+                    description.ViewDimension = ShaderResourceViewDimension.Texture2DMultisampledArray;
+                    description.Texture2DMSArray = new Texture2DMultisampledArrayShaderResourceView { FirstArraySlice = view.BaseLayer, ArraySize = view.Layers };
+                }
+                else if (view.Dimension == TextureViewDimension.D2Array || texture.Layers > 1)
+                {
+                    description.ViewDimension = ShaderResourceViewDimension.Texture2DArray;
+                    description.Texture2DArray = new Texture2DArrayShaderResourceView
+                    {
+                        MostDetailedMip = view.BaseMip,
+                        MipLevels = view.Mips,
+                        FirstArraySlice = view.BaseLayer,
+                        ArraySize = view.Layers,
+                        PlaneSlice = plane,
+                    };
+                }
+                else
+                {
+                    description.ViewDimension = ShaderResourceViewDimension.Texture2D;
+                    description.Texture2D = new Texture2DShaderResourceView { MostDetailedMip = view.BaseMip, MipLevels = view.Mips, PlaneSlice = plane };
+                }
+                break;
+        }
+        return description;
+    }
+
+    /// <summary>The view as shaders write it: its first mip.</summary>
+    internal static UnorderedAccessViewDescription Write(TextureView view)
+    {
+        TextureLife texture = view.Texture.Life;
+        var description = new UnorderedAccessViewDescription { Format = D3D12Formats.View(view.Format) };
+        if (texture.Dimension == TextureDimension.D3)
+        {
+            description.ViewDimension = UnorderedAccessViewDimension.Texture3D;
+            description.Texture3D = new Texture3DUnorderedAccessView { MipSlice = view.BaseMip, FirstWSlice = 0, WSize = uint.MaxValue };
+        }
+        else if (texture.Dimension == TextureDimension.D1)
+        {
+            description.ViewDimension = UnorderedAccessViewDimension.Texture1D;
+            description.Texture1D = new Texture1DUnorderedAccessView { MipSlice = view.BaseMip };
+        }
+        else if (view.Dimension == TextureViewDimension.D2Array || texture.Layers > 1)
+        {
+            description.ViewDimension = UnorderedAccessViewDimension.Texture2DArray;
+            description.Texture2DArray = new Texture2DArrayUnorderedAccessView { MipSlice = view.BaseMip, FirstArraySlice = view.BaseLayer, ArraySize = view.Layers };
+        }
+        else
+        {
+            description.ViewDimension = UnorderedAccessViewDimension.Texture2D;
+            description.Texture2D = new Texture2DUnorderedAccessView { MipSlice = view.BaseMip };
+        }
+        return description;
+    }
+
     internal static RenderTargetViewDescription Target(TextureLife texture, TextureFormat format, uint mip, uint baseLayer, uint layers, uint slice, uint slices)
     {
         var description = new RenderTargetViewDescription { Format = D3D12Formats.View(format) };

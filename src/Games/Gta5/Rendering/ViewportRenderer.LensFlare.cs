@@ -123,7 +123,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = Read("Scene/scene.wgsl") + "\n" + Read("Gta5/sky_system.wgsl") + "\n" + Read("Gta5/fog.wgsl") + "\n" + Read("Gta5/sky.wgsl") + "\n" + Read("Gta5/lens_flare.wgsl"),
+            Label = "gta5/lens-flare", Code = Module("gta5/lens-flare"),
         }));
         RenderPipelineDescriptor Describe(BindGroupLayout layout, string vertex, string fragment, BlendState? blend, ColorWriteMask mask) => new()
         {

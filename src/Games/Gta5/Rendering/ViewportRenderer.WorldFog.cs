@@ -133,7 +133,7 @@ internal sealed unsafe partial class ViewportRenderer
         });
         Lazy<ShaderModule> module = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
         {
-            Code = LitShader("Gta5/fog.wgsl") + "\n" + Read("Gta5/world_fog.wgsl") + "\n" + Read("Gta5/world_fog_pass.wgsl"),
+            Label = "gta5/world-fog", Code = Module("gta5/world-fog"),
         }));
         PipelineLayout lit = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, worldFogLayout, lightLayout!] });
         PipelineLayout blur = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, fogRayBlurLayout] });

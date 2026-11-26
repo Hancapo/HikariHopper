@@ -145,7 +145,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         PipelineLayout pipelineLayout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [layout] });
 
         // The backdrop goes first and behind everything: it neither tests nor writes depth.
-        Lazy<ShaderModule> backdropShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("Scene/backdrop.wgsl") }));
+        Lazy<ShaderModule> backdropShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/backdrop", Code = Module("scene/backdrop") }));
         backdrop = gpu.Pipeline($"backdrop/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = pipelineLayout,
@@ -159,7 +159,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.False, DepthCompare = CompareFunction.Always },
         }));
         // Meshes: nearer is greater in reversed Z. Both sides drawn, as collisions aren't wound consistently.
-        Lazy<ShaderModule> meshShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("Scene/mesh.wgsl") }));
+        Lazy<ShaderModule> meshShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/mesh", Code = Module("scene/mesh") }));
         // Over a drawable, its solid collision blends by a constant, the nearest surface only.
         RenderPipelineDescriptor Meshes(bool blended) => new()
         {
@@ -206,7 +206,7 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         meshes = gpu.Pipeline($"meshes/{viewFormat}", () => device.CreateRenderPipelineSync(Meshes(blended: false)));
         overlayMeshes = gpu.Pipeline($"overlay-meshes/{viewFormat}", () => device.CreateRenderPipelineSync(Meshes(blended: true)));
         // Lines over the meshes: tested against them, writing no depth. Each segment is one instance of six corners.
-        Lazy<ShaderModule> lineShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Shader("Scene/lines.wgsl") }));
+        Lazy<ShaderModule> lineShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/lines", Code = Module("scene/lines") }));
         RenderPipelineDescriptor Lines(bool depth) => new()
         {
             Layout = pipelineLayout,
@@ -663,8 +663,35 @@ internal sealed unsafe partial class ViewportRenderer : IDisposable
         }
     }
 
-    /// <summary>A shader's source: its own file, after Scene/scene.wgsl, which every shader shares (WGSL has no includes).</summary>
-    private static string Shader(string name) => Read("Scene/scene.wgsl") + "\n" + Read(name);
+    /// <summary>
+    /// A shader module's source, by its name in Shaders/modules.txt: the .wgsl files listed there, joined with a newline
+    /// between each (WGSL has no includes). A Direct3D 12 build compiles every module listed there as it's built.
+    /// </summary>
+    internal static string Module(string name) => Listed().TryGetValue(name, out string[]? files)
+        ? string.Join("\n", files.Select(Read))
+        : throw new KeyNotFoundException($"No shader module is named {name} in Shaders/modules.txt.");
+
+    /// <summary>The names of every shader module in Shaders/modules.txt.</summary>
+    internal static IEnumerable<string> ModuleNames => Listed().Keys;
+
+    private static Dictionary<string, string[]> Listed()
+    {
+        lock (Modules)
+        {
+            if (Modules.Count == 0)
+                foreach (string line in Read("modules.txt").Split('\n'))
+                {
+                    string entry = line.Trim();
+                    if (entry.Length == 0 || entry[0] == '#')
+                        continue;
+                    int equals = entry.IndexOf('=');
+                    Modules[entry[..equals].Trim()] = entry[(equals + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                }
+            return Modules;
+        }
+    }
+
+    private static readonly Dictionary<string, string[]> Modules = [];
 
     internal static string Read(string name)
     {

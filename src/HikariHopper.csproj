@@ -26,6 +26,7 @@
     <!-- RDR2's RPF8 tables (RedFury's RF8C format), for game build 1.0.1491.50. -->
     <EmbeddedResource Include="Assets/Keys/rpf8.dat" LogicalName="HikariHopper.rpf8.dat" />
     <!-- Shaders, read by their folder and name: the shared ones by concern ("Scene/scene.wgsl"), each game's by game ("Gta5/sky.wgsl"). -->
+    <EmbeddedResource Include="Rendering/Shaders/modules.txt" LogicalName="HikariHopper.Shaders.modules.txt" />
     <EmbeddedResource Include="Rendering/Shaders/Scene/*" LogicalName="HikariHopper.Shaders.Scene/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Rendering/Shaders/Post/*" LogicalName="HikariHopper.Shaders.Post/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Rendering/Shaders/World/*" LogicalName="HikariHopper.Shaders.World/%(Filename)%(Extension)" />
@@ -55,6 +56,40 @@
   <ItemGroup>
     <Compile Remove="Rendering/Gpu/D3D12/**" Condition="'$(GpuBackend)' != 'D3D12'" />
     <Compile Remove="Rendering/Gpu/Wgpu/**" Condition="'$(GpuBackend)' != 'Wgpu'" />
+  </ItemGroup>
+  <!-- Direct3D 12 draws with shaders compiled as the app is built: every module of Shaders/modules.txt, through
+       tools/ShaderCompiler (Naga to HLSL, DXC to DXIL; it needs Rust's cargo), embedded as one pack. -->
+  <PropertyGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderCompilerRoot>$(MSBuildProjectDirectory)/../tools/ShaderCompiler/</ShaderCompilerRoot>
+    <ShaderCompiler>$(ShaderCompilerRoot)target/release/shader-compiler.exe</ShaderCompiler>
+  </PropertyGroup>
+  <Target Name="BuildShaderCompiler" Condition="'$(GpuBackend)' == 'D3D12'"
+          Inputs="$(ShaderCompilerRoot)Cargo.toml;$(ShaderCompilerRoot)Cargo.lock;@(ShaderCompilerSource)" Outputs="$(ShaderCompiler)">
+    <Exec Command="cargo build --release --quiet --manifest-path &quot;$(ShaderCompilerRoot)Cargo.toml&quot;" />
+    <Touch Files="$(ShaderCompiler)" />
+  </Target>
+  <ItemGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderCompilerSource Include="$(ShaderCompilerRoot)src/**/*.rs" />
+  </ItemGroup>
+  <Target Name="ShaderPackPath" Condition="'$(GpuBackend)' == 'D3D12'">
+    <PropertyGroup>
+      <ShaderPack>$(ProjectDir)$(IntermediateOutputPath)shaders.dxil.pack</ShaderPack>
+    </PropertyGroup>
+  </Target>
+  <Target Name="CompileShaders" BeforeTargets="BeforeBuild" DependsOnTargets="BuildShaderCompiler;ShaderPackPath" Condition="'$(GpuBackend)' == 'D3D12'"
+          Inputs="@(ShaderSource);$(ShaderCompiler)" Outputs="$(ShaderPack)">
+    <ItemGroup>
+      <ShaderFile Include="@(EmbeddedResource)" Condition="$([System.String]::Copy('%(EmbeddedResource.LogicalName)').StartsWith('HikariHopper.Shaders.'))" />
+      <ShaderLine Include="@(ShaderFile->'$([System.String]::Copy('%(ShaderFile.LogicalName)').Substring(21))=%(ShaderFile.FullPath)')" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)shader-files.txt" Lines="@(ShaderLine)" Overwrite="true" />
+    <Exec Command="&quot;$(ShaderCompiler)&quot; &quot;$(MSBuildProjectDirectory)/Rendering/Shaders/modules.txt&quot; &quot;$(IntermediateOutputPath)shader-files.txt&quot; &quot;$(PkgMicrosoft_Direct3D_DXC)/build/native/bin/x64/dxc.exe&quot; &quot;$(IntermediateOutputPath)shader-cache&quot; &quot;$(ShaderPack)&quot;" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(ShaderPack)" LogicalName="HikariHopper.Shaders.dxil.pack" Visible="false" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderSource Include="Rendering/Shaders/**/*;Games/*/Shaders/**/*" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="HikariHopper.Tests" />

@@ -239,7 +239,7 @@ internal sealed unsafe partial class ViewportRenderer
                 Entries = [new BindGroupEntry { Binding = 0, Buffer = shadowViewBuffers[i], Size = ShadowViewBytes }],
             });
         }
-        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("Gta5/trees.wgsl") + "\n" + Read("Scene/shadow.wgsl") }));
+        Lazy<ShaderModule> shadowShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/shadow", Code = Module("scene/shadow") }));
         shadowPipeline = gpu.Pipeline($"shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout] }),
@@ -264,7 +264,7 @@ internal sealed unsafe partial class ViewportRenderer
         // The drawable's shadow on the backdrop's ground, multiplied over it. Group 1 is unused.
         BindGroupLayout none = device.CreateBindGroupLayout(new BindGroupLayoutDescriptor { Entries = [] });
         noGroup = device.CreateBindGroup(new BindGroupDescriptor { Layout = none, Entries = [] });
-        Lazy<ShaderModule> groundShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Scene/ground_shadow.wgsl") }));
+        Lazy<ShaderModule> groundShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "scene/ground-shadow", Code = Module("scene/ground-shadow") }));
         groundShadowPipeline = gpu.Pipeline($"ground-shadow/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, none, lightLayout] }),
@@ -341,7 +341,7 @@ internal sealed unsafe partial class ViewportRenderer
         CreateExposure();
         CreateBloom();
         CreateSubSampledPipeline();
-        Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = LitShader("Post/tonemap.wgsl") }));
+        Lazy<ShaderModule> tonemapShader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "post/tonemap", Code = Module("post/tonemap") }));
         tonemapPipeline = gpu.Pipeline($"tonemap/{viewFormat}", () => device.CreateRenderPipelineSync(new RenderPipelineDescriptor
         {
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [sceneLayout, tonemapLayout, lightLayout] }),
@@ -710,7 +710,4 @@ internal sealed unsafe partial class ViewportRenderer
         pass.SetBindGroup(2, lightGroup!);
         pass.Draw(3);
     }
-
-    /// <summary>A shader with the light: Scene/scene.wgsl, Scene/light.wgsl, then its own file.</summary>
-    private static string LitShader(string name) => Read("Scene/scene.wgsl") + "\n" + Read("Scene/light.wgsl") + "\n" + Read(name);
 }

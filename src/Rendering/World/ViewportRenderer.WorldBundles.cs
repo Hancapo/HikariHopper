@@ -161,7 +161,7 @@ internal sealed unsafe partial class ViewportRenderer
             Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, worldEmptyLayout, worldEmptyLayout, worldInstanceLayout] }),
             Vertex = new VertexState
             {
-                Module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Read("World/world_instances.wgsl") + "\n" + Read("World/world_shadow.wgsl") }),
+                Module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "world/shadow", Code = Module("world/shadow") }),
                 EntryPoint = "vs_world_shadow",
                 Buffers = [new VertexBufferLayout { ArrayStride = SurfaceVertex.Size, Attributes = new[] { new VertexAttribute { ShaderLocation = 0, Offset = 0, Format = VertexFormat.Float32x3 } } }, WorldInstanceLayout()],
             },
@@ -205,7 +205,6 @@ internal sealed unsafe partial class ViewportRenderer
         {
             BindGroupLayouts = [sceneLayout, material, lightLayout!, worldInstanceLayout!],
         });
-        string instances = Read("World/world_instances.wgsl");
         (string name, string vertex, string fragment) = family switch
         {
             WorldFamily.Rdr2 => ("rdr2-world", "vs_rdr2_world", "fs_rdr2_world"),
@@ -214,20 +213,16 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.GtaWater => ("gta-water-world", "vs_gta_water", "fs_gta_water"),
             _ => ("gta-world", "vs_surface_world", "fs_surface"),
         };
-        string Code() => family switch
+        // GTA V's world shaders take its fog over the world too (Gta5/world_fog.wgsl).
+        string module = family switch
         {
-            WorldFamily.Rdr2 => LitShader("Rdr2/light.wgsl") + "\n" + Read("Rdr2/terrain_blending.wgsl") + "\n" + Read("Rdr2/cutout.wgsl") + "\n" + Read("Rdr2/material.wgsl") + "\n"
-                + Read("Rdr2/vertex.wgsl") + "\n" + instances + "\n" + Read("Rdr2/world.wgsl"),
-            WorldFamily.Rdr2Water => LitShader("Rdr2/light.wgsl") + "\n" + Read("Rdr2/terrain_blending.wgsl") + "\n" + Read("Rdr2/cutout.wgsl") + "\n" + Read("Rdr2/material.wgsl") + "\n"
-                + Read("Rdr2/vertex.wgsl") + "\n" + instances + "\n" + Read("Rdr2/world.wgsl") + "\n" + Read("World/water_common.wgsl") + "\n"
-                + Read("Rdr2/water.wgsl"),
-            WorldFamily.GtaWater => LitShader("World/water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/water.wgsl"),
-            WorldFamily.GtaTerrain => LitShader("Gta5/terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world_terrain.wgsl"),
-            _ => LitShader("Gta5/trees.wgsl") + "\n" + Read("Gta5/surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world.wgsl"),
+            WorldFamily.Rdr2 => "world/rdr2",
+            WorldFamily.Rdr2Water => "world/rdr2-water",
+            WorldFamily.GtaWater => "world/gta-water",
+            WorldFamily.GtaTerrain => "world/gta-terrain",
+            _ => "world/gta",
         };
-        // GTA V's fog over its world, which its shaders take (Gta5/world_fog.wgsl).
-        static string GtaFog() => Read("Gta5/fog.wgsl") + "\n" + Read("Gta5/world_fog.wgsl") + "\n";
-        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = Code() }));
+        Lazy<ShaderModule> shader = new(() => device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = module, Code = Module(module) }));
         RenderPipeline Pipeline(CullMode cull, bool blend, bool decal = false) =>
             Compile($"{name}/{cull}/{blend}/{decal}/{viewFormat}", () => Describe(cull, blend, decal), prepare);
         // GTA V's blended surfaces are drawn after its world's fog pass, and take the fog themselves.
@@ -286,10 +281,10 @@ internal sealed unsafe partial class ViewportRenderer
         if (family == WorldFamily.GtaTerrain)
             return;
         bool gta = family != WorldFamily.Rdr2;
-        string test = gta ? Read("Gta5/trees.wgsl") + "\n" + Read("Gta5/world_shadow.wgsl") : Read("Rdr2/cutout.wgsl") + "\n" + Read("Rdr2/world_shadow.wgsl");
+        string masked = gta ? "world/gta-shadow-masked" : "world/rdr2-shadow-masked";
         worldMaskedShadow[f] = Compile($"{name}-shadow-masked", () =>
         {
-            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = instances + "\n" + Read("World/world_shadow.wgsl") + "\n" + test });
+            ShaderModule module = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = masked, Code = Module(masked) });
             return new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [shadowViewLayout!, material, worldEmptyLayout!, worldInstanceLayout!] }),
