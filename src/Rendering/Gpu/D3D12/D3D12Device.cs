@@ -348,7 +348,7 @@ public sealed unsafe class Device : GpuObject
         instance.Remove(this);
         if (IsLost)
             return;
-        WaitIdle();
+        WaitQueue();
         lock (Sync)
             FreeRetired(fence.CompletedValue);
     }
@@ -364,9 +364,9 @@ public sealed unsafe class Device : GpuObject
     /// <summary>Lets go of the device: everything submitted is waited out, and it reports itself lost as destroyed.</summary>
     public void Destroy()
     {
+        WaitQueue();
         if (Interlocked.Exchange(ref lost, 1) != 0)
             return;
-        WaitIdle();
         Report(() => lostCallback?.Invoke(DeviceLostReason.Destroyed, "The device was destroyed."));
     }
 
@@ -423,6 +423,23 @@ public sealed unsafe class Device : GpuObject
     }
 
     internal void WaitIdle() => WaitFor(Volatile.Read(ref submitted));
+
+    /// <summary>
+    /// Waits for everything on the queue, presents included: they're queued after the last submit's signal, so the
+    /// queue is signalled once more and that waited for.
+    /// </summary>
+    internal void WaitQueue()
+    {
+        if (IsLost)
+            return;
+        ulong serial;
+        lock (Sync)
+        {
+            serial = ++submitted;
+            Direct.Signal(fence, serial).CheckError();
+        }
+        WaitFor(serial);
+    }
 
     /// <summary>Hands the device something the GPU may be using, to free once it's done with it.</summary>
     internal void Retire(D3D12Life life)

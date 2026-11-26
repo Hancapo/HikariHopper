@@ -570,8 +570,8 @@ public sealed class Surface : GpuObject
         {
             if (chain is not null && device == on)
             {
-                // Resized: the old buffers let go of first, once the GPU is done with them.
-                on.WaitIdle();
+                // Resized: the old buffers let go of first, once the GPU (and the screen) are done with them.
+                on.WaitQueue();
                 FreeBuffers();
                 chain.ResizeBuffers(Buffers, width, height, format, flags).CheckError();
             }
@@ -604,7 +604,7 @@ public sealed class Surface : GpuObject
     {
         if (chain is null)
             return;
-        device!.WaitIdle();
+        device!.WaitQueue();
         FreeBuffers();
         chain.Dispose();
         chain = null;
