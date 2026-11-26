@@ -47,6 +47,20 @@ public abstract class GpuObject : IDisposable
 /// </summary>
 internal abstract class D3D12Life
 {
+    // Every life not yet freed, held here so the COM wrappers it frees aren't left to their own finalizers: an app
+    // object let go of without being disposed is finalized along with them, in no order, and would retire a life
+    // whose resource was already released.
+    private static readonly ConcurrentDictionary<D3D12Life, byte> Alive = new();
+
+    private protected D3D12Life() => Alive.TryAdd(this, 0);
+
+    /// <summary>Frees it now (the GPU is done with it).</summary>
+    internal void FreeNow()
+    {
+        Free();
+        Alive.TryRemove(this, out _);
+    }
+
     /// <summary>The serial of the last submit that used it.</summary>
     internal ulong LastUse;
 
@@ -55,13 +69,13 @@ internal abstract class D3D12Life
 
     internal bool Released;
 
-    internal abstract void Free();
+    private protected abstract void Free();
 }
 
 /// <summary>A COM object kept until the GPU is done with it.</summary>
 internal sealed class ComLife(IDisposable item) : D3D12Life
 {
-    internal override void Free() => item.Dispose();
+    private protected override void Free() => item.Dispose();
 }
 
 public sealed class Instance : GpuObject
@@ -467,7 +481,7 @@ public sealed unsafe class Device : GpuObject
                 continue;
             retired[i] = retired[^1];
             retired.RemoveAt(retired.Count - 1);
-            life.Free();
+            life.FreeNow();
         }
     }
 

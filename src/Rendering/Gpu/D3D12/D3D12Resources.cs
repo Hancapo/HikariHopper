@@ -40,7 +40,7 @@ internal sealed unsafe class BufferLife : D3D12Life
     /// <summary>Where the CPU reads or writes it, for upload and readback memory (mapped as long as it lives).</summary>
     internal byte* Pointer { get; }
 
-    internal override void Free()
+    private protected override void Free()
     {
         if (counted)
         {
@@ -129,7 +129,7 @@ internal sealed class TextureLife : D3D12Life
     internal (uint Width, uint Height, uint Depth) Extent(uint mip) =>
         (Math.Max(1, Width >> (int)mip), Math.Max(1, Height >> (int)mip), Math.Max(1, Depth >> (int)mip));
 
-    internal override void Free()
+    private protected override void Free()
     {
         if (allocation is not null)
         {
@@ -707,7 +707,7 @@ public sealed class Surface : GpuObject
     private void FreeBuffers()
     {
         foreach (TextureLife buffer in buffers)
-            buffer.Free();
+            buffer.FreeNow();
         buffers = [];
     }
 

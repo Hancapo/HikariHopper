@@ -232,7 +232,7 @@ public sealed class BindGroupLayout : GpuObject
 /// <summary>A bind group's descriptors, freed once the GPU is done with them.</summary>
 internal sealed class BindGroupLife(ShaderHeaps heaps, VirtualAllocation range) : D3D12Life
 {
-    internal override void Free() => heaps.Give(range);
+    private protected override void Free() => heaps.Give(range);
 }
 
 public sealed class BindGroup : GpuObject
