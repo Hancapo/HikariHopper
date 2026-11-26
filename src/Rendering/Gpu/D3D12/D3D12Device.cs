@@ -682,8 +682,12 @@ public sealed unsafe class Device : GpuObject
             }
             Direct.Signal(fence, serial).CheckError();
             Volatile.Write(ref submitted, serial);
+            // Free again once this submit is done.
             foreach (UploadPageLife used in dirtyPages)
+            {
                 used.LastUse = serial;
+                used.Dirty = false;
+            }
             dirtyPages.Clear();
         }
         CheckLost();
