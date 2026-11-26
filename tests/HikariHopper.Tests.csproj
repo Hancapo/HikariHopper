@@ -17,10 +17,25 @@
   <ItemGroup>
     <!-- The rendering tests' own shaders, read with their file name. -->
     <EmbeddedResource Include="Shaders/*.wgsl" LogicalName="HikariHopper.Tests.Shaders.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Shaders/modules.txt" LogicalName="HikariHopper.Tests.Shaders.modules.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../src/HikariHopper.csproj" />
   </ItemGroup>
   <!-- The tests use the game libraries directly too, from the same place as the app. -->
   <Import Project="../GameLibraries.props" />
+  <!-- Direct3D 12 builds compile the tests' own modules, of Shaders/modules.txt, as the app's are (ShaderPack.targets). -->
+  <PropertyGroup>
+    <ShaderManifest>$(MSBuildProjectDirectory)/Shaders/modules.txt</ShaderManifest>
+    <ShaderPackResource>HikariHopper.Tests.Shaders.dxil.pack</ShaderPackResource>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderFile Include="../src/Rendering/Shaders/Scene/*.wgsl" ShaderName="Scene/%(Filename)%(Extension)" />
+    <ShaderFile Include="../src/Rendering/Shaders/Post/*.wgsl" ShaderName="Post/%(Filename)%(Extension)" />
+    <ShaderFile Include="../src/Rendering/Shaders/World/*.wgsl" ShaderName="World/%(Filename)%(Extension)" />
+    <ShaderFile Include="../src/Games/Gta5/Shaders/*.wgsl" ShaderName="Gta5/%(Filename)%(Extension)" />
+    <ShaderFile Include="../src/Games/Rdr2/Shaders/*.wgsl" ShaderName="Rdr2/%(Filename)%(Extension)" />
+    <ShaderFile Include="Shaders/*.wgsl" ShaderName="Test/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Import Project="../ShaderPack.targets" />
 </Project>

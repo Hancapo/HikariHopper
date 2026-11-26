@@ -1,0 +1,6 @@
+# The tests' own shader modules, as src/Rendering/Shaders/modules.txt lists the app's: a name, then the .wgsl files it
+# joins with a newline between each, the app's by their resource names ("Rdr2/cutout.wgsl"), the tests' own under
+# "Test/". TestShaders.Module makes a module's source from here; a Direct3D 12 build compiles every module here.
+
+test/rdr2-cutout-probe = Rdr2/cutout.wgsl Test/rdr2_cutout_probe.wgsl
+test/gta-fog-rays = Gta5/fog.wgsl Test/gta_fog_rays.wgsl

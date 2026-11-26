@@ -1,0 +1,34 @@
+<Project>
+  <!-- Direct3D 12 draws with shaders compiled as a project is built: every module its ShaderManifest lists, joined from its
+       ShaderFile items (each named by its ShaderName metadata, as its modules name it), through tools/ShaderCompiler
+       (Naga to HLSL, DXC to DXIL; it needs Rust's cargo), embedded as one pack named ShaderPackResource. The app finds
+       a module's code in any loaded assembly's pack. -->
+  <PropertyGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderCompilerRoot>$(MSBuildThisFileDirectory)tools/ShaderCompiler/</ShaderCompilerRoot>
+    <ShaderCompiler>$(ShaderCompilerRoot)target/release/shader-compiler.exe</ShaderCompiler>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(GpuBackend)' == 'D3D12'">
+    <ShaderCompilerSource Include="$(ShaderCompilerRoot)src/**/*.rs" />
+  </ItemGroup>
+  <Target Name="BuildShaderCompiler" Condition="'$(GpuBackend)' == 'D3D12'"
+          Inputs="$(ShaderCompilerRoot)Cargo.toml;$(ShaderCompilerRoot)Cargo.lock;@(ShaderCompilerSource)" Outputs="$(ShaderCompiler)">
+    <Exec Command="cargo build --release --quiet --manifest-path &quot;$(ShaderCompilerRoot)Cargo.toml&quot;" />
+    <Touch Files="$(ShaderCompiler)" />
+  </Target>
+  <Target Name="ShaderPackPath" Condition="'$(GpuBackend)' == 'D3D12'">
+    <PropertyGroup>
+      <ShaderPack>$(ProjectDir)$(IntermediateOutputPath)shaders.dxil.pack</ShaderPack>
+    </PropertyGroup>
+  </Target>
+  <Target Name="CompileShaders" BeforeTargets="BeforeBuild" DependsOnTargets="BuildShaderCompiler;ShaderPackPath" Condition="'$(GpuBackend)' == 'D3D12'"
+          Inputs="@(ShaderFile);$(ShaderManifest);$(ShaderCompiler)" Outputs="$(ShaderPack)">
+    <ItemGroup>
+      <ShaderLine Include="@(ShaderFile->'%(ShaderName)=%(FullPath)')" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)shader-files.txt" Lines="@(ShaderLine)" Overwrite="true" />
+    <Exec Command="&quot;$(ShaderCompiler)&quot; &quot;$(ShaderManifest)&quot; &quot;$(IntermediateOutputPath)shader-files.txt&quot; &quot;$(PkgMicrosoft_Direct3D_DXC)/build/native/bin/x64/dxc.exe&quot; &quot;$(IntermediateOutputPath)shader-cache&quot; &quot;$(ShaderPack)&quot;" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(ShaderPack)" LogicalName="$(ShaderPackResource)" Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>

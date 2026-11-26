@@ -486,9 +486,23 @@ internal static class ShaderPack
     private static Dictionary<ulong, PackedModule> Load()
     {
         var modules = new Dictionary<ulong, PackedModule>();
-        using Stream? stream = typeof(ShaderPack).Assembly.GetManifestResourceStream("HikariHopper.Shaders.dxil.pack");
-        if (stream is null)
-            return modules;
+        // The app's, and those of the assemblies loaded with it (the tests' own modules).
+        foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic)
+                continue;
+            foreach (string name in assembly.GetManifestResourceNames())
+                if (name.EndsWith(".Shaders.dxil.pack", StringComparison.Ordinal))
+                {
+                    using Stream stream = assembly.GetManifestResourceStream(name)!;
+                    Read(stream, modules);
+                }
+        }
+        return modules;
+    }
+
+    private static void Read(Stream stream, Dictionary<ulong, PackedModule> modules)
+    {
         using var reader = new BinaryReader(stream, Encoding.UTF8);
         if (reader.ReadUInt32() != 0x58444848 || reader.ReadUInt32() != 1)
             throw new GpuException("The app's compiled shaders are of another version.");
@@ -507,7 +521,6 @@ internal static class ShaderPack
             }
             modules[hash] = module;
         }
-        return modules;
 
         static string Text(BinaryReader reader) => Encoding.UTF8.GetString(reader.ReadBytes(reader.ReadUInt16()));
     }
