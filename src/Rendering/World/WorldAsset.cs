@@ -202,10 +202,10 @@ internal readonly record struct WorldTextureContent(ulong Pixels, string? Name, 
 
 /// <summary>
 /// An asset's surfaces as the world draws them, laid out for the GPU (RedFury's BufferLayout): RDR2's materials, water
-/// included, and GTA V's that Gta5/surface.wgsl, Gta5/terrain.wgsl and Gta5/water.wgsl draw (not yet its water foams, fur grass
-/// and cables, which the model viewer draws with shaders of their own), by level of detail, each level's solid surfaces first so they
-/// cast as one, the indexes made the vertices' own, and the vertices in the asset's own space (the scene has them from
-/// its middle), as the placements' matrices take them.
+/// included, and GTA V's that Gta5/surface.wgsl, Gta5/terrain.wgsl, Gta5/cable.wgsl and Gta5/water.wgsl draw (not yet its
+/// fur grass, which the model viewer draws with a shader of its own, nor its water foams), by level of detail, each
+/// level's solid surfaces first so they cast as one, the indexes made the vertices' own, and the vertices in the asset's
+/// own space (the scene has them from its middle), as the placements' matrices take them.
 /// </summary>
 internal sealed class WorldLayout
 {
@@ -225,7 +225,7 @@ internal sealed class WorldLayout
     // Whether the world draws a material yet.
     private static bool Drawn(SurfaceMaterial material) => material.Rdr2 is not null
         || material.Water is not null
-        || !material.Fur && !material.Cable && !material.Glass && !material.Shader.StartsWith("water", StringComparison.OrdinalIgnoreCase);
+        || !material.Fur && !material.Glass && !material.Shader.StartsWith("water", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Lays out a scene made for one asset, whose vertices it takes and moves into the asset's space.</summary>
     public static WorldLayout Of(DrawableScene scene)

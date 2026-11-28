@@ -190,6 +190,94 @@ public sealed class FurCableShaderTests
         Assert.True(wireCover > 100, $"{wireCover} pixels of wire");
     }
 
+    [Fact]
+    public void A_cable_placed_in_a_world_is_drawn_wide_enough_to_see()
+    {
+        GpuDevice gpu;
+        try
+        {
+            gpu = TestGpu.Device();
+        }
+        catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
+            or WebGpuSharp.WebGPUException)
+        {
+            Assert.Skip($"No GPU to test on: {error.Message}");
+            return;
+        }
+        // The wire above, 5 cm thick, placed 1.5 m in front of the camera and along its view's width.
+        var material = new DrawableMaterialInput { Name = "surface", Shader = "cable" };
+        material.Parameters["shader_cableDiffuse"] = [1, 1, 1];
+        material.Parameters["shader_cableAmbient"] = [1, 1];
+        var builder = new DrawableBuilder { Name = "wire" };
+        builder.Materials.Add(material);
+        var model = new DrawableModelInput();
+        model.Meshes.Add(Wire(.05f));
+        builder.Models.Add(model);
+        Drawable drawable = Ydr.Read(new Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write()).Drawable;
+        var key = new RedFury.World.WorldAssetKey(1, 2);
+        var asset = Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]);
+        const int Size = 128;
+        byte[] empty, drawn;
+        (WebGpuSharp.ErrorType Type, string Message) result;
+        lock (gpu.Gate)
+        {
+            gpu.Device.PushErrorScope(WebGpuSharp.ErrorFilter.Validation);
+            var renderer = new ViewportRenderer(gpu);
+            renderer.Resize(Size, Size);
+            renderer.Antialiasing = false;
+            renderer.WorldShown = true;
+            renderer.SetTime(14);
+            renderer.Camera.Frame(new Vector3(2, -1.5f, 1), 20);
+            renderer.Camera.Free = true;
+            renderer.Camera.Place(new Vector3(2, -1.5f, 1), -MathF.PI / 2, 0);
+            WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
+            {
+                Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
+                Dimension = WebGpuSharp.TextureDimension.D2,
+                Size = new WebGpuSharp.Extent3D(Size, Size, 1),
+                Format = renderer.PresentFormat,
+                MipLevelCount = 1,
+                SampleCount = 1,
+            });
+            WebGpuSharp.TextureView view = target.CreateView();
+            byte[] Frame()
+            {
+                renderer.RenderTo(view);
+                WebGpuSharp.Buffer readback = gpu.Device.CreateBuffer(new WebGpuSharp.BufferDescriptor
+                {
+                    Size = Size * Size * 4,
+                    Usage = WebGpuSharp.BufferUsage.CopyDst | WebGpuSharp.BufferUsage.MapRead,
+                });
+                WebGpuSharp.CommandEncoder encoder = gpu.Device.CreateCommandEncoder();
+                encoder.CopyTextureToBuffer(new WebGpuSharp.TexelCopyTextureInfo { Texture = target },
+                    new WebGpuSharp.TexelCopyBufferInfo { Buffer = readback, Layout = new WebGpuSharp.TexelCopyBufferLayout { BytesPerRow = Size * 4, RowsPerImage = Size } },
+                    new WebGpuSharp.Extent3D(Size, Size, 1));
+                gpu.Queue.Submit(encoder.Finish());
+                readback.MapSync(WebGpuSharp.MapMode.Read);
+                byte[] pixels = readback.GetConstMappedRange<byte[], byte>(0, Size * Size * 4, span => span.ToArray());
+                readback.Unmap();
+                readback.Destroy();
+                return pixels;
+            }
+            empty = Frame();
+            Assert.True(renderer.AddWorldAsset(asset, new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
+            while (renderer.HasPendingWorldUpload)
+                renderer.ProcessWorldUploads();
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, Matrix4x4.Identity, new Vector3(2, 0, 1), 2, 1000, 0, 0);
+            renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
+            drawn = Frame();
+            target.Destroy();
+            renderer.Dispose();
+            result = gpu.Device.PopErrorScopeSync(10_000_000_000);
+        }
+        Assert.True(result.Type == WebGpuSharp.ErrorType.NoError, $"{result.Type}: {result.Message}");
+        int changed = 0;
+        for (int at = 0; at < empty.Length; at += 4)
+            if (Math.Abs(empty[at] - drawn[at]) + Math.Abs(empty[at + 1] - drawn[at + 1]) + Math.Abs(empty[at + 2] - drawn[at + 2]) > 6)
+                changed++;
+        Assert.True(changed > 100, $"{changed} pixels of wire");
+    }
+
     // How many pixels a scene changes over the empty backdrop, seen from an axis.
     private static int Drawn(GpuDevice gpu, DrawableScene? scene, Vector3 from, CommonFury.Numerics.Aabb3 box)
     {

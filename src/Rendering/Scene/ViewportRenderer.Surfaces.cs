@@ -549,10 +549,10 @@ internal sealed unsafe partial class ViewportRenderer
         ],
     });
 
-    private BindGroup CableGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
+    private BindGroup CableGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0) => device.CreateBindGroup(new BindGroupDescriptor
     {
         Layout = cableLayout!,
-        Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes }],
+        Entries = [new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Offset = offset, Size = SurfaceMaterial.UniformBytes }],
     });
 
     private BindGroup TerrainGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0)
