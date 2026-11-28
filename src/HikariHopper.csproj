@@ -14,6 +14,10 @@
     <!-- Releases are Native AOT (tools/release.ps1). This also runs the AOT and trimming analyzers on every build,
          and code they flag fails it rather than the published app. -->
     <PublishAot>true</PublishAot>
+    <!-- The garbage collector works on every core: the worlds' streaming threads allocate some 200 MB a second, and the
+         workstation collector's young collections, on one thread, held the UI thread's frames up behind them. The
+         server collector's heaps grow and shrink with the work (DATAS), so it doesn't hold more memory for it. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2057;IL2060;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2077;IL2080;IL2087;IL2090;IL2091;IL2111;IL3000;IL3002;IL3050;IL3051</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
