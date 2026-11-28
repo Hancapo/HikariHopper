@@ -33,6 +33,9 @@ internal sealed unsafe class BufferLife : D3D12Life
 
     internal ID3D12Resource Resource { get; }
 
+    /// <summary>The command list whose state tracker last saw it, and where it keeps its state.</summary>
+    internal int Tracker, TrackedSlot;
+
     internal HeapType Heap { get; }
 
     internal ulong Size { get; }
@@ -40,7 +43,7 @@ internal sealed unsafe class BufferLife : D3D12Life
     /// <summary>Where the CPU reads or writes it, for upload and readback memory (mapped as long as it lives).</summary>
     internal byte* Pointer { get; }
 
-    internal override void Free()
+    private protected override void Free()
     {
         if (counted)
         {
@@ -97,6 +100,11 @@ internal sealed class TextureLife : D3D12Life
 
     internal ID3D12Resource Resource { get; }
 
+    /// <summary>The command list whose state tracker last saw it, and its subresources' states there.</summary>
+    internal int Tracker;
+
+    internal ResourceStates[]? TrackedStates;
+
     internal TextureFormat Format { get; }
 
     internal TextureUsage Usage { get; }
@@ -129,7 +137,7 @@ internal sealed class TextureLife : D3D12Life
     internal (uint Width, uint Height, uint Depth) Extent(uint mip) =>
         (Math.Max(1, Width >> (int)mip), Math.Max(1, Height >> (int)mip), Math.Max(1, Depth >> (int)mip));
 
-    internal override void Free()
+    private protected override void Free()
     {
         if (allocation is not null)
         {
@@ -707,7 +715,7 @@ public sealed class Surface : GpuObject
     private void FreeBuffers()
     {
         foreach (TextureLife buffer in buffers)
-            buffer.Free();
+            buffer.FreeNow();
         buffers = [];
     }
 

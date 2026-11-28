@@ -59,6 +59,11 @@ internal sealed unsafe class ShaderHeaps
 
     internal ID3D12DescriptorHeap Samplers { get; }
 
+    /// <summary>Both heaps, as a list sets them.</summary>
+    internal ID3D12DescriptorHeap[] Both => both ??= [Views, Samplers];
+
+    private ID3D12DescriptorHeap[]? both;
+
     /// <summary>Every bind group's list of sampler heap indices, each list written once and shared by every group with it.</summary>
     internal BufferLife Indices { get; }
 
@@ -232,7 +237,7 @@ public sealed class BindGroupLayout : GpuObject
 /// <summary>A bind group's descriptors, freed once the GPU is done with them.</summary>
 internal sealed class BindGroupLife(ShaderHeaps heaps, VirtualAllocation range) : D3D12Life
 {
-    internal override void Free() => heaps.Give(range);
+    private protected override void Free() => heaps.Give(range);
 }
 
 public sealed class BindGroup : GpuObject
@@ -486,9 +491,23 @@ internal static class ShaderPack
     private static Dictionary<ulong, PackedModule> Load()
     {
         var modules = new Dictionary<ulong, PackedModule>();
-        using Stream? stream = typeof(ShaderPack).Assembly.GetManifestResourceStream("HikariHopper.Shaders.dxil.pack");
-        if (stream is null)
-            return modules;
+        // The app's, and those of the assemblies loaded with it (the tests' own modules).
+        foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic)
+                continue;
+            foreach (string name in assembly.GetManifestResourceNames())
+                if (name.EndsWith(".Shaders.dxil.pack", StringComparison.Ordinal))
+                {
+                    using Stream stream = assembly.GetManifestResourceStream(name)!;
+                    Read(stream, modules);
+                }
+        }
+        return modules;
+    }
+
+    private static void Read(Stream stream, Dictionary<ulong, PackedModule> modules)
+    {
         using var reader = new BinaryReader(stream, Encoding.UTF8);
         if (reader.ReadUInt32() != 0x58444848 || reader.ReadUInt32() != 1)
             throw new GpuException("The app's compiled shaders are of another version.");
@@ -507,7 +526,6 @@ internal static class ShaderPack
             }
             modules[hash] = module;
         }
-        return modules;
 
         static string Text(BinaryReader reader) => Encoding.UTF8.GetString(reader.ReadBytes(reader.ReadUInt16()));
     }
@@ -838,16 +856,5 @@ public sealed class ComputePipeline : GpuObject
     {
         if (Life is not null)
             device.Retire(Life);
-    }
-}
-
-public sealed class RenderBundle : GpuObject
-{
-    private RenderBundle()
-    {
-    }
-
-    private protected override void Release()
-    {
     }
 }

@@ -19,14 +19,6 @@ public sealed partial class Rdr2CutoutTests
     private readonly record struct Surface(Vector3 Colour, float Depth, float Coverage = 1, bool Cutout = false,
         int X0 = 0, int Y0 = 0, int X1 = CombineSize, int Y1 = CombineSize);
 
-    private static string TestShader(string name)
-    {
-        using Stream stream = typeof(Rdr2CutoutTests).Assembly.GetManifestResourceStream("HikariHopper.Tests.Shaders." + name)
-            ?? throw new FileNotFoundException(name);
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
-
     // The target's pixels once the surfaces are drawn, in order, over the backdrop, and put together, with the GPU error,
     // if any.
     private static Vector4[] Combine(Vector4 backdrop, Surface[] surfaces, out string? error)
@@ -65,7 +57,8 @@ public sealed partial class Rdr2CutoutTests
             });
             ShaderModule probe = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor
             {
-                Code = ViewportRenderer.Read("Rdr2/cutout.wgsl") + "\n" + TestShader("rdr2_cutout_probe.wgsl"),
+                Label = "test/rdr2-cutout-probe",
+                Code = TestShaders.Module("test/rdr2-cutout-probe"),
             });
             RenderPipeline probePipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
@@ -140,7 +133,7 @@ public sealed partial class Rdr2CutoutTests
                     },
                 ],
             });
-            ShaderModule combine = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Code = ViewportRenderer.Read("Rdr2/subsample_alpha.wgsl") });
+            ShaderModule combine = device.CreateShaderModuleWGSL(new ShaderModuleWGSLDescriptor { Label = "rdr2/subsample-alpha", Code = ViewportRenderer.Module("rdr2/subsample-alpha") });
             RenderPipeline combinePipeline = device.CreateRenderPipelineSync(new RenderPipelineDescriptor
             {
                 Layout = device.CreatePipelineLayout(new PipelineLayoutDescriptor { BindGroupLayouts = [combineLayout] }),

@@ -47,21 +47,38 @@ public abstract class GpuObject : IDisposable
 /// </summary>
 internal abstract class D3D12Life
 {
+    // Every life not yet freed, held here so the COM wrappers it frees aren't left to their own finalizers: an app
+    // object let go of without being disposed is finalized along with them, in no order, and would retire a life
+    // whose resource was already released.
+    private static readonly ConcurrentDictionary<D3D12Life, byte> Alive = new();
+
+    private protected D3D12Life() => Alive.TryAdd(this, 0);
+
+    /// <summary>Frees it now (the GPU is done with it).</summary>
+    internal void FreeNow()
+    {
+        Free();
+        Alive.TryRemove(this, out _);
+    }
+
     /// <summary>The serial of the last submit that used it.</summary>
     internal ulong LastUse;
+
+    /// <summary>The command list that last held it (<see cref="Recorder"/>'s id): held again by it at no cost.</summary>
+    internal int Holder;
 
     /// <summary>Command lists that use it and haven't been submitted.</summary>
     internal int Recording;
 
     internal bool Released;
 
-    internal abstract void Free();
+    private protected abstract void Free();
 }
 
 /// <summary>A COM object kept until the GPU is done with it.</summary>
 internal sealed class ComLife(IDisposable item) : D3D12Life
 {
-    internal override void Free() => item.Dispose();
+    private protected override void Free() => item.Dispose();
 }
 
 public sealed class Instance : GpuObject
@@ -339,11 +356,26 @@ public sealed unsafe class Device : GpuObject
     internal Instance Instance => instance;
 
     /// <summary>The shader-visible heaps bind groups and samplers go into, made with the first that does.</summary>
-    internal ShaderHeaps Heaps => LazyInitializer.EnsureInitialized(ref heaps, ref heapsMade, ref heapsLock, () => new ShaderHeaps(this))!;
+    internal ShaderHeaps Heaps => heaps ?? MakeHeaps();
+
+    private ShaderHeaps MakeHeaps()
+    {
+        lock (Sync)
+            return heaps ??= new ShaderHeaps(this);
+    }
 
     private ShaderHeaps? heaps;
-    private bool heapsMade;
-    private object? heapsLock;
+
+    /// <summary>How indirect draws and dispatches read their arguments.</summary>
+    internal CommandSignatures Signatures => signatures ?? MakeSignatures();
+
+    private CommandSignatures MakeSignatures()
+    {
+        lock (Sync)
+            return signatures ??= new CommandSignatures(Native);
+    }
+
+    private CommandSignatures? signatures;
 
     /// <summary>What submits and retires hold.</summary>
     internal object Sync { get; } = new();
@@ -454,7 +486,11 @@ public sealed unsafe class Device : GpuObject
         lock (Sync)
         {
             life.Released = true;
-            retired.Add(life);
+            // What no list holds and the GPU is done with (or never used) goes now; the rest once it's done.
+            if (Volatile.Read(ref life.Recording) == 0 && life.LastUse <= fence.CompletedValue)
+                life.FreeNow();
+            else
+                retired.Add(life);
         }
     }
 
@@ -467,7 +503,7 @@ public sealed unsafe class Device : GpuObject
                 continue;
             retired[i] = retired[^1];
             retired.RemoveAt(retired.Count - 1);
-            life.Free();
+            life.FreeNow();
         }
     }
 
@@ -493,9 +529,74 @@ public sealed unsafe class Device : GpuObject
 
     public ComputePipeline CreateComputePipelineSync(in ComputePipelineDescriptor descriptor) => new(this, descriptor);
 
-    public CommandEncoder CreateCommandEncoder() => new(new Recorder(this));
+    public CommandEncoder CreateCommandEncoder() => new(TakeRecorder());
 
-    public RenderBundleEncoder CreateRenderBundleEncoder(in RenderBundleEncoderDescriptor descriptor) => throw D3D12Pending.Bundles();
+    private readonly Stack<Recorder> recorders = new();
+
+    /// <summary>A recorder for a new list: one given back before, with the room it kept, or a new one.</summary>
+    internal Recorder TakeRecorder()
+    {
+        Recorder? recorder;
+        lock (Sync)
+            recorders.TryPop(out recorder);
+        if (recorder is null)
+            return new Recorder(this);
+        recorder.Reopen();
+        return recorder;
+    }
+
+    internal void GiveRecorder(Recorder recorder)
+    {
+        lock (Sync)
+            recorders.Push(recorder);
+    }
+
+    public RenderBundleEncoder CreateRenderBundleEncoder(in RenderBundleEncoderDescriptor descriptor) => new(new BundleRecorder(this), instance);
+
+    private BundleArena? bundleArena;
+    private bool bundleOpen;
+
+    /// <summary>
+    /// A bundle's command list, from the arena bundles are recorded from now: a new arena once it's full, or while the
+    /// last bundle from it is still being recorded (an allocator records one list at a time).
+    /// </summary>
+    internal (BundleArena Arena, ID3D12GraphicsCommandList List) OpenBundle()
+    {
+        lock (Sync)
+        {
+            if (bundleArena is null || bundleOpen || bundleArena.Recorded >= BundleArena.Bundles)
+            {
+                if (bundleArena is { } old)
+                {
+                    old.Recorded = BundleArena.Bundles;
+                    if (old.Alive == 0 && !bundleOpen)
+                        old.FreeNow();
+                }
+                bundleArena = new BundleArena(Native.CreateCommandAllocator(CommandListType.Bundle));
+            }
+            BundleArena arena = bundleArena;
+            arena.Recorded++;
+            arena.Alive++;
+            bundleOpen = true;
+            return (arena, Native.CreateCommandList<ID3D12GraphicsCommandList>(CommandListType.Bundle, arena.Allocator, null));
+        }
+    }
+
+    /// <summary>A bundle recorded: its arena records the next one.</summary>
+    internal void BundleClosed(BundleArena arena)
+    {
+        lock (Sync)
+            if (arena == bundleArena)
+                bundleOpen = false;
+    }
+
+    /// <summary>A bundle freed (the GPU done with it): its arena too once it's full and none of its bundles is left.</summary>
+    internal void BundleFreed(BundleArena arena)
+    {
+        lock (Sync)
+            if (--arena.Alive == 0 && arena.Recorded >= BundleArena.Bundles && arena != bundleArena)
+                arena.FreeNow();
+    }
 
     public void PushErrorScope(ErrorFilter filter)
     {
@@ -661,15 +762,19 @@ public sealed unsafe class Device : GpuObject
             }
             Direct.Signal(fence, serial).CheckError();
             Volatile.Write(ref submitted, serial);
+            // Free again once this submit is done.
             foreach (UploadPageLife used in dirtyPages)
+            {
                 used.LastUse = serial;
+                used.Dirty = false;
+            }
             dirtyPages.Clear();
         }
         CheckLost();
     }
 
     /// <summary>The command list the queue's writes are recorded into, run before what's submitted next. Under <see cref="Sync"/>.</summary>
-    internal Recorder Pending() => pending ??= new Recorder(this);
+    internal Recorder Pending() => pending ??= TakeRecorder();
 
     /// <summary>
     /// Room in the upload pages for <paramref name="size"/> bytes the CPU writes for a copy, aligned to
@@ -862,14 +967,6 @@ internal sealed class CpuDescriptors(ID3D12Device device, DescriptorHeapType typ
         lock (free)
             free.Push(handle);
     }
-}
-
-/// <summary>What isn't made on Direct3D 12 yet, while it's built in steps.</summary>
-internal static class D3D12Pending
-{
-    internal static NotSupportedException Bundles() => new("Direct3D 12 doesn't record render bundles yet.");
-
-    internal static NotSupportedException Draws() => new("Direct3D 12 doesn't draw or dispatch yet.");
 }
 
 /// <summary>What Device Removed Extended Data says the GPU was doing when it lost the device, when it's kept.</summary>
