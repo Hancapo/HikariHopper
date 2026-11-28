@@ -354,6 +354,7 @@ internal sealed unsafe partial class ViewportRenderer
             CreateSkyPipelines(prepare: true);
             CreateCloudHatPipeline(prepare: true);
             CreateCoronaPipeline(prepare: true);
+            CreateDistantLightsPipeline(prepare: true);
             CreateWorldFogPipeline(prepare: true);
         }
     }
