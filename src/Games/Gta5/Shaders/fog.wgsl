@@ -49,6 +49,15 @@ fn gta_fog(fog: GtaFog, ray: vec3f, haze_scale: f32) -> vec4f {
     return vec4f(colour, saturate(haze + amount));
 }
 
+// How much of a ray from the camera the fog takes, height fog and haze (CalcFogData's alpha), as the coronas and the
+// distant lights fade by it.
+fn gta_fog_amount(fog: GtaFog, ray: vec3f) -> f32 {
+    let ground = gta_ground_fog(fog, ray);
+    let amount = ground.x * fog.params[2].y;
+    let haze = (1.0 - amount) * fog.params[1].y * (1.0 - exp(fog.params[1].x * max(0.0, ground.y - fog.params[2].x)));
+    return saturate(amount + haze);
+}
+
 // The fog without its haze, as the sky takes it.
 fn gta_fog_no_haze(fog: GtaFog, ray: vec3f) -> vec4f {
     return gta_fog(fog, ray, 0.0);

@@ -147,10 +147,7 @@ fn light_category(kind: u32, radius: f32, intensity: f32, extent: f32, flags: u3
 
 // The fog's amount: the height fog, then the haze over what it leaves.
 fn corona_fog(ray: vec3f) -> f32 {
-    let ground = gta_ground_fog(sky.fog, ray);
-    let amount = ground.x * sky.fog.params[2].y;
-    let haze = (1.0 - amount) * sky.fog.params[1].y * (1.0 - exp(sky.fog.params[1].x * max(0.0, ground.y - sky.fog.params[2].x)));
-    return saturate(amount + haze);
+    return gta_fog_amount(sky.fog, ray);
 }
 
 // Whether the scene at a point of the screen (in NDC) is no nearer than depth (near over distance, reversed Z).

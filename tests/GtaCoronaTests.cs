@@ -354,7 +354,7 @@ public sealed class GtaCoronaTests
     }
 
     // A dome of eight triangles, with no textures: each is the renderer's stand-in.
-    private static GtaSkyDome Dome()
+    internal static GtaSkyDome Dome()
     {
         Vector3[] corners = [Vector3.UnitX, Vector3.UnitY, -Vector3.UnitX, -Vector3.UnitY, Vector3.UnitZ, -Vector3.UnitZ];
         float[] vertices = [.. corners.SelectMany(c => new[] { c.X, c.Y, c.Z, c.X * .5f + .5f, c.Y * .5f + .5f, c.X * .5f + .5f, c.Z * .5f + .5f })];
@@ -362,7 +362,7 @@ public sealed class GtaCoronaTests
         return new GtaSkyDome(vertices, indices, null, null, null, null, null, GtaSkyVisuals.From(null));
     }
 
-    private static float HdrRed(GpuDevice gpu, ViewportRenderer renderer, int x, int y)
+    internal static float HdrRed(GpuDevice gpu, ViewportRenderer renderer, int x, int y)
     {
         var hdr = (WebGpuSharp.Texture)typeof(ViewportRenderer).GetField("hdr", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(renderer)!;

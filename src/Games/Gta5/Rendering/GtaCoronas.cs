@@ -55,6 +55,24 @@ internal sealed record GtaCoronaVisuals
     public float SphereExpandStart { get; init; } = 1;
     public float SphereExpandEnd { get; init; } = 1;
 
+    /// <summary>
+    /// The distant LOD lights' settings (distantlights.*), with the game's code defaults: the sprites' radius in metres,
+    /// the smallest they're drawn (sizeMin, sizeUpscale), how they grow with the camera's height (sizeDistStart,
+    /// sizeDist), their HDR intensity (streetlight.HDRIntensity, for every distant LOD light), their flicker and twinkle,
+    /// and the hours they fade in and out over, the street lights' and the others'.
+    /// </summary>
+    public float DistantLightSize { get; init; } = .8f;
+    public float DistantLightSizeMin { get; init; } = 6;
+    public float DistantLightSizeUpscale { get; init; } = 1;
+    public float DistantLightSizeDistStart { get; init; } = 40;
+    public float DistantLightSizeDist { get; init; } = 70;
+    public float DistantLightHdrIntensity { get; init; } = 4;
+    public float DistantLightFlicker { get; init; } = .33f;
+    public float DistantLightTwinkleAmount { get; init; }
+    public float DistantLightTwinkleSpeed { get; init; } = 1;
+    public Vector2 DistantLightHours { get; init; } = new(19, 6);
+    public Vector2 DistantStreetLightHours { get; init; } = new(19, 6);
+
     /// <summary>lights.cutoff.distance: where lights that aren't the map's fade out.</summary>
     public float LightCutoffDistance { get; init; } = 1000;
 
@@ -108,6 +126,18 @@ internal sealed record GtaCoronaVisuals
             SphereExpandEnd = Get("lodlight.sphere.expand.end", 1),
             LightCutoffDistance = Get("lights.cutoff.distance", d.LightCutoffDistance),
             MapLightFadeDistance = Get("lights.cutoff.map.distance", d.MapLightFadeDistance),
+            DistantLightSize = Get("distantlights.size", d.DistantLightSize),
+            DistantLightSizeMin = Get("distantlights.sizeMin", d.DistantLightSizeMin),
+            DistantLightSizeUpscale = Get("distantlights.sizeUpscale", d.DistantLightSizeUpscale),
+            DistantLightSizeDistStart = Get("distantlights.sizeDistStart", d.DistantLightSizeDistStart),
+            DistantLightSizeDist = Get("distantlights.sizeDist", d.DistantLightSizeDist),
+            DistantLightHdrIntensity = Get("distantlights.streetlight.HDRIntensity", d.DistantLightHdrIntensity),
+            DistantLightFlicker = Get("distantlights.flicker", d.DistantLightFlicker),
+            DistantLightTwinkleAmount = Get("distantlights.twinkleAmount", d.DistantLightTwinkleAmount),
+            DistantLightTwinkleSpeed = Get("distantlights.twinkleSpeed", d.DistantLightTwinkleSpeed),
+            DistantLightHours = new(Get("distantlights.hourStart", d.DistantLightHours.X), Get("distantlights.hourEnd", d.DistantLightHours.Y)),
+            DistantStreetLightHours = new(Get("distantlights.streetLightHourStart", d.DistantStreetLightHours.X),
+                Get("distantlights.streetLightHourEnd", d.DistantStreetLightHours.Y)),
         };
     }
 
@@ -327,7 +357,8 @@ internal sealed class GtaHeightMap
 }
 
 /// <summary>What the coronas are drawn with, read from the game: graphics.ytd's two textures, the settings, the LOD lights and the height map.</summary>
-internal sealed record GtaCoronaData(GameTexture? Corona, GameTexture? Flare, GtaCoronaVisuals Visuals, GtaLodLights LodLights, GtaHeightMap? HeightMap);
+internal sealed record GtaCoronaData(GameTexture? Corona, GameTexture? Flare, GtaCoronaVisuals Visuals, GtaLodLights LodLights, GtaHeightMap? HeightMap,
+    GtaDistantLights? Distant = null, GameTexture? DistantLight = null, GameTexture? WaterNoise = null);
 
 /// <summary>
 /// One corona as the GPU draws it (Gta5/coronas.wgsl's Corona): where it is and what the game registers it from, a

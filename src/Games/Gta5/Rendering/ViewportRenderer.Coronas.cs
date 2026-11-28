@@ -49,6 +49,7 @@ internal sealed unsafe partial class ViewportRenderer
         flareView = Own(data.Flare);
         coronaTextures = [.. owned];
         coronaData = data;
+        ShowDistantLights(data);
     }
 
     /// <summary>
@@ -88,6 +89,7 @@ internal sealed unsafe partial class ViewportRenderer
         coronaInstances = null;
         coronaCapacity = 0;
         coronaGroup = null;
+        ClearDistantLights();
     }
 
     /// <summary>

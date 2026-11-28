@@ -325,7 +325,8 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// What the coronas are drawn with, as the game loads it: graphics.ytd's "corona" and "flare_animorphic",
     /// visualsettings.dat's settings, the LOD lights of lodlights.rpf's maps (each lodlights_* map with
     /// the distlodlights_* map it names as its parent, as the game pairs them) and the world height map
-    /// (heightmap.dat).
+    /// (heightmap.dat); and the distant LOD lights of the medium and large distlodlights_* maps, with graphics.ytd's
+    /// "distant_light" and "waternoise" they're drawn with.
     /// </summary>
     public override GtaCoronaData? LoadCoronas()
     {
@@ -368,7 +369,8 @@ internal sealed class GtaWorldIndex : WorldIndex
             }
         }
         var pairs = lod.Where(map => distant.ContainsKey(map.Parent.Value)).Select(map => (distant[map.Parent.Value], map));
-        return new GtaCoronaData(Named("corona"), Named("flare_animorphic"), GtaCoronaVisuals.From(visuals), GtaLodLights.From(pairs), heightMap);
+        return new GtaCoronaData(Named("corona"), Named("flare_animorphic"), GtaCoronaVisuals.From(visuals), GtaLodLights.From(pairs), heightMap,
+            GtaDistantLights.From(distant.Values.Distinct()), Named("distant_light"), Named("waternoise"));
     }
 
     /// <summary>

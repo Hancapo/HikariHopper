@@ -10,6 +10,10 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 
 ## [Unreleased]
 
+### Added
+
+- GTA V's world draws its distant LOD lights at night as the game does: the street and city lights of every medium and large distlodlights map the game has streamed in, as glowing points from past their coronas' reach out to the horizon. They never shrink below about 15 pixels at 2560 wide, grow brighter with distance, twinkle, and are fogged. They fade in from 19:00 to 20:00 and out from 05:00 to 06:00. ([#351](https://github.com/Hancapo/HikariHopper/pull/351))
+
 ### Fixed
 
 - Title-bar menus opened over a world run their items when clicked, including menus already used on the Files side. ([#338](https://github.com/Hancapo/HikariHopper/pull/338))
