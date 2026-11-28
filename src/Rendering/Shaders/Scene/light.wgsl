@@ -324,7 +324,7 @@ fn paraboloid_uv(r: vec3f) -> vec2f {
 // PS_directional_ambient's reflection: the map in the reflected direction, at a mip chosen by gloss (the specular
 // exponent over 1500) with the game's curve, times what the surface reflects at this angle (fresnel times specular
 // intensity), and an energy term that runs from 1/pi for dull surfaces to one for glossy ones (the exponent over 563).
-// The caller scales it by the ambient scale, as the game does.
+// The caller scales it by the greater of the natural and artificial ambient scales, as the game does.
 fn gta_reflection(normal: vec3f, view: vec3f, exponent: f32, reflected_share: f32) -> vec3f {
     let direction = reflect(-view, normal);
     let rough = 1.0 - saturate(exponent / 1500.0);
@@ -389,9 +389,10 @@ fn gta_lit(stored: vec3f, normal: vec3f, view: vec3f, intensity: f32, power: f32
     // Its vertex occlusion is in the ambient scales already.
     occludable(ambient, 1.0, normal, albedo);
 
-    // Reflection: what the surface reflects (the share the diffuse loses), scaled as the ambient is, and by the scale
-    // the G-buffer's last channel holds (one for all but peds, whose deferred shaders write their own).
-    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale * reflection_scale;
+    // Reflection: what the surface reflects (the share the diffuse loses), by the greater of the natural and artificial
+    // ambient scales, and by the scale the G-buffer's last channel holds (one for all but peds, whose deferred shaders
+    // write their own).
+    let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * max(ambient_scale, artificial_scale) * reflection_scale;
 
     // The local lights, lit as the sun is, after their falloff.
     let local = gta_local_lights(albedo, kept, spec, exponent, fresnel_value, normal, view);
