@@ -23,6 +23,7 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 - Red Dead Redemption 2's world keeps 967 MB less in memory at Valentine by letting go of texture pixels once they're on the GPU, and puts 194 MB fewer textures on it. ([#339](https://github.com/Hancapo/HikariHopper/pull/339))
 - Both worlds let go of the models the camera left behind half a minute ago, so their memory comes back down: back at Legion Square after a 3.5 km flight out, the process holds 5.3 GB instead of 8.2 GB and the GPU 2.2 GB instead of 4.5 GB. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
 - Moving through a world allocates 11–14 MB a second instead of 80, and standing still none instead of 29. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
+- Both worlds hitch less as they stream, the garbage collector now working on every core: a minute of flying over GTA V's map pauses for 0.5 s instead of 1.5 s, and half as many frames take twice as long as those around them. ([#346](https://github.com/Hancapo/HikariHopper/pull/346))
 
 ## [0.3.0] - 2026-11-20
 
