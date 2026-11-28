@@ -33,6 +33,9 @@ internal sealed unsafe class BufferLife : D3D12Life
 
     internal ID3D12Resource Resource { get; }
 
+    /// <summary>The command list whose state tracker last saw it, and where it keeps its state.</summary>
+    internal int Tracker, TrackedSlot;
+
     internal HeapType Heap { get; }
 
     internal ulong Size { get; }
@@ -96,6 +99,11 @@ internal sealed class TextureLife : D3D12Life
     }
 
     internal ID3D12Resource Resource { get; }
+
+    /// <summary>The command list whose state tracker last saw it, and its subresources' states there.</summary>
+    internal int Tracker;
+
+    internal ResourceStates[]? TrackedStates;
 
     internal TextureFormat Format { get; }
 

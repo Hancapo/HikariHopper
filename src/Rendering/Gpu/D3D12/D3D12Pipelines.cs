@@ -59,6 +59,11 @@ internal sealed unsafe class ShaderHeaps
 
     internal ID3D12DescriptorHeap Samplers { get; }
 
+    /// <summary>Both heaps, as a list sets them.</summary>
+    internal ID3D12DescriptorHeap[] Both => both ??= [Views, Samplers];
+
+    private ID3D12DescriptorHeap[]? both;
+
     /// <summary>Every bind group's list of sampler heap indices, each list written once and shared by every group with it.</summary>
     internal BufferLife Indices { get; }
 

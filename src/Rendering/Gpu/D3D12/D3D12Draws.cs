@@ -4,13 +4,14 @@ using DxgiFormat = Vortice.DXGI.Format;
 namespace HikariHopper.Gpu;
 
 /// <summary>
-/// What a pass binds and draws with. A pass starts with nothing bound, as WebGPU's do. Root arguments go in just before
-/// the draw or dispatch that needs them: a bind group's table and dynamic buffers once it's set (and again if the root
-/// signature changes under it), vertex buffers once their pipeline's strides are known, and Naga's special constants
-/// when they change. A bind group's buffers and textures move into the states its shaders read them in as it's set;
-/// a compute pass also waits for each dispatch's writes before the next dispatch, as WebGPU's dispatches do.
+/// What a pass or a render bundle binds and draws with. Either starts with nothing bound, as WebGPU's do. Root arguments
+/// go in just before the draw or dispatch that needs them: a bind group's table and dynamic buffers once it's set (and
+/// again if the root signature changes under it), vertex buffers once their pipeline's strides are known, and Naga's
+/// special constants when they change. A bind group's buffers and textures are used in the states its shaders read them
+/// in as it's set (a pass moves them there; a bundle lists them for the pass that runs it); a compute pass also waits
+/// for each dispatch's writes before the next dispatch, as WebGPU's dispatches do.
 /// </summary>
-internal sealed unsafe partial class Recorder
+internal abstract unsafe class DrawRecorder
 {
     private const int MaxGroups = 8;
     private const int MaxVertexBuffers = 16;
@@ -19,11 +20,28 @@ internal sealed unsafe partial class Recorder
     private readonly uint[][] offsets = new uint[MaxGroups][];
     private readonly bool[] groupsDirty = new bool[MaxGroups];
     private readonly (BufferLife? Buffer, ulong Offset, ulong Size)[] vertexBuffers = new (BufferLife?, ulong, ulong)[MaxVertexBuffers];
+    /// <summary>The command list drawn into: a pass's, or a bundle's.</summary>
+    private protected abstract ID3D12GraphicsCommandList Commands { get; }
+
+    private protected abstract Device Owner { get; }
+
+    /// <summary>A buffer the next commands use in the given state.</summary>
+    private protected abstract void UseBuffer(BufferLife buffer, ResourceStates state, bool write = false);
+
+    /// <summary>A texture view the next commands use in the given state.</summary>
+    private protected abstract void UseTexture(TextureView view, ResourceStates state);
+
+    /// <summary>Something the GPU uses until the commands are done with it.</summary>
+    private protected abstract void Hold(D3D12Life life);
+
+    /// <summary>The barriers the next command waits for.</summary>
+    private protected abstract void Barriers();
+
     private RenderPipeline? renderPipeline;
     private ComputePipeline? computePipeline;
     private ID3D12RootSignature? rootSignature;
     private bool vertexBuffersDirty;
-    private bool heapsSet;
+    private protected bool heapsSet;
     private bool compute;
     private (int A, int B, int C)? constants;
 
@@ -41,35 +59,35 @@ internal sealed unsafe partial class Recorder
         compute = computing;
     }
 
-    private void SetHeaps()
+    private protected void SetHeaps()
     {
         if (heapsSet)
             return;
-        ShaderHeaps heaps = device.Heaps;
-        Touch(heaps.Indices);
-        List.SetDescriptorHeaps([heaps.Views, heaps.Samplers]);
+        ShaderHeaps heaps = Owner.Heaps;
+        Hold(heaps.Indices);
+        Commands.SetDescriptorHeaps(heaps.Both);
         heapsSet = true;
     }
 
     private void SetRoot(PipelineLayout layout)
     {
-        Touch(layout.Life);
+        Hold(layout.Life);
         if (rootSignature == layout.Native)
             return;
         rootSignature = layout.Native;
         if (compute)
-            List.SetComputeRootSignature(layout.Native);
+            Commands.SetComputeRootSignature(layout.Native);
         else
-            List.SetGraphicsRootSignature(layout.Native);
+            Commands.SetGraphicsRootSignature(layout.Native);
         // A new root signature forgets every root argument.
         Array.Fill(groupsDirty, true);
         constants = null;
         if (layout.SamplerTable >= 0)
         {
             if (compute)
-                List.SetComputeRootDescriptorTable((uint)layout.SamplerTable, device.Heaps.SamplersOnGpu);
+                Commands.SetComputeRootDescriptorTable((uint)layout.SamplerTable, Owner.Heaps.SamplersOnGpu);
             else
-                List.SetGraphicsRootDescriptorTable((uint)layout.SamplerTable, device.Heaps.SamplersOnGpu);
+                Commands.SetGraphicsRootDescriptorTable((uint)layout.SamplerTable, Owner.Heaps.SamplersOnGpu);
         }
     }
 
@@ -79,10 +97,10 @@ internal sealed unsafe partial class Recorder
         if (pipeline.State is null || pipeline.Life is null)
             return;
         SetHeaps();
-        Touch(pipeline.Life);
-        List.SetPipelineState(pipeline.State);
+        Hold(pipeline.Life);
+        Commands.SetPipelineState(pipeline.State);
         SetRoot(pipeline.Layout);
-        List.IASetPrimitiveTopology(pipeline.Topology);
+        Commands.IASetPrimitiveTopology(pipeline.Topology);
         vertexBuffersDirty = true;
     }
 
@@ -92,8 +110,8 @@ internal sealed unsafe partial class Recorder
         if (pipeline.State is null || pipeline.Life is null)
             return;
         SetHeaps();
-        Touch(pipeline.Life);
-        List.SetPipelineState(pipeline.State);
+        Hold(pipeline.Life);
+        Commands.SetPipelineState(pipeline.State);
         SetRoot(pipeline.Layout);
     }
 
@@ -105,33 +123,25 @@ internal sealed unsafe partial class Recorder
         if (group is null)
             return;
         if (group.Life is not null)
-            Touch(group.Life);
+            Hold(group.Life);
         // Into the states its shaders read and write them in; a render pass's, before its draws.
         foreach ((BufferLife buffer, ResourceStates state, bool write) in group.Buffers)
-            Use(buffer, state, write);
+            UseBuffer(buffer, state, write);
         foreach ((TextureView view, ResourceStates state) in group.Textures)
-            UseView(view, state);
-    }
-
-    private void UseView(TextureView view, ResourceStates state)
-    {
-        TextureLife texture = view.Texture.Life;
-        bool volume = texture.Dimension == TextureDimension.D3;
-        uint mips = state == ResourceStates.UnorderedAccess ? 1 : view.Mips;
-        Use(texture, view.BaseMip, mips, volume ? 0 : view.BaseLayer, volume ? 1 : view.Layers, view.Aspect, state);
+            UseTexture(view, state);
     }
 
     internal void SetVertexBuffer(uint slot, BufferLife buffer, ulong offset, ulong size)
     {
-        Use(buffer, ResourceStates.VertexAndConstantBuffer);
+        UseBuffer(buffer, ResourceStates.VertexAndConstantBuffer);
         vertexBuffers[slot] = (buffer, offset, size);
         vertexBuffersDirty = true;
     }
 
     internal void SetIndexBuffer(BufferLife buffer, IndexFormat format, ulong offset, ulong size)
     {
-        Use(buffer, ResourceStates.IndexBuffer);
-        List.IASetIndexBuffer(new IndexBufferView(buffer.Resource.GPUVirtualAddress + offset, (uint)size,
+        UseBuffer(buffer, ResourceStates.IndexBuffer);
+        Commands.IASetIndexBuffer(new IndexBufferView(buffer.Resource.GPUVirtualAddress + offset, (uint)size,
             format == IndexFormat.Uint32 ? DxgiFormat.R32_UInt : DxgiFormat.R16_UInt));
     }
 
@@ -140,7 +150,7 @@ internal sealed unsafe partial class Recorder
     {
         if (layout is null)
             return false;
-        Flush();
+        Barriers();
         for (int index = 0; index < layout.Groups.Length; index++)
         {
             if (!groupsDirty[index] || groups[index] is not { } group)
@@ -148,11 +158,11 @@ internal sealed unsafe partial class Recorder
             groupsDirty[index] = false;
             if (layout.Tables[index] is >= 0 and int table)
             {
-                GpuDescriptorHandle start = device.Heaps.ViewOnGpu(group.First);
+                GpuDescriptorHandle start = Owner.Heaps.ViewOnGpu(group.First);
                 if (compute)
-                    List.SetComputeRootDescriptorTable((uint)table, start);
+                    Commands.SetComputeRootDescriptorTable((uint)table, start);
                 else
-                    List.SetGraphicsRootDescriptorTable((uint)table, start);
+                    Commands.SetGraphicsRootDescriptorTable((uint)table, start);
             }
             int[] roots = layout.DynamicRoots[index];
             uint[] dynamic = offsets[index];
@@ -161,9 +171,9 @@ internal sealed unsafe partial class Recorder
                 (BufferLife buffer, ulong offset, _) = group.Dynamic[i];
                 ulong address = buffer.Resource.GPUVirtualAddress + offset + (i < dynamic.Length ? dynamic[i] : 0);
                 if (compute)
-                    List.SetComputeRootConstantBufferView((uint)roots[i], address);
+                    Commands.SetComputeRootConstantBufferView((uint)roots[i], address);
                 else
-                    List.SetGraphicsRootConstantBufferView((uint)roots[i], address);
+                    Commands.SetGraphicsRootConstantBufferView((uint)roots[i], address);
             }
         }
         if (constants != (first, second, third))
@@ -171,9 +181,9 @@ internal sealed unsafe partial class Recorder
             constants = (first, second, third);
             int* values = stackalloc int[3] { first, second, third };
             if (compute)
-                List.SetComputeRoot32BitConstants((uint)PipelineLayout.Constants, 3, values, 0);
+                Commands.SetComputeRoot32BitConstants((uint)PipelineLayout.Constants, 3, values, 0);
             else
-                List.SetGraphicsRoot32BitConstants((uint)PipelineLayout.Constants, 3, values, 0);
+                Commands.SetGraphicsRoot32BitConstants((uint)PipelineLayout.Constants, 3, values, 0);
         }
         return true;
     }
@@ -188,7 +198,7 @@ internal sealed unsafe partial class Recorder
             uint[] strides = pipeline.Strides;
             for (int slot = 0; slot < strides.Length; slot++)
                 if (vertexBuffers[slot] is { Buffer: { } buffer } bound)
-                    List.IASetVertexBuffers((uint)slot, new VertexBufferView(buffer.Resource.GPUVirtualAddress + bound.Offset, (uint)bound.Size, strides[slot]));
+                    Commands.IASetVertexBuffers((uint)slot, new VertexBufferView(buffer.Resource.GPUVirtualAddress + bound.Offset, (uint)bound.Size, strides[slot]));
         }
         return true;
     }
@@ -196,13 +206,13 @@ internal sealed unsafe partial class Recorder
     internal void Draw(uint vertexCount, uint instanceCount, uint firstVertex, uint firstInstance)
     {
         if (PrepareDraw((int)firstVertex, firstInstance))
-            List.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+            Commands.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     internal void DrawIndexed(uint indexCount, uint instanceCount, uint firstIndex, int baseVertex, uint firstInstance)
     {
         if (PrepareDraw(baseVertex, firstInstance))
-            List.DrawIndexedInstanced(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+            Commands.DrawIndexedInstanced(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
     /// <summary>
@@ -211,9 +221,9 @@ internal sealed unsafe partial class Recorder
     /// </summary>
     internal void DrawIndexedIndirect(BufferLife arguments, ulong offset)
     {
-        Use(arguments, ResourceStates.IndirectArgument);
+        UseBuffer(arguments, ResourceStates.IndirectArgument);
         if (PrepareDraw(0, 0))
-            List.ExecuteIndirect(device.Signatures.DrawIndexed, 1, arguments.Resource, offset, null, 0);
+            Commands.ExecuteIndirect(Owner.Signatures.DrawIndexed, 1, arguments.Resource, offset, null, 0);
     }
 
     // Compute.
@@ -225,9 +235,9 @@ internal sealed unsafe partial class Recorder
             if (groups[index] is { } group)
             {
                 foreach ((BufferLife buffer, ResourceStates state, bool write) in group.Buffers)
-                    Use(buffer, state, write);
+                    UseBuffer(buffer, state, write);
                 foreach ((TextureView view, ResourceStates state) in group.Textures)
-                    UseView(view, state);
+                    UseTexture(view, state);
             }
     }
 
@@ -235,16 +245,16 @@ internal sealed unsafe partial class Recorder
     {
         PrepareDispatch();
         if (computePipeline is { State: not null } pipeline && Prepare(pipeline.Layout, (int)x, (int)y, (int)z))
-            List.Dispatch(x, y, z);
+            Commands.Dispatch(x, y, z);
     }
 
     /// <summary>A dispatch whose workgroup counts the GPU reads from the buffer (its shaders see them as zero).</summary>
     internal void DispatchIndirect(BufferLife arguments, ulong offset)
     {
         PrepareDispatch();
-        Use(arguments, ResourceStates.IndirectArgument);
+        UseBuffer(arguments, ResourceStates.IndirectArgument);
         if (computePipeline is { State: not null } pipeline && Prepare(pipeline.Layout, 0, 0, 0))
-            List.ExecuteIndirect(device.Signatures.Dispatch, 1, arguments.Resource, offset, null, 0);
+            Commands.ExecuteIndirect(Owner.Signatures.Dispatch, 1, arguments.Resource, offset, null, 0);
     }
 }
 
