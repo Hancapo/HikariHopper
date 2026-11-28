@@ -108,6 +108,12 @@ internal sealed partial class SurfaceMaterial
     /// <summary>grass_fur_mask's mask over its fur, on the second UV set.</summary>
     public Texture? FurMask { get; private init; }
 
+    /// <summary>
+    /// The map's glass (glass, glass_env, glass_breakable and the rest), forward and blended with its back culled, lit as it
+    /// is drawn (Gta5/surface.wgsl's map_glass).
+    /// </summary>
+    public bool MapGlass { get; private init; }
+
     /// <summary>grass_fur_mask's colour over the diffuse map (DiffuseHfTex), on the third UV set.</summary>
     public Texture? DiffuseHf { get; private init; }
 
@@ -223,6 +229,7 @@ internal sealed partial class SurfaceMaterial
     private static readonly HashSet<string> Textured = Family("textured");
     private static readonly HashSet<string> Vehicles = Family("vehicle");
     private static readonly HashSet<string> Glasses = Family("glass");
+    private static readonly HashSet<string> MapGlasses = Family("map_glass");
     private static readonly HashSet<string> Terrains = Family("terrain");
     private static readonly HashSet<string> ApproximateTerrains = Family("terrain_approximate");
     private static readonly HashSet<string> Peds = Family("ped");
@@ -313,9 +320,10 @@ internal sealed partial class SurfaceMaterial
         // unread, as a missing one is.
         Texture? environment = null;
         var reflection = EnvironmentKind.None;
-        if (Textured.Contains(shader) && Pattern(shader, "reflect") is "sphere" or "cube" && Texture("environment") is { } found)
+        string? reflect = MapGlasses.Contains(shader) ? Pattern(shader, "glass_reflect") : Textured.Contains(shader) ? Pattern(shader, "reflect") : null;
+        if (reflect is "sphere" or "cube" && Texture("environment") is { } found)
         {
-            bool cube = Pattern(shader, "reflect") == "cube";
+            bool cube = reflect == "cube";
             bool isCube = found.Shape.Dimension == CommonFury.Textures.TextureDimension.Cube && found.Shape.ArraySize == 1;
             bool isPlane = found.Shape.IsSingleImage;
             if (cube ? isCube : isPlane)
@@ -328,9 +336,11 @@ internal sealed partial class SurfaceMaterial
             Shader = shader,
             Rebuilt = Textured.Contains(shader) || Vehicles.Contains(shader) || Terrains.Contains(shader) || Peds.Contains(shader)
                 || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || Furs.Contains(shader) || Cables.Contains(shader)
-                || Glasses.Contains(shader) || Trees.Contains(shader) || TreeLods.Contains(shader) || TreeBillboards.Contains(shader),
+                || Glasses.Contains(shader) || MapGlasses.Contains(shader) || Trees.Contains(shader) || TreeLods.Contains(shader)
+                || TreeBillboards.Contains(shader),
             Vehicle = Vehicles.Contains(shader),
             Glass = Glasses.Contains(shader),
+            MapGlass = MapGlasses.Contains(shader),
             Terrain = Terrains.Contains(shader) || ApproximateTerrains.Contains(shader),
             Ped = Peds.Contains(shader) || PedsDiffuse.Contains(shader) || PedsHair.Contains(shader) || ApproximatePeds.Contains(shader),
             Fur = Furs.Contains(shader),
@@ -358,7 +368,7 @@ internal sealed partial class SurfaceMaterial
             Reflection = reflection,
             NightOnly = Textured.Contains(shader) && Pattern(shader, "geometry_night") == "true",
             // The trees are always cut out, by their own alpha test.
-            AlphaMode = Glasses.Contains(shader) ? AlphaMode.Blend
+            AlphaMode = Glasses.Contains(shader) || MapGlasses.Contains(shader) ? AlphaMode.Blend
                 : Trees.Contains(shader) || TreeLods.Contains(shader) || TreeBillboards.Contains(shader) ? AlphaMode.Mask : (material.RenderBucket & 7) switch
             {
                 1 => AlphaMode.Blend,
@@ -451,7 +461,7 @@ internal sealed partial class SurfaceMaterial
         // by the day/night balance (globalScalars2.y); _geomnightonly collapses its vertices by day.
         u[100] = (float)result.Reflection;
         u[101] = result.Reflection != EnvironmentKind.None ? Constant("reflectivity", .45f)[0] : 0;
-        u[102] = Textured.Contains(shader) && Pattern(shader, "emissive_night") == "true" ? 1 : 0;
+        u[102] = (Textured.Contains(shader) || MapGlasses.Contains(shader)) && Pattern(shader, "emissive_night") == "true" ? 1 : 0;
         u[103] = result.NightOnly ? 1 : 0;
         // The _detail shaders: detailSettings (how much the detail darkens, how much it bumps, its tiling), and what
         // masks it: the specular map's alpha, the diffuse map's for the diffspec shaders, or nothing.
@@ -472,6 +482,8 @@ internal sealed partial class SurfaceMaterial
             Ped(u);
         if (result.Glass)
             Glass(u);
+        if (result.MapGlass)
+            MapGlass(u);
         if (result.Tree != TreeProgram.None)
             TreeUniforms(u);
         return result;
@@ -512,6 +524,22 @@ internal sealed partial class SurfaceMaterial
             // trees_lod2d's billboards (the drawables' LODs) take their placement's turn and scale as the game's do.
             v[115] = shader.Equals("trees_lod2d", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
             Fill(v[116..119], Constant("tree_lod2_normal", 0, 0, 1));
+        }
+
+        // The map's glass (Gta5/surface.wgsl's map_glass): which program (4 the megashader's forward glass, 5
+        // glass_breakable's, whole), whether it has the glass lighting and the alpha's fresnel adjust (glass_env and the
+        // breakable glass), whether it is glass_displacement (lit white, by the vertex alpha); and its reflection: the
+        // sphere map as the _reflect shaders read it, the reflection map (3, the dynamic reflection), or none.
+        void MapGlass(Span<float> v)
+        {
+            v[92] = Pattern(shader, "glass_program") == "breakable" ? 5 : 4;
+            v[93] = Pattern(shader, "glass_lighting") == "true" ? 1 : 0;
+            v[94] = Pattern(shader, "displacement") == "true" ? 1 : 0;
+            if (Pattern(shader, "glass_reflect") == "dynamic")
+            {
+                v[100] = 3;
+                v[101] = 0;
+            }
         }
 
         // PS_VehicleTextured, as vehicle_vehglass and its _crack and _inner compile it: matDiffuseColor, dirtLevelMod and

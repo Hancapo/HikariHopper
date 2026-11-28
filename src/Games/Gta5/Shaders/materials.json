@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "What Gta5/surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); what Gta5/terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred); the trees' (tree: PS_PropFoliageDeferred, with the _camera_facing and _camera_aligned cards turned to the camera; tree_lod: PS_PropFoliageDeferredLod; tree_lod2: the billboards VS_PropFoliageDeferredLod2 builds); what Gta5/fur.wgsl reads for the fur grass shaders (PS_FurDeferredTextured) and Gta5/cable.wgsl for the cables (VS_Cable and PS_Cable). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue. Patterns: reflect is how a textured shader reads its environment texture (sphere: reflect, normal_reflect, spec_reflect, normal_spec_reflect and their decals; cube: the _cubemap_reflect ones; normal, normal_spec and the like reflect nothing of their own); emissive_night scales the emissive by the day/night balance (the emissivenight shaders); geometry_night collapses the vertices by day (_geomnightonly).",
+  "about": "What Gta5/surface.wgsl reads from a GTA V material, for the families it rebuilds: textured (PS_DeferredTextured), vehicle (PS_DeferredVehicleTextured), the peds' (PS_DeferredPedTextured: ped, ped_diffuse and ped_hair, with ped_approximate drawn as ped), and the vehicles' glass (glass: vehicle_vehglass and its _crack and _inner, forward shaders the game lights as it draws them, PS_VehicleTextured); the map's glass (map_glass: the megashader's forward glass, PS_Textured, and glass_breakable's PS_BreakableGlassNoCrack, which glass_breakable_crack is drawn as while whole; each shader's glass_program, glass_reflect (none, sphere or dynamic), glass_lighting and displacement below); what Gta5/terrain.wgsl reads for the terrain shaders (their PS_TexturedDeferred); the trees' (tree: PS_PropFoliageDeferred, with the _camera_facing and _camera_aligned cards turned to the camera; tree_lod: PS_PropFoliageDeferredLod; tree_lod2: the billboards VS_PropFoliageDeferredLod2 builds); what Gta5/fur.wgsl reads for the fur grass shaders (PS_FurDeferredTextured) and Gta5/cable.wgsl for the cables (VS_Cable and PS_Cable). Roles name Legacy parameters; Enhanced materials reach them through FiveFury's catalogue, which pairs each Enhanced parameter with its Legacy name. A value a material doesn't set is the shader's default from the same catalogue. Patterns: reflect is how a textured shader reads its environment texture (sphere: reflect, normal_reflect, spec_reflect, normal_spec_reflect and their decals; cube: the _cubemap_reflect ones; normal, normal_spec and the like reflect nothing of their own); emissive_night scales the emissive by the day/night balance (the emissivenight shaders); geometry_night collapses the vertices by day (_geomnightonly).",
   "textures": {
     "diffuse": ["DiffuseSampler"],
     "normal": ["BumpSampler"],
@@ -146,6 +146,10 @@
       "vehicle_track2_emissive", "vehicle_track_ammo", "vehicle_track_emissive"
     ],
     "glass": ["vehicle_vehglass", "vehicle_vehglass_crack", "vehicle_vehglass_inner"],
+    "map_glass": [
+      "glass", "glass_spec", "glass_reflect", "glass_env", "glass_normal_spec_reflect", "glass_emissive", "glass_emissivenight",
+      "glass_displacement", "glass_breakable", "glass_breakable_crack"
+    ],
     "textured": [
       "cloth_default", "cloth_normal_spec", "cloth_normal_spec_tnt", "cubemap_reflect", "cutout_hard", "decal", "decal_amb_only",
       "decal_diff_only_um", "decal_dirt", "decal_emissive_only", "decal_emissivenight_only", "decal_glue", "decal_normal_only",
@@ -231,6 +235,16 @@
   "shaders": {
     "ped_alpha": { "ped_rim": false },
     "emissivenight_geomnightonly": { "emissive_night": false },
-    "normal_spec_reflect_emissivenight": { "reflect": "none" }
+    "normal_spec_reflect_emissivenight": { "reflect": "none" },
+    "glass": { "glass_program": "megashader", "glass_reflect": "sphere" },
+    "glass_spec": { "glass_program": "megashader", "glass_reflect": "none" },
+    "glass_reflect": { "glass_program": "megashader", "glass_reflect": "sphere" },
+    "glass_env": { "glass_program": "megashader", "glass_reflect": "dynamic", "glass_lighting": true },
+    "glass_normal_spec_reflect": { "glass_program": "megashader", "glass_reflect": "sphere" },
+    "glass_emissive": { "glass_program": "megashader", "glass_reflect": "sphere" },
+    "glass_emissivenight": { "glass_program": "megashader", "glass_reflect": "sphere" },
+    "glass_displacement": { "glass_program": "megashader", "glass_reflect": "sphere", "displacement": true },
+    "glass_breakable": { "glass_program": "breakable", "glass_reflect": "dynamic", "glass_lighting": true },
+    "glass_breakable_crack": { "glass_program": "breakable", "glass_reflect": "dynamic", "glass_lighting": true }
   }
 }

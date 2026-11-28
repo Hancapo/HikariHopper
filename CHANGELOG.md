@@ -20,6 +20,9 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 - GTA V's world draws its cables (power lines, telephone and tram wires), which it left out, faded and fogged by the fog in front of them as the game does. ([#348](https://github.com/Hancapo/HikariHopper/pull/348))
 - GTA V cables take the artificial ambient by their own scale, as well as the natural, as the game lights them. ([#348](https://github.com/Hancapo/HikariHopper/pull/348))
 - GTA V's world draws its fur grass (the grass_fur lawns of parks, gardens and the golf club), which it left out: its eight shells near the camera, fading out between the material's fur alpha distances as the game fades it. ([#349](https://github.com/Hancapo/HikariHopper/pull/349))
+- GTA V's map glass (phone boxes, newspaper stands, bank doors, lamps and the rest: glass, glass_env, glass_breakable and their kin) is drawn with the game's own forward glass lighting, in the 3D viewer and the world, instead of as a plain blended surface. Clear panes are lit from either side and turn opaque at grazing angles, the shiny ones reflect the sky or their sphere map, and the emissive ones glow (the night-only ones by night). ([#350](https://github.com/Hancapo/HikariHopper/pull/350))
+- GTA V's world draws vehicle glass on map props, which it left out, blended with its back culled. ([#350](https://github.com/Hancapo/HikariHopper/pull/350))
+- GTA V vehicle glass takes the sun as the game's alpha pass does, less the timecycle's cloud shadow opacity. ([#350](https://github.com/Hancapo/HikariHopper/pull/350))
 
 ### Performance
 

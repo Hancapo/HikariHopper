@@ -399,7 +399,7 @@ internal sealed unsafe partial class ViewportRenderer
                 PartKind.Cable => AlphaMode.Blend,
                 _ => material.Decal ? AlphaMode.Blend : material.AlphaMode,
             };
-            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass || material.CullsBack);
+            return (part, groups[part.Material], mode, kind, fringes[part.Material], material.Glass || material.MapGlass || material.CullsBack);
         })];
         partsShown = [.. drawable.Parts.Select(part => part.Primary)];
         partNightOnly = [.. drawable.Parts.Select(part => drawable.Materials[part.Material].NightOnly)];

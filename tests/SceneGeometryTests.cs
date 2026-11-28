@@ -53,4 +53,16 @@ public sealed class SceneGeometryTests
         Assert.Same(own, layout.Vertices);
         Assert.Equal(relative.Select(position => position + scene.Origin), layout.Vertices.Select(vertex => vertex.Position));
     }
+
+    [Theory]
+    [InlineData("vehicle_vehglass")]
+    [InlineData("glass_env")]
+    [InlineData("grass_fur")]
+    [InlineData("cable")]
+    public void A_world_layout_keeps_GTA_V_s_glass_fur_grass_and_cables(string shader)
+    {
+        FiveFury.Drawables.Drawable drawable = FiveFury.Ydr.Ydr.Read(TestDrawables.Triangle(shader: shader)).Drawable;
+        WorldLayout layout = WorldLayout.Of(DrawableScene.Build(drawable, []));
+        Assert.Single(layout.Kept);
+    }
 }

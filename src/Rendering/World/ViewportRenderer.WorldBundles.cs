@@ -192,8 +192,9 @@ internal sealed unsafe partial class ViewportRenderer
 
     /// <summary>
     /// A family's pipelines, made the first time one of its surfaces comes in: its surfaces drawn solid (back faces
-    /// culled), unculled, blended and as decals, and its cut-outs into the shadow. With <paramref name="prepare"/>, they
-    /// only start compiling in the background (GpuDevice.Prepare), for when the family's first surface comes in.
+    /// culled), unculled, blended (unculled, or with their back culled, as glass is) and as decals, and its cut-outs into
+    /// the shadow. With <paramref name="prepare"/>, they only start compiling in the background (GpuDevice.Prepare), for
+    /// when the family's first surface comes in.
     /// </summary>
     internal void CreateWorldFamily(WorldFamily family, bool prepare = false)
     {
@@ -281,7 +282,7 @@ internal sealed unsafe partial class ViewportRenderer
         // Water is only ever blended over the copy of what's behind it; cables are only ever blended, and cast nothing.
         if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater or WorldFamily.GtaCable)
         {
-            worldSolid[f] = worldUnculled[f] = worldDecal[f] = worldBlended[f] = Pipeline(CullMode.None, blend: true);
+            worldSolid[f] = worldUnculled[f] = worldDecal[f] = worldBlended[f] = worldBlendedCulled[f] = Pipeline(CullMode.None, blend: true);
             return;
         }
         // Fur is solid, seen from both sides, each of its shells cut out by its own pixels; only its first shell casts,
@@ -294,6 +295,7 @@ internal sealed unsafe partial class ViewportRenderer
         worldSolid[f] = Pipeline(CullMode.Back, blend: false);
         worldUnculled[f] = Pipeline(CullMode.None, blend: false);
         worldBlended[f] = Pipeline(CullMode.None, blend: true);
+        worldBlendedCulled[f] = Pipeline(CullMode.Back, blend: true);
         worldDecal[f] = Pipeline(CullMode.None, blend: true, decal: true);
 
         // Cut-outs into the shadow through their material's alpha; terrain is never cut out.
@@ -701,7 +703,7 @@ internal sealed unsafe partial class ViewportRenderer
         BindGroup? boundMaterial = null;
         foreach (WorldBlendedDraw draw in draws)
         {
-            if (worldBlended[(int)draw.Mesh.Family] is not { } blended)
+            if ((draw.Mesh.CullsBack ? worldBlendedCulled : worldBlended)[(int)draw.Mesh.Family] is not { } blended)
                 continue;
             if (blended != current)
             {
