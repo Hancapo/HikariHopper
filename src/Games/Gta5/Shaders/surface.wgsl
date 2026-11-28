@@ -977,7 +977,7 @@ fn tree_foliage_light(place: vec3f, stored: vec3f, original: vec3f, view: vec3f,
     let sun = sun_colour * shadow * (albedo * kept * n_dot_l + vec3f(n_dot_l * spec * highlight));
     let ambient = albedo * kept * (gta_ambient(around) * ambient_scale + gta_artificial_ambient(around) * artificial_scale);
     occludable(ambient, 1.0, around, albedo);
-    let reflection = gta_reflection(around, view, exponent, 1.0 - kept) * ambient_scale * reflection_scale;
+    let reflection = gta_reflection(around, view, exponent, 1.0 - kept) * max(ambient_scale, artificial_scale) * reflection_scale;
     let local = gta_local_lights(albedo, kept, spec, exponent, fresnel_value, normal, view);
     var through = vec3f(0.0);
     if (scatter) {
