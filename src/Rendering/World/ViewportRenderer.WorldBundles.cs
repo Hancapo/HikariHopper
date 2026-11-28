@@ -178,13 +178,15 @@ internal sealed unsafe partial class ViewportRenderer
         Attributes = [new VertexAttribute { ShaderLocation = 8, Offset = 0, Format = VertexFormat.Uint32 }],
     };
 
-    // A family's material group's layout: RDR2's material, GTA V's Gta5/surface.wgsl, Gta5/terrain.wgsl or Gta5/cable.wgsl.
+    // A family's material group's layout: RDR2's material, GTA V's Gta5/surface.wgsl, Gta5/terrain.wgsl, Gta5/cable.wgsl or
+    // Gta5/fur.wgsl.
     private BindGroupLayout WorldMaterialLayout(WorldFamily family) => family switch
     {
         WorldFamily.Rdr2 or WorldFamily.Rdr2Water => rdr2Layout!,
         WorldFamily.GtaTerrain => terrainLayout!,
         WorldFamily.GtaWater => GtaWaterLayout(),
         WorldFamily.GtaCable => cableLayout!,
+        WorldFamily.GtaFur => furLayout!,
         _ => materialLayout!,
     };
 
@@ -214,6 +216,7 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.GtaTerrain => ("gta-terrain-world", "vs_terrain_world", "fs_terrain"),
             WorldFamily.GtaWater => ("gta-water-world", "vs_gta_water", "fs_gta_water"),
             WorldFamily.GtaCable => ("gta-cable-world", "vs_cable_world", "fs_cable_world"),
+            WorldFamily.GtaFur => ("gta-fur-world", "vs_fur_world", "fs_fur_world"),
             _ => ("gta-world", "vs_surface_world", "fs_surface"),
         };
         string Code() => family switch
@@ -226,6 +229,7 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.GtaWater => LitShader("World/water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/water.wgsl"),
             WorldFamily.GtaTerrain => LitShader("Gta5/terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world_terrain.wgsl"),
             WorldFamily.GtaCable => LitShader("Gta5/cable.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world_cable.wgsl"),
+            WorldFamily.GtaFur => LitShader("Gta5/fur.wgsl") + "\n" + instances + "\n" + Read("Gta5/world_fur.wgsl"),
             _ => LitShader("Gta5/trees.wgsl") + "\n" + Read("Gta5/surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world.wgsl"),
         };
         // GTA V's fog over its world, which its shaders take (Gta5/world_fog.wgsl).
@@ -261,9 +265,9 @@ internal sealed unsafe partial class ViewportRenderer
                             Alpha = new BlendComponent { Operation = BlendOperation.Add, SrcFactor = BlendFactor.One, DstFactor = BlendFactor.OneMinusSrcAlpha },
                         } : null,
                         WriteMask = ColorWriteMask.All,
-                    }, subSampled: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain,
+                    }, subSampled: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain or WorldFamily.GtaFur,
                         // The solid surfaces leave what the ambient occlusion takes out; water and the blended don't.
-                        occludable: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain or WorldFamily.Rdr2),
+                        occludable: !blend && family is WorldFamily.Gta or WorldFamily.GtaTerrain or WorldFamily.Rdr2 or WorldFamily.GtaFur),
                 },
                 DepthStencil = new DepthStencilState
                 {
@@ -278,6 +282,13 @@ internal sealed unsafe partial class ViewportRenderer
         if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater or WorldFamily.GtaCable)
         {
             worldSolid[f] = worldUnculled[f] = worldDecal[f] = worldBlended[f] = Pipeline(CullMode.None, blend: true);
+            return;
+        }
+        // Fur is solid, seen from both sides, each of its shells cut out by its own pixels; only its first shell casts,
+        // without its material.
+        if (family == WorldFamily.GtaFur)
+        {
+            worldSolid[f] = worldUnculled[f] = worldBlended[f] = worldDecal[f] = Pipeline(CullMode.None, blend: false);
             return;
         }
         worldSolid[f] = Pipeline(CullMode.Back, blend: false);

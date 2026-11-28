@@ -12,9 +12,9 @@
 // is under its clip (furAlphaClip03/47, by the amount). It is shaded from furLayerParams.w at no fur to its own shade
 // (furShadow03/47) at full fur, darker the deeper it is.
 //
-// The game fades the whole prop out between furAlphaDistance's near and far (15 to 30 m in its props), by a noise,
-// as a LOD takes over; the viewer shows a model on its own, from any distance, so it is drawn as if near. Nothing
-// tramples it, and the game's wetness is off.
+// The game fades the whole prop out between furAlphaDistance's near and far (15 to 30 m in its props), by a stipple,
+// as a LOD takes over: a world does too (Gta5/world_fur.wgsl); the model viewer shows a model on its own, from any
+// distance, so it is drawn as if near. Nothing tramples it, and the game's wetness is off.
 
 struct Fur {
     // specularFresnel, specularFalloffMult, specularIntensityMult, bumpiness.
@@ -34,6 +34,9 @@ struct Fur {
     // furShadow03 and furShadow47: each shell's shade.
     shade0: vec4f,
     shade1: vec4f,
+    // furAlphaDistance: from the camera, where a world's fur starts fading out and where it's gone; then the shell a
+    // world's copy of the material draws (each shell is a draw of its own there).
+    fade: vec4f,
 };
 
 @group(1) @binding(0) var<uniform> fur: Fur;
@@ -86,6 +89,9 @@ struct FurOutput {
     @location(9) tint: vec3f,
     // Drawn into the reflection map: how far into the hemisphere being drawn the point is; behind it below zero.
     @location(10) hemisphere: f32,
+    // In a world: the interior room it's in (Scene/light.wgsl's use_room), and its level of detail fade.
+    @location(11) room: vec4f,
+    @location(12) lod_fade: vec2f,
 };
 
 struct ReflectionView {
@@ -122,6 +128,8 @@ fn vs_fur_paraboloid(input: FurInput, @builtin(instance_index) shell: u32) -> Fu
 fn fur_vertex(input: FurInput, shell: u32) -> FurOutput {
     var output: FurOutput;
     output.hemisphere = 1.0;
+    output.room = vec4f(0.0);
+    output.lod_fade = vec2f(0.0);
     output.shell = min(shell, SHELLS - 1u);
     output.place = input.position + f32(output.shell) * fur.layer.x * input.normal;
     output.normal = normalize(input.normal);
@@ -141,21 +149,21 @@ fn fur_vertex(input: FurInput, shell: u32) -> FurOutput {
 
 @fragment
 fn fs_fur(input: FurOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
-    return shade_fur(input, front);
+    return shade_fur(input, front, 1.0);
 }
 
 // Into the reflection map: the paraboloid mirrors the winding, and what is behind the hemisphere is left out.
 @fragment
 fn fs_fur_reflected(input: FurOutput, @builtin(front_facing) front: bool) -> @location(0) vec4f {
-    let colour = shade_fur(input, !front);
+    let colour = shade_fur(input, !front, 1.0);
     if (input.hemisphere < 0.0) {
         discard;
     }
     return colour;
 }
 
-// PS_FurDeferredTextured, shell by shell.
-fn shade_fur(input: FurOutput, front: bool) -> vec4f {
+// PS_FurDeferredTextured, shell by shell, at a fade from whole (one) to gone (nought).
+fn shade_fur(input: FurOutput, front: bool, fade: f32) -> vec4f {
     // Every map is sampled before anything is decided, as derivatives need uniform control flow. The combo height
     // maps' sampler has a mip bias of 1.15, the mask's and DiffuseHf's of -1.
     let diffuse = textureSample(diffuse_map, fur_sampler, input.uv.xy);
@@ -186,9 +194,9 @@ fn shade_fur(input: FurOutput, front: bool) -> vec4f {
         discard;
     }
 
-    // The albedo: the diffuse map by the shell's shade, from furLayerParams.w where there is no fur; for _mask by
-    // DiffuseHf's colour, for _tnt by the palette's.
-    var base = mix(fur.layer.w, shades[shell], amount) * diffuse.rgb * input.tint;
+    // The albedo: the diffuse map by the shell's shade, from furLayerParams.w where there is no fur or as it fades; for
+    // _mask by DiffuseHf's colour, for _tnt by the palette's.
+    var base = mix(fur.layer.w, mix(fur.layer.w, shades[shell], fade), amount) * diffuse.rgb * input.tint;
     if (shader == 1u) {
         base *= hf.rgb;
     }

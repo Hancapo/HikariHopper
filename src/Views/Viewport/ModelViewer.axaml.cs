@@ -1032,7 +1032,7 @@ public partial class ModelViewer : UserControl, IModalContent
         {
             IEnumerable<FiveFury.Textures.Texture?> textures = material.Rdr2 is { } rdr2
                 ? rdr2.Textures
-                : [.. material.BoundTextures(), .. material.FurHeights, material.FurMask, material.DiffuseHf];
+                : material.BoundTextures();
             foreach (FiveFury.Textures.Texture? texture in textures)
                 if (texture is not null)
                     named.TryAdd(texture.Name, texture);

@@ -193,27 +193,72 @@ public sealed class FurCableShaderTests
     [Fact]
     public void A_cable_placed_in_a_world_is_drawn_wide_enough_to_see()
     {
-        GpuDevice gpu;
+        if (Gpu() is not { } gpu)
+            return;
+        // The wire above, 5 cm thick, placed 1.5 m in front of the camera and along its view's width.
+        Drawable wire = Built("cable", m =>
+        {
+            m.Parameters["shader_cableDiffuse"] = [1, 1, 1];
+            m.Parameters["shader_cableAmbient"] = [1, 1];
+        }, Wire(.05f));
+        int changed = WorldCover(gpu, wire, Matrix4x4.Identity, new Vector3(2, -1.5f, 1), 0);
+        Assert.True(changed > 100, $"{changed} pixels of wire");
+    }
+
+    [Fact]
+    public void Fur_placed_in_a_world_grows_its_shells_near_and_fades_out_past_its_alpha_distance()
+    {
+        if (Gpu() is not { } gpu)
+            return;
+        // Seen edge on from 3 m, the square's shells stand over it; a plain square is all but nothing.
+        Drawable bare = Built("default"), fur = Built("grass_fur", m =>
+        {
+            FurMaps(m);
+            m.Parameters["furLayerParams"] = [.05f, 0, 0, 1];
+            m.Parameters["furAlphaDistance"] = [15, 30];
+        });
+        Vector3 edge = new(.5f, -3, 0);
+        int bareEdge = WorldCover(gpu, bare, Matrix4x4.Identity, edge, 0), furEdge = WorldCover(gpu, fur, Matrix4x4.Identity, edge, 0);
+        Assert.True(furEdge > bareEdge + 100, $"{furEdge} pixels with fur, {bareEdge} without");
+        // A 10 m square seen from above, 45 m away: plain, it shows; fur, past its 30 m, has faded out.
+        Matrix4x4 large = Matrix4x4.CreateScale(10);
+        Vector3 far = new(5, 5 - 25, 37);
+        float down = MathF.Atan2(37, 25);
+        int bareFar = WorldCover(gpu, bare, large, far, down), furFar = WorldCover(gpu, fur, large, far, down);
+        Assert.True(bareFar > 100, $"{bareFar} pixels of the plain square");
+        Assert.Equal(0, furFar);
+    }
+
+    private static GpuDevice? Gpu()
+    {
         try
         {
-            gpu = TestGpu.Device();
+            return TestGpu.Device();
         }
         catch (Exception error) when (error is InvalidOperationException or NotSupportedException or DllNotFoundException
             or WebGpuSharp.WebGPUException)
         {
             Assert.Skip($"No GPU to test on: {error.Message}");
-            return;
+            return null;
         }
-        // The wire above, 5 cm thick, placed 1.5 m in front of the camera and along its view's width.
-        var material = new DrawableMaterialInput { Name = "surface", Shader = "cable" };
-        material.Parameters["shader_cableDiffuse"] = [1, 1, 1];
-        material.Parameters["shader_cableAmbient"] = [1, 1];
-        var builder = new DrawableBuilder { Name = "wire" };
+    }
+
+    // One drawable, as Read builds it, read back as the game's.
+    private static Drawable Built(string shader, Action<DrawableMaterialInput>? setup = null, DrawableMeshInput? mesh = null)
+    {
+        var material = new DrawableMaterialInput { Name = "surface", Shader = shader };
+        setup?.Invoke(material);
+        var builder = new DrawableBuilder { Name = "prop" };
         builder.Materials.Add(material);
         var model = new DrawableModelInput();
-        model.Meshes.Add(Wire(.05f));
+        model.Meshes.Add(mesh ?? Quad());
         builder.Models.Add(model);
-        Drawable drawable = Ydr.Read(new Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write()).Drawable;
+        return Ydr.Read(new Ydr(builder.Build(GameTarget.Legacy), GameTarget.Legacy).Write()).Drawable;
+    }
+
+    // How many pixels a drawable placed in a world changes, seen from a camera looking north (+Y) at a pitch.
+    private static int WorldCover(GpuDevice gpu, Drawable drawable, Matrix4x4 placement, Vector3 eye, float pitch)
+    {
         var key = new RedFury.World.WorldAssetKey(1, 2);
         var asset = Rendering.World.WorldAsset.FromGta(key, DrawableScene.Build(drawable, []), [drawable]);
         const int Size = 128;
@@ -227,9 +272,9 @@ public sealed class FurCableShaderTests
             renderer.Antialiasing = false;
             renderer.WorldShown = true;
             renderer.SetTime(14);
-            renderer.Camera.Frame(new Vector3(2, -1.5f, 1), 20);
+            renderer.Camera.Frame(eye, 20);
             renderer.Camera.Free = true;
-            renderer.Camera.Place(new Vector3(2, -1.5f, 1), -MathF.PI / 2, 0);
+            renderer.Camera.Place(eye, -MathF.PI / 2, pitch);
             WebGpuSharp.Texture target = gpu.Device.CreateTexture(new WebGpuSharp.TextureDescriptor
             {
                 Usage = WebGpuSharp.TextureUsage.RenderAttachment | WebGpuSharp.TextureUsage.CopySrc,
@@ -263,7 +308,9 @@ public sealed class FurCableShaderTests
             Assert.True(renderer.AddWorldAsset(asset, new HashSet<RedFury.World.WorldAssetKey>(), long.MaxValue));
             while (renderer.HasPendingWorldUpload)
                 renderer.ProcessWorldUploads();
-            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, Matrix4x4.Identity, new Vector3(2, 0, 1), 2, 1000, 0, 0);
+            // Its middle, near enough for the cull: the models here are all within 3 m of it, by the placement's scale.
+            Vector3 middle = Vector3.Transform(new Vector3(1, .5f, .5f), placement);
+            var node = new RedFury.World.WorldLodNode(new RedFury.World.WorldEntityId(1, 0), null, key, placement, middle, 20, 1000, 0, 0);
             renderer.SetWorldSelection(new RedFury.World.WorldSelection([node], [key]));
             drawn = Frame();
             target.Destroy();
@@ -275,7 +322,7 @@ public sealed class FurCableShaderTests
         for (int at = 0; at < empty.Length; at += 4)
             if (Math.Abs(empty[at] - drawn[at]) + Math.Abs(empty[at + 1] - drawn[at + 1]) + Math.Abs(empty[at + 2] - drawn[at + 2]) > 6)
                 changed++;
-        Assert.True(changed > 100, $"{changed} pixels of wire");
+        return changed;
     }
 
     // How many pixels a scene changes over the empty backdrop, seen from an axis.

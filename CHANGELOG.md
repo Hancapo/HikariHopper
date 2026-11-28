@@ -19,6 +19,7 @@ The changelog is release-oriented and uses a small fixed set of categories: `Add
 - Shadows in both worlds hold steady after models are let go, instead of buildings' shadows flickering on and off with the camera still. ([#340](https://github.com/Hancapo/HikariHopper/pull/340))
 - GTA V's world draws its cables (power lines, telephone and tram wires), which it left out, faded and fogged by the fog in front of them as the game does. ([#348](https://github.com/Hancapo/HikariHopper/pull/348))
 - GTA V cables take the artificial ambient by their own scale, as well as the natural, as the game lights them. ([#348](https://github.com/Hancapo/HikariHopper/pull/348))
+- GTA V's world draws its fur grass (the grass_fur lawns of parks, gardens and the golf club), which it left out: its eight shells near the camera, fading out between the material's fur alpha distances as the game fades it. ([#349](https://github.com/Hancapo/HikariHopper/pull/349))
 
 ### Performance
 

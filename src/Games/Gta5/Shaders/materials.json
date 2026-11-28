@@ -77,6 +77,7 @@
     "aniso_alpha_bias": ["AnisotropicAlphaBias"],
     "hair_noise_scale": ["specularNoiseMapUVScaleFactor"],
     "fur_layer": ["furLayerParams"],
+    "fur_alpha_distance": ["furAlphaDistance"],
     "fur_uv_scales": ["furUvScales"],
     "fur_clip03": ["furAlphaClip03"],
     "fur_clip47": ["furAlphaClip47"],

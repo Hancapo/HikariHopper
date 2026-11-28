@@ -114,11 +114,12 @@ internal sealed partial class SurfaceMaterial
     public AlphaMode AlphaMode { get; private init; }
 
     /// <summary>
-    /// The textures its group binds, as Gta5/surface.wgsl or Gta5/terrain.wgsl read them (fur's and cables' aside): what the
-    /// world puts up before it draws the material.
+    /// The textures its group binds, as Gta5/surface.wgsl, Gta5/terrain.wgsl or Gta5/fur.wgsl read them (cables read none):
+    /// what the world puts up before it draws the material.
     /// </summary>
     internal IEnumerable<Texture?> BoundTextures() => Water is { } water ? water.Textures : Terrain
         ? [.. Layers, Lookup, TintPalette]
+        : Fur ? [Diffuse, Normal, Specular, .. FurHeights, FurMask, DiffuseHf, TintPalette]
         : [Diffuse, Normal, Specular, TintPalette, Dirt, DiffuseRamp, DiffuseLayer, Detail, Height, HairNoise, DiffuseMask, Environment];
 
     /// <summary>
@@ -598,7 +599,8 @@ internal sealed partial class SurfaceMaterial
         }
 
         // Gta5/fur.wgsl's Fur uniform, PS_FurDeferredTextured's constants: the specular, furLayerParams, furUvScales, which of
-        // the three shaders, the tint palette's row, and each shell's clip and shade (furAlphaClip03/47, furShadow03/47).
+        // the three shaders, the tint palette's row, each shell's clip and shade (furAlphaClip03/47, furShadow03/47), and
+        // furAlphaDistance (with the shell a world's copy draws, nought here).
         void FurUniforms(Span<float> v)
         {
             v[0] = Constant("fresnel", .97f)[0];
@@ -614,6 +616,7 @@ internal sealed partial class SurfaceMaterial
             Fill(v[24..28], Constant("fur_clip47", 20 / 255f, 25 / 255f, 30 / 255f, 34 / 255f));
             Fill(v[28..32], Constant("fur_shade03", 90 / 255f, 118 / 255f, 148 / 255f, 168 / 255f));
             Fill(v[32..36], Constant("fur_shade47", 200 / 255f, 220 / 255f, 238 / 255f, 1));
+            Fill(v[36..38], Constant("fur_alpha_distance", 15, 30));
         }
 
         // Gta5/cable.wgsl's Cable uniform: shader_radiusScale, shader_fadeExponent, shader_cableEmissive and the game's alpha

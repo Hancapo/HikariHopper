@@ -210,7 +210,7 @@ internal sealed unsafe partial class ViewportRenderer
     private RenderPipeline? worldShadow;
 
     // Each family's pipelines (see WorldFamily).
-    private const int WorldFamilies = 6;
+    private const int WorldFamilies = 7;
     private readonly RenderPipeline?[] worldSolid = new RenderPipeline?[WorldFamilies], worldUnculled = new RenderPipeline?[WorldFamilies],
         worldBlended = new RenderPipeline?[WorldFamilies], worldDecal = new RenderPipeline?[WorldFamilies],
         worldMaskedShadow = new RenderPipeline?[WorldFamilies];
@@ -1196,8 +1196,8 @@ internal sealed unsafe partial class ViewportRenderer
 }
 
 /// <summary>
-/// Which world shaders draw a surface: RDR2's material, GTA V's Gta5/surface.wgsl, Gta5/terrain.wgsl or Gta5/cable.wgsl, or
-/// either game's water (Rdr2/water.wgsl, Gta5/water.wgsl).
+/// Which world shaders draw a surface: RDR2's material, GTA V's Gta5/surface.wgsl, Gta5/terrain.wgsl, Gta5/cable.wgsl or
+/// Gta5/fur.wgsl, or either game's water (Rdr2/water.wgsl, Gta5/water.wgsl).
 /// </summary>
 internal enum WorldFamily
 {
@@ -1207,4 +1207,5 @@ internal enum WorldFamily
     Rdr2Water,
     GtaWater,
     GtaCable,
+    GtaFur,
 }
