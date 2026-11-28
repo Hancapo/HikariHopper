@@ -47,7 +47,8 @@ struct Light {
     // The peds' ambient occlusion multiplier (light_amb_occ_mult_ped) and their rim light's (light_ped_rim_mult).
     ped: vec4f,
     // The artificial ambient outside interiors, its down light and its base, as the natural ambient's
-    // (light_artificial_ext_*).
+    // (light_artificial_ext_*); with the timecycle's light_ambient_bake_ramp (gBakeAdjust) in the first's w, and in the
+    // second's what the game's alpha pass keeps of the directional light (one less cloud_shadow_opacity).
     artificial_down: vec4f,
     artificial_up: vec4f,
     // The water's: seconds since the view began (its ripples' time), the timecycle's water_foglight, and the frame's
@@ -150,6 +151,19 @@ fn local_light_point(source: LocalLight) -> vec3f {
 }
 
 fn gta_local_lights(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_value: f32, normal: vec3f, view: vec3f) -> vec3f {
+    return local_lights_by(albedo, kept, spec, exponent, fresnel_value, normal, view, -1.0);
+}
+
+// The local lights as the forward glass takes them (USE_GLASS_LIGHTING): each light's cosine from |N.L| towards N.L by
+// the glass's alpha, so a clear pane is lit from either side.
+fn gta_local_lights_glass(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_value: f32, normal: vec3f, view: vec3f,
+    alpha: f32) -> vec3f {
+    return local_lights_by(albedo, kept, spec, exponent, fresnel_value, normal, view, saturate(alpha));
+}
+
+// Either: the glass's alpha, or below nought for the cosine as it is.
+fn local_lights_by(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_value: f32, normal: vec3f, view: vec3f,
+    glass_alpha: f32) -> vec3f {
     let tile = local_light_tile();
     var radiance = vec3f(0.0);
     for (var word = 0u; word < 16u; word++) {
@@ -174,7 +188,11 @@ fn gta_local_lights(albedo: vec3f, kept: f32, spec: f32, exponent: f32, fresnel_
             }
             if (attenuation < 1e-6) { continue; }
             let half_vector = normalize(to_light + view);
-            let n_dot_l = saturate(dot(normal, to_light));
+            let cosine = dot(normal, to_light);
+            var n_dot_l = saturate(cosine);
+            if (glass_alpha >= 0.0) {
+                n_dot_l = abs(cosine) + glass_alpha * (n_dot_l - abs(cosine));
+            }
             let h_dot_l = saturate(dot(half_vector, to_light));
             let n_dot_h = saturate(dot(normal, half_vector));
             let highlight = (exponent + 2.0) / 8.0 * pow(n_dot_h + 1e-8, exponent) * fresnel(fresnel_value, h_dot_l);

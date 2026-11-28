@@ -272,7 +272,7 @@ internal sealed unsafe partial class ViewportRenderer
                 uploaded.SubSampled = true;
             uploaded.Meshes.Add(new WorldMesh(pending.Layout.Placed[i], group.Group, group.Uniforms, mode, rdr2?.DoubleSided ?? false,
                 material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family, rdr2 is null && material.NightOnly,
-                rdr2 is null && material.CullsBack));
+                rdr2 is null && (material.CullsBack || material.Glass || material.MapGlass)));
         }
         // RedFury's depth runs: adjacent casters of a level, one draw each (a fur surface's first shell among them).
         foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))

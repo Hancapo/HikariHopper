@@ -337,6 +337,9 @@ fn shade_surface(original: SurfaceOutput, front: bool, in_view: bool) -> vec4f {
             discard;
         }
     }
+    if (material.glass.x > 3.5) {
+        return map_glass(input, diffuse, bump, specular_sample);
+    }
     if (material.glass.x > 0.5) {
         return glass(input, diffuse, specular_sample, dirt);
     }
@@ -486,12 +489,143 @@ fn glass(input: SurfaceOutput, diffuse: vec4f, specular_sample: vec4f, dirt: vec
     let highlight = (exponent + 2.0) / 8.0 * pow(saturate(dot(normal, half_vector)), exponent) * highlight_fresnel * intensity;
     // Shadowed as a face turned to the sun, so light let through from behind isn't cut off at the terminator.
     let shadow = sun_shadow(input.place, select(-normal, normal, n_dot_l >= 0.0));
-    let sun = light.sun_colour.rgb * shadow * facing * (albedo * kept + vec3f(highlight));
+    // The alpha pass's sun: what it keeps of the directional light, as forward surfaces have no cloud shadow.
+    let sun = light.sun_colour.rgb * light.artificial_up.w * shadow * facing * (albedo * kept + vec3f(highlight));
 
     let ambient_scale = ao * ao;
     let ambient = albedo * kept * gta_ambient(normal) * ambient_scale;
     let reflection = gta_reflection(normal, view, exponent, 1.0 - kept) * ambient_scale;
     return vec4f(sun + ambient + reflection, saturate(shown));
+}
+
+// The map's glass, as its forward programs draw it (checked against Enhanced's): the megashader's PS_Textured as glass,
+// glass_spec, glass_reflect, glass_env, glass_normal_spec_reflect, glass_emissive(night) and glass_displacement compile
+// it (program 4), and glass_breakable's PS_BreakableGlassNoCrack (program 5), lit as it is drawn and blended over what is
+// behind it, not premultiplied.
+//   - Colour and alpha: the diffuse map squared into linear, its alpha by the vertex alpha. The breakable glass reads no
+//     vertex colour; glass_displacement is lit white, by the vertex alpha (its diffuse map is the refraction's offset,
+//     which isn't read: what's behind it is seen straight through).
+//   - Normal: the bump map's in the tangent frame, as the deferred surfaces'; the breakable glass's vertex normal is turned
+//     to the camera first.
+//   - Ambient scales: the vertex red and green (natural and artificial), squared, after the vertex shader's bake adjust:
+//     by light_ambient_bake_ramp, the natural far from the camera, the artificial near it, outside interiors. The
+//     breakable glass's are one.
+//   - Specular: specularIntensityMult (by the specular map's red and green squared and blue, by specMapIntMask), the
+//     power specularFalloffMult (by the map's alpha) turned into the exponent as the deferred passes do, unclamped;
+//     specularFresnel.
+//   - Light: the sun (what the alpha pass keeps of it) with its shadow, the ambient, the local lights (their diffuse by
+//     what the fresnel leaves once, their specular by the intensity squared), and the reflection by the share the fresnel
+//     takes. glass_env and the breakable glass (USE_GLASS_LIGHTING, USE_ALPHA_FRESNEL_ADJUST) are lit from either side by
+//     how clear they are (each cosine from |N.L| towards N.L by the alpha) and turn opaque where they reflect most: the
+//     alpha is the greater of itself and the fresnel, and the diffuse keeps 1 - s lerp(1, F, alpha).
+//   - Reflection: the sphere map by reflectivePower (no ambient scale on it, as Enhanced's programs have it), or the
+//     reflection map (glass_env, the breakable glass) by the greater ambient scale, each by the energy term.
+//   - Emissive (glass_emissive, glass_emissivenight by the day/night balance): emissiveMultiplier by the diffuse alpha
+//     and the vertex blue, by the albedo and N.V.
+fn map_glass(input: SurfaceOutput, diffuse: vec4f, bump: vec4f, specular_sample: vec4f) -> vec4f {
+    let breakable = u32(material.glass.x + 0.5) == 5u;
+    let glass_lit = material.glass.y > 0.5;
+    let displacement = material.glass.z > 0.5;
+    let eye_offset = scene.eye.xyz - (input.place + scene.origin.xyz);
+    let view = normalize(eye_offset);
+
+    // The normal, the breakable glass's turned to the camera with its tangent frame.
+    var vertex_normal = normalize(input.normal);
+    var binormal = input.binormal;
+    if (breakable && dot(vertex_normal, view) < 0.0) {
+        vertex_normal = -vertex_normal;
+        binormal = -binormal;
+    }
+    var normal = vertex_normal;
+    if (material.options.x > 0.5) {
+        let xy = bump.xy * 2.0 - 1.0;
+        let z = sqrt(abs(1.0 - dot(xy, xy)));
+        let scale = max(0.001, material.specular.w);
+        normal = normalize(scale * xy.x * input.tangent + scale * xy.y * binormal + z * vertex_normal);
+    }
+
+    // Colour and alpha.
+    var albedo = diffuse.rgb * diffuse.rgb;
+    var alpha = diffuse.a * input.colour0.a;
+    if (displacement) {
+        albedo = vec3f(1.0);
+        alpha = input.colour0.a;
+    }
+    if (breakable) {
+        alpha = diffuse.a;
+    }
+
+    // The ambient scales, after the bake adjust.
+    var natural = 1.0;
+    var artificial = 1.0;
+    if (!breakable) {
+        let blend = saturate(dot(eye_offset, eye_offset) / (500.0 * 500.0));
+        let inside = select(0.0, 1.0, shaded_room.w > 0.5);
+        let ramp = light.artificial_down.w;
+        let r = saturate(input.colour0.r * mix(1.0, ramp, saturate(blend - inside)));
+        let g = saturate(input.colour0.g * mix(1.0, ramp, saturate(1.0 - blend - inside)));
+        natural = r * r;
+        artificial = g * g;
+    }
+
+    // Specular.
+    var spec = saturate(material.specular.z);
+    var power = material.specular.y;
+    if (material.options.y > 0.5) {
+        let weighed = vec3f(specular_sample.r * specular_sample.r, specular_sample.g * specular_sample.g, specular_sample.b);
+        spec = saturate(material.specular.z * dot(weighed, material.mask.xyz));
+        power = material.specular.y * specular_sample.a;
+    }
+    let over = max(0.0, power - 500.0);
+    let exponent = 3.0 * (power - over) + 558.0 * over;
+    let fresnel_value = material.specular.x;
+
+    // The sun, and how much the fresnel leaves.
+    let to_light = normalize(light.sun_direction.xyz);
+    let n_dot_l = dot(normal, to_light);
+    var cosine = saturate(n_dot_l);
+    if (glass_lit) {
+        cosine = abs(n_dot_l) + alpha * (saturate(n_dot_l) - abs(n_dot_l));
+    }
+    let half_vector = normalize(view + to_light);
+    let reflected = fresnel(fresnel_value, saturate(dot(normal, view)));
+    var shown = alpha;
+    var kept = 1.0 - spec * reflected;
+    if (glass_lit) {
+        shown = max(alpha, reflected);
+        kept = 1.0 - spec * mix(1.0, reflected, shown);
+    }
+    let highlight = spec * cosine * (exponent + 2.0) / 8.0 * pow(saturate(dot(normal, half_vector) + 1e-8), exponent + 1e-8)
+        * fresnel(fresnel_value, saturate(dot(half_vector, to_light)));
+    // Shadowed as a face turned to the sun, so light let through from behind isn't cut off at the terminator.
+    let shadow = sun_shadow(input.place, select(-vertex_normal, vertex_normal, dot(vertex_normal, to_light) >= 0.0));
+    let sun = light.sun_colour.rgb * light.artificial_up.w * shadow * (albedo * kept * cosine + vec3f(highlight));
+
+    let ambient = albedo * kept * (gta_ambient(normal) * natural + gta_artificial_ambient(normal) * artificial);
+    var local: vec3f;
+    if (glass_lit) {
+        local = gta_local_lights_glass(albedo, kept, spec * spec, exponent, fresnel_value, normal, view, alpha);
+    } else {
+        local = gta_local_lights(albedo, kept, spec * spec, exponent, fresnel_value, normal, view);
+    }
+
+    // The reflection.
+    let share = 1.0 - kept;
+    var reflection = vec3f(0.0);
+    let kind = u32(material.environment.x + 0.5);
+    if (kind == 1u) {
+        reflection = environment_reflection(normal, view) * share * (0.31830987 + 0.6816901 * saturate(exponent / 563.0));
+    } else if (kind == 3u) {
+        reflection = gta_reflection(normal, view, exponent, share) * max(natural, artificial);
+    }
+
+    // The emissive.
+    var glow = vec3f(0.0);
+    if (material.options.w > 0.5) {
+        let night = select(1.0, light.reflection.y, material.environment.z > 0.5);
+        glow = albedo * material.mask.w * diffuse.a * input.colour0.b * night * saturate(dot(normal, view));
+    }
+    return vec4f(sun + local + ambient + reflection + glow, saturate(shown));
 }
 
 // PS_DeferredTextured. Specular intensity, power and fresnel as written to the G-buffer: a specular map's R and G

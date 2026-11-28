@@ -117,7 +117,8 @@ internal sealed unsafe partial class ViewportRenderer
 
     // A surface of an asset: its part (with indexes into the asset's vertices as they are), and how it's drawn.
     // Night-only: a _geomnightonly shader's, gone by day (SurfaceMaterial.NightOnly), which the shadow's bundles leave
-    // out, day and night.
+    // out, day and night. Culls its back: a tree's foliage or stand-in, and glass, blended with its back culled as the
+    // game draws it (a building's inside has glass of its own).
     private readonly record struct WorldMesh(SurfacePart Part, BindGroup Material, WorldSlice Uniforms, AlphaMode Mode, bool DoubleSided, bool Decal,
         WorldFamily Family, bool NightOnly = false, bool CullsBack = false)
     {
@@ -212,7 +213,7 @@ internal sealed unsafe partial class ViewportRenderer
     // Each family's pipelines (see WorldFamily).
     private const int WorldFamilies = 7;
     private readonly RenderPipeline?[] worldSolid = new RenderPipeline?[WorldFamilies], worldUnculled = new RenderPipeline?[WorldFamilies],
-        worldBlended = new RenderPipeline?[WorldFamilies], worldDecal = new RenderPipeline?[WorldFamilies],
+        worldBlended = new RenderPipeline?[WorldFamilies], worldBlendedCulled = new RenderPipeline?[WorldFamilies], worldDecal = new RenderPipeline?[WorldFamilies],
         worldMaskedShadow = new RenderPipeline?[WorldFamilies];
     private readonly List<WorldBlendedDraw> worldBlendedDraws = [], worldWaterDraws = [];
     private bool worldShown;

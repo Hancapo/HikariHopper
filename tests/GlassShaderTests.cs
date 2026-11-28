@@ -58,6 +58,45 @@ public sealed class GlassShaderTests
         Assert.Equal([0f, .5f, .3f, 1f], u[20..24]);
     }
 
+    [Theory]
+    [InlineData(GameTarget.Legacy, "glass", 4, 0, 0)]
+    [InlineData(GameTarget.Legacy, "glass_spec", 4, 0, 0)]
+    [InlineData(GameTarget.Legacy, "glass_env", 4, 1, 3)]
+    [InlineData(GameTarget.Legacy, "glass_emissivenight", 4, 0, 0)]
+    [InlineData(GameTarget.Legacy, "glass_breakable", 5, 1, 3)]
+    [InlineData(GameTarget.Legacy, "glass_breakable_crack", 5, 1, 3)]
+    [InlineData(GameTarget.Enhanced, "glass_env", 4, 1, 3)]
+    [InlineData(GameTarget.Enhanced, "glass_breakable", 5, 1, 3)]
+    public void The_maps_glass_is_drawn_with_its_own_program_blended(GameTarget target, string shader, int program, int glassLit,
+        int reflection)
+    {
+        SurfaceMaterial material = Read(Pane(target, shader, m =>
+        {
+            m.Parameters["specularFresnel"] = [.9f];
+            m.Parameters["specularIntensityMult"] = [.5f];
+        }));
+        Assert.True(material.MapGlass);
+        Assert.False(material.Glass);
+        Assert.True(material.Rebuilt);
+        Assert.Equal(AlphaMode.Blend, material.AlphaMode);
+        float[] u = material.Uniforms;
+        Assert.Equal(program, u[92]);
+        Assert.Equal(glassLit, u[93]);
+        Assert.Equal(0, u[94]);
+        // The reflection map for glass_env and the breakable glass; a sphere map only where the material has one.
+        Assert.Equal(reflection, u[100]);
+        Assert.Equal([.9f, 100f, .5f], u[0..3]);
+        Assert.Equal(shader == "glass_emissivenight" ? 1 : 0, u[102]);
+    }
+
+    [Fact]
+    public void Glass_displacement_is_lit_white_by_the_vertex_alpha()
+    {
+        SurfaceMaterial material = Read(Pane(GameTarget.Legacy, "glass_displacement"));
+        Assert.True(material.MapGlass);
+        Assert.Equal(1, material.Uniforms[94]);
+    }
+
     // The pane drawn at the centre of a small view, from above (its front) or below (its back); the centre's colour.
     private static (byte R, byte G, byte B) Centre(byte[]? ydr, bool above)
     {
@@ -107,10 +146,13 @@ public sealed class GlassShaderTests
         }
     }
 
-    [Fact]
-    public void Glass_is_seen_from_its_front_and_culled_from_its_back_as_the_game_draws_it()
+    [Theory]
+    [InlineData("vehicle_vehglass")]
+    [InlineData("glass_env")]
+    [InlineData("glass")]
+    public void Glass_is_seen_from_its_front_and_culled_from_its_back_as_the_game_draws_it(string shader)
     {
-        byte[] pane = Pane(GameTarget.Legacy, "vehicle_vehglass");
+        byte[] pane = Pane(GameTarget.Legacy, shader);
         // From below, its back: culled, so what is behind it shows as if it weren't there.
         Assert.Equal(Centre(null, above: false), Centre(pane, above: false));
         // From above, its front: drawn over what is behind it.

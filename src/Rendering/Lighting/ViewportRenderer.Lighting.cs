@@ -591,8 +591,10 @@ internal sealed unsafe partial class ViewportRenderer
         // Without bloom, the tone map adds none.
         vectors[33] = Bloom ? Timecycle.BloomParameters(cycle) : Timecycle.BloomParameters(cycle) with { Y = 0 };
         vectors[34] = new Vector4(cycle.OcclusionPed, cycle.PedRim, 0, 0);
-        vectors[35] = new Vector4(cycle.ArtificialDown, 0);
-        vectors[36] = new Vector4(cycle.ArtificialUp, 0);
+        // With the timecycle's light_ambient_bake_ramp (gBakeAdjust), and what the game's alpha pass keeps of the sun
+        // (one less cloud_shadow_opacity: forward surfaces have no cloud shadow of their own).
+        vectors[35] = new Vector4(cycle.ArtificialDown, cycle.BakeRamp);
+        vectors[36] = new Vector4(cycle.ArtificialUp, 1 - cycle.CloudShadowOpacity);
         vectors[37] = new Vector4((float)waterTime, cycle.WaterFogLight, Camera.Near, (float)lodFadeTime);
         queue.WriteBuffer(lightBuffer!, 0, (ReadOnlySpan<float>)values);
     }
