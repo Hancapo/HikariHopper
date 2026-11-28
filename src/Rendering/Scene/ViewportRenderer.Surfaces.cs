@@ -516,7 +516,7 @@ internal sealed unsafe partial class ViewportRenderer
     private const int TerrainUniformBytes = 112;
 
     /// <summary>The bytes of Gta5/fur.wgsl's Fur uniform and of Gta5/cable.wgsl's Cable uniform, the start of the material's.</summary>
-    private const int FurUniformBytes = 144, CableUniformBytes = 64;
+    private const int FurUniformBytes = 160, CableUniformBytes = 64;
 
     private Buffer MaterialUniforms(SurfaceMaterial material)
     {
@@ -528,12 +528,12 @@ internal sealed unsafe partial class ViewportRenderer
 
     // A missing combo height map has no fur, so only the first shell shows; a missing mask, no fur at all; a missing
     // colour map changes nothing.
-    private BindGroup FurGroup(SurfaceMaterial material, Buffer? had = null) => device.CreateBindGroup(new BindGroupDescriptor
+    private BindGroup FurGroup(SurfaceMaterial material, Buffer? had = null, ulong offset = 0) => device.CreateBindGroup(new BindGroupDescriptor
     {
         Layout = furLayout!,
         Entries =
         [
-            new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Size = SurfaceMaterial.UniformBytes },
+            new BindGroupEntry { Binding = 0, Buffer = had ?? MaterialUniforms(material), Offset = offset, Size = SurfaceMaterial.UniformBytes },
             new BindGroupEntry { Binding = 1, Sampler = surfaceSampler! },
             new BindGroupEntry { Binding = 2, TextureView = View(material.Diffuse) ?? (material.MissingRoles.Contains("diffuse") ? missing! : white!) },
             new BindGroupEntry { Binding = 3, TextureView = View(material.Normal) ?? flat! },

@@ -188,13 +188,50 @@ internal sealed unsafe partial class ViewportRenderer
         worldNodeAssetsDirty = worldSourcesDirty = worldVisibilityDirty = true;
     }
 
+    // A fur surface, as Gta5/world_fur.wgsl draws it: a mesh per shell, each with its own copy of the material's values
+    // saying which shell it is (the model viewer draws the shells as instances, which here are the placements), drawn
+    // from both sides; the first shell alone casts, as the surface itself.
+    private void AddFurShells(PendingWorldUpload pending, WorldGpuAsset uploaded, int i,
+        Dictionary<(int Material, uint Shell), (BindGroup Group, WorldSlice Uniforms)> shells)
+    {
+        var (part, material, _) = pending.Layout.Kept[i];
+        CreateWorldFamily(WorldFamily.GtaFur);
+        foreach (GameTexture? texture in material.BoundTextures())
+            if (texture is not null && pending.Source.TextureId(texture) is var id && !uploaded.Textures.Contains(id))
+                uploaded.Textures.Add(id);
+        SurfacePart placed = pending.Layout.Placed[i];
+        for (uint shell = 0; shell < FurShells; shell++)
+        {
+            if (!shells.TryGetValue((part.Material, shell), out var group))
+            {
+                WorldSlice uniforms = UniformPages.Allocate(SurfaceMaterial.UniformBytes);
+                float[] values = [.. material.Uniforms];
+                values[FurShellValue] = shell;
+                queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)values);
+                group = (FurGroup(material, uniforms.Buffer, uniforms.Offset), uniforms);
+                shells.Add((part.Material, shell), group);
+            }
+            SurfacePart surface = shell == 0 ? placed : placed with { Passes = placed.Passes & ~FiveFury.Drawables.DrawableRenderMask.Shadow };
+            uploaded.Meshes.Add(new WorldMesh(surface, group.Group, group.Uniforms, AlphaMode.Opaque, true, false, WorldFamily.GtaFur));
+        }
+    }
+
+    // Where in a fur material's values the shell a world's copy draws is (Gta5/fur.wgsl's fade.z).
+    private const int FurShellValue = 38;
+
     // Its surfaces' material groups (each material's values in the uniform pages) and meshes, and its depth runs.
     private void AddWorldMeshes(PendingWorldUpload pending, WorldGpuAsset uploaded)
     {
         var groups = new Dictionary<int, (BindGroup Group, WorldSlice Uniforms)>();
+        var shells = new Dictionary<(int Material, uint Shell), (BindGroup Group, WorldSlice Uniforms)>();
         foreach (int i in pending.Layout.Order)
         {
             var (part, material, rdr2) = pending.Layout.Kept[i];
+            if (rdr2 is null && material.Fur)
+            {
+                AddFurShells(pending, uploaded, i, shells);
+                continue;
+            }
             WorldFamily family = rdr2 is not null ? rdr2.Water ? WorldFamily.Rdr2Water : WorldFamily.Rdr2
                 : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain
                 : material.Cable ? WorldFamily.GtaCable : WorldFamily.Gta;
@@ -237,7 +274,7 @@ internal sealed unsafe partial class ViewportRenderer
                 material.Decal && family is not (WorldFamily.Rdr2Water or WorldFamily.GtaWater), family, rdr2 is null && material.NightOnly,
                 rdr2 is null && material.CullsBack));
         }
-        // RedFury's depth runs: adjacent casters of a level, one draw each.
+        // RedFury's depth runs: adjacent casters of a level, one draw each (a fur surface's first shell among them).
         foreach (WorldMesh mesh in uploaded.Meshes.Where(m => m.Caster))
         {
             int last = uploaded.DepthRuns.Count - 1;
