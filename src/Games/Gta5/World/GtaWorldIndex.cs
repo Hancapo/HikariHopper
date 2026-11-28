@@ -133,7 +133,7 @@ internal sealed class GtaWorldIndex : WorldIndex
     /// </summary>
     public override bool LoadsConcurrently => true;
 
-    public override IReadOnlyList<Rendering.WorldFamily> Families { get; } = [Rendering.WorldFamily.Gta, Rendering.WorldFamily.GtaTerrain, Rendering.WorldFamily.GtaWater];
+    public override IReadOnlyList<Rendering.WorldFamily> Families { get; } = [Rendering.WorldFamily.Gta, Rendering.WorldFamily.GtaTerrain, Rendering.WorldFamily.GtaWater, Rendering.WorldFamily.GtaCable];
 
     public override WorldAsset LoadAsset(WorldAssetKey key)
     {

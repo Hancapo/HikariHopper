@@ -178,12 +178,13 @@ internal sealed unsafe partial class ViewportRenderer
         Attributes = [new VertexAttribute { ShaderLocation = 8, Offset = 0, Format = VertexFormat.Uint32 }],
     };
 
-    // A family's material group's layout: RDR2's material, GTA V's Gta5/surface.wgsl or Gta5/terrain.wgsl.
+    // A family's material group's layout: RDR2's material, GTA V's Gta5/surface.wgsl, Gta5/terrain.wgsl or Gta5/cable.wgsl.
     private BindGroupLayout WorldMaterialLayout(WorldFamily family) => family switch
     {
         WorldFamily.Rdr2 or WorldFamily.Rdr2Water => rdr2Layout!,
         WorldFamily.GtaTerrain => terrainLayout!,
         WorldFamily.GtaWater => GtaWaterLayout(),
+        WorldFamily.GtaCable => cableLayout!,
         _ => materialLayout!,
     };
 
@@ -212,6 +213,7 @@ internal sealed unsafe partial class ViewportRenderer
             WorldFamily.Rdr2Water => ("rdr2-water-world", "vs_rdr2_world", "fs_rdr2_world_water"),
             WorldFamily.GtaTerrain => ("gta-terrain-world", "vs_terrain_world", "fs_terrain"),
             WorldFamily.GtaWater => ("gta-water-world", "vs_gta_water", "fs_gta_water"),
+            WorldFamily.GtaCable => ("gta-cable-world", "vs_cable_world", "fs_cable_world"),
             _ => ("gta-world", "vs_surface_world", "fs_surface"),
         };
         string Code() => family switch
@@ -223,6 +225,7 @@ internal sealed unsafe partial class ViewportRenderer
                 + Read("Rdr2/water.wgsl"),
             WorldFamily.GtaWater => LitShader("World/water_common.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/water.wgsl"),
             WorldFamily.GtaTerrain => LitShader("Gta5/terrain.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world_terrain.wgsl"),
+            WorldFamily.GtaCable => LitShader("Gta5/cable.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world_cable.wgsl"),
             _ => LitShader("Gta5/trees.wgsl") + "\n" + Read("Gta5/surface.wgsl") + "\n" + instances + "\n" + GtaFog() + Read("Gta5/world.wgsl"),
         };
         // GTA V's fog over its world, which its shaders take (Gta5/world_fog.wgsl).
@@ -271,8 +274,8 @@ internal sealed unsafe partial class ViewportRenderer
                     DepthBiasSlopeScale = decal ? 1 : 0,
                 },
             };
-        // Water is only ever blended over the copy of what's behind it.
-        if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater)
+        // Water is only ever blended over the copy of what's behind it; cables are only ever blended, and cast nothing.
+        if (family is WorldFamily.Rdr2Water or WorldFamily.GtaWater or WorldFamily.GtaCable)
         {
             worldSolid[f] = worldUnculled[f] = worldDecal[f] = worldBlended[f] = Pipeline(CullMode.None, blend: true);
             return;

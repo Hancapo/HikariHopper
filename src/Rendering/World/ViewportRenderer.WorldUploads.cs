@@ -196,7 +196,8 @@ internal sealed unsafe partial class ViewportRenderer
         {
             var (part, material, rdr2) = pending.Layout.Kept[i];
             WorldFamily family = rdr2 is not null ? rdr2.Water ? WorldFamily.Rdr2Water : WorldFamily.Rdr2
-                : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain : WorldFamily.Gta;
+                : material.Water is not null ? WorldFamily.GtaWater : material.Terrain ? WorldFamily.GtaTerrain
+                : material.Cable ? WorldFamily.GtaCable : WorldFamily.Gta;
             if (!groups.TryGetValue(part.Material, out var group))
             {
                 CreateWorldFamily(family);
@@ -218,6 +219,7 @@ internal sealed unsafe partial class ViewportRenderer
                     uniforms = UniformPages.Allocate(SurfaceMaterial.UniformBytes);
                     queue.WriteBuffer(uniforms.Buffer, uniforms.Offset, (ReadOnlySpan<float>)material.Uniforms);
                     group = (material.Terrain ? TerrainGroup(material, uniforms.Buffer, uniforms.Offset)
+                        : material.Cable ? CableGroup(material, uniforms.Buffer, uniforms.Offset)
                         : MaterialGroup(material, material.Uniforms, uniforms.Buffer, uniforms.Offset), uniforms);
                 }
                 groups.Add(part.Material, group);
@@ -225,8 +227,9 @@ internal sealed unsafe partial class ViewportRenderer
                     if (texture is not null && pending.Source.TextureId(texture) is var id && !uploaded.Textures.Contains(id))
                         uploaded.Textures.Add(id);
             }
-            // Terrain is solid ground, as the model viewer draws it; water is blended over the scene behind it.
-            AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater ? AlphaMode.Blend
+            // Terrain is solid ground, as the model viewer draws it; water is blended over the scene behind it, and so
+            // are cables.
+            AlphaMode mode = family is WorldFamily.Rdr2Water or WorldFamily.GtaWater or WorldFamily.GtaCable ? AlphaMode.Blend
                 : material.Terrain ? AlphaMode.Opaque : material.Decal ? AlphaMode.Blend : material.AlphaMode;
             if (mode == AlphaMode.Mask && rdr2?.SubSampled == true && pending.Layout.Placed[i].Shown)
                 uploaded.SubSampled = true;

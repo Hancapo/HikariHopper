@@ -126,8 +126,8 @@ internal sealed unsafe partial class ViewportRenderer
             DepthStencil = new DepthStencilState { Format = DepthFormat, DepthWriteEnabled = OptionalBool.True, DepthCompare = CompareFunction.GreaterEqual },
         }));
         worldPick[f] = Pick("fs_world_pick");
-        // Terrain is never cut out.
-        worldMaskedPick[f] = family == WorldFamily.GtaTerrain ? worldPick[f] : Pick("fs_world_pick_masked");
+        // Terrain is never cut out, and cables are never picked (they blend), nor have a diffuse map.
+        worldMaskedPick[f] = family is WorldFamily.GtaTerrain or WorldFamily.GtaCable ? worldPick[f] : Pick("fs_world_pick_masked");
     }
 
     /// <summary>
